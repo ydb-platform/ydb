@@ -55,7 +55,7 @@ namespace {
         }
 
         void AddLevel0Sst(std::initializer_list<ui32> steps) {
-            TTrackableVector<TLevelSegment::TRec> records(TMemoryConsumer(Contexts.GetVCtx()->SstIndex));
+            TTrackableVector<TLevelSegment::TRec> records(TMemoryConsumer(SstIndexConsumer<TKey>(*Contexts.GetVCtx())));
             for (ui32 step : steps) {
                 records.emplace_back(MakeKey(step), MakeMemRec());
             }

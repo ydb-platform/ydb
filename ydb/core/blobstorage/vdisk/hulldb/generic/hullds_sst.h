@@ -12,6 +12,19 @@
 
 namespace NKikimr {
 
+    // The SstIndex memory consumer of the table with the given key type
+    template <class TKey>
+    TMemoryConsumer& SstIndexConsumer(TVDiskContext& vctx) {
+        if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
+            return vctx.SstIndexLogoBlobs;
+        } else if constexpr (std::is_same_v<TKey, TKeyBlock>) {
+            return vctx.SstIndexBlocks;
+        } else {
+            static_assert(std::is_same_v<TKey, TKeyBarrier>);
+            return vctx.SstIndexBarriers;
+        }
+    }
+
     template <class TKey, class TMemRec>
     struct TRecIndex : public TThrRefBase {
         typedef TIndexRecord<TKey, TMemRec> TRec;
@@ -19,7 +32,7 @@ namespace NKikimr {
         TTrackableVector<TRec> LoadedIndex;
 
         TRecIndex(TVDiskContextPtr vctx)
-            : LoadedIndex(TMemoryConsumer(vctx->SstIndex))
+            : LoadedIndex(TMemoryConsumer(SstIndexConsumer<TKey>(*vctx)))
         {}
 
         bool IsLoaded() const {
@@ -184,8 +197,8 @@ namespace NKikimr {
         TTrackableVector<TRecLow> IndexLow;
 
         TRecIndex(TVDiskContextPtr vctx)
-            : IndexHigh(TMemoryConsumer(vctx->SstIndex))
-            , IndexLow(TMemoryConsumer(vctx->SstIndex))
+            : IndexHigh(TMemoryConsumer(vctx->SstIndexLogoBlobs))
+            , IndexLow(TMemoryConsumer(vctx->SstIndexLogoBlobs))
         {}
 
         bool IsLoaded() const {
@@ -325,7 +338,7 @@ namespace NKikimr {
         TLevelSegment(TVDiskContextPtr vctx)
             : TRecIndex<TKey, TMemRec>(vctx)
             , LastPartAddr()
-            , LoadedOutbound(TMemoryConsumer(vctx->SstIndex))
+            , LoadedOutbound(TMemoryConsumer(SstIndexConsumer<TKey>(*vctx)))
             , Info()
             , AllChunks()
             , StorageRatio()
@@ -334,7 +347,7 @@ namespace NKikimr {
         TLevelSegment(TVDiskContextPtr vctx, const TDiskPart &addr)
             : TRecIndex<TKey, TMemRec>(vctx)
             , LastPartAddr(addr)
-            , LoadedOutbound(TMemoryConsumer(vctx->SstIndex))
+            , LoadedOutbound(TMemoryConsumer(SstIndexConsumer<TKey>(*vctx)))
             , Info()
             , AllChunks()
             , StorageRatio()
@@ -345,7 +358,7 @@ namespace NKikimr {
         TLevelSegment(TVDiskContextPtr vctx, const NKikimrVDiskData::TDiskPart &pb)
             : TRecIndex<TKey, TMemRec>(vctx)
             , LastPartAddr(pb)
-            , LoadedOutbound(TMemoryConsumer(vctx->SstIndex))
+            , LoadedOutbound(TMemoryConsumer(SstIndexConsumer<TKey>(*vctx)))
             , Info()
             , AllChunks()
             , StorageRatio()

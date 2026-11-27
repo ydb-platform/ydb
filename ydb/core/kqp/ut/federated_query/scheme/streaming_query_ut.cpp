@@ -215,11 +215,13 @@ Y_UNIT_TEST_SUITE(KqpSchemeStreamingQuery) {
         const TString body = " AS DO BEGIN\n    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic -- copy events\nEND DO;";
         execute("CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (RUN = FALSE)" + body);
         UNIT_ASSERT_VALUES_EQUAL(show(), "CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (\n    RUN = FALSE\n)" + body);
-        execute("$start = Timestamp('2025-05-04T23:59:59.123456Z'); "
+        execute(
+            "$start = Timestamp('2025-05-04T23:59:59.123456Z'); "
             "ALTER STREAMING QUERY `MyFolder/MyQuery` SET (CHECKPOINT_INTERVAL = 'PT3S', READ_FROM = $start + Interval('PT1S'))");
         const auto evaluatedDdl = show("/Root/MyFolder/MyQuery");
         UNIT_ASSERT_VALUES_EQUAL(evaluatedDdl, "CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (\n    RUN = FALSE,\n"
-            "    CHECKPOINT_INTERVAL = 'PT3S',\n    READ_FROM = Timestamp('2025-05-05T00:00:00.123456Z')\n)" + body);
+                                               "    CHECKPOINT_INTERVAL = 'PT3S',\n    READ_FROM = Timestamp('2025-05-05T00:00:00.123456Z')\n)" +
+                                                   body);
         execute("DROP STREAMING QUERY `MyFolder/MyQuery`");
         execute(evaluatedDdl);
         UNIT_ASSERT_VALUES_EQUAL(show(), evaluatedDdl);
@@ -233,7 +235,7 @@ Y_UNIT_TEST_SUITE(KqpSchemeStreamingQuery) {
 
         for (const auto& position : positions) {
             execute(TString("ALTER STREAMING QUERY `MyFolder/MyQuery` SET (CHECKPOINT_INTERVAL = 'PT3S', ") +
-                "RESOURCE_POOL = 'sales_pool', WATERMARK_LATE_EVENTS_POLICY = ADJUST, " + position + ")");
+                    "RESOURCE_POOL = 'sales_pool', WATERMARK_LATE_EVENTS_POLICY = ADJUST, " + position + ")");
             const auto ddl = show();
             UNIT_ASSERT_STRING_CONTAINS(ddl, "CHECKPOINT_INTERVAL = 'PT3S'");
             UNIT_ASSERT_STRING_CONTAINS(ddl, "RESOURCE_POOL = 'sales_pool'");
@@ -250,7 +252,7 @@ Y_UNIT_TEST_SUITE(KqpSchemeStreamingQuery) {
         for (const TString& lexer : { "", "--!ansi_lexer\n" }) {
             execute("DROP STREAMING QUERY `MyFolder/MyQuery`");
             execute(lexer + poolDdl);
-            CheckObjectProperties(*kikimr->GetTestServer().GetRuntime(), "/Root/MyFolder/MyQuery", {{ "resource_pool", "ops'\"\\\x01zone" }});
+            CheckObjectProperties(*kikimr->GetTestServer().GetRuntime(), "/Root/MyFolder/MyQuery", { { "resource_pool", "ops'\"\\\x01zone" } });
         }
 
         execute("CREATE TABLE MyTable (id Uint64, PRIMARY KEY (id))");

@@ -148,8 +148,12 @@ namespace NKikimr::NStorage {
         if (!Self->StorageConfig) {
             throw TExNoQuorum() << "No storage configuration is available";
         }
-        if (Self->IsBridged() || !Self->SelfManagementEnabled || !Self->StorageConfig->GetDataCenterQuorumEnabled()) {
-            throw TExError() << "SetDataCenterState requires an ordinary self-managed cluster with DC quorum enabled";
+        if (Self->IsBridged() || !Self->SelfManagementEnabled) {
+            throw TExError() << "SetDataCenterState requires an ordinary self-managed cluster";
+        }
+        if (!Self->StorageConfig->GetDataCenterQuorumEnabled()) {
+            InvokeOtherActor(*Self, &TDistributedConfigKeeper::ScheduleConfigRecovery);
+            throw TExRace() << "Distconf is waiting to activate DC quorum after all static nodes report support";
         }
         if (change.GetName().empty() || !change.HasState()
                 || (change.GetState() != TDataCenterState::INCLUDED && change.GetState() != TDataCenterState::EXCLUDED)) {

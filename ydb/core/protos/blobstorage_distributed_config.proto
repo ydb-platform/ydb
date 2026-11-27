@@ -405,8 +405,6 @@ message TEvNodeConfigInvokeOnRoot {
     // Read the static-node connectivity of the top of this binding component, even without global quorum.
     message TQueryPileConnectivity {}
 
-    message TEnableDataCenterQuorum {}
-
     // Report how far the rollback of the bridge mode has gone: whether the cluster still has its cluster state, and
     // which nodes still run with BridgeConfig.
     message TQueryBridgeRollbackStatus {}
@@ -452,8 +450,7 @@ message TEvNodeConfigInvokeOnRoot {
         TQueryBridgeRollbackStatus QueryBridgeRollbackStatus = 32;
         TRollbackBridge RollbackBridge = 33;
         TDataCenterStates ApplyDataCenterStates = 34;
-        TEnableDataCenterQuorum EnableDataCenterQuorum = 35;
-        TDataCenterStates.TDataCenter SetDataCenterState = 36;
+        TDataCenterStates.TDataCenter SetDataCenterState = 35;
     }
 }
 

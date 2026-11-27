@@ -801,6 +801,20 @@ namespace NKikimr::NStorage {
             }
         }
 
+        // A recovered proposal keeps its original fingerprint. Only a new decision can switch quorum rules.
+        NKikimrBlobStorage::TStorageConfig *candidate = configToPropose ? configToPropose : persistedConfig;
+        if (!dryRun && !IsBridged() && propositionBase && candidate && candidate->GetSelfManagementConfig().GetEnabled()
+                && !candidate->GetDataCenterQuorumEnabled() && !res->GetDataCenterQuorumCapableNodeIds().empty()) {
+            const auto& reported = res->GetDataCenterQuorumCapableNodeIds();
+            THashSet<ui32> capable(reported.begin(), reported.end());
+            if (candidate->AllNodesSize() && std::ranges::all_of(candidate->GetAllNodes(), [&](const auto& node) {
+                    return capable.contains(node.GetNodeId());
+                })) {
+                candidate->SetDataCenterQuorumEnabled(true);
+                configToPropose = candidate;
+            }
+        }
+
         if (configToPropose) {
             result.PropositionBase = std::move(propositionBase);
             result.ConfigToPropose = *configToPropose;

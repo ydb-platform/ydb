@@ -161,19 +161,6 @@ namespace NKikimr::NStorage {
                     {"selfId", SelfId()},
                     {"command", op.Command});
                 switch (op.Command.GetRequestCase()) {
-                    case TQuery::kEnableDataCenterQuorum: {
-                        RunCommonChecks();
-                        if (Self->IsBridged() || !Self->SelfManagementEnabled) {
-                            throw TExError() << "DC quorum requires an ordinary self-managed cluster";
-                        }
-                        if (Self->StorageConfig->GetDataCenterQuorumEnabled()) {
-                            return Finish(TResult::OK, std::nullopt);
-                        }
-                        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-                        config.SetDataCenterQuorumEnabled(true);
-                        return StartProposition(&config);
-                    }
-
                     case TQuery::kSetDataCenterState:
                         return SetDataCenterState(op.Command.GetSetDataCenterState());
 
@@ -281,7 +268,8 @@ namespace NKikimr::NStorage {
                     {"marker", "NWDC19"});
 
                 TEvScatter task;
-                task.MutableCollectConfigs();
+                task.MutableCollectConfigs()->SetCheckDataCenterQuorumSupport(
+                    !Self->IsBridged() && !Self->StorageConfig->GetDataCenterQuorumEnabled());
                 const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
                 IssueScatterTask(std::move(task), [this, recoveryGeneration](TEvGather *res) {
                     Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
@@ -354,7 +342,7 @@ namespace NKikimr::NStorage {
             throw TExError() << "Use ApplyDataCenterStates to change DC availability";
         }
         if (current.GetDataCenterQuorumEnabled() != proposed.GetDataCenterQuorumEnabled()) {
-            throw TExError() << "Use EnableDataCenterQuorum to activate DC quorum";
+            throw TExError() << "Distconf manages DC quorum activation automatically";
         }
         CheckStaticGroupStateUpdate(proposed);
         StartProposition(request->MutableConfig());
@@ -413,33 +401,22 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback,
                                                  bool allowConflictingGenerationAdvance) {
-        const TInvokeExternalOperation *op = std::get_if<TInvokeExternalOperation>(&Query);
         bool useTargetQuorum = Self->StorageConfig && Self->StorageConfig->GetDataCenterQuorumEnabled()
             && !Self->IsBridged() && IsDataCenterStateUpdate();
-        bool activating = op && op->Command.HasEnableDataCenterQuorum();
         if (!Self->StorageConfig || (!Self->Scepter && !useTargetQuorum)) {
             throw TExRace() << "No working root for configuration recovery";
         }
         TEvScatter task;
-        task.MutableCollectConfigs()->SetCheckDataCenterQuorumSupport(activating);
+        task.MutableCollectConfigs();
         const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
         IssueScatterTask(std::move(task), [this, recoveryGeneration, callback = std::move(callback),
-                                           allowConflictingGenerationAdvance, useTargetQuorum, activating]
+                                           allowConflictingGenerationAdvance, useTargetQuorum]
                                         (TEvGather *res) {
             if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
                 throw TExRace() << "Configuration changed while collecting configs";
             }
             if (!res->HasCollectConfigs()) {
                 throw TExError() << "Incorrect CollectConfigs response";
-            }
-            if (activating) {
-                const auto& reported = res->GetCollectConfigs().GetDataCenterQuorumCapableNodeIds();
-                THashSet<ui32> capable(reported.begin(), reported.end());
-                for (const NKikimrBlobStorage::TNodeIdentifier& node : Self->StorageConfig->GetAllNodes()) {
-                    if (!capable.contains(node.GetNodeId())) {
-                        throw TExError() << "Static node " << node.GetNodeId() << " has not reported DC quorum support";
-                    }
-                }
             }
             // A no-op checks the current membership before acknowledging the snapshot.
             const auto *target = useTargetQuorum && ProposedStorageConfig.GetGeneration() ? &ProposedStorageConfig : nullptr;
@@ -751,7 +728,8 @@ namespace NKikimr::NStorage {
             [&](TCollectConfigsAndPropose&) {
                 if (InvokePipelineGeneration == Self->InvokePipelineGeneration && status == TResult::OK) {
                     Self->ConfigRecoveryScheduled = false;
-                    if (Self->ConfigRecoveryRequired) {
+                    if (Self->ConfigRecoveryRequired || (RecoveryProposition && !Self->IsBridged()
+                            && Self->SelfManagementEnabled && !Self->StorageConfig->GetDataCenterQuorumEnabled())) {
                         InvokeOtherActor(*Self, &TDistributedConfigKeeper::ScheduleConfigRecovery);
                     }
                 } else if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {

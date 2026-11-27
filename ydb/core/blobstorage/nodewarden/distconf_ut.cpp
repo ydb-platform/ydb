@@ -3363,6 +3363,7 @@ selector_config: []
             , Runtime(runtimeNodeCount)
         {
             Config.MutableSelfManagementConfig()->SetEnabled(true);
+            Config.SetDataCenterQuorumEnabled(true);
             for (auto& node : *Config.MutableAllNodes()) {
                 node.MutableLocation()->SetDataCenter("dc-1");
             }
@@ -3384,6 +3385,7 @@ selector_config: []
         void UseMirror3dcGroup(ui32 nodeCount = 3) {
             Config = MakeStorageConfig(nodeCount, 1, {1, 2, 3}, TBlobStorageGroupType::ErasureMirror3dc);
             Config.MutableSelfManagementConfig()->SetEnabled(true);
+            Config.SetDataCenterQuorumEnabled(true);
             Config.MutableSelfManagementConfig()->SetErasureSpecies("mirror-3-dc");
             for (auto& node : *Config.MutableAllNodes()) {
                 node.MutableLocation()->SetDataCenter("dc-" + std::to_string((node.GetNodeId() - 1) % 3 + 1));
@@ -5133,6 +5135,7 @@ selector_config: []
 
     Y_UNIT_TEST(DataCenterQuorumActivationNeedsLegacyWriteQuorum) {
         TCommitConfirmationFixture fixture(true);
+        fixture.Config.ClearDataCenterQuorumEnabled();
         for (ui32 id : {1, 2, 3}) {
             TString name = "dc-" + std::to_string(id);
             fixture.Config.MutableAllNodes(id - 1)->MutableLocation()->SetDataCenter(name);
@@ -5164,32 +5167,43 @@ selector_config: []
     }
 
     Y_UNIT_TEST(DataCenterQuorumActivationRequiresEveryStaticKeeper) {
-        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
         TCommitConfirmationFixture fixture(true);
-        fixture.Start(true);
-        TActorId root = fixture.Root();
-        TActorId client = fixture.Runtime.AllocateEdgeActor(root.NodeId());
-        bool hideCapability = true;
+        fixture.State.RequiredRootNodeId = 1;
+        fixture.Config.ClearDataCenterQuorumEnabled();
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 id : {1, 2, 3}) {
+            *fixture.Metadata(id).MutableCommittedStorageConfig() = fixture.Config;
+        }
+        bool upgrading = true;
+        bool sawLegacyKeeper = false;
         fixture.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-            if (hideCapability && ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType) {
+            if (upgrading && ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType) {
                 auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
                 if (record.HasCollectConfigs()) {
-                    record.MutableCollectConfigs()->ClearDataCenterQuorumCapableNodeIds();
+                    auto *nodes = record.MutableCollectConfigs()->MutableDataCenterQuorumCapableNodeIds();
+                    auto end = std::remove(nodes->begin(), nodes->end(), 3u);
+                    if (end != nodes->end()) {
+                        nodes->erase(end, nodes->end());
+                        sawLegacyKeeper = true;
+                    }
                 }
             }
             return true;
         };
-        for (bool supported : {false, true}) {
-            hideCapability = !supported;
-            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-            request->Record.MutableEnableDataCenterQuorum();
-            fixture.Runtime.Send(new IEventHandle(root, client, request.release()), root.NodeId());
-            auto reply = fixture.Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(client, false);
-            UNIT_ASSERT(reply);
-            UNIT_ASSERT_C(reply->Get()->Record.GetStatus() == (supported ? TResult::OK : TResult::ERROR),
-                reply->Get()->Record.DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, root).GetQueryConfig().GetConfig().GetDataCenterQuorumEnabled(), supported);
-        }
+        fixture.Start(true);
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return sawLegacyKeeper; }));
+        TActorId root = fixture.Root();
+        UNIT_ASSERT(!QueryKeeper(fixture.Runtime, root).GetQueryConfig().GetConfig().GetDataCenterQuorumEnabled());
+
+        fixture.Runtime.StopNode(3);
+        upgrading = false;
+        fixture.Runtime.StartNode(3);
+        fixture.Keepers[2] = RegisterKeeper(fixture.Runtime, fixture.Config, 3, fixture.State);
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] {
+            return fixture.Metadata(1).GetCommittedStorageConfig().GetDataCenterQuorumEnabled();
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration(),
+            fixture.Config.GetGeneration() + 1);
     }
 
     Y_UNIT_TEST(DataCenterQuorumCountsOnlyIncludedVoters) {
@@ -5204,7 +5218,7 @@ selector_config: []
         TDataCenterStates::TDataCenter* dc = config.MutableDataCenterStates()->AddDataCenter();
         dc->SetName("dc-3");
         dc->SetState(TDataCenterState::EXCLUDED);
-        UNIT_ASSERT(HasTestConfigQuorum(config, {1, 2, 7})); // legacy quorum until explicit activation
+        UNIT_ASSERT(HasTestConfigQuorum(config, {1, 2, 7})); // legacy quorum until the transition is committed
         config.SetDataCenterQuorumEnabled(true);
         for (TDataCenterState::EState state : {TDataCenterState::EXCLUDED, TDataCenterState::RECOVERING}) {
             dc->SetState(state);

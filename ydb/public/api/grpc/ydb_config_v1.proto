@@ -16,7 +16,7 @@ service ConfigService {
     rpc FetchConfig(Config.FetchConfigRequest) returns (Config.FetchConfigResponse);
 
     // Change one data center's membership in a non-bridged, self-managed cluster.
-    // Requires cluster administrator privileges and activated data center quorum.
+    // Requires cluster administrator privileges. Distconf enables data center quorum automatically after upgrade.
     rpc SetDataCenterState(Config.SetDataCenterStateRequest) returns (Config.SetDataCenterStateResponse);
 
     // Start cluster initialization process.

@@ -1053,6 +1053,10 @@ namespace NKikimr::NStorage {
                     || (meta.GetGeneration() == StorageConfig->GetGeneration()
                         && meta != TStorageConfigMeta(*StorageConfig)))) {
                 RequestConfigRecovery(/*invalidateInFlight=*/ appliedConfigChanged);
+            } else if (inserted && SelfManagementEnabled && !StorageConfig->GetDataCenterQuorumEnabled()
+                    && AllBoundNodes.size() >= static_cast<size_t>(StorageConfig->AllNodesSize())) {
+                // The last upgraded keeper may rejoin with the same config generation.
+                RequestConfigRecovery(/*invalidateInFlight=*/ true);
             }
         }
 

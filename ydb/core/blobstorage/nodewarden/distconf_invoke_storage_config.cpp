@@ -1107,7 +1107,7 @@ namespace NKikimr::NStorage {
         };
 
         TEvScatter task;
-        task.MutableCollectConfigs();
+        task.MutableCollectConfigs()->SetCheckDataCenterQuorumSupport(!Self->IsBridged());
         IssueScatterTask(std::move(task), std::move(done));
     }
 

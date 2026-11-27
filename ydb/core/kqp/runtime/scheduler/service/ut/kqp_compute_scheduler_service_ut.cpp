@@ -170,11 +170,16 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         auto grabWakeup = [&](const TActorId& worker) {
             return f.Runtime.GrabEdgeEvent<TTask::TResumeEventType>(worker, TDuration::MilliSeconds(10));
         };
+        auto assertNoWakeups = [&] {
+            // Tick delivers the service event synchronously. Inspect the dedicated worker
+            // mailboxes without dispatching (waiting for an absent event can throw).
+            UNIT_ASSERT(f.Runtime.CaptureMailboxEvents(workerA.Hint(), workerA.NodeId()).empty());
+            UNIT_ASSERT(f.Runtime.CaptureMailboxEvents(workerB.Hint(), workerB.NodeId()).empty());
+        };
         f.Tick(8);
         UNIT_ASSERT_VALUES_EQUAL(a->GetSnapshot()->CpuFairShare, 0);
         UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->CpuFairShare, 0);
-        UNIT_ASSERT(!grabWakeup(workerA));
-        UNIT_ASSERT(!grabWakeup(workerB));
+        assertNoWakeups();
 
         NResourcePool::TPoolSettings settings;
         settings.TotalCpuLimitPercentPerNode = 12.5;
@@ -193,8 +198,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         taskA->DecreaseUsage(TDuration::Zero(), TTask::CPU_DEFAULT);
 
         f.Tick(8);
-        UNIT_ASSERT(!grabWakeup(workerA)); // No extra wakeup when the share stays positive.
-        UNIT_ASSERT(!grabWakeup(workerB));
+        assertNoWakeups(); // No extra wakeup when the share stays positive.
     }
 
     Y_UNIT_TEST(WakesQueryWhenPoolFairShareStaysPositive) {

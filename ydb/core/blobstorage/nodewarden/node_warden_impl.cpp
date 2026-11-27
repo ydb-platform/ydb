@@ -15,6 +15,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
+#include <ydb/core/blobstorage/syncer/group_state_barrier.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactbroker.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
@@ -508,6 +509,7 @@ void TNodeWarden::Bootstrap() {
     YDB_LOG_DEBUG_COMP(BS_NODE, "Bootstrap",
         {"marker", "NW26"});
 
+    NGroupSyncer::RegisterGroupStateBarrierControls();
     LocalNodeId = SelfId().NodeId();
     WhiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(LocalNodeId);
 
@@ -803,7 +805,12 @@ void TNodeWarden::Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {
             if (group.ProxyId) {
                 Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(group.Info, group.NodeLayoutInfo));
             }
+        } else {
+            group.NodeLayoutInfo.Reset();
         }
+    }
+    for (const auto& [groupId, _] : BridgeProxies) {
+        SendBridgeReadLayouts(groupId);
     }
 }
 
@@ -1543,6 +1550,7 @@ void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
 }
 
 void TNodeWarden::Handle(TEvPrivate::TEvUpdateStats::TPtr&) {
+    ExpireS3EndpointHandoffs();
     const bool useFixedVDiskSlotSize = UseFixedVDiskSlotSize;
     if (useFixedVDiskSlotSize != UseFixedVDiskSlotSizeCached) {
         UseFixedVDiskSlotSizeCached = useFixedVDiskSlotSize;

@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_work_factory.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/yexception.h>
 

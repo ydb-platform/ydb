@@ -2,6 +2,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include <ydb/core/base/table_index.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
@@ -71,6 +73,25 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
         {"version", schemaVersion});
 
     TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable());
+    if (schemeTx.HasInitialHnswCentroid()) {
+        using namespace NTableIndex::NKMeans;
+        const TClusterId parent = 0;
+        const TClusterId leaf = SetPostingParentFlag(1);
+        const TRawTypeValue rawKey[] = {
+            TRawTypeValue(&parent, sizeof(parent), NScheme::NTypeIds::Uint64),
+            TRawTypeValue(&leaf, sizeof(leaf), NScheme::NTypeIds::Uint64),
+        };
+        const TCell key[] = {TCell(&rawKey[0]), TCell(&rawKey[1])};
+        if (ComparePointAndRange(key, info->GetTableRange(), info->KeyColumnTypes, info->KeyColumnTypes) == 0) {
+            const auto column = FindIf(info->Columns.begin(), info->Columns.end(), [](const auto& item) {
+                return item.second.Name == CentroidColumn;
+            });
+            Y_ENSURE(column != info->Columns.end());
+            const auto centroid = NScheme::TString::TInstance(schemeTx.GetInitialHnswCentroid());
+            const NTable::TUpdateOp value[] = {{column->first, NTable::ECellOp::Set, centroid}};
+            txc.DB.Update(info->LocalTid, NTable::ERowOp::Upsert, rawKey, value);
+        }
+    }
     DataShard.AddUserTable(tableId, info);
 
     info->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {

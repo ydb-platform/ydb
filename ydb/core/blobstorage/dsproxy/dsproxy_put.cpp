@@ -7,7 +7,6 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 
 #include <util/generic/ymath.h>

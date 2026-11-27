@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/dictionary_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/index_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/abstract.h>
@@ -304,8 +305,8 @@ TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDat
     std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>> result;
     for (auto&& i : addresses) {
         auto indexMeta = GetSourceSchema()->GetIndexInfo().GetIndexVerified(i.first);
-        result.emplace_back(
-            indexMeta->BuildFetchTask(i.second, indexMeta.GetObjectPtrVerified(), GetContext()->GetCommonContext()->GetStoragesManager()));
+        result.emplace_back(std::make_shared<NIndexes::TIndexFetcherLogic>(
+            i.second, indexMeta.GetObjectPtrVerified(), GetContext()->GetCommonContext()->GetStoragesManager()));
     }
     return result;
 }

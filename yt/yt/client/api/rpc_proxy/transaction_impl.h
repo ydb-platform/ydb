@@ -211,10 +211,6 @@ public:
         NObjectClient::TCellTag cellTag,
         const TExternalizeNodeOptions& options) override;
 
-    TFuture<void> InternalizeNode(
-        const NYPath::TYPath& path,
-        const TInternalizeNodeOptions& options) override;
-
     TFuture<bool> NodeExists(
         const NYPath::TYPath& path,
         const NApi::TNodeExistsOptions& options) override;

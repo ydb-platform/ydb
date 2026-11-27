@@ -49,6 +49,7 @@ namespace NKikimr::NBlobDepot {
     struct TS3PutResult {
         std::optional<TString> Error;
         bool SlowDown = false;
+        bool MayArriveLate = false;
     };
 
     struct TKeyResolved {
@@ -141,6 +142,7 @@ namespace NKikimr::NBlobDepot {
             // tablet responses
             TEvBlobDepot::TEvRegisterAgentResult*,
             TEvBlobDepot::TEvAllocateIdsResult*,
+            TEvBlobDepot::TEvHotWriteCreditResult*,
             TEvBlobDepot::TEvBlockResult*,
             TEvBlobDepot::TEvQueryBlocksResult*,
             TEvBlobDepot::TEvCollectGarbageResult*,
@@ -225,7 +227,7 @@ namespace NKikimr::NBlobDepot {
         ui64 TabletId = Max<ui64>();
         TActorId PipeId;
         TActorId PipeServerId;
-        bool IsConnected = false;
+        bool IsConnected = false; // tablet registration has completed on this pipe
         ui64 ConnectionInstance = 0;
 
         NMonitoring::TDynamicCounterPtr AgentCounters;
@@ -271,6 +273,10 @@ namespace NKikimr::NBlobDepot {
 
         EMode Mode = EMode::None;
 
+        bool IsWaitingForS3Router() const {
+            return IsConnected && Mode == EMode::Registering;
+        }
+
         void SwitchMode(EMode mode);
 
     private:
@@ -282,6 +288,7 @@ namespace NKikimr::NBlobDepot {
                 EvPushMetrics,
                 EvS3GetThrottleWakeup,
                 EvS3Result,
+                EvReturnIdleHotWriteCredits,
             };
         };
 
@@ -311,12 +318,14 @@ namespace NKikimr::NBlobDepot {
 
                 hFunc(TEvBlobDepot::TEvRegisterAgentResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvAllocateIdsResult, HandleTabletResponse);
+                hFunc(TEvBlobDepot::TEvHotWriteCreditResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvBlockResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvQueryBlocksResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvCollectGarbageResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvCommitBlobSeqResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvResolveResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvPrepareWriteS3Result, HandleTabletResponse);
+                hFunc(NStorage::TEvNodeWardenBlobDepotS3RouterReady, Handle);
 
                 hFunc(TEvBlobStorage::TEvGetResult, HandleOtherResponse);
                 hFunc(TEvBlobStorage::TEvPutResult, HandleOtherResponse);
@@ -328,12 +337,13 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvProcessPendingEvent, HandleProcessPendingEvent);
                 fFunc(TEvPrivate::EvPendingEventQueueWatchdog, HandlePendingEventQueueWatchdog);
 
-                cFunc(TEvPrivate::EvQueryWatchdog, HandleQueryWatchdog);
+                fFunc(TEvPrivate::EvQueryWatchdog, HandleQueryWatchdog);
 
                 cFunc(TEvPrivate::EvPushMetrics, HandlePushMetrics);
 
                 fFunc(TEvPrivate::EvS3Result, HandleS3Result);
                 cFunc(TEvPrivate::EvS3GetThrottleWakeup, HandleS3GetThrottleWakeup);
+                cFunc(TEvPrivate::EvReturnIdleHotWriteCredits, ReturnIdleHotWriteCredits);
             )
 
             DeletePendingQueries.Clear();
@@ -359,11 +369,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         void ReleaseS3Wrapper() {
-            if (!S3WrapperId) {
+            if (!S3RouterGeneration) {
                 return;
             }
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
-                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(TabletId, BlobDepotGeneration));
+                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(TabletId, std::exchange(S3RouterGeneration, 0)));
             S3WrapperId = {};
         }
 
@@ -418,6 +428,7 @@ namespace NKikimr::NBlobDepot {
         void OnRequestComplete(ui64 id, TRequestSender::TResponse response, TRequestsInFlight& map,
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay = nullptr);
         void DropTabletRequest(ui64 id);
+        void TakeOverS3Preparation(ui64 requestId);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -427,6 +438,14 @@ namespace NKikimr::NBlobDepot {
             TAllocateIdsContext(NKikimrBlobDepot::TChannelKind::E channelKind)
                 : ChannelKind(channelKind)
             {}
+        };
+
+        struct THotWriteCreditContext : TRequestContext {
+            explicit THotWriteCreditContext(ui64 queryId)
+                : QueryId(queryId)
+            {}
+
+            const ui64 QueryId;
         };
 
         ui32 BlobDepotGeneration = 0;
@@ -447,13 +466,13 @@ namespace NKikimr::NBlobDepot {
         }
 
         std::optional<NKikimrBlobDepot::TS3BackendSettings> S3BackendSettings;
-        // S3WrapperId is always the per-node router service id obtained from NodeWarden
-        // (TEvNodeWardenAcquireBlobDepotS3Router). The agent is responsible for releasing
-        // it on shutdown / re-init via TEvNodeWardenReleaseBlobDepotS3Router.
+        // Workers keep their concrete router for the lifetime of each physical request.
         TActorId S3WrapperId;
+        ui32 S3RouterGeneration = 0;
         TString S3BasePath;
 
         void InitS3(const TString& name);
+        void Handle(NStorage::TEvNodeWardenBlobDepotS3RouterReady::TPtr ev);
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
@@ -465,6 +484,7 @@ namespace NKikimr::NBlobDepot {
         void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) override;
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvRegisterAgentResult& msg);
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvAllocateIdsResult& msg);
+        void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvHotWriteCreditResult& msg);
 
         template<typename T, typename = typename TEvBlobDepot::TEventFor<T>::Type>
         ui64 Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId = {});
@@ -479,11 +499,13 @@ namespace NKikimr::NBlobDepot {
         struct TExecutingQueries {};
         struct TPendingBlockChecks {};
         struct TPendingId {};
+        struct TPendingHotWriteCredit {};
 
         class TQuery
             : public TIntrusiveListItem<TQuery, TExecutingQueries>
             , public TIntrusiveListItem<TQuery, TPendingBlockChecks>
             , public TIntrusiveListItem<TQuery, TPendingId>
+            , public TIntrusiveListItem<TQuery, TPendingHotWriteCredit>
             , public TRequestSender
         {
         protected:
@@ -493,7 +515,7 @@ namespace NKikimr::NBlobDepot {
             mutable TString QueryIdString;
             const TMonotonic StartTime;
             const TInstant Deadline;
-            const TMonotonic DeadlineMonotonic;
+            TMonotonic DeadlineMonotonic;
             std::multimap<TMonotonic, TQuery*>::iterator QueryWatchdogMapIter;
             NLog::EPriority WatchdogPriority = NLog::PRI_WARN;
             bool Destroyed = false;
@@ -507,6 +529,12 @@ namespace NKikimr::NBlobDepot {
         public:
             TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event, TMonotonic received);
             virtual ~TQuery();
+
+            ui64 GetQueryNumber() const { return QueryId; }
+            TInstant GetDeadline() const { return Deadline; }
+            ui64 HotWriteCreditNeeded = 0;
+            bool HotWriteCreditFailOnSlowDown = false;
+            virtual void OnHotWriteCredit() { Y_ABORT(); }
 
             void CheckQueryExecutionTime(TMonotonic now);
             bool CheckDeadline(TMonotonic now);
@@ -538,6 +566,7 @@ namespace NKikimr::NBlobDepot {
             using TFinishCallback = std::function<void(NKikimrProto::EReplyStatus, TString, const char*)>;
             void IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId);
 
+            void LimitS3Deadline(TInstant callerDeadline);
             void IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id, TS3Locator locator);
 
         protected: // reading logic
@@ -581,6 +610,22 @@ namespace NKikimr::NBlobDepot {
             void DoDestroy();
         };
 
+        ui64 HotWriteCreditEpoch = 0;
+        ui64 HotWriteCreditAvailable = 0;
+        // Include fixed request storage so tiny writes also stay bounded during an outage.
+        static constexpr ui64 HotWriteCreditWaiterOverhead = sizeof(TQuery) + sizeof(TEvBlobStorage::TEvPut) + sizeof(IEventHandle);
+        ui64 HotWriteCreditQueueBytes = 0;
+        bool HotWriteCreditInFlight = false;
+        bool HotWriteCreditReturnScheduled = false;
+        TIntrusiveList<TQuery, TPendingHotWriteCredit> QueriesWaitingForHotWriteCredit;
+
+        bool EnsureHotWriteCredit(TQuery *query, ui64 bytes, bool failOnSlowDown);
+        bool RemoveHotWriteCreditWaiter(TQuery *query);
+        void ProcessHotWriteCreditQueue();
+        void ScheduleReturnIdleHotWriteCredits();
+        void ReturnIdleHotWriteCredits();
+        void ReturnHotWriteCredits();
+
         template<typename TEvent>
         class TBlobStorageQuery : public TQuery {
         public:
@@ -619,6 +664,7 @@ namespace NKikimr::NBlobDepot {
         // A query cancellation can unlink pending reads during agent destruction.
         std::list<ui64> PendingS3Reads;
         std::multimap<TMonotonic, TQuery*> QueryWatchdogMap;
+        TWakeupTimer QueryWatchdogTimer;
         TIntrusiveListWithAutoDelete<TQuery, TQuery::TDeleter, TExecutingQueries> ExecutingQueries;
         TIntrusiveListWithAutoDelete<TQuery, TQuery::TDeleter, TExecutingQueries> DeletePendingQueries;
         bool ProcessPendingEventInFlight = false;
@@ -635,7 +681,8 @@ namespace NKikimr::NBlobDepot {
         void SchedulePendingEventQueueWatchdog();
         void HandlePendingEventQueueWatchdog(const TAutoPtr<IEventHandle>& ev);
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
-        void HandleQueryWatchdog();
+        void ScheduleQueryWatchdog();
+        void HandleQueryWatchdog(const TAutoPtr<IEventHandle>& ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -731,15 +778,17 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        struct TS3Read : TRequestContext {
+        struct TS3Read : TRequestContext, std::enable_shared_from_this<TS3Read> {
             ui64 RequestId;
             TMonotonic Deadline;
+            ui64 ConnectionInstance;
             std::optional<std::list<ui64>::iterator> Queued;
             TString Key;
             ui32 Offset;
             ui32 Len;
             TQuery::TFinishCallback Finish;
             ui64 ReadId;
+            TActorId ReplyActorId;
             ui32 SlowDownRetries = 0;
             NWilson::TSpan Span;
 
@@ -772,10 +821,11 @@ namespace NKikimr::NBlobDepot {
         void HandleS3ReadResult(ui64 id, IEventHandle& result);
         void HandleS3WriteResult(ui64 id, IEventHandle& result);
         void IssueOrEnqueueS3Read(TS3Read& read);
-        void DispatchS3Read(const TS3Read& read);
+        void DispatchS3Read(TS3Read& read);
         void NotifyS3GetSlowDown();
         void OnS3GetCompleted(bool success);
         void RunPendingS3ReadsIfPossible();
+        void RetirePendingS3Reads();
         void HandleS3GetThrottleWakeup();
 
         void IncS3HttpErrorCounter(const TString& operation, int httpCode);

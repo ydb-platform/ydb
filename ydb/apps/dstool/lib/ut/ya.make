@@ -13,6 +13,7 @@ TEST_SRCS(
     test_cluster_reanimate.py
     test_cluster_workload_config.py
     test_cluster_workload_runtime.py
+    test_vdisk_list.py
 )
 
 PEERDIR(

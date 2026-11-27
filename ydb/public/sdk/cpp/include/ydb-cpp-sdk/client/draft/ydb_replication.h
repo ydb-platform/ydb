@@ -143,6 +143,8 @@ public:
         std::string DstPath;
         TStats Stats;
         std::optional<std::string> SrcChangefeedName;
+        // Issues reported for this item.
+        NYdb::NIssue::TIssues Issues;
     };
 
     enum class EConsistencyLevel {

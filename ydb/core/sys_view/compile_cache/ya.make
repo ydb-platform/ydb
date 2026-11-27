@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/kqp/common/simple
     ydb/core/kqp/runtime/common
     ydb/core/sys_view/common
+    ydb/core/sys_view/scan
     ydb/library/actors/core
     ydb/library/ydb_issue
 )

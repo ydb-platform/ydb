@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/runtime/scheduler/fwd.h>
 
 #include <ydb/library/actors/core/monotonic.h>
-#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+#include <ydb/library/yql/dq/actors/common/dq_schedulable.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>

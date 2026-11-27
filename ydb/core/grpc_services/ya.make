@@ -216,13 +216,14 @@ PEERDIR(
     ydb/core/local_indexes/bloom
     ydb/core/persqueue/deferred_publish
     ydb/core/protos
+    ydb/core/quoter/public
     ydb/core/scheme
     ydb/core/scheme/mkql
     ydb/core/security
     ydb/core/security/ldap_auth_provider
     ydb/core/security/sasl
     ydb/core/statistics
-    ydb/core/sys_view
+    ydb/core/sys_view/scan_factory
     ydb/core/tx
     ydb/core/tx/data_events
     ydb/core/tx/datashard

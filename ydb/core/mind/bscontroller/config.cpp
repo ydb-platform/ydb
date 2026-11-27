@@ -682,6 +682,14 @@ namespace NKikimr::NBsController {
                     TStoragePoolInfo::UpdatePDiskFilters(txc.DB,
                         previous ? &previous->second.PDiskFilters : nullptr,
                         current ? &current->second.PDiskFilters : nullptr);
+                    if (previous && current && previous->second.TargetInvariant != current->second.TargetInvariant) {
+                        const auto& groups = state.StoragePoolGroups.Get();
+                        const TBoxStoragePoolId& poolId = current->first;
+                        for (auto it = groups.lower_bound({poolId, TGroupId::Zero()});
+                                it != groups.end() && it->first == poolId; ++it) {
+                            state.GroupStateUpdates.insert(it->second.GetRawId());
+                        }
+                    }
                 }
             }
             if (state.Nodes.Changed()) {
@@ -689,10 +697,6 @@ namespace NKikimr::NBsController {
             }
             if (state.BlobDepotDeleteQueue.Changed()) {
                 MakeTableMerger<Schema::BlobDepotDeleteQueue>(&BlobDepotDeleteQueue, &state.BlobDepotDeleteQueue.Get(), this)(txc);
-            }
-            if (!state.NewRetiredS3Namespaces.empty()) {
-                MakeTableMerger<Schema::RetiredS3Namespaces>(
-                    static_cast<const TRetiredS3Namespaces*>(nullptr), &state.NewRetiredS3Namespaces, this)(txc);
             }
 
             // while converting to bridged cluster, watch for groups that have to be converted or stop blocking conversion
@@ -1470,6 +1474,9 @@ namespace NKikimr::NBsController {
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TStoragePoolSettings *pb, const TStoragePoolInfo &pool) {
             if (pool.VDiskHeapAllocatorNumLeadingDisks) {
                 pb->SetVDiskHeapAllocatorNumLeadingDisks(*pool.VDiskHeapAllocatorNumLeadingDisks);
+            }
+            if (pool.TargetInvariant) {
+                pb->SetTargetInvariant(*pool.TargetInvariant);
             }
         }
 

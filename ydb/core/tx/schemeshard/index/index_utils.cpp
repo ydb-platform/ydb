@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_generated_column_utils.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/persqueue/public/utils.h>
 
@@ -140,6 +141,21 @@ TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
     return result;
 }
 
+void FilterIndexTableTierIds(NKikimrSchemeOp::TPartitionConfig& config) {
+    if (!config.HasCompactionPolicy()) {
+        return;
+    }
+    THashSet<ui32> familyIds{0}; // The default family can be implicit.
+    for (const auto& family : config.GetColumnFamilies()) {
+        familyIds.insert(family.GetId());
+    }
+    for (auto& generation : *config.MutableCompactionPolicy()->MutableGeneration()) {
+        if (!familyIds.contains(generation.GetTierId())) {
+            generation.ClearTierId();
+        }
+    }
+}
+
 namespace {
 
 NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
@@ -149,12 +165,6 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     // KIKIMR-6687
     NKikimrSchemeOp::TPartitionConfig result;
 
-    if (baseTablePartitionConfig.HasNamedCompactionPolicy()) {
-        result.SetNamedCompactionPolicy(baseTablePartitionConfig.GetNamedCompactionPolicy());
-    }
-    if (baseTablePartitionConfig.HasCompactionPolicy()) {
-        result.MutableCompactionPolicy()->CopyFrom(baseTablePartitionConfig.GetCompactionPolicy());
-    }
     // skip optional uint64 FollowerCount = 3;
     if (baseTablePartitionConfig.HasExecutorCacheSize()) {
         result.SetExecutorCacheSize(baseTablePartitionConfig.GetExecutorCacheSize());
@@ -177,18 +187,33 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     if (baseTablePartitionConfig.HasPipelineConfig()) {
         result.MutablePipelineConfig()->CopyFrom(baseTablePartitionConfig.GetPipelineConfig());
     }
-    if (baseTablePartitionConfig.ColumnFamiliesSize()) {
-        // Indexes don't need column families unless it's the default column family
-        for (const auto& family : baseTablePartitionConfig.GetColumnFamilies()) {
-            const bool isDefaultFamily = (
-                (!family.HasId() && !family.HasName()) ||
-                (family.HasId() && family.GetId() == 0) ||
-                (family.HasName() && family.GetName() == "default"));
-            if (isDefaultFamily) {
-                result.AddColumnFamilies()->CopyFrom(family);
-            }
+    for (const auto& family : baseTablePartitionConfig.GetColumnFamilies()) {
+        const bool isDefaultFamily = (
+            (!family.HasId() && !family.HasName()) ||
+            (family.HasId() && family.GetId() == 0) ||
+            (family.HasName() && family.GetName() == "default"));
+        if (isDefaultFamily) {
+            result.AddColumnFamilies()->CopyFrom(family);
         }
     }
+    // Resolve presets before filtering their generation-to-family references.
+    if (baseTablePartitionConfig.HasNamedCompactionPolicy()) {
+        const auto& name = baseTablePartitionConfig.GetNamedCompactionPolicy();
+        const auto* preset = HasAppData() && !name.empty()
+            ? AppData()->DomainsInfo->NamedCompactionPolicies.FindPtr(name) : nullptr;
+        if (preset) {
+            (*preset)->Serialize(*result.MutableCompactionPolicy());
+        } else {
+            // Keep an unresolved name for normal CREATE validation.
+            result.SetNamedCompactionPolicy(name);
+        }
+    } else if (baseTablePartitionConfig.HasCompactionPolicy()) {
+        result.MutableCompactionPolicy()->CopyFrom(baseTablePartitionConfig.GetCompactionPolicy());
+    } else if (HasAppData()) {
+        // Older tables may have no stored policy. Derive their index from the domain default.
+        AppData()->DomainsInfo->GetDefaultUserTablePolicy()->Serialize(*result.MutableCompactionPolicy());
+    }
+    FilterIndexTableTierIds(result);
     if (baseTablePartitionConfig.HasResourceProfile()) {
         result.SetResourceProfile(baseTablePartitionConfig.GetResourceProfile());
     }

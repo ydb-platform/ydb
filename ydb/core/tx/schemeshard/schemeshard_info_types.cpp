@@ -7,7 +7,7 @@
 
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
+#include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tx_processing.h>
@@ -1364,7 +1364,6 @@ bool TPartitionConfigMerger::ApplyChanges(
         policyPtr->Serialize(*result.MutableCompactionPolicy());
     }
 
-
     if (changes.FollowerGroupsSize()) {
         // use FollowerGroups
         if (result.HasFollowerCount()) {
@@ -1871,9 +1870,11 @@ bool TPartitionConfigMerger::VerifyCreateParams(
 
     bool hasStorageConfig = false;
     bool hasAuxilaryFamilies = false;
+    THashSet<ui32> familyIds{0}; // The default family may be implicit.
 
     for (const auto& family : config.GetColumnFamilies()) {
         ui32 fId = family.GetId();
+        familyIds.insert(fId);
         if (fId == 0) {
             hasStorageConfig = family.HasStorageConfig();
         } else {
@@ -1906,6 +1907,17 @@ bool TPartitionConfigMerger::VerifyCreateParams(
 
     if (!VerifyCompactionPolicy(config.GetCompactionPolicy(), errDescr)) {
         return false;
+    }
+
+    const auto& policy = config.GetCompactionPolicy();
+    for (size_t index = 0; index < policy.GenerationSize(); ++index) {
+        const ui32 tierId = policy.GetGeneration(index).GetTierId();
+        if (!familyIds.contains(tierId)) {
+            errDescr = TStringBuilder()
+                << "Compaction generation " << index << " refers to tier " << tierId
+                << " that is not a column family of the table";
+            return false;
+        }
     }
 
     return true;
@@ -2077,30 +2089,8 @@ bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrCompaction::TCo
         }
     }
 
-    // Check constructor preconditions before building a runtime policy.
-    for (size_t index = 0; index < policy.GenerationSize(); ++index) {
-        const auto& generation = policy.GetGeneration(index);
-        if (generation.GetGenerationId() != index) {
-            err = TStringBuilder()
-                << "Compaction generation " << index
-                << ": expected GenerationId " << index
-                << ", got " << generation.GetGenerationId();
-            return false;
-        }
-
-        // The runtime policy derives omitted sizes by dividing by CountToCompact.
-        if (generation.HasCountToCompact() && generation.GetCountToCompact() == 0 &&
-            (!generation.HasExtraCompactionExpMaxSize() || !generation.HasUpliftPartSize()))
-        {
-            err = TStringBuilder()
-                << "Compaction generation " << index
-                << ": CountToCompact must be nonzero when "
-                   "ExtraCompactionExpMaxSize or UpliftPartSize is omitted";
-            return false;
-        }
-    }
-
-    return NLocalDb::ValidateCompactionPolicy(NLocalDb::TCompactionPolicy(policy), err);
+    auto parsed = NLocalDb::TryParseCompactionPolicy(policy, err);
+    return parsed && NLocalDb::ValidateCompactionPolicy(*parsed, err);
 }
 
 bool TPartitionConfigMerger::VerifyCommandOnFrozenTable(const NKikimrSchemeOp::TPartitionConfig &srcConfig, const NKikimrSchemeOp::TPartitionConfig &dstConfig)

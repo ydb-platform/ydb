@@ -1,10 +1,12 @@
 #include "bridge_common.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <span>
 
 using NBridgeTest::GetBridgedLocation;
+using NBridgeTest::MakeLocalPileFirstSettings;
 using NBridgeTest::PutToPileGroup;
 
 namespace {
@@ -15,8 +17,8 @@ namespace {
         return ev;
     }
 
-    TActorId GetBridgeProxyActor(TEnvironmentSetup& env, ui32 groupId) {
-        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+    TActorId GetBridgeProxyActor(TEnvironmentSetup& env, ui32 groupId, ui32 nodeId = 1) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
         env.Runtime->WrapInActorContext(edge, [&] {
             SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvStatus(TInstant::Max()));
         });
@@ -139,20 +141,6 @@ namespace {
         }
     }
 
-    TEnvironmentSetup::TSettings MakeLocalPileFirstSettings(bool enabled = true, ui32 numPiles = 2) {
-        TFeatureFlags featureFlags;
-        featureFlags.SetEnableBridgeProxyLocalPileFirstGet(enabled);
-        return {
-            .NodeCount = 8 * numPiles,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetBridgedLocation,
-            .FeatureFlags = featureFlags,
-            .SelfManagementConfig = true,
-            .NumPiles = numPiles,
-            .AutomaticBootstrap = true,
-        };
-    }
-
     void CheckLocalPileFirstGet(bool localHasBlob, bool mustRestoreFirst = false, bool isIndexOnly = false) {
         TEnvironmentSetup env{MakeLocalPileFirstSettings()};
         const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
@@ -220,6 +208,212 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(BridgeGet) {
+
+    Y_UNIT_TEST(PhysicalGroupAndMirrorReadFollowReaderDatacenter) {
+        // Pile 1 has three complete mirror realms and one extra node in the first datacenter of pile 2.
+        auto dc = [](ui32 node) {
+            return node <= 10 ? (node - 1) / 3 : 3 + (node - 11) / 3;
+        };
+        TFeatureFlags flags;
+        flags.SetEnableBridgeProxyLocalPileFirstGet(true);
+        TEnvironmentSetup env({
+            .NodeCount = 19,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+            .LocationGenerator = [dc](ui32 node) {
+                NActorsInterconnect::TNodeLocation loc;
+                loc.SetBridgePileName(node <= 10 ? "pile_1" : "pile_2");
+                loc.SetDataCenter(TStringBuilder() << "dc_" << dc(node));
+                loc.SetRack(TStringBuilder() << "rack_" << node);
+                loc.SetUnit(ToString(node));
+                return TNodeLocation(loc);
+            },
+            .FeatureFlags = flags,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        });
+        const ui32 group = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto piles = NBridgeTest::GetPileGroups(env, group);
+        const auto remote = env.GetGroupInfo(piles[1]);
+        const TString data = "mixed datacenters";
+        TLogoBlobID id;
+        for (ui32 cookie = 0;; ++cookie) {
+            UNIT_ASSERT_LT(cookie, 100u);
+            id = TLogoBlobID(100500, 1, 1, 0, data.size(), cookie);
+            const auto first = remote->GetTopology().GetVDiskInSubgroup(0, id.Hash());
+            if (dc(remote->GetActorId(first).NodeId()) != dc(10)) {
+                break; // the first disk in subgroup order must lose to the physically closer main replica
+            }
+        }
+        PutToPileGroup(env, piles[0], 1, id, data);
+        PutToPileGroup(env, piles[1], 11, id, data);
+        for (const auto [reader, pile] : {std::pair{1u, 0u}, std::pair{10u, 1u}}) {
+            const auto proxy = GetBridgeProxyActor(env, group, reader);
+            env.Sim(TDuration::Seconds(1));
+            const auto physical = env.GetGroupInfo(piles[pile]);
+            ui32 reads = 0;
+            std::optional<ui32> firstDisk;
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->Sender == proxy) {
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, MakeBlobStorageProxyID(piles[pile]));
+                    ++reads;
+                } else if (!firstDisk && ev->GetTypeRewrite() == TEvBlobStorage::EvVGet && ev->HasEvent()) {
+                    const auto& msg = ev->Get<TEvBlobStorage::TEvVGet>()->Record;
+                    const auto disk = VDiskIDFromVDiskID(msg.GetVDiskID());
+                    if (disk.GroupID == physical->GroupID && msg.ExtremeQueriesSize() &&
+                            LogoBlobIDFromLogoBlobID(msg.GetExtremeQueries(0).GetId()).FullID() == id) {
+                        firstDisk = physical->GetActorId(disk).NodeId();
+                    }
+                }
+                return true;
+            };
+            const auto edge = env.Runtime->AllocateEdgeActor(reader, __FILE__, __LINE__);
+            SendGet(env, edge, group, {&id, 1});
+            auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge);
+            env.Runtime->FilterFunction = {};
+            NBridgeTest::CheckGetResult(*result->Get(), data);
+            UNIT_ASSERT_VALUES_EQUAL(reads, 1);
+            UNIT_ASSERT(firstDisk);
+            UNIT_ASSERT_VALUES_EQUAL(dc(*firstDisk), dc(reader));
+        }
+    }
+
+    Y_UNIT_TEST(BlockReadLocalityFollowsRequestedPartsAndLocationUpdates) {
+        TEnvironmentSetup env{MakeLocalPileFirstSettings()};
+        const ui32 group = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto piles = NBridgeTest::GetPileGroups(env, group);
+        const TString data(4096, 'x');
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        auto primaryNode = [&](ui32 pile, ui32 part) {
+            const auto info = env.GetGroupInfo(piles[pile]);
+            return info->GetActorId(info->GetTopology().GetVDiskInSubgroup(part, id.Hash())).NodeId();
+        };
+        const ui32 reader = primaryNode(0, 0);
+        const ui32 remote1 = primaryNode(1, 1);
+        const ui32 remote2 = primaryNode(1, 2);
+        PutToPileGroup(env, piles[0], reader, id, data);
+        PutToPileGroup(env, piles[1], remote1, id, data);
+        const auto proxy = GetBridgeProxyActor(env, group, reader);
+        const auto edge = env.Runtime->AllocateEdgeActor(reader, __FILE__, __LINE__);
+        env.Sim(TDuration::Seconds(1));
+
+        auto read = [&](std::initializer_list<ui32> offsets, ui32 expectedPile, bool acquireBlockedGeneration = false) {
+            ui32 reads = 0;
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->Sender == proxy) {
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, MakeBlobStorageProxyID(piles[expectedPile]));
+                    ++reads;
+                }
+                return true;
+            };
+            env.Runtime->WrapInActorContext(edge, [&] {
+                using TGet = TEvBlobStorage::TEvGet;
+                TArrayHolder<TGet::TQuery> queries(new TGet::TQuery[offsets.size()]);
+                size_t i = 0;
+                for (ui32 offset : offsets) {
+                    queries[i++].Set(id, offset, 1);
+                }
+                auto get = std::make_unique<TGet>(queries, offsets.size(), TInstant::Max(), NKikimrBlobStorage::FastRead);
+                if (acquireBlockedGeneration) {
+                    get->TabletId = id.TabletID();
+                    get->AcquireBlockedGeneration = true;
+                }
+                SendToBSProxy(edge, group, get.release());
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+            env.Runtime->FilterFunction = {};
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, offsets.size());
+            for (const auto& item : std::span(res->Get()->Responses.Get(), res->Get()->ResponseSz)) {
+                UNIT_ASSERT_VALUES_EQUAL(item.Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(item.Buffer.ConvertToString(), "x");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(reads, 1);
+        };
+
+        // A nameservice update places two remote data primaries in the reader's module, in distinct racks.
+        auto updateLocations = [&](bool complete) {
+            auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+            for (ui32 node : env.Runtime->GetNodes()) {
+                NActorsInterconnect::TNodeLocation loc;
+                GetBridgedLocation(node).Serialize(&loc, false);
+                if (node == reader || node == remote1 || node == remote2) {
+                    loc.SetModule("shared");
+                }
+                if (!complete && node == remote1) {
+                    loc.ClearDataCenter();
+                }
+                nodes->emplace_back(node, "", "", "", 0, TNodeLocation(loc));
+            }
+            env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(reader), GetNameserviceActorId(),
+                new TEvInterconnect::TEvNodesInfo(nodes)), reader);
+            env.Sim(TDuration::MilliSeconds(100));
+        };
+        read({1024}, 0); // both data primaries are in different racks
+        updateLocations(true);
+        read({0}, 0); // part 0 is on the reader itself
+        read({1024}, 1); // part 1 is in the reader's module only in the other pile
+        read({0, 1024, 2048}, 1); // one outside-module read there, two on the self pile
+        updateLocations(false);
+        read({1024}, 0); // incomplete placement falls back to the eligible self pile
+
+        NBridgeTest::SwitchPileState(env, 1, NKikimrBridge::TClusterState::HOT_STANDBY);
+        env.Sim(TDuration::Seconds(30));
+        updateLocations(true);
+        read({1024}, 1); // a geographically close standby can supply payload to a node in another pile
+        read({1024}, 0, /*acquireBlockedGeneration=*/ true);
+    }
+
+    Y_UNIT_TEST_TWIN(TrustedFullReplyPreservesObservedFlags, doNotKeep) {
+        TEnvironmentSetup env{MakeLocalPileFirstSettings(false)};
+        const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto pileGroups = NBridgeTest::GetPileGroups(env, groupId);
+        const TActorId bridgeProxy = GetBridgeProxyActor(env, groupId);
+        const TString data = "blob from trusted pile";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        PutToPileGroup(env, pileGroups[0], 1, id, data, doNotKeep);
+
+        std::unique_ptr<IEventHandle> held;
+        ui32 heldNodeId = 0;
+        bool missingReplied = false;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvBlobStorage::EvGetResult || !ev->HasEvent() ||
+                    ev->GetRecipientRewrite() != bridgeProxy) {
+                return true;
+            }
+            auto& result = *ev->Get<TEvBlobStorage::TEvGetResult>();
+            UNIT_ASSERT_VALUES_EQUAL(result.ResponseSz, 1);
+            auto& response = result.Responses[0];
+            UNIT_ASSERT_VALUES_EQUAL(response.Id, id);
+            if (result.GroupId == pileGroups[0]) {
+                UNIT_ASSERT_VALUES_EQUAL(response.Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(response.Keep, doNotKeep);
+                UNIT_ASSERT(!response.DoNotKeep);
+                UNIT_ASSERT(!held);
+                held = std::move(ev);
+                heldNodeId = nodeId;
+                return false;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GroupId, pileGroups[1]);
+            UNIT_ASSERT_VALUES_EQUAL(response.Status, NKikimrProto::NODATA);
+            response.Keep = !doNotKeep;
+            response.DoNotKeep = doNotKeep;
+            missingReplied = true;
+            return true;
+        };
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        SendGet(env, edge, groupId, std::span<const TLogoBlobID>(&id, 1));
+        NBridgeTest::WaitUntil(env, [&] { return held && missingReplied; }, "both pile replies");
+        env.Sim(TDuration::MilliSeconds(10));
+        env.Runtime->FilterFunction = {};
+        env.Runtime->Send(held.release(), heldNodeId);
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        NBridgeTest::CheckGetResult(*result->Get(), data);
+        const auto& response = result->Get()->Responses[0];
+        UNIT_ASSERT_VALUES_EQUAL(response.Keep, !doNotKeep);
+        UNIT_ASSERT_VALUES_EQUAL(response.DoNotKeep, doNotKeep);
+    }
 
     Y_UNIT_TEST(LocalPileFirst) {
         CheckLocalPileFirstGet(true);
@@ -365,7 +559,7 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
             UNIT_ASSERT_VALUES_EQUAL(res->Responses[i].Buffer.ConvertToString(), data[i]);
         }
         UNIT_ASSERT_VALUES_EQUAL_C(res->Responses[1].Status, NKikimrProto::ERROR, res->ToString());
-        UNIT_ASSERT(res->Responses[1].Keep);
+        UNIT_ASSERT(!res->Responses[1].Keep);
         UNIT_ASSERT(res->Responses[1].DoNotKeep);
     }
 
@@ -426,7 +620,7 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
 
         NBridgeTest::CheckGetResult(*result->Get<TEvBlobStorage::TEvGetResult>(), data);
         const auto& response = result->Get<TEvBlobStorage::TEvGetResult>()->Responses[0];
-        UNIT_ASSERT(response.Keep);
+        UNIT_ASSERT(!response.Keep);
         UNIT_ASSERT(response.DoNotKeep);
     }
 

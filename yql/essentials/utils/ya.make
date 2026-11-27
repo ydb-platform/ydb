@@ -79,6 +79,17 @@ PEERDIR(
     yql/essentials/public/utf8
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    statbox/uv
+    yabs/telegram/rt/lib/distribution_interface/posts_history_client
+    yabs/telegram/rt/lib/xiva_client
+    yabs/telegram/uroboros/worker/lib/avatars_client
+    yabs/telegram/uroboros/worker/lib/count_http_client
+    yabs/telegram/uroboros/worker/lib/renderer_http_client
+    yabs/telegram/uroboros/worker/lib/translator_requester
+)
+
 END()
 
 RECURSE_FOR_TESTS(

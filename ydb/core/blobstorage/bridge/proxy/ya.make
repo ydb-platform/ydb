@@ -8,6 +8,8 @@ LIBRARY()
     )
 
     PEERDIR(
+        ydb/core/blobstorage/bridge
+        ydb/core/blobstorage/contracts
         ydb/core/blobstorage/dsproxy
         ydb/core/blobstorage/groupinfo
     )

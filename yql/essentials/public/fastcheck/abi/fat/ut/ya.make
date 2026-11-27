@@ -4,10 +4,6 @@ BUILD_ONLY_IF(ARCH_X86_64)
 
 UNITTEST()
 
-CFLAGS(
-    -DYQL_FASTCHECK_TEST_NEW_FEATURES
-)
-
 BUNDLE_OUTPUT(
     yql/essentials/public/fastcheck/abi/fat
     fastcheck_abi_internalized.a

@@ -143,7 +143,8 @@ struct TDeltaTestEnv {
     }
 
     NKikimrIndexBuilder::EBuildStatus DoDeltaKMeans(const TRowVersion& from, const TRowVersion& to,
-        ui32 prefixColumns = 0, const TString& prefixTable = {})
+        ui32 prefixColumns = 0, const TString& prefixTable = {},
+        TVector<TString>* ackKeys = nullptr, ui64 maxCheckpointBytes = 0)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto datashards = GetTableShards(Server, Sender, kMainTable);
@@ -179,11 +180,24 @@ struct TDeltaTestEnv {
 
         rec.SetDatabaseName(kDatabaseName);
 
+        if (maxCheckpointBytes) {
+            rec.MutableScanSettings()->SetMaxBatchRows(1);
+            rec.MutableScanSettings()->SetMaxCheckpointBytes(maxCheckpointBytes);
+        }
+
         Runtime.SendToPipe(datashards[0], Sender, ev.release(), 0, GetPipeConfigWithRetries());
 
+        auto collectAck = [&](const auto& record) {
+            if (ackKeys && !record.GetLastKeyAck().empty()) {
+                ackKeys->push_back(record.GetLastKeyAck());
+            }
+        };
+
         auto reply = Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvDeltaKMeansResponse>(Sender);
+        collectAck(reply->Get()->Record);
         while (reply->Get()->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
             reply = Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvDeltaKMeansResponse>(Sender);
+            collectAck(reply->Get()->Record);
         }
 
         auto& record = reply->Get()->Record;
@@ -240,6 +254,41 @@ Y_UNIT_TEST_SUITE(TTxDataShardDeltaKMeansScan) {
             "__ydb_parent = 9223372036854775819, key = 3, data = three\n"
             "__ydb_parent = 9223372036854775830, key = 1, data = one-updated\n"
         );
+    }
+
+    Y_UNIT_TEST(CheckpointForInsertOnlyDelta) {
+        TDeltaTestEnv env;
+        env.CreateTables({});
+
+        env.Upsert(LevelUpsertSql({
+            {0, 1, CentroidA()},
+            {0, 2, CentroidB()},
+            {1, SetPostingParentFlag(11), CentroidA()},
+            {1, SetPostingParentFlag(12), CentroidB()},
+            {2, SetPostingParentFlag(21), CentroidA()},
+            {2, SetPostingParentFlag(22), CentroidB()},
+        }));
+
+        auto from = CreateVolatileSnapshot(env.Server, {kMainTable});
+
+        // Only inserts: the scan has nothing to erase, so its erase destination
+        // never gets a single key.
+        env.Upsert(TStringBuilder()
+            << "UPSERT INTO `" << kMainTable << "` (key, embedding, data) VALUES "
+            << "(1, \"\\x18\\x01\\x02\", \"one\"), "
+            << "(2, \"\\x01\\x18\\x02\", \"two\");");
+
+        auto to = CreateVolatileSnapshot(env.Server, {kMainTable});
+
+        TVector<TString> ackKeys;
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.DoDeltaKMeans(from, to, /*prefixColumns=*/0, /*prefixTable=*/{},
+                &ackKeys, /*maxCheckpointBytes=*/1),
+            NKikimrIndexBuilder::EBuildStatus::DONE);
+
+        // Before the fix the empty erase destination blocked GetMinFlushedKey()
+        // forever, so the scan never reported a LastKeyAck.
+        UNIT_ASSERT_C(!ackKeys.empty(), "delta scan never reported a LastKeyAck");
     }
 
     Y_UNIT_TEST(NewPrefix) {

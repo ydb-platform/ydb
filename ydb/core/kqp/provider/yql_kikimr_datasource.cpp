@@ -205,7 +205,7 @@ private:
         return HandleKey(cluster, key, sysViewRewritten);
     }
 
-    TStatus HandleRead(TExprBase node, TExprContext& ctx) override {
+    TStatus HandleRead(TExprBase node, TExprNode::TPtr& output, TExprContext& ctx) override {
         bool sysViewRewritten = false;
         if (auto maybeRead = node.Maybe<TCoRead>()) {
             auto read = maybeRead.Cast();
@@ -223,6 +223,11 @@ private:
         TKikimrKey key(ctx);
         if (!key.Extract(*node.Ref().Child(2))) {
             return TStatus::Error;
+        }
+
+        if (auto rewritten = TryRewriteShowCreateAtIntent(node.Ref(), key, sysViewRewritten, *SessionCtx, ctx)) {
+            output = std::move(rewritten);
+            return TStatus::Repeat;
         }
 
         return HandleKey(cluster, key, sysViewRewritten);
@@ -1199,7 +1204,7 @@ IGraphTransformer::TStatus TKiSourceVisitorTransformer::DoTransform(TExprNode::T
     }
 
     if (input->IsCallable(ReadName)) {
-        return HandleRead(TExprBase(input), ctx);
+        return HandleRead(TExprBase(input), output, ctx);
     }
 
     if (input->IsCallable(ConfigureName)) {

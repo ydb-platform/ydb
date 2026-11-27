@@ -16,6 +16,8 @@
 #include <ydb/public/api/protos/ydb_secret.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
+#include <algorithm>
+
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
 #include <util/stream/format.h>
@@ -1064,6 +1066,14 @@ int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDe
             columnNames.push_back("Lag");
             columnNames.push_back("Progress");
         }
+        // An item can be broken while the replication itself reports running, so the column is
+        // shown whenever any item has something to say.
+        const bool anyIssues = std::any_of(items.begin(), items.end(), [](const auto& item) {
+            return !item.Issues.Empty();
+        });
+        if (anyIssues) {
+            columnNames.push_back("Issues");
+        }
 
         TPrettyTable table(columnNames, TPrettyTableConfig().WithoutRowDelimiters());
         for (const auto& item : items) {
@@ -1072,10 +1082,14 @@ int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDe
                 .Column(1, SkipDatabasePrefix(TStringBuf(item.SrcPath), TStringBuf(srcDatabase)))
                 .Column(2, SkipDatabasePrefix(TStringBuf(item.DstPath), TStringBuf(dstDatabase)))
                 .Column(3, ValueOr(item.SrcChangefeedName, "n/a"));
+            size_t column = 4;
             if (options.ShowStats) {
                 row
-                    .Column(4, ValueOr(item.Stats.GetLag(), "n/a"))
-                    .Column(5, ProgressOr(item.Stats.GetInitialScanProgress(), "n/a"));
+                    .Column(column++, ValueOr(item.Stats.GetLag(), "n/a"))
+                    .Column(column++, ProgressOr(item.Stats.GetInitialScanProgress(), "n/a"));
+            }
+            if (anyIssues) {
+                row.Column(column, TString(item.Issues.ToOneLineString()));
             }
         }
         Out << Endl << "Items:" << Endl << table;

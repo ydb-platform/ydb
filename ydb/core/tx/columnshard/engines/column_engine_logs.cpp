@@ -245,14 +245,14 @@ private:
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema,
-    const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
+    const std::shared_ptr<NColumnShard::TShardDataStats>& dataStats)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager, dataStats))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
     , SchemaObjectsCache(schemaCache)
     , VersionedSchemas(presetId, StoragesManager, schemaCache)
     , TabletId(tabletId)
-    , Counters(counters)
+    , DataStats(dataStats)
     , LastPortion(0)
     , LastGranule(0)
 {
@@ -263,14 +263,14 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema,
-    const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
+    const std::shared_ptr<NColumnShard::TShardDataStats>& dataStats)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager, dataStats))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
     , SchemaObjectsCache(schemaCache)
     , VersionedSchemas(schema.GetPresetId(), StoragesManager, schemaCache)
     , TabletId(tabletId)
-    , Counters(counters)
+    , DataStats(dataStats)
     , LastPortion(0)
     , LastGranule(0)
 {
@@ -281,7 +281,6 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
 void TColumnEngineForLogs::InitDerivedState() {
     YDB_LOG_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
-    Counters->SetSmallBlobThresholdBytes(StoragesManager->GetDefaultOperator()->GetSmallBlobThresholdBytes());
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(
@@ -442,6 +441,7 @@ bool TColumnEngineForLogs::FinishLoading(const bool portionsLoaded) {
         if (portionsLoaded) {
             spg->SetLoadedKeyRanges(TLoadedKeyRanges::BuildEverything());
         }
+        spg->RefreshDataCounters();
     }
 
     Y_ABORT_UNLESS(!(LastPortion >> 63), "near to int overflow");
@@ -830,7 +830,7 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAcces
     SignalCounters.OnPortionAdded((TAppData::TimeProvider->Now() - appendPortionStart));
 }
 
-bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
+bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo) {
     const ui64 portion = portionInfo.GetPortionId();
     auto& spg = MutableGranuleVerified(portionInfo.GetPathId());
     auto p = spg.GetPortionOptional(portion);
@@ -841,9 +841,6 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
             {"tabletId", TabletId});
         return false;
     } else {
-        if (updateStats) {
-            Counters->RemovePortion(*p);
-        }
         Y_ABORT_UNLESS(spg.ErasePortion(portion));
         return true;
     }
@@ -950,16 +947,13 @@ bool TColumnEngineForLogs::TestingLoad(IDbWrapper& db) {
         }
     }
 
-    {
-        auto guard = GranulesStorage->GetStats()->StartPackModification();
-        if (!LoadCounters(db)) {
-            return false;
-        }
-        for (auto&& [_, i] : GranulesStorage->GetTables()) {
-            i->TestingLoad(db, *this);
-        }
-        FinishLoading();
+    if (!LoadCounters(db)) {
+        return false;
     }
+    for (auto&& [_, i] : GranulesStorage->GetTables()) {
+        i->TestingLoad(db, *this);
+    }
+    FinishLoading();
     return true;
 }
 

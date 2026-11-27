@@ -40,6 +40,7 @@
 #include <util/generic/singleton.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
 #include <util/stream/null.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -733,6 +734,12 @@ IGraphTransformer::TStatus FailMeWrapper(const TExprNode::TPtr& input, TExprNode
         input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String)));
     } else if (failureKind == "exception") {
         ythrow yexception() << "FailMe exception";
+    } else if (failureKind == "oom" && TryGetEnv("YQL_DETERMINISTIC_MODE")) {
+        constexpr size_t allocationSize = 1024 * 1024;
+        TVector<THolder<char, TDeleteArray>> allocations;
+        for (;;) {
+            allocations.emplace_back(new char[allocationSize]);
+        }
     } else if (failureKind == "opt_cycle" || failureKind == "opt_inf") {
         maxCount = 2;
         input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
@@ -6173,6 +6180,12 @@ IGraphTransformer::TStatus CoalesceWrapper(const TExprNode::TPtr& input, TExprNo
 
     const auto leftType = input->Head().GetTypeAnn();
     const auto rightType = input->Tail().GetTypeAnn();
+
+    if (leftType->GetKind() == ETypeAnnotationKind::Universal ||
+        (rightType->GetKind() == ETypeAnnotationKind::Universal && leftType->IsOptionalOrNull())) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
 
     auto leftItemType = leftType;
     if (leftType->GetKind() == ETypeAnnotationKind::Optional) {

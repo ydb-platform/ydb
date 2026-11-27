@@ -272,7 +272,7 @@ public:
     // Returns the latest source-table key K such that, for every destination
     // buffer, all entries this destination would produce for source rows
     // <= K are durably persisted via the upload pipeline. Returns nullopt
-    // while any destination has not yet completed a successful upload — in
+    // while any destination has not yet completed a pending upload — in
     // that case there is no cross-destination safe checkpoint and the caller
     // must NOT advance LastKeyAck on the scan-level response.
     //
@@ -287,13 +287,22 @@ public:
         const TDestination* minDst = nullptr;
         for (const auto& [_, dst] : Destinations) {
             if (!dst.HasFlushedOnce) {
-                return std::nullopt;
+                // Nothing to upload == everything is uploaded, too.
+                const bool inFlight = bool(Uploading)
+                    && Uploading.Table == dst.Table
+                    && Uploading.Kind == dst.Kind;
+                if (dst || inFlight) {
+                    return std::nullopt;
+                }
+                continue;
             }
             if (!minDst || dst.FlushedSeqNo < minDst->FlushedSeqNo) {
                 minDst = &dst;
             }
         }
-        return minDst->FlushedKey;
+        return minDst
+            ? std::optional<TSerializedCellVec>(minDst->FlushedKey)
+            : std::nullopt;
     }
 
     TString Debug() const {

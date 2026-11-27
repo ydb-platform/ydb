@@ -14,7 +14,7 @@ public:
     }
 private:
     virtual TStatus HandleKiRead(NNodes::TKiReadBase node, TExprContext& ctx) = 0;
-    virtual TStatus HandleRead(NNodes::TExprBase node, TExprContext& ctx) = 0;
+    virtual TStatus HandleRead(NNodes::TExprBase node, TExprNode::TPtr& output, TExprContext& ctx) = 0;
     virtual TStatus HandleLength(NNodes::TExprBase node, TExprContext& ctx) = 0;
     virtual TStatus HandleConfigure(NNodes::TExprBase node, TExprContext& ctx) = 0;
 };
@@ -385,13 +385,15 @@ TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ct
 // the .sys/show_create system view.
 bool IsShowCreateSettingName(TStringBuf name);
 // Returns the PathType ("Table" / "View" / "ExternalDataSource" /
-// "ExternalTable") for a SHOW CREATE setting name, or an empty string-buf
+// "ExternalTable" / "StreamingQuery") for a SHOW CREATE setting name, or an empty string-buf
 // if `name` is not one of the known SHOW CREATE settings.
 TStringBuf ShowCreateSettingToPathType(TStringBuf name);
 // Returns the first SHOW CREATE setting name found in `settings`, or an
 // empty string-buf if none is present. The returned view is backed by static
 // storage and outlives any TExprNode.
 TStringBuf GetShowCreateSetting(const TExprNode& settings);
+TExprNode::TPtr TryRewriteShowCreateAtIntent(const TExprNode& read, const TKikimrKey& key, bool sysViewRewritten,
+    const TKikimrSessionContext& sessionCtx, TExprContext& ctx);
 
 TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
 

@@ -15,7 +15,6 @@
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
-#include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 
 namespace NKikimr::NArrow {
@@ -124,11 +123,11 @@ public:
     TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId,
-        const TSchemaVersionView& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters);
+        const TSchemaVersionView& schema, const std::shared_ptr<NColumnShard::TShardDataStats>& dataStats);
     TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema,
-        const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters);
+        const std::shared_ptr<NColumnShard::TShardDataStats>& dataStats);
 
     void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) override;
     void OnTieringModified(const THashMap<TInternalPathId, NOlap::TTiering>& ttl) override;
@@ -166,7 +165,7 @@ public:
     void SetSchemeNeedActualization(const bool value);
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
-        return limit < TGranulesStat::GetSumMetadataMemoryPortionsSize();
+        return limit < NColumnShard::TShardDataStats::GetAllShardsPortionsMetadataRamBytes();
     }
 
     virtual std::vector<TCSMetadataRequest> CollectMetadataRequests() const override {
@@ -243,7 +242,7 @@ public:
     }
 
     bool HasDataWithSchemaVersion(const ui64 fromVersion, const ui64 version) const {
-        return GranulesStorage->GetStats()->HasSchemaVersion(fromVersion, version);
+        return DataStats->HasSchemaVersion(fromVersion, version);
     }
 
     std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const TInternalPathId pathId) const {
@@ -282,12 +281,8 @@ public:
 
     template <class TModifier>
     void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
-        auto exPortion = portion->MakeCopy();
         YDB_LOG_VERIFY(portion);
-        auto granule = GetGranulePtrVerified(portion->GetPathId());
-        granule->ModifyPortionOnComplete(portion, modifier);
-        Counters->AddPortion(*portion);
-        Counters->RemovePortion(*exPortion);
+        GetGranulePtrVerified(portion->GetPathId())->ModifyPortionOnComplete(portion, modifier);
     }
 
     void AppendPortion(const std::shared_ptr<TPortionDataAccessor>& portionInfo);
@@ -296,7 +291,7 @@ public:
 private:
     ui64 TabletId;
     std::map<TInstant, std::vector<TPortionInfo::TConstPtr>> CleanupPortions;
-    std::shared_ptr<NColumnShard::TPortionIndexStats> Counters;
+    std::shared_ptr<NColumnShard::TShardDataStats> DataStats;
     ui64 LastPortion;
     ui64 LastGranule;
     ui64 LastInsertWriteId = 0;
@@ -304,11 +299,10 @@ private:
     bool Loaded = false;
 
 private:
-    bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
+    bool ErasePortion(const TPortionInfo& portionInfo);
 
     template <class TPortionPtr>
     void RegisterPortion(const TPortionPtr& portion) {
-        Counters->AddPortion(*portion);
         if (portion->HasRemoveSnapshot()) {
             AddCleanupPortion(portion);
         }

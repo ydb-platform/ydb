@@ -242,12 +242,17 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Handle(TEvNodeWardenRegisterBridgeProxy::TPtr ev) {
         auto& msg = *ev->Get();
         if (msg.Registered) {
-            BridgeProxies[msg.GroupId].insert(ev->Sender);
-            // the proxy may have been made with the group configuration older than the one of the seal
-            for (auto& [cookie, seal] : StandbySealsInProgress) {
-                if (seal.BridgeProxyGroupId == msg.GroupId) {
-                    SendStandbySeal(cookie, seal, ev->Sender);
+            const auto [it, inserted] = BridgeProxies[msg.GroupId].try_emplace(ev->Sender, false);
+            if (inserted) {
+                // the proxy may have been made with the group configuration older than the one of the seal
+                for (auto& [cookie, seal] : StandbySealsInProgress) {
+                    if (seal.BridgeProxyGroupId == msg.GroupId) {
+                        SendStandbySeal(cookie, seal, ev->Sender);
+                    }
                 }
+            }
+            if (msg.SubscribeToReadLayouts && !std::exchange(it->second, true)) {
+                SendBridgeReadLayouts(msg.GroupId, true);
             }
         } else {
             if (const auto it = BridgeProxies.find(msg.GroupId); it != BridgeProxies.end()) {
@@ -291,7 +296,7 @@ namespace NKikimr::NStorage {
                 .Flush = item.GetFlush(),
             };
             if (const auto it = BridgeProxies.find(seal.BridgeProxyGroupId); it != BridgeProxies.end()) {
-                for (const TActorId& proxyId : it->second) {
+                for (const auto& [proxyId, _] : it->second) {
                     SendStandbySeal(cookie, seal, proxyId);
                 }
             }
@@ -398,6 +403,7 @@ namespace NKikimr::NStorage {
 
         // report syncer progress
         auto& stats = *syncer.SyncerDataStats;
+        const bool scanFinished = stats.ScanFinished;
         auto res = false;
         forceProgress |= std::exchange(syncer.ForceProgressReport, false);
 
@@ -421,8 +427,7 @@ namespace NKikimr::NStorage {
 
 #undef ISSUE_METRIC
 
-        if (const bool scanFinished = stats.ScanFinished;
-                forceProgress || syncer.ReportedScanFinished != scanFinished) {
+        if (forceProgress || syncer.ReportedScanFinished != scanFinished) {
             item->SetScanFinished(scanFinished);
             syncer.ReportedScanFinished = scanFinished;
             res = true;

@@ -1,7 +1,10 @@
+#include <ydb/core/base/domain.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/library/aclib/aclib.h>
 
 #include <util/string/printf.h>
 #include <util/string/strip.h>
@@ -46,6 +49,250 @@ struct TVectorBuildRow {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
+
+    NKikimrSchemeOp::TPartitionConfig MakeCompactionTierConfig() {
+        NKikimrSchemeOp::TPartitionConfig config;
+        auto* generation = config.MutableCompactionPolicy()->AddGeneration();
+        generation->SetGenerationId(0);
+        generation->SetSizeToCompact(1000);
+        generation->SetCountToCompact(5);
+        generation->SetForceSizeToCompact(20000);
+        auto* family = config.AddColumnFamilies();
+        family->SetId(0);
+        family->MutableStorageConfig();
+        return config;
+    }
+
+    void AddCompactionTierFamily(NKikimrSchemeOp::TPartitionConfig& config) {
+        auto* family = config.AddColumnFamilies();
+        family->SetId(42);
+        family->SetName("archive");
+    }
+
+    void AppendCompactionTierGeneration(NKikimrSchemeOp::TPartitionConfig& config, ui32 tierId) {
+        auto* policy = config.MutableCompactionPolicy();
+        const ui32 generationId = policy->GenerationSize();
+        auto* generation = policy->AddGeneration();
+        generation->CopyFrom(policy->GetGeneration(0));
+        generation->SetGenerationId(generationId);
+        generation->SetTierId(tierId);
+    }
+
+    Y_UNIT_TEST(CreateCompactionGenerationTierReferences) {
+        auto config = MakeCompactionTierConfig();
+        config.ClearColumnFamilies();
+        TString error;
+        // Both an omitted TierId and an explicit zero accept an implicit default family.
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(config, nullptr, false, error), error);
+        auto* generation = config.MutableCompactionPolicy()->MutableGeneration(0);
+        generation->SetTierId(0);
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(config, nullptr, false, error), error);
+
+        generation->SetTierId(42);
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyCreateParams(config, nullptr, false, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "Compaction generation 0 refers to tier 42");
+        UNIT_ASSERT_STRING_CONTAINS(error, "not a column family");
+
+        auto* family = config.AddColumnFamilies();
+        family->SetId(0);
+        family->MutableStorageConfig();
+        AddCompactionTierFamily(config);
+        error.clear();
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(config, nullptr, false, error), error);
+    }
+
+    Y_UNIT_TEST(IndexImplTableDropsTierIdsOfExcludedFamilies) {
+        auto base = MakeCompactionTierConfig();
+        AddCompactionTierFamily(base);
+        base.MutableCompactionPolicy()->MutableGeneration(0)->SetTierId(0);
+        AppendCompactionTierGeneration(base, 42);
+
+        const auto index = NTableIndex::CalcVectorKmeansTreeLevelImplTableDesc(base, {});
+        const auto& indexConfig = index.GetPartitionConfig();
+        UNIT_ASSERT_VALUES_EQUAL(indexConfig.ColumnFamiliesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(indexConfig.GetColumnFamilies(0).GetId(), 0u);
+        auto expected = base.GetCompactionPolicy();
+        expected.MutableGeneration(1)->ClearTierId();
+        UNIT_ASSERT_VALUES_EQUAL(indexConfig.GetCompactionPolicy().DebugString(), expected.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(base.GetCompactionPolicy().GetGeneration(1).GetTierId(), 42u);
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(indexConfig, nullptr, false, error), error);
+    }
+
+    Y_UNIT_TEST(AlterCompactionGenerationTierRequiresAMergedFamily) {
+        const auto source = MakeCompactionTierConfig();
+        NKikimrSchemeOp::TPartitionConfig changes;
+        changes.MutableCompactionPolicy()->CopyFrom(source.GetCompactionPolicy());
+        AppendCompactionTierGeneration(changes, 42);
+        ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription> columns;
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, columns, nullptr, false, error), error);
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyAlterParams(source, result, nullptr, false, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "Compaction generation 1 refers to tier 42");
+
+        // A family and a policy referring to it may be introduced by the same ALTER.
+        AddCompactionTierFamily(changes);
+        error.clear();
+        UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, columns, nullptr, false, error), error);
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyAlterParams(source, result, nullptr, false, error), error);
+    }
+
+    Y_UNIT_TEST(AlterCompactionGenerationTierUsesInheritedFamilies) {
+        auto source = MakeCompactionTierConfig();
+        AddCompactionTierFamily(source);
+        NKikimrSchemeOp::TPartitionConfig changes;
+        changes.MutableCompactionPolicy()->CopyFrom(source.GetCompactionPolicy());
+        AppendCompactionTierGeneration(changes, 42);
+        ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription> columns;
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, columns, nullptr, false, error), error);
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyAlterParams(source, result, nullptr, false, error), error);
+    }
+
+    Y_UNIT_TEST_FLAG(IndexImplTableInheritsOnlyDefaultFamilyTierIds, NamedPolicy) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        policy->DefaultTaskPriority = 37;
+        policy->Generations.front().TierId = 0;
+        policy->Generations.back().TierId = 42;
+        NKikimrCompaction::TCompactionPolicy expectedPolicy;
+        policy->Serialize(expectedPolicy);
+        runtime.GetAppData().DomainsInfo->AddCompactionPolicy(
+            NamedPolicy ? "WithArchive" : TDomainsInfo::UserTableDefaultPoicyName(), policy);
+
+        const ui64 txId = 100;
+        TestCreateIndexedTable(runtime, txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    %s
+                    ColumnFamilies { Id: 42 Name: "archive" }
+                }
+            }
+            IndexDescription {
+                Name: "ByValue"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )", NamedPolicy ? R"(NamedCompactionPolicy: "WithArchive")" : ""));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto table = DescribePath(runtime, "/MyRoot/Table", true);
+        TestDescribeResult(table, {NLs::IsTable});
+        const auto& tablePolicy = table.GetPathDescription().GetTable().GetPartitionConfig().GetCompactionPolicy();
+        UNIT_ASSERT_VALUES_EQUAL(tablePolicy.DebugString(), expectedPolicy.DebugString());
+
+        const auto index = DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true);
+        TestDescribeResult(index, {NLs::IsTable, NLs::ColumnFamiliesCount(1), NLs::ColumnFamiliesHas(0)});
+        const auto& indexPolicy = index.GetPathDescription().GetTable().GetPartitionConfig().GetCompactionPolicy();
+        expectedPolicy.MutableGeneration(expectedPolicy.GenerationSize() - 1)->ClearTierId();
+        UNIT_ASSERT_VALUES_EQUAL(indexPolicy.DebugString(), expectedPolicy.DebugString());
+    }
+
+    Y_UNIT_TEST(DirectCreateOfIndexBuildTablePreservesGenerationTierIds) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Vectors"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "embedding" Type: "String" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "ByVector"
+                KeyColumnNames: ["embedding"]
+                Type: EIndexTypeGlobalVectorKmeansTree
+                VectorIndexKmeansTreeDescription { Settings {
+                    settings { metric: DISTANCE_COSINE vector_type: VECTOR_TYPE_FLOAT vector_dimension: 2 }
+                    clusters: 4 levels: 2
+                } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        policy->Generations.back().TierId = 42;
+        runtime.GetAppData().DomainsInfo->AddCompactionPolicy("WithArchive", policy);
+        auto* request = InternalTransaction(CreateTableRequest(++txId, "/MyRoot/Vectors/ByVector", R"(
+            Name: "indexImplPostingTable0build"
+            Columns { Name: "id" Type: "Uint64" }
+            KeyColumnNames: ["id"]
+            PartitionConfig {
+                NamedCompactionPolicy: "WithArchive"
+                ColumnFamilies { Id: 42 Name: "archive" }
+            }
+        )"));
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        TestModificationResult(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+
+        const auto table = DescribePrivatePath(runtime, "/MyRoot/Vectors/ByVector/indexImplPostingTable0build", true);
+        TestDescribeResult(table, {NLs::IsTable, NLs::ColumnFamiliesHas(42, "archive")});
+        NKikimrCompaction::TCompactionPolicy expected;
+        policy->Serialize(expected);
+        const auto& actual = table.GetPathDescription().GetTable().GetPartitionConfig().GetCompactionPolicy();
+        UNIT_ASSERT_VALUES_EQUAL(actual.DebugString(), expected.DebugString());
+    }
+
+    Y_UNIT_TEST(CopyIndexedTablePreservesIndexImplGenerationTier) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+        runtime.GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ByValue"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const TString sourcePath = "/MyRoot/Table/ByValue/indexImplTable";
+        const auto index = DescribePrivatePath(runtime, sourcePath, true);
+        TestDescribeResult(index, {NLs::IsTable});
+        const auto& policy = index.GetPathDescription().GetTable().GetPartitionConfig().GetCompactionPolicy();
+        const int generationId = policy.GenerationSize();
+        UNIT_ASSERT(generationId > 0);
+
+        auto* request = AlterTableRequest(++txId, "/MyRoot/Table/ByValue", R"(Name: "indexImplTable")");
+        auto& changes = *request->Record.MutableTransaction(0)->MutableAlterTable()->MutablePartitionConfig();
+        changes.MutableCompactionPolicy()->CopyFrom(policy);
+        AddCompactionTierFamily(changes);
+        AppendCompactionTierGeneration(changes, 42);
+        request->Record.SetUserToken(NACLib::TUserToken("root@builtin", {}).SerializeAsString());
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        TestModificationResult(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+
+        auto checkArchiveTier = [&](const TString& path) {
+            const auto index = DescribePrivatePath(runtime, path, true);
+            TestDescribeResult(index, {NLs::IsTable, NLs::ColumnFamiliesHas(42, "archive")});
+            const auto& policy = index.GetPathDescription().GetTable().GetPartitionConfig().GetCompactionPolicy();
+            UNIT_ASSERT_VALUES_EQUAL_C(policy.GenerationSize(), generationId + 1, path);
+            UNIT_ASSERT_VALUES_EQUAL_C(policy.GetGeneration(generationId).GetTierId(), 42u, path);
+        };
+        checkArchiveTier(sourcePath);
+
+        TestCopyTable(runtime, ++txId, "/MyRoot", "Copy", "/MyRoot/Table");
+        env.TestWaitNotification(runtime, txId);
+        checkArchiveTier("/MyRoot/Copy/ByValue/indexImplTable");
+    }
 
     NKikimrCompaction::TCompactionPolicy CompactionPolicyWithGenerationIds(
             const TVector<std::optional<ui32>>& ids) {

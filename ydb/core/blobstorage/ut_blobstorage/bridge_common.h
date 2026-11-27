@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/sys_view/common/events.h>
@@ -63,6 +64,20 @@ namespace NBridgeTest {
         return TNodeLocation(location);
     }
 
+    inline TEnvironmentSetup::TSettings MakeLocalPileFirstSettings(bool enabled = true, ui32 numPiles = 2) {
+        TFeatureFlags featureFlags;
+        featureFlags.SetEnableBridgeProxyLocalPileFirstGet(enabled);
+        return {
+            .NodeCount = 8 * numPiles,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .FeatureFlags = featureFlags,
+            .SelfManagementConfig = true,
+            .NumPiles = numPiles,
+            .AutomaticBootstrap = true,
+        };
+    }
+
     // nodes of the cluster being converted have no pile names in their locations
     inline TNodeLocation GetUnbridgedLocation(ui32 nodeId) {
         NActorsInterconnect::TNodeLocation location;
@@ -103,6 +118,46 @@ namespace NBridgeTest {
             : new IEventHandle(ev->Type, ev->Flags, ev->Recipient, ev->Sender, ev->ReleaseChainBuffer(), ev->Cookie,
                 forward), nodeId);
     }
+
+    // keeps events matching the predicate until released
+    class TEventHold {
+        TEnvironmentSetup& Env;
+        const std::function<bool(IEventHandle&)> Predicate;
+        bool Hold = true;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> Held;
+
+    public:
+        TEventHold(TEnvironmentSetup& env, std::function<bool(IEventHandle&)> predicate)
+            : Env(env)
+            , Predicate(std::move(predicate))
+        {}
+
+        bool Filter(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (Hold && Predicate(*ev)) {
+                Held.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return true;
+        }
+
+        bool HasHeld() const {
+            return !Held.empty();
+        }
+
+        void WaitForHeld() {
+            for (ui32 i = 0; i < 120 && Held.empty(); ++i) {
+                Env.Sim(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT(!Held.empty());
+        }
+
+        void Release() {
+            Hold = false;
+            for (auto& [nodeId, ev] : std::exchange(Held, {})) {
+                ResendEvent(Env, nodeId, std::move(ev));
+            }
+        }
+    };
 
     // check that the read result contains exactly one blob with the expected data
     inline void CheckGetResult(const TEvBlobStorage::TEvGetResult& m, const TString& data) {
@@ -394,6 +449,57 @@ namespace NBridgeTest {
         WaitUntil(env, condition, what, TDuration::Seconds(10), 60, describe);
     }
 
+    class TBscNotificationRetry {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TEnvironmentSetup& Env;
+        TEventHold HeldWrites;
+        TActorId Sender;
+        ui64 Cookie = 0;
+        bool Retried = false;
+        std::vector<TResult::EStatus> Replies;
+
+    public:
+        TBscNotificationRetry(TEnvironmentSetup& env, auto shouldHoldCommit)
+            : Env(env)
+            , HeldWrites(env, [shouldHoldCommit](IEventHandle& ev) {
+                return ev.GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType
+                    && shouldHoldCommit(ev.Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetCommittedStorageConfig());
+            })
+        {}
+
+        void ObserveNotification(const IEventHandle& ev) {
+            if (!Sender) {
+                Sender = ev.Sender;
+                Cookie = ev.Cookie;
+            } else if (Sender == ev.Sender && Cookie == ev.Cookie && !Replies.empty()) {
+                Retried = true;
+            }
+        }
+
+        bool Filter(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (Sender && ev->Recipient == Sender && ev->Cookie == Cookie
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                Replies.push_back(ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record.GetStatus());
+            }
+            return HeldWrites.Filter(nodeId, ev);
+        }
+
+        bool HasHeldWrites() const {
+            return HeldWrites.HasHeld();
+        }
+
+        void CheckRetryWaitsForCommit() {
+            WaitUntil(Env, [&] { return Retried; }, "BSC notification retried", TDuration::Seconds(1));
+            Env.Sim(TDuration::Seconds(1));
+            UNIT_ASSERT(HasHeldWrites());
+            UNIT_ASSERT_VALUES_EQUAL(Replies.size(), 1u);
+            UNIT_ASSERT_EQUAL(Replies.front(), TResult::NO_QUORUM);
+            HeldWrites.Release();
+            WaitUntil(Env, [&] { return Replies.size() >= 2; }, "committed BSC notification", TDuration::Seconds(1));
+            UNIT_ASSERT_EQUAL(Replies[1], TResult::OK);
+        }
+    };
+
     // request the change of the pile state in the next cluster state generation
     inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult TrySwitchPileState(TEnvironmentSetup& env, ui32 pileIndex,
             NKikimrBridge::TClusterState::EPileState state) {
@@ -444,6 +550,18 @@ namespace NBridgeTest {
         }
         UNIT_FAIL("group not found GroupId# " << groupId);
         Y_UNREACHABLE();
+    }
+
+    inline NKikimrBridge::TStorageState QueryStorageDiagnostics(TEnvironmentSetup& env, const NKikimrBridge::TStorageQuery& query) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
+        request->Record.CopyFrom(query);
+        env.Runtime->SendToPipe(env.TabletId, edge, request.release(), 0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(edge, true,
+            env.Runtime->GetClock() + TDuration::Minutes(1));
+        UNIT_ASSERT_C(response, query.ShortDebugString());
+        return response->Get()->Record;
     }
 
     inline NKikimrSysView::TGroupInfo QueryGroupSystemView(TEnvironmentSetup& env, ui32 groupId,

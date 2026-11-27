@@ -1,6 +1,7 @@
 #include "bridge_common.h"
 #include "bridge_pile_ops.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
@@ -1659,9 +1660,13 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
         };
         sendProgress(true);
         const ui64 baselineProgress = lastProgress();
-        sendProgress(true, 900);
+        sendProgress(true, 4);
         const ui64 oldProgress = lastProgress();
         UNIT_ASSERT_GT(oldProgress, baselineProgress);
+        const auto bytesCopied = GetServiceCounters(runtime->GetNode(env.Settings.ControllerNodeId)->AppData->Counters, "bridge")
+            ->GetSubgroup("subsystem", "bsc")->GetSubgroup("pile", "pile_2")->GetSubgroup("database", env.StoragePoolName)
+            ->GetSubgroup("storagePool", env.StoragePoolName)->GetCounter("SyncBytesCopied", true);
+        const auto beforeRestart = bytesCopied->Val();
 
         ReassignOneDisk(env, targetGroupId);
         const auto after = GetGroupInfo(env, groupId);
@@ -1685,8 +1690,9 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
         report.SetBridgeProxyGroupGeneration(after.GetGroupGeneration());
         sendProgress(false);
         UNIT_ASSERT_VALUES_EQUAL(lastProgress(), oldProgress);
-        sendProgress(true);
+        sendProgress(true, 6);
         UNIT_ASSERT_VALUES_EQUAL(lastProgress(), oldProgress);
+        UNIT_ASSERT_VALUES_EQUAL(bytesCopied->Val(), beforeRestart + (6u << 20));
         sendProgress(true, 50);
         const ui64 newProgress = lastProgress();
         UNIT_ASSERT_GT(newProgress, oldProgress);
@@ -1696,6 +1702,7 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
         }
         sendProgress(true, 100);
         UNIT_ASSERT_GT(lastProgress(), newProgress);
+        UNIT_ASSERT_VALUES_EQUAL(bytesCopied->Val(), beforeRestart + (100u << 20));
         runtime->FilterFunction = {};
     }
 

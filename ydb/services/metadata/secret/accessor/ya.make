@@ -5,8 +5,10 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/digest/md5
     ydb/core/base
-    ydb/library/actors/core
+    ydb/core/protos
+    ydb/library/accessor
     ydb/library/aclib
 )
 

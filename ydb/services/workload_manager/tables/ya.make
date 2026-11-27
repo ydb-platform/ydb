@@ -5,11 +5,12 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/services/workload_manager/common
-
+    ydb/core/base
+    ydb/core/kqp/common/simple
+    ydb/library/actors/core
     ydb/library/query_actor
-
     ydb/library/table_creator
+    ydb/services/workload_manager/common
 )
 
 END()

@@ -1,4 +1,5 @@
 #include "s3_storage_config.h"
+#include "fake_storage.h"
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -448,3 +449,43 @@ private:
 }; // TS3WrapperTests
 
 UNIT_TEST_SUITE_REGISTRATION(TS3WrapperTests);
+
+#ifndef KIKIMR_DISABLE_S3_OPS
+Y_UNIT_TEST_SUITE(TFakeS3BucketTests) {
+    Y_UNIT_TEST(ListObjectsPagination) {
+        NExternalStorage::TFakeBucketStorage bucket;
+        for (const char* key : {"other", "packs/a", "packs/b", "packs/c", "packs2/d"}) {
+            bucket.PutObject(key, "x");
+        }
+
+        auto expectPage = [&](TStringBuf prefix, TStringBuf marker, int limit,
+                std::initializer_list<TStringBuf> expected, bool truncated) {
+            const auto page = bucket.ListObjects(prefix, marker, limit);
+            UNIT_ASSERT_VALUES_EQUAL(page.GetContents().size(), expected.size());
+            auto object = page.GetContents().begin();
+            for (TStringBuf key : expected) {
+                UNIT_ASSERT_VALUES_EQUAL(TStringBuf(object->GetKey()), key);
+                UNIT_ASSERT_VALUES_EQUAL(object->GetSize(), 1);
+                ++object;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(page.GetIsTruncated(), truncated);
+            if (truncated) {
+                UNIT_ASSERT_VALUES_EQUAL(page.GetNextMarker(), page.GetContents().back().GetKey());
+            } else {
+                UNIT_ASSERT(page.GetNextMarker().empty());
+            }
+            return TString(page.GetNextMarker());
+        };
+
+        auto first = expectPage("packs/", {}, 1, {"packs/a"}, true);
+        auto second = expectPage("packs/", first, 1, {"packs/b"}, true);
+        expectPage("packs/", second, 1, {"packs/c"}, false);
+        first = expectPage("packs/", {}, 2, {"packs/a", "packs/b"}, true);
+        expectPage("packs/", first, 2, {"packs/c"}, false);
+        expectPage("packs/", {}, 3, {"packs/a", "packs/b", "packs/c"}, false);
+        expectPage("packs/", "packs/az", 2, {"packs/b", "packs/c"}, false);
+        expectPage("packs/", "packs2/d", 2, {}, false);
+        expectPage("absent/", {}, 1, {}, false);
+    }
+}
+#endif

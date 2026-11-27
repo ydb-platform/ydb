@@ -33,6 +33,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage_data_kind.h>
+#include <ydb/core/base/config_metrics.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -4404,7 +4405,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
             ResourceMetrics->TryUpdate(ctx);
         }
     }
-    Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateCounters());
+    Schedule(AppData()->MetricsConfig.GetTabletCountersUpdateInterval(), new TEvPrivate::TEvUpdateCounters());
 }
 
 void TExecutor::ForceSendCounters() {

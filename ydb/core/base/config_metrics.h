@@ -2,6 +2,8 @@
 
 #include <ydb/core/protos/config_metrics.pb.h>
 
+#include <util/datetime/base.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr {
@@ -69,6 +71,7 @@ public:
     {}
 
     void InitializeFromProto(const NKikimrConfig::TMetricsConfig& config) {
+        TabletCountersUpdateInterval = TDuration::Seconds(Max<ui32>(1, config.GetTabletCountersUpdateIntervalSeconds()));
         if (config.HasCommonLatencyHistBounds()) {
             CommonLatencyHistBounds.InitializeFromProto(config.GetCommonLatencyHistBounds());
         }
@@ -77,8 +80,15 @@ public:
     TCommonLatencyHistBounds GetCommonLatencyHistBounds() const {
         return CommonLatencyHistBounds;
     }
+
+    TDuration GetTabletCountersUpdateInterval() const {
+        return TabletCountersUpdateInterval;
+    }
+
 private:
     TCommonLatencyHistBounds CommonLatencyHistBounds;
+    TDuration TabletCountersUpdateInterval = TDuration::Seconds(
+        NKikimrConfig::TMetricsConfig().GetTabletCountersUpdateIntervalSeconds());
 };
 
 } // NKikimr

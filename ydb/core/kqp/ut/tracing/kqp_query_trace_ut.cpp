@@ -2130,7 +2130,9 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 }
                 if (ev->GetTypeRewrite() == NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot::EventType
                         && ev->Sender == snapshotManager) {
-                    UNIT_ASSERT(ev->TraceId == snapshotParent);
+                    UNIT_ASSERT(ev->TraceId);
+                    UNIT_ASSERT(TString(static_cast<const char*>(ev->TraceId.GetTraceIdPtr()), ev->TraceId.GetTraceIdSize())
+                        == TString(static_cast<const char*>(snapshotParent.GetTraceIdPtr()), snapshotParent.GetTraceIdSize()));
                     snapshotForwarded = true;
                 }
                 if (!blockedSnapshot && ev->GetTypeRewrite() == NKqp::TEvKqpSnapshot::TEvCreateSnapshotResponse::EventType) {

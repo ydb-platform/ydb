@@ -1201,6 +1201,10 @@ protected:
     void TestCommonEncryptionRequirements(bool useSchemaSecrets, bool isFsBackup = false) {
         using namespace ::fmt::literals;
 
+        if (!isFsBackup) {
+            // The S3 cases also restore the backup with the pre-directory importer.
+            AppConfig().MutableFeatureFlags()->SetEnableDirectoryExport(false);
+        }
         auto& runtime = *Server().GetRuntime();
         NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
         NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusImport);

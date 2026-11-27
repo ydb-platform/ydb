@@ -12,12 +12,9 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/dq/opt
-    yql/essentials/minikql/invoke_builtins/no_llvm
-    yql/essentials/providers/common/udf_resolve
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/stub
-    yql/essentials/udfs/common/set/impl
 )
 
 SIZE(SMALL)

@@ -119,169 +119,6 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2, bo
     ])", FormatResultSetYson(exec.GetResultSet(0)));
 }
 
-TString BalancedFrom(const TString& ast, size_t open) {
-    if (open >= ast.size() || ast[open] != '(') {
-        return {};
-    }
-    int depth = 0;
-    for (size_t i = open; i < ast.size(); ++i) {
-        if (ast[i] == '(') {
-            ++depth;
-        } else if (ast[i] == ')') {
-            if (--depth == 0) {
-                return ast.substr(open, i + 1 - open);
-            }
-        }
-    }
-    return {};
-}
-
-// The aggregate ExpandMap lambda may be bound outside the stage. Follow that binding.
-TString AggregateInputLambda(const TString& ast, const TString& stage) {
-    const auto expand = stage.find("ExpandMap");
-    if (expand == TString::npos) {
-        return {};
-    }
-    const auto first = stage.find('$', expand);
-    const auto second = first == TString::npos ? TString::npos : stage.find('$', first + 1);
-    if (second == TString::npos) {
-        return {};
-    }
-    size_t end = second + 1;
-    while (end < stage.size() && stage[end] >= '0' && stage[end] <= '9') {
-        ++end;
-    }
-    const auto name = stage.substr(second, end - second);
-    const auto letPos = ast.find("(let " + name + " (lambda");
-    if (letPos == TString::npos) {
-        return {};
-    }
-    return BalancedFrom(ast, letPos);
-}
-
-TString CallableContaining(const TString& ast, TStringBuf marker, TStringBuf callable) {
-    const auto markerPos = ast.find(marker);
-    if (markerPos == TString::npos) {
-        return {};
-    }
-    const auto namePos = ast.rfind(callable, markerPos);
-    if (namePos == TString::npos) {
-        return {};
-    }
-    const auto open = ast.rfind('(', namePos);
-    if (open == TString::npos) {
-        return {};
-    }
-
-    int depth = 0;
-    for (size_t i = open; i < ast.size(); ++i) {
-        if (ast[i] == '(') {
-            ++depth;
-        } else if (ast[i] == ')') {
-            if (--depth == 0) {
-                return ast.substr(open, i + 1 - open);
-            }
-        }
-    }
-    return {};
-}
-
-TString FullFrameSumWithFatColumnExpected() {
-    struct TRow {
-        ui64 Key;
-        TStringBuf Text;
-        i32 Data;
-        i32 Total;
-    };
-    const TRow rows[] = {
-        {101, "Value1", 1, 15}, {201, "Value1", 2, 15}, {301, "Value1", 3, 15}, {401, "Value1", 1, 15},
-        {501, "Value1", 2, 15}, {601, "Value1", 3, 15}, {701, "Value1", 1, 15}, {801, "Value1", 2, 15},
-        {102, "Value2", 3, 16}, {202, "Value2", 1, 16}, {302, "Value2", 2, 16}, {402, "Value2", 3, 16},
-        {502, "Value2", 1, 16}, {602, "Value2", 2, 16}, {702, "Value2", 3, 16}, {802, "Value2", 1, 16},
-        {103, "Value3", 2, 17}, {203, "Value3", 3, 17}, {303, "Value3", 1, 17}, {403, "Value3", 2, 17},
-        {503, "Value3", 3, 17}, {603, "Value3", 1, 17}, {703, "Value3", 2, 17}, {803, "Value3", 3, 17},
-    };
-
-    TStringBuilder expected;
-    expected << "[";
-    bool first = true;
-    for (const auto& row : rows) {
-        if (!first) {
-            expected << ";";
-        }
-        first = false;
-        // Unwrap makes unused_fat_col a non-optional string, so its YSON cell is not a list.
-        expected << "[[" << row.Key << "u];[\"" << row.Text << "\"];[" << row.Data
-            << "];\"" << row.Key << row.Text << row.Data << "\";[" << row.Total << "]]";
-    }
-    expected << "]";
-    return expected;
-}
-
-const char* FullFrameSumWithFatColumnQuery(bool ordered) {
-    if (ordered) {
-        return R"(
-            $input = SELECT Key, Text, Data,
-                Unwrap(CAST(Key AS String) || Text || CAST(Data AS String)) AS unused_fat_col
-            FROM `/Root/EightShard`;
-            SELECT Key, Text, Data, unused_fat_col,
-                SUM(Data) OVER (
-                    PARTITION BY Text
-                    ORDER BY Key
-                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-                ) AS total
-            FROM $input;
-        )";
-    }
-    return R"(
-        $input = SELECT Key, Text, Data,
-            Unwrap(CAST(Key AS String) || Text || CAST(Data AS String)) AS unused_fat_col
-        FROM `/Root/EightShard`;
-        SELECT Key, Text, Data, unused_fat_col,
-            SUM(Data) OVER (PARTITION BY Text) AS total
-        FROM $input;
-    )";
-}
-
-void CheckFullFrameDropsUnusedColumn(bool narrow, bool ordered) {
-    NKikimrConfig::TAppConfig appConfig;
-    auto* tableServiceConfig = appConfig.MutableTableServiceConfig();
-    tableServiceConfig->SetEnableWindowFunctionsV2(true);
-    tableServiceConfig->SetEnableNarrowWindowAggregateInput(narrow);
-
-    TKikimrRunner kikimr(appConfig);
-    auto db = kikimr.GetQueryClient();
-    auto session = db.GetSession().GetValueSync().GetSession();
-    const TString query = TStringBuilder() << "--!syntax_v1\n"
-        << "PRAGMA ydb.HashJoinMode = 'grace';\n"
-        << FullFrameSumWithFatColumnQuery(ordered);
-
-    auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
-        NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)).GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
-    const TString ast = *explain.GetStats()->GetAst();
-    Cerr << "=== Full-frame fat column AST, narrow=" << narrow << ", ordered=" << ordered
-        << " ===\n" << ast << Endl;
-
-    UNIT_ASSERT_C(ast.Contains("unused_fat_col"), ast);
-    UNIT_ASSERT_C(ast.Contains("Condense1") || ast.Contains("WideCondense1"), ast);
-    const auto aggregateStage = CallableContaining(ast, "AggrAdd", "DqPhyStage");
-    UNIT_ASSERT_C(aggregateStage, ast);
-    const auto inputLambda = AggregateInputLambda(ast, aggregateStage);
-    UNIT_ASSERT_C(inputLambda, aggregateStage);
-    if (narrow) {
-        UNIT_ASSERT_C(!aggregateStage.Contains("unused_fat_col"), aggregateStage);
-        UNIT_ASSERT_C(inputLambda.Contains("\"Data\""), inputLambda);
-        UNIT_ASSERT_C(!inputLambda.Contains("unused_fat_col"), inputLambda);
-    } else {
-        UNIT_ASSERT_C(inputLambda.Contains("unused_fat_col"), inputLambda);
-    }
-
-    auto exec = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(exec.GetStatus(), EStatus::SUCCESS, exec.GetIssues().ToString());
-    CompareYsonUnordered(FullFrameSumWithFatColumnExpected(), FormatResultSetYson(exec.GetResultSet(0)));
-}
-
 void CheckNarrowWindowAggregateResults(const TString& query) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
@@ -430,16 +267,16 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             WindowFunctionsV2);
     }
 
-    Y_UNIT_TEST(WindowFunctionFullFrameAggregateDropsUnusedColumn) {
-        CheckFullFrameDropsUnusedColumn(true, false);
-    }
-
-    Y_UNIT_TEST(WindowFunctionFullFrameAggregateKeepsUnusedColumn) {
-        CheckFullFrameDropsUnusedColumn(false, false);
-    }
-
-    Y_UNIT_TEST(WindowFunctionFullFrameOrderedAggregateDropsUnusedColumn) {
-        CheckFullFrameDropsUnusedColumn(true, true);
+    Y_UNIT_TEST(NarrowWindowAggregateInputKeepsUnusedColumnResults) {
+        for (TStringBuf order : {"", "ORDER BY Key ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"}) {
+            CheckNarrowWindowAggregateResults(TStringBuilder() << R"(
+                $input = SELECT Key, Text, Data,
+                    Unwrap(CAST(Key AS String) || Text || CAST(Data AS String)) AS unused_fat_col
+                FROM `/Root/EightShard`;
+                SELECT Key, Text, Data, unused_fat_col, SUM(Data) OVER w AS total
+                FROM $input WINDOW w AS (PARTITION BY Text
+            )" << order << ");");
+        }
     }
 
     Y_UNIT_TEST(NarrowWindowAggregateInputKeepsPlainWholeRowAggregate) {

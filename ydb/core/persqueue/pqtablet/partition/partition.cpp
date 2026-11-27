@@ -5321,11 +5321,6 @@ void TPartition::Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const 
     }
 }
 
-bool TPartition::IsCdcReplicationTopic() const {
-    return Config.GetCdcReplication()
-        || (ChangeConfig && ChangeConfig->Config.GetCdcReplication());
-}
-
 TActorId TPartition::GetActiveMirrorer() const {
     if (Mirrorer && (!ChangeConfig || MirroringEnabled(ChangeConfig->Config))) {
         return Mirrorer->Actor;
@@ -5341,10 +5336,8 @@ void TPartition::CreateMirrorerActor() {
 
 void TPartition::DestroyMirrorer() {
     if (Mirrorer) {
-        if (IsCdcReplicationTopic()) {
-            PendingReplicationData.reset();
-            ReplicationDataNeedsApply = false;
-        }
+        PendingReplicationData.reset();
+        ReplicationDataNeedsApply = false;
         Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
         Mirrorer.Reset();
     }

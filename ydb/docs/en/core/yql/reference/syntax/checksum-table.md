@@ -1,6 +1,6 @@
 # CHECKSUM TABLE
 
-`CHECKSUM TABLE` calculates a checksum: a short string that represents the data in a table. Use it to check whether a copy or restored table has the same contents as the original.
+`CHECKSUM TABLE` calculates a checksum — a short string that represents the data in a table. Use it to check whether a copy or restored table has the same contents as the original.
 
 To calculate the checksum of `my_table`, run:
 
@@ -33,7 +33,7 @@ Where:
 For example, to use `Sha256` with an absolute table path, enclose the path in backticks:
 
 ```yql
-CHECKSUM TABLE `/Root/my_database/my_table` WITH (ALGORITHM = "Sha256");
+CHECKSUM TABLE `/<database>/<table>` WITH (ALGORITHM = "Sha256");
 ```
 
 ## Result {#result}

@@ -758,6 +758,7 @@ public:
     COMMON_TESTS_LIST()
     UNIT_TEST(FailsOnEmptyTopicName)
     UNIT_TEST(SuccessfullyReplies)
+    UNIT_TEST(DoesNotPanicWhenFullConverterCannotBeBuilt)
     UNIT_TEST_SUITE_END();
 
     NKikimrClient::TPersQueueRequest MakeValidRequest(ui64 topicsCount = 2) override {
@@ -809,6 +810,44 @@ public:
             UNIT_ASSERT_C(topic2Cfg.HasConfig(), "Response: " << resp->Record);
             UNIT_ASSERT_C(topic2Cfg.GetConfig().HasVersion(), "Response: " << resp->Record);
         }
+    }
+
+    TSchemeCacheNavigate::TEntry MakeUserDatabaseTopicEntry() {
+        TSchemeCacheNavigate::TEntry entry;
+        entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+        entry.Kind = TSchemeCacheNavigate::KindTopic;
+        entry.Path = {"Root", "db1", "dir", "topic-in-db"};
+        auto* pqInfo = new TSchemeCacheNavigate::TPQGroupInfo();
+        pqInfo->Kind = TSchemeCacheNavigate::KindTopic;
+        auto& descr = pqInfo->Description;
+        descr.SetName("topic-in-db");
+        descr.SetBalancerTabletID(MakeTabletID(false, 100));
+        descr.SetAlterVersion(42);
+        descr.SetPartitionPerTablet(1);
+        auto* pqTabletConfig = descr.MutablePQTabletConfig();
+        pqTabletConfig->SetTopicName("topic-in-db");
+        pqTabletConfig->SetTopicPath("/Root/db1/dir/topic-in-db");
+        pqTabletConfig->SetYdbDatabasePath("/Root/db1");
+        for (auto i = 0u; i < descr.GetPartitionPerTablet(); i++) {
+            auto* part = descr.AddPartitions();
+            part->SetPartitionId(i);
+            part->SetTabletId(MakeTabletID(false, 101 + i));
+        }
+        entry.PQGroupInfo.Reset(pqInfo);
+        return entry;
+    }
+
+    void DoesNotPanicWhenFullConverterCannotBeBuilt() {
+        auto entry = MakeUserDatabaseTopicEntry();
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswerForRequestedTopics({entry}, "dc1");
+
+        NKikimrClient::TPersQueueRequest request;
+        request.SetTicket("client_id@" BUILTIN_ACL_DOMAIN);
+        request.MutableMetaRequest()->MutableCmdGetTopicMetadata()->AddTopic("/Root/db1/dir/topic-in-db");
+        RegisterActor(request);
+
+        GrabResponseEvent();
+        AssertFailedResponse(NPersQueue::NErrorCode::UNKNOWN_TOPIC, "Marker# PQ95");
     }
 };
 

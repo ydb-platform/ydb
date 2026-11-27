@@ -260,9 +260,21 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
         && !oldInfo->IsIncrementalRestore()) {
         if (oldInfo->IsReplicated()) {
             // Persist NONE before deleting offsets, so delayed replication writes
-            // cannot recreate them. Keep the schema version until ALTER completes.
+            // cannot recreate them. CDC activation must commit at this same boundary.
             TUserTable::TPtr stopped = new TUserTable(*oldInfo);
             stopped->ReplicationConfig.Mode = TReplicationConfig::REPLICATION_MODE_NONE;
+            if (alterTableTx.ActivateCdcStreamsSize()) {
+                stopped->SetTableSchemaVersion(version);
+                // SchemeShard checks that each stream is Disabled before proposing the ALTER.
+                // The table ALTER excludes concurrent stream changes until all shards finish.
+                for (const auto& id : alterTableTx.GetActivateCdcStreams()) {
+                    const auto streamId = TPathId::FromProto(id);
+                    const auto* stream = stopped->CdcStreams.FindPtr(streamId);
+                    Y_ENSURE(stream);
+                    Y_ENSURE(stream->State == NKikimrSchemeOp::ECdcStreamStateDisabled);
+                    stopped->SwitchCdcStreamState(streamId, NKikimrSchemeOp::ECdcStreamStateReady);
+                }
+            }
             NKikimrSchemeOp::TTableDescription schema;
             stopped->GetSchema(schema);
             stopped->ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
@@ -272,6 +284,9 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
             TDataShardLocksDb locksDb(DataShard, txc);
             DataShard.ReplaceUserTable(tableId, stopped, locksDb);
             DataShard.ReplicatedTables.erase(tableId);
+            if (alterTableTx.ActivateCdcStreamsSize()) {
+                DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+            }
             return EExecutionStatus::Reschedule;
         }
 
@@ -296,7 +311,9 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     TDataShardLocksDb locksDb(DataShard, txc);
     DataShard.ReplaceUserTable(tableId, newInfo, locksDb);
 
-    if (newInfo->NeedSchemaSnapshots()) {
+    if (newInfo->NeedSchemaSnapshots()
+        && !DataShard.GetSchemaSnapshotManager().FindSnapshot(TSchemaSnapshotKey(tableId, version)))
+    {
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
     }
 

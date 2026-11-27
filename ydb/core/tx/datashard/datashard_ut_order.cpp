@@ -84,6 +84,25 @@ private:
 ///
 Y_UNIT_TEST_SUITE(TxOrderInternals) {
 
+Y_UNIT_TEST(CdcActivationRequiresReplicaDetach) {
+    using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
+    NKikimrTxDataShard::TFlatSchemeTransaction body;
+    auto* alter = body.MutableAlterTable();
+    alter->AddActivateCdcStreams()->SetLocalId(42);
+
+    TActiveTransaction tx(TBasicOpInfo(1, EOperationKind::SchemeTx, 0, 0, TInstant::Zero(), 1));
+    tx.SetTxBody(body.SerializeAsString());
+    UNIT_ASSERT(!tx.BuildSchemeTx());
+
+    alter->MutableReplicationConfig()->SetMode(TConfig::REPLICATION_MODE_READ_ONLY);
+    tx.SetTxBody(body.SerializeAsString());
+    UNIT_ASSERT(!tx.BuildSchemeTx());
+
+    alter->MutableReplicationConfig()->SetMode(TConfig::REPLICATION_MODE_NONE);
+    tx.SetTxBody(body.SerializeAsString());
+    UNIT_ASSERT(tx.BuildSchemeTx());
+}
+
 Y_UNIT_TEST(OperationOrder) {
     using TTester = TDatashardTester;
 

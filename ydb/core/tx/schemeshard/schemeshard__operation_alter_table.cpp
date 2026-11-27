@@ -8,6 +8,8 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
@@ -52,6 +54,74 @@ bool CheckAllowedFields(const TMessage& message, THashSet<TString>&& allowedFiel
         }
     }
     return true;
+}
+
+TString CheckCdcActivation(const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context) {
+    const auto& alter = tx.GetAlterTable();
+    if (alter.ActivateCdcStreamsSize() == 0) {
+        return {};
+    }
+
+    if (!AppData()->FeatureFlags.GetEnableCdcHandoff()) {
+        return "CDC handoff is disabled on the destination SchemeShard (EnableCdcHandoff)";
+    }
+
+    using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
+    if (!tx.GetInternal() || !tx.HasExpectedReplicationOwnerPathId()
+        || !CheckAllowedFields(alter, {"Name", "PathId", "ActivateCdcStreams"})
+        || !tablePath.IsCommonSensePath())
+    {
+        return "CDC activation requires an internal owner-checked request with only the table path and stream IDs";
+    }
+
+    const auto& config = context.SS->Tables.at(tablePath.Base()->PathId)->ReplicationConfig();
+    const auto expectedOwner = TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId());
+    if (!expectedOwner.OwnerId || !expectedOwner.LocalPathId
+        || !config.HasOwnerPathId() || TPathId::FromProto(config.GetOwnerPathId()) != expectedOwner
+        || config.GetMode() != TConfig::REPLICATION_MODE_READ_ONLY
+        || config.GetConsistencyLevel() != TConfig::CONSISTENCY_LEVEL_ROW
+        || EqualToOneOf(config.GetImportState(), TConfig::WAITING_IMPORT, TConfig::IMPORTING))
+    {
+        return "CDC activation requires the exact owner of a read-only ROW replica";
+    }
+
+    THashSet<TPathId> selected;
+    for (const auto& id : alter.GetActivateCdcStreams()) {
+        const auto streamId = TPathId::FromProto(id);
+        const auto streamPath = TPath::Init(streamId, context.SS);
+        const auto checks = streamPath.Check();
+        checks.NotEmpty().IsResolved().IsAtLocalSchemeShard().NotDeleted().IsCdcStream().NotUnderOperation();
+        if (!checks || streamPath.Base()->ParentPathId != tablePath.Base()->PathId
+            || !selected.insert(streamId).second)
+        {
+            return "CDC activation targets must be distinct live streams of the replica table";
+        }
+
+        const auto stream = context.SS->CdcStreams.at(streamId);
+        if (stream->AlterData || stream->State != NKikimrSchemeOp::ECdcStreamStateDisabled
+            || stream->ResolvedTimestamps || stream->VirtualTimestamps || stream->SchemaChanges
+            || !EqualToOneOf(stream->Format, NKikimrSchemeOp::ECdcStreamFormatJson,
+                NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson,
+                NKikimrSchemeOp::ECdcStreamFormatDebeziumJson))
+        {
+            return "CDC activation supports Disabled JSON streams without timestamps or schema changes";
+        }
+
+        const auto topicPath = streamPath.Child("streamImpl");
+        const auto topicChecks = topicPath.Check();
+        topicChecks.NotEmpty().IsResolved().NotDeleted().IsPQGroup().NotUnderOperation();
+        if (!topicChecks) {
+            return "CDC activation requires an idle managed stream topic";
+        }
+        const auto topic = context.SS->Topics.at(topicPath.Base()->PathId);
+        const auto topicConfig = topic->GetTabletConfig();
+        if (topic->AlterData || !topicConfig.GetCdcReplication() || topicConfig.GetReplicationSourceConsumer().empty()
+            || topicConfig.GetPartitionConfig().HasMirrorFrom())
+        {
+            return "CDC activation requires a managed stream topic with mirroring stopped";
+        }
+    }
+    return {};
 }
 
 bool CheckDefaultColumnFamilies(const NKikimrSchemeOp::TPartitionConfig& partitionConfig) {
@@ -162,6 +232,10 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     }
 
     auto copyAlter = alter;
+    if (alter.ActivateCdcStreamsSize()) {
+        // The sender omits ReplicationConfig so an older SchemeShard sees an empty ALTER.
+        copyAlter.MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+    }
 
     const bool hasSchemaChanges = (
             copyAlter.ColumnsSize() != 0 ||
@@ -551,6 +625,18 @@ public:
         const auto& alterPartitionConfig = table->AlterData->PartitionConfigCompatible();
         const bool disablesShadowData = alterPartitionConfig.HasShadowData()
             && !alterPartitionConfig.GetShadowData();
+        // The target list survives SchemeShard restart in AlterTableFull until this plan commits.
+        if (table->AlterData->TableDescriptionFull.Defined()) {
+            for (const auto& id : table->AlterData->TableDescriptionFull->GetActivateCdcStreams()) {
+                const auto streamId = TPathId::FromProto(id);
+                const auto stream = context.SS->CdcStreams.at(streamId);
+                stream->CreateNextVersion()->State = NKikimrSchemeOp::ECdcStreamStateReady;
+                context.SS->PersistCdcStream(db, streamId);
+                stream->FinishAlter();
+                context.SS->ClearDescribePathCaches(context.SS->PathsById.at(streamId));
+                context.OnComplete.PublishToSchemeBoard(OperationId, streamId);
+            }
+        }
         table->FinishAlter();
 
         if (disablesShadowData && hasReadyUniqueIndex) {
@@ -822,6 +908,11 @@ public:
             }
         }
 
+        if (const auto error = CheckCdcActivation(Transaction, path, context); !error.empty()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, error);
+            return result;
+        }
+
         const auto& replicationConfig = table->ReplicationConfig();
         const auto replicationPathId = replicationConfig.HasOwnerPathId()
             ? TPathId::FromProto(replicationConfig.GetOwnerPathId()) : TPathId{};
@@ -950,6 +1041,7 @@ public:
             }
         }
 
+        *alterData->TableDescriptionFull->MutableActivateCdcStreams() = alter.GetActivateCdcStreams();
         table->PrepareAlter(alterData);
         PrepareChanges(OperationId, path.Base(), table, bindingChanges, context);
 
@@ -1401,6 +1493,14 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
     if (!path.IsResolved()) {
+        return {CreateAlterTable(id, tx)};
+    }
+
+    if (alter.ActivateCdcStreamsSize()) {
+        if (!path->IsTable()) {
+            return {CreateReject(id, NKikimrScheme::StatusPreconditionFailed, "CDC activation requires a row table")};
+        }
+        // Handoff validates the owner in Propose and applies only to this table.
         return {CreateAlterTable(id, tx)};
     }
 

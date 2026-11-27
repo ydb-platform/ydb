@@ -508,4 +508,9 @@ message TFeatureFlags {
     optional bool EnableConsistentVectorIndexBuild = 405 [default = true];
     optional bool EnableReadSecretRpcHandler = 406 [default = false];
     optional bool EnableCdcKeyRangeHeartbeats = 407 [default = false];
+    // Enable before CDC enrollment, once all eligible destination SchemeShard and DataShard
+    // hosts have been upgraded and rollback to a version without CDC handoff is ruled out.
+    // A DataShard restarted on an older binary after PREPARED can detach the table
+    // while ignoring ActivateCdcStreams.
+    optional bool EnableCdcHandoff = 408 [default = false];
 }

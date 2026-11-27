@@ -475,6 +475,11 @@ message TTableDescription {
 
     // Local graph of the logical index owning this physical posting table.
     optional TLocalHnswIndexDescription LocalHnswIndex = 56;
+
+    // Internal ALTER command: activate these streams atomically with replica detach.
+    // Omit ReplicationConfig in the request so an older SchemeShard rejects the empty ALTER.
+    // The accepting SchemeShard adds Mode=NONE to pending AlterData for its DataShards.
+    repeated NKikimrProto.TPathID ActivateCdcStreams = 57;
 }
 
 message TCompressionOptions {

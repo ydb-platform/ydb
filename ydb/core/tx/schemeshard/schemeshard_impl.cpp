@@ -8483,7 +8483,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
 
     NKikimrTxDataShard::TFlatSchemeTransaction tx;
     FillSeqNo(tx, seqNo);
-    auto proto = tx.MutableAlterTable();
+    auto* proto = tx.MutableAlterTable();
     FillTableSchemaVersion(alterData->AlterVersion, proto);
     proto->SetName(path->Name);
 
@@ -8535,6 +8535,10 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         ApplyPartitionConfigStoragePatch(
             *proto->MutablePartitionConfig(),
             *patch);
+    }
+
+    if (alterData->TableDescriptionFull.Defined()) {
+        *proto->MutableActivateCdcStreams() = alterData->TableDescriptionFull->GetActivateCdcStreams();
     }
 
     if (alterData->TableDescriptionFull.Defined() && alterData->TableDescriptionFull->HasReplicationConfig()) {

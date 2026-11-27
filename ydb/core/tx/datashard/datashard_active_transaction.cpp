@@ -346,6 +346,13 @@ bool TActiveTransaction::BuildSchemeTx()
     }
 
     if (SchemeTx->HasAlterTable()) {
+        const auto& alter = SchemeTx->GetAlterTable();
+        const bool detachesReplica = alter.HasReplicationConfig()
+            && alter.GetReplicationConfig().GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE;
+        if (alter.ActivateCdcStreamsSize() && !detachesReplica) {
+            return false;
+        }
+
         SchemeTxType = TSchemaOperation::ETypeAlter;
         count++;
     }

@@ -26,6 +26,7 @@ void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TS
         AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
         AUDIT_PART("database", database)
         AUDIT_PART("operation", ctx->GetRequestName())
+        AUDIT_PART("status", "SUCCESS")
     );
 
     // and transitional, to be removed, output to the common log

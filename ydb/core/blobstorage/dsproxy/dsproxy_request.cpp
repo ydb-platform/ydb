@@ -269,7 +269,9 @@ namespace NKikimr {
         TInstant now = TActivationContext::Now();
 
         if (Controls.EnablePutBatching.Update(now) && partSize < MinHugeBlobInBytes && partSize <= MaxBatchedPutSize &&
-                !BatchedPutIds.contains(ev->Get()->Id)) {
+                !BatchedPutIds.contains(ev->Get()->Id) &&
+                // A restarted cancellable put needs its own watcher when it sends requests to BSQueue.
+                !(ev->Get()->RestartCounter && ev->Get()->ExternalRelevanceWatcher)) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
             const bool reduceInterpileTraffic = ev->Get()->ReduceInterpileTraffic;
@@ -881,6 +883,9 @@ namespace NKikimr {
                 << " Type# " << type);
             return done(NKikimrProto::RACE, "forced group generation mismatch");
         } else {
+            if (CancelIfIrrelevant()) {
+                return true;
+            }
             Y_DEBUG_ABORT_UNLESS(RestartCounter < 100);
             auto q = RestartQuery(RestartCounter + 1);
             if (q->Type() != TEvBlobStorage::EvBunchOfEvents) {

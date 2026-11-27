@@ -2,10 +2,11 @@
 
 namespace NKikimr::NBsQueue {
 
-IEventBase *TEventHolder::MakeErrorReply(NKikimrProto::EReplyStatus status, const TString& errorReason,
+std::pair<std::unique_ptr<IEventBase>, NKikimrProto::EReplyStatus> TEventHolder::MakeErrorReply(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, const TVDiskID* currentVDiskId,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& deserItems,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& deserBytes) {
-    auto callback = [&](auto *event) -> IEventBase* {
+    auto callback = [&](auto *event) -> std::pair<std::unique_ptr<IEventBase>, NKikimrProto::EReplyStatus> {
         using T = std::remove_pointer_t<decltype(event)>;
         std::unique_ptr<T> temp;
 
@@ -18,8 +19,9 @@ IEventBase *TEventHolder::MakeErrorReply(NKikimrProto::EReplyStatus status, cons
         }
 
         auto res = std::make_unique<TMatchingResultTypeT<T>>();
-        res->MakeError(status, std::move(errorReason), event->Record);
-        return res.release();
+        MakeQueueError(*res, event->Record, status, errorReason, currentVDiskId);
+        NKikimrProto::EReplyStatus replyStatus = res->Record.GetStatus();
+        return {std::move(res), replyStatus};
     };
 
     return Apply(callback);

@@ -593,6 +593,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                     .AlreadyEncrypted = item.AlreadyEncrypted,
                     .ReduceInterpileTraffic = false /* this could not reach proxy */,
                     .IsZeroEntry = item.IsZeroEntry,
+                    .ExternalRelevanceWatcher = std::move(item.ExternalRelevanceWatcher),
                 }),
                 0 /*flags*/,
                 item.Cookie,

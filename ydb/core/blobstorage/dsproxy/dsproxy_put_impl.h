@@ -67,6 +67,7 @@ private:
         NWilson::TSpan Span;
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
         TInstant Deadline;
+        std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
 
         TBlobInfo(TEvBlobStorage::TEvPut&& msg, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId, bool single)
             : BlobId(msg.Id)
@@ -86,6 +87,7 @@ private:
             , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Put.Blob"))
             , ExecutionRelay(std::move(msg.ExecutionRelay))
             , Deadline(msg.Deadline)
+            , ExternalRelevanceWatcher(std::move(msg.ExternalRelevanceWatcher))
         {}
 
         void Output(IOutputStream& s) const {

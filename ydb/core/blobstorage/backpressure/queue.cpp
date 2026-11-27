@@ -247,26 +247,27 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
 }
 
 void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus status, const TString& errorReason,
-        const TActorContext& ctx) {
+        const TActorContext& ctx, const TVDiskID* currentVDiskId) {
+    auto [reply, replyStatus] = item.Event.MakeErrorReply(status, errorReason, currentVDiskId, QueueDeserializedItems,
+            QueueDeserializedBytes);
     const TDuration processingTime = TDuration::Seconds(item.ProcessingTimer.Passed());
     YDB_LOG_INFO_CTX(ctx, "Reply error",
         {"logPrefix", LogPrefix},
         {"func", __func__},
         {"type", item.Event.GetType()},
-        {"status", NKikimrProto::EReplyStatus_Name(status)},
+        {"status", NKikimrProto::EReplyStatus_Name(replyStatus)},
         {"cookie", item.Event.GetCookie()},
         {"processingTime", processingTime},
         {"marker", "BSQ03"});
 
     if (NWilson::TSpan* wilsonSpan = item.Span.GetWilsonSpanPtr()) {
-        wilsonSpan->EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);
+        wilsonSpan->EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(replyStatus) << ": " << errorReason);
     } else if (TNamedSpan* retroSpan = item.Span.GetRetroSpanPtr()) {
         retroSpan->EndError();
     }
     item.Span.Reset();
 
-    ctx.Send(item.Event.GetSender(), item.Event.MakeErrorReply(status, errorReason, QueueDeserializedItems,
-            QueueDeserializedBytes), 0, item.Event.GetCookie());
+    ctx.Send(item.Event.GetSender(), reply.release(), 0, item.Event.GetCookie());
 
     ++*QueueItemsRejected;
 }
@@ -346,7 +347,8 @@ void TBlobStorageQueue::Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 exp
     Paused = static_cast<bool>(InFlightLookup);
 }
 
-void TBlobStorageQueue::DrainQueue(NKikimrProto::EReplyStatus status, const TString& errorReason, const TActorContext &ctx) {
+void TBlobStorageQueue::DrainQueue(NKikimrProto::EReplyStatus status, const TString& errorReason,
+        const TVDiskID& currentVDiskId, const TActorContext& ctx) {
     // remove all items from in-flight map
     InFlightCost = 0;
 
@@ -356,7 +358,7 @@ void TBlobStorageQueue::DrainQueue(NKikimrProto::EReplyStatus status, const TStr
     auto flushQueue = [&](TItemList& queue) {
         for (auto it = queue.begin(); it != queue.end(); it = EraseItem(queue, it)) {
             if (it->Event.GetRelevanceStatus() != TMessageRelevance::EStatus::CancelledInternally) {
-                ReplyWithError(*it, status, errorReason, ctx);
+                ReplyWithError(*it, status, errorReason, ctx, &currentVDiskId);
             }
         }
     };

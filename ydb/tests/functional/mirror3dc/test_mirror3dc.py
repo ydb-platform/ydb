@@ -18,7 +18,7 @@ class TestMirror3dc(Mirror3dcTestBase):
     def test_transition_cycle_3(self):
         run_transition_cycle(self, 'N F F1 F2P F2 R N')
 
-    def _test_transition_cycle_4(self):
+    def test_transition_cycle_4(self):
         run_transition_cycle(self, 'N F F1 S1 R1P S1 R1P R1 F1 R N')
 
     def test_transition_cycle_5(self):

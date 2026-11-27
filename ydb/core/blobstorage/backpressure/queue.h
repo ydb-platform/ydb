@@ -191,13 +191,15 @@ public:
 
     void SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, ui32 vdiskOrderNumber);
 
-    void ReplyWithError(TItem& item, NKikimrProto::EReplyStatus status, const TString& errorReason, const TActorContext& ctx);
+    void ReplyWithError(TItem& item, NKikimrProto::EReplyStatus status, const TString& errorReason,
+            const TActorContext& ctx, const TVDiskID* currentVDiskId = nullptr);
     bool Expecting(ui64 msgId, ui64 sequenceId) const;
     bool OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TActorId *outSender, ui64 *outCookie, TDuration *processingTime);
 
     void Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 expectedMsgId, ui64 expectedSequenceId);
 
-    void DrainQueue(NKikimrProto::EReplyStatus status, const TString& errorReason, const TActorContext &ctx);
+    void DrainQueue(NKikimrProto::EReplyStatus status, const TString& errorReason, const TVDiskID& currentVDiskId,
+            const TActorContext& ctx);
 
     void OnConnect();
 

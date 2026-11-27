@@ -285,16 +285,21 @@ void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& 
         NIceDb::TUpdate<Schema::ImportItems::SrcPath>(item.SrcPath),
         NIceDb::TUpdate<Schema::ImportItems::ParentIndex>(item.ParentIdx)
     );
+    if (item.ExportItemIV) {
+        db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
+            NIceDb::TUpdate<Schema::ImportItems::EncryptionIV>(item.ExportItemIV->GetBinaryString())
+        );
+    }
 }
 
-void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemsSizeBefore) {
-    for (ui32 itemIdx = importInfo.Items.size(); itemIdx < itemsSizeBefore; ++itemIdx) {
+void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo, const TVector<TImportInfo::TItem>& resolvedItems) {
+    for (ui32 itemIdx = resolvedItems.size(); itemIdx < importInfo.Items.size(); ++itemIdx) {
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
     }
 
     // There can be new items, so do at least the same as for creation
-    for (ui32 itemIdx : xrange(importInfo.Items.size())) {
-        const auto& item = importInfo.Items.at(itemIdx);
+    for (ui32 itemIdx : xrange(resolvedItems.size())) {
+        const auto& item = resolvedItems.at(itemIdx);
 
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
             NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
@@ -302,6 +307,11 @@ void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const T
             NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix),
             NIceDb::TUpdate<Schema::ImportItems::SrcPath>(item.SrcPath)
         );
+        if (item.ExportIndexIVs.IVsSize() || item.ExportIndexIVs.ExportPrefixesSize()) {
+            db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
+                NIceDb::TUpdate<Schema::ImportItems::IndexIVs>(item.ExportIndexIVs)
+            );
+        }
         if (item.ExportItemIV) {
             db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
                 NIceDb::TUpdate<Schema::ImportItems::EncryptionIV>(item.ExportItemIV->GetBinaryString())
@@ -519,7 +529,8 @@ bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
         case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD:
             return true;
         case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
-            return item.ChildItems.empty();
+            // During scheme validation the impl tables have been downloaded but have no child items yet.
+            return item.MaterializedIndexes.empty() && item.ChildItems.empty();
         case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
             return false;
         default:

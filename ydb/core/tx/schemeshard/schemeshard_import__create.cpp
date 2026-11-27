@@ -1,3 +1,4 @@
+#include "index/index_utils.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_import.h"
@@ -28,6 +29,8 @@
 
 #include <ydb/core/backup/common/feature_flags.h>
 
+#include <algorithm>
+
 #include <util/generic/algorithm.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
@@ -57,7 +60,7 @@ concept HasIndexPopulationMode = requires(const T& t) {
     { t.index_population_mode() } -> std::same_as<Ydb::Import::ImportFromS3Settings::IndexPopulationMode>;
 };
 
-bool PrepareNextBuildableIndex(TSchemeShard* ss, TItem& item) {
+TConclusion<bool> PrepareNextBuildableIndex(TSchemeShard* ss, TItem& item) {
     if (!item.Table || !item.DstPathId) {
         return false;
     }
@@ -76,6 +79,14 @@ bool PrepareNextBuildableIndex(TSchemeShard* ss, TItem& item) {
 
         const auto indexPath = tablePath.Child(index.name());
         if (indexPath.IsResolved() && !indexPath.IsDeleted()) {
+            const auto* existing = ss->Indexes.FindPtr(indexPath.Base()->PathId);
+            if (!existing || (*existing)->Type != NTableIndex::TryConvertIndexType(index.type_case(),
+                    NTableIndex::IsCompactFulltextIndex((*existing)->Type))
+                || !std::ranges::equal((*existing)->IndexKeys, index.index_columns())
+                || !std::ranges::equal((*existing)->IndexDataColumns, index.data_columns())) {
+                return TConclusionStatus::Fail(TStringBuilder() << "Existing object '" << indexPath.PathString()
+                    << "' does not match the index definition in the backup");
+            }
             // Already materialized or built.
             ++item.NextIndexIdx;
             continue;
@@ -1835,6 +1846,7 @@ private:
             childItem.State = EState::Waiting;
             childItem.ParentIdx = msg.ItemIdx;
             childItem.Table = std::move(scheme);
+            childItem.ExportItemIV = indexMetadata.IV;
 
             Self->PersistNewImportItem(db, *importInfo, childIdx);
             Self->PersistImportItemScheme(db, *importInfo, childIdx);
@@ -1902,15 +1914,28 @@ private:
             }
         }
 
-        const ui32 itemsSizeBefore = importInfo->Items.size();
-        const TImportInfo::TFillItemsFromSchemaMappingResult fillResult = importInfo->FillItemsFromSchemaMapping(Self);
-        if (!fillResult.Success) {
-            return CancelAndPersist(db, importInfo, -1, fillResult.ErrorMessage, "invalid items in schema mapping");
+        auto mapping = importInfo->ResolveItemsFromSchemaMapping(Self);
+        if (!mapping.Success) {
+            return CancelAndPersist(db, importInfo, -1, mapping.ErrorMessage, "invalid items in schema mapping");
         }
 
+        PersistSchemaMappingImportFields(db, *importInfo, mapping.Items);
+        // Reserve 1 MiB for the final state update and executor bookkeeping.
+        const ui64 limitBytes = (ui64(Self->MaxCommitRedoMB) - 1) << 20;
+        const ui64 redoBytes = txc.DB.GetCommitRedoBytes();
+        if (redoBytes >= limitBytes && AnyOf(mapping.Items, [](const auto& item) {
+                return item.ExportIndexIVs.IVsSize() || item.ExportIndexIVs.ExportPrefixesSize();
+            })) {
+            txc.DB.RollbackChanges();
+            return CancelAndPersist(db, importInfo, -1,
+                TStringBuilder() << "Index IVs in the import schema mapping exceed the maximum SchemeShard commit size: "
+                    << redoBytes << " bytes, limit " << limitBytes << " bytes",
+                "index IV mapping is too large");
+        }
+
+        importInfo->Items = std::move(mapping.Items);
         importInfo->State = EState::Waiting;
         PersistImportState(db, *importInfo);
-        PersistSchemaMappingImportFields(db, *importInfo, itemsSizeBefore);
         Resume(txc, ctx);
     }
 
@@ -2259,7 +2284,21 @@ private:
         if (item.State == EState::Done || item.State == EState::CreateSchemeObject) {
             UpdateItemDstPathId(db, *importInfo, itemIdx);
             for (auto childIdx : item.ChildItems) {
-                UpdateItemDstPathId(db, *importInfo, childIdx);
+                auto& child = importInfo->Items.at(childIdx);
+                const auto path = TPath::Resolve(child.DstPathName, Self);
+                if (!path.Parent().IsResolved()) {
+                    // The accepted create left this index for a rebuild. Its backup files
+                    // have no destination, including on replay after losing the reply.
+                    child.State = EState::Done;
+                    Self->PersistImportItemState(db, *importInfo, childIdx);
+                    continue;
+                }
+                if (!path.IsResolved() || path.IsDeleted()) {
+                    return CancelAndPersist(db, importInfo, itemIdx,
+                        TStringBuilder() << "Missing implementation table '" << child.DstPathName << "'", "invalid materialized index");
+                }
+                child.DstPathId = path.Base()->PathId;
+                Self->PersistImportItemDstPathId(db, *importInfo, childIdx);
             }
         }
 
@@ -2449,6 +2488,9 @@ private:
                     Y_ABORT_UNLESS(childIdx < importInfo->Items.size());
                     auto& childItem = importInfo->Items.at(childIdx);
 
+                    if (childItem.State == EState::Done) {
+                        continue;
+                    }
                     childItem.State = EState::Transferring;
                     Self->PersistImportItemState(db, *importInfo, childIdx);
                     AllocateTxId(*importInfo, childIdx);
@@ -2461,46 +2503,43 @@ private:
             break;
 
         case EState::Transferring:
-            if (const auto issue = GetIssues(item, txId)) {
-                item.Issue = *issue;
-                Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
-                Self->EraseEncryptionKey(db, *importInfo);
+        case EState::BuildIndexes: {
+            if (item.State == EState::Transferring) {
+                if (const auto issue = GetIssues(item, txId)) {
+                    item.Issue = *issue;
+                    Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
+                    Self->EraseEncryptionKey(db, *importInfo);
+                    break;
+                }
             } else {
-                if (PrepareNextBuildableIndex(Self, item)) {
-                    item.State = EState::BuildIndexes;
-                    AllocateTxId(*importInfo, itemIdx);
-                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
-                           AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
-                    item.State = EState::CreateChangefeed;
-                    AllocateTxId(*importInfo, itemIdx);
-                } else {
-                    FinishImportItem(*importInfo, itemIdx);
+                if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
+                    if (item.ReplicationConfig) {
+                        return CancelAndPersist(db, importInfo, itemIdx, *issue, "replica index build failed");
+                    }
+                    // One unsuccessful index build must not fail the whole import: skip that index
+                    // and continue with the remaining ones. Nothing has to be cleaned up here - a
+                    // rejected build rolls back everything it created on its own.
+                    YDB_LOG_WARN("TImport::TTxProgress: skipping an index that failed to build",
+                        {"info", importInfo->ToString()},
+                        {"item", item.ToString(itemIdx)},
+                        {"issue", *issue},
+                    );
+                    if (item.Issue) {
+                        item.Issue += "\n";
+                    }
+                    item.Issue += *issue;
+                }
+                if (item.Table) {
+                    ++item.NextIndexIdx;
                 }
             }
-            break;
 
-        case EState::BuildIndexes:
-            if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
-                if (item.ReplicationConfig) {
-                    return CancelAndPersist(db, importInfo, itemIdx, *issue, "replica index build failed");
-                }
-                // One unsuccessful index build must not fail the whole import: skip that index
-                // and continue with the remaining ones. Nothing has to be cleaned up here - a
-                // rejected build rolls back everything it created on its own.
-                YDB_LOG_WARN("TImport::TTxProgress: skipping an index that failed to build",
-                    {"info", importInfo->ToString()},
-                    {"item", item.ToString(itemIdx)},
-                    {"issue", *issue},
-                );
-                if (item.Issue) {
-                    item.Issue += "\n";
-                }
-                item.Issue += *issue;
+            const auto next = PrepareNextBuildableIndex(Self, item);
+            if (next.IsFail()) {
+                return CancelAndPersist(db, importInfo, itemIdx, next.GetErrorMessage(), "index definition mismatch");
             }
-            if (item.Table) {
-                ++item.NextIndexIdx;
-            }
-            if (PrepareNextBuildableIndex(Self, item)) {
+            if (next.GetResult()) {
+                item.State = EState::BuildIndexes;
                 AllocateTxId(*importInfo, itemIdx);
             } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                        AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
@@ -2510,6 +2549,7 @@ private:
                 FinishImportItem(*importInfo, itemIdx);
             }
             break;
+        }
 
         case EState::CreateChangefeed:
             if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {

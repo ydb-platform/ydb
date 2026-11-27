@@ -6,6 +6,7 @@
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
+#include <util/generic/set.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NBackup {
@@ -44,6 +45,7 @@ struct TChangefeedMetadata {
 struct TIndexMetadata {
     TString ExportPrefix;
     TString ImplTablePrefix;
+    TMaybe<TEncryptionIV> IV = Nothing();
 };
 
 struct TRateLimiterResourceMetadata {
@@ -77,6 +79,9 @@ public:
     void AddIndex(const TIndexMetadata& index);
     const std::optional<std::vector<TIndexMetadata>>& GetIndexes() const;
 
+    void SetAnonymousBloomPrefixes(TSet<ui32> prefixes);
+    const std::optional<TSet<ui32>>& GetAnonymousBloomPrefixes() const;
+
     void SetRateLimiterResources(std::vector<TRateLimiterResourceMetadata> resources);
     const std::optional<std::vector<TRateLimiterResourceMetadata>>& GetRateLimiterResources() const;
 
@@ -109,6 +114,10 @@ private:
     // [...]: The export must have all materialized indexes listed here
     std::optional<std::vector<TIndexMetadata>> Indexes;
 
+    // Prefix filters rendered as indexes in scheme.pb without a named scheme object on the source.
+    // Older backups do not record the distinction.
+    std::optional<TSet<ui32>> AnonymousBloomPrefixes;
+
     // When present, this is the complete resource list, including an explicitly empty set.
     // Files not listed here may remain from an earlier export attempt and must be ignored.
     // The zero-based list position is the resource file's IV shard number.
@@ -135,6 +144,8 @@ public:
         TString ExportPrefix;
         TString ObjectPath;
         TMaybe<NBackup::TEncryptionIV> IV;
+        TMap<TString, TEncryptionIV> IndexIVs = {};
+        TMap<TString, TString> IndexExportPrefixes = {};
     };
 
     TSchemaMapping() = default;

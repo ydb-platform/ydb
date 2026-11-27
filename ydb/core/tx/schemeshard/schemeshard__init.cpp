@@ -866,7 +866,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString, TString> TBackupSettingsRec;
+    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString, TString, TString, TString, TMaybe<TString>> TBackupSettingsRec;
     typedef TDeque<TBackupSettingsRec> TBackupSettingsRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -882,7 +882,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::EnableChecksums>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::EnablePermissions>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::ChangefeedUnderlyingTopics>(""),
-            rowSet.template GetValueOrDefault<typename SchemaTable::FSSettings>("")
+            rowSet.template GetValueOrDefault<typename SchemaTable::FSSettings>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::EncryptionSettings>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::Compression>(""),
+            rowSet.template HaveValue<typename SchemaTable::IndexExportPrefixes>()
+                ? TMaybe<TString>(rowSet.template GetValue<typename SchemaTable::IndexExportPrefixes>())
+                : Nothing()
         );
     }
 
@@ -4579,6 +4584,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 bool enablePermissions = std::get<9>(rec);
                 TString changefeedUnderlyingTopics = std::get<10>(rec);
                 TString fsSerializedSettings = std::get<11>(rec);
+                TString encryptionSettings = std::get<12>(rec);
+                TString compression = std::get<13>(rec);
+                const auto& indexExportPrefixes = std::get<14>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
 
@@ -4618,6 +4626,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
                             *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
                         }
+                    }
+
+                    if (encryptionSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableEncryptionSettings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, encryptionSettings));
+                    }
+
+                    if (compression) {
+                        auto settings = tableInfo->BackupSettings.MutableCompression();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, compression));
+                    }
+
+                    if (indexExportPrefixes) {
+                        auto settings = tableInfo->BackupSettings.MutableIndexExportPrefixes();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, *indexExportPrefixes));
                     }
                 };
 
@@ -5370,6 +5393,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     if (rowset.HaveValue<Schema::ImportItems::EncryptionIV>()) {
                         item.ExportItemIV = ::NKikimr::NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
+                    }
+                    if (rowset.HaveValue<Schema::ImportItems::IndexIVs>()) {
+                        item.ExportIndexIVs = rowset.GetValue<Schema::ImportItems::IndexIVs>();
                     }
 
                     if (item.WaitTxId != InvalidTxId) {

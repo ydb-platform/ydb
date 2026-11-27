@@ -117,7 +117,11 @@ public:
             return result;
         }
 
-        if (tableIndexCreation.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !context.SS->EnableHnswIndex) {
+        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        // An internal backup copy preserves a ready index without starting an index build.
+        if (tableIndexCreation.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !context.SS->EnableHnswIndex
+                && !(internal && parentPath.IsResolved() && parentPath.IsBackupTable()
+                    && tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexStateReady)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "HNSW index support is disabled (EnableHnswIndex)");
             return result;
@@ -128,7 +132,6 @@ public:
             return result;
         }
 
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks

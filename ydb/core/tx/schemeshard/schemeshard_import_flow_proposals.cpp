@@ -13,6 +13,7 @@
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>
 #include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
@@ -90,14 +91,123 @@ static bool FillDefaultValues(
 
 namespace {
 
+bool FillRowTableIndexesForRestore(
+    NKikimrSchemeOp::TIndexedTableCreationConfig& out, const Ydb::Table::CreateTableRequest& scheme,
+    const NBackup::TMetadata& metadata, bool buildIndexes, bool enableCompactFulltext,
+    Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    if (!AnyOf(scheme.indexes(), [](const auto& index) { return index.has_local_bloom_filter_index(); })) {
+        return buildIndexes || FillIndexDescription(out, scheme, enableCompactFulltext, status, error);
+    }
+
+    const bool named = AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject();
+    const auto& anonymousPrefixes = metadata.GetAnonymousBloomPrefixes();
+    THashMap<TStringBuf, ui32> nameCounts;
+    THashSet<TStringBuf> schemeObjectNames;
+    for (const auto& index : scheme.indexes()) {
+        ++nameCounts[index.name()];
+        if (!index.has_local_bloom_filter_index()) {
+            schemeObjectNames.insert(index.name());
+        }
+    }
+    if (named && !anonymousPrefixes) {
+        for (const auto& column : scheme.columns()) {
+            if (column.has_from_sequence()) {
+                ++nameCounts[column.from_sequence().name()];
+            }
+        }
+    }
+    THashSet<ui32> bloomPrefixes;
+    for (const auto& index : scheme.indexes()) {
+        if (!index.has_local_bloom_filter_index()) {
+            continue;
+        }
+
+        const ui32 length = index.index_columns_size();
+        if (length == 0 || index.index_columns_size() > scheme.primary_key_size() ||
+                !std::equal(index.index_columns().begin(), index.index_columns().end(), scheme.primary_key().begin())) {
+            error = TStringBuilder() << "Local bloom index '" << index.name() << "' must cover a non-empty prefix of the primary key";
+            return false;
+        }
+        if (!index.data_columns().empty()) {
+            error = TStringBuilder() << "Data columns are not supported for local bloom index '" << index.name() << "'";
+            return false;
+        }
+        const auto& bloom = index.local_bloom_filter_index();
+        const double fpp = bloom.has_false_positive_probability() ? bloom.false_positive_probability() : NTable::DefaultBloomFilterFpp;
+        if (!(fpp > 0.0 && fpp < 1.0)) {
+            error = TStringBuilder() << "Local bloom index '" << index.name() << "': false_positive_probability must be in range (0, 1)";
+            return false;
+        }
+
+        auto* prefix = out.MutableTableDescription()->MutablePartitionConfig()->AddByKeyFilterPrefixes();
+        prefix->SetPrefixLength(length);
+        prefix->SetFalsePositiveProbability(fpp);
+        if (named) {
+            if (index.name().empty() || !bloomPrefixes.insert(length).second) {
+                error = "Local bloom indexes must have a name and distinct primary-key prefixes";
+                return false;
+            }
+
+            // A legacy anonymous filter's synthesized name can also name a real index or sequence.
+            const bool anonymousFilter = anonymousPrefixes
+                ? anonymousPrefixes->contains(length)
+                : nameCounts.at(index.name()) > 1 && index.name() == (TStringBuilder() << "idx_bloom_" << length);
+            if (anonymousFilter) {
+                continue;
+            }
+            if (!schemeObjectNames.insert(index.name()).second) {
+                error = TStringBuilder() << "Conflicting index definitions for '" << index.name() << "'";
+                return false;
+            }
+            auto* desc = out.AddIndexDescription();
+            desc->SetName(index.name());
+            desc->SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+            desc->SetState(NKikimrSchemeOp::EIndexStateReady);
+            desc->MutableKeyColumnNames()->CopyFrom(index.index_columns());
+            desc->MutableBloomFilterDescription()->SetFalsePositiveProbability(fpp);
+        }
+    }
+    if (buildIndexes) {
+        return true;
+    }
+    return FillIndexDescription(out, scheme, enableCompactFulltext, status, error, [](const auto& index) {
+        return !index.has_local_bloom_filter_index();
+    });
+}
+
+using TImplTableSchemes = TVector<std::pair<TStringBuf, const Ydb::Table::CreateTableRequest*>>;
+
+THashMap<TStringBuf, TImplTableSchemes> GetMaterializedIndexSchemes(const TImportInfo& importInfo, const TImportInfo::TItem& item) {
+    THashMap<TStringBuf, TImplTableSchemes> schemes;
+    const auto add = [&](TStringBuf path, const Ydb::Table::CreateTableRequest& scheme) {
+        schemes[path.Before('/')].emplace_back(path.After('/'), &scheme);
+    };
+    if (!item.MaterializedIndexes.empty()) {
+        for (const auto& [metadata, scheme] : item.MaterializedIndexes) {
+            add(metadata.ImplTablePrefix, scheme);
+        }
+    } else {
+        const TString prefix = TStringBuilder() << item.DstPathName << "/";
+        for (ui32 idx : item.ChildItems) {
+            const auto& child = importInfo.Items.at(idx);
+            TStringBuf path(child.DstPathName);
+            if (child.Table && path.SkipPrefix(prefix)) {
+                add(path, *child.Table);
+            }
+        }
+    }
+    return schemes;
+}
+
 // Returns true if the materialized impl tables of `indexDesc` from the backup can be restored into
 // the index as it would be created in this database. Returns false (and fills `error`) when they
 // cannot - for example when a backup of a compact fulltext index is restored with
 // EnableCompactFulltextIndex off. Such an index must not be materialized.
-bool CheckIndexMaterializationCompatible(
+bool PrepareIndexMaterialization(
     const NKikimrSchemeOp::TTableDescription& baseTable,
-    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
-    const TImportInfo::TItem& item,
+    NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    const TImplTableSchemes& schemes,
     TString& error
 ) {
     THashMap<TString, NKikimrSchemeOp::TTableDescription> expected;
@@ -105,13 +215,7 @@ bool CheckIndexMaterializationCompatible(
         expected[tbl.GetName()] = std::move(tbl);
     }
 
-    const TString indexPrefix = TStringBuilder() << indexDesc.GetName() << "/";
-    for (const auto& [metadata, scheme] : item.MaterializedIndexes) {
-        if (!metadata.ImplTablePrefix.StartsWith(indexPrefix)) {
-            continue;
-        }
-
-        const TString implTableName = metadata.ImplTablePrefix.substr(indexPrefix.size());
+    for (const auto& [implTableName, scheme] : schemes) {
         auto expectedIt = expected.find(implTableName);
         if (expectedIt == expected.end()) {
             error = TStringBuilder() << "materialized index '" << indexDesc.GetName()
@@ -122,24 +226,54 @@ bool CheckIndexMaterializationCompatible(
         NKikimrSchemeOp::TTableDescription backupDesc;
         Ydb::StatusIds::StatusCode status;
         TString parseError;
-        if (!FillColumnDescription(backupDesc, scheme.columns(), status, error)) {
-            error = TStringBuilder() << "cannot parse the materialized scheme of '" << metadata.ImplTablePrefix
-                << "': " << parseError;
+        if (!FillColumnDescription(backupDesc, scheme->columns(), status, parseError)) {
+            error = TStringBuilder() << "cannot parse the materialized scheme of '" << indexDesc.GetName() << "/"
+                << implTableName << "': " << parseError;
             return false;
         }
-        backupDesc.MutableKeyColumnNames()->CopyFrom(scheme.primary_key());
+        backupDesc.MutableKeyColumnNames()->CopyFrom(scheme->primary_key());
 
         google::protobuf::util::MessageDifferencer diff;
         // TypeId is redundant with Type, and the backup scheme is parsed without it.
         diff.IgnoreField(NKikimrSchemeOp::TColumnDescription::descriptor()->FindFieldByName("TypeId"));
         if (!std::equal(backupDesc.GetColumns().begin(), backupDesc.GetColumns().end(),
-                expectedIt->second.GetColumns().begin(), [&](const auto& a, const auto& b) { return diff.Compare(a, b); }) ||
+                expectedIt->second.GetColumns().begin(), expectedIt->second.GetColumns().end(),
+                [&](const auto& a, const auto& b) { return diff.Compare(a, b); }) ||
             !std::equal(backupDesc.GetKeyColumnNames().begin(), backupDesc.GetKeyColumnNames().end(),
-                expectedIt->second.GetKeyColumnNames().begin())) {
+                expectedIt->second.GetKeyColumnNames().begin(), expectedIt->second.GetKeyColumnNames().end())) {
             error = TStringBuilder() << "materialized index '" << indexDesc.GetName()
                 << "' has a scheme incompatible with this database";
             return false;
         }
+        // The layout comparison above also checked which columns use an index-owned sequence.
+        // Transfer its cursor from the child scheme into the create request for that impl table.
+        for (const auto& column : scheme->columns()) {
+            if (!column.has_from_sequence()) {
+                continue;
+            }
+            const auto& sequence = column.from_sequence();
+            if (!sequence.set_val().has_next_value() || !sequence.set_val().has_next_used()) {
+                error = TStringBuilder() << "Missing position of sequence '" << sequence.name()
+                    << "' in materialized index '" << indexDesc.GetName() << "/" << implTableName << "'";
+                return false;
+            }
+            int position = 0;
+            if (implTableName == NTableIndex::NKMeans::PrefixTable) {
+                position = NTableIndex::NKMeans::PrefixTablePosition;
+            } else if (indexDesc.GetType() == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+                position = NTableIndex::NFulltext::PostingTablePosition;
+            }
+            auto* saved = indexDesc.MutableIndexImplTableDescriptions(position)->AddSequences();
+            saved->SetName(sequence.name());
+            saved->MutableSetVal()->SetNextValue(sequence.set_val().next_value());
+            saved->MutableSetVal()->SetNextUsed(sequence.set_val().next_used());
+        }
+        expected.erase(expectedIt);
+    }
+    if (!expected.empty()) {
+        error = TStringBuilder() << "materialized index '" << indexDesc.GetName()
+            << "' is missing impl table '" << expected.begin()->first << "'";
+        return false;
     }
 
     return true;
@@ -199,7 +333,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             return nullptr;
         }
 
-        if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(indexedTable, *item.Table,
+        if (!FillRowTableIndexesForRestore(indexedTable, *item.Table, item.Metadata, NeedToBuildIndexes(importInfo, itemIdx),
                 ss->EnableCompactFulltextIndex, status, error)) {
             return nullptr;
         }
@@ -211,40 +345,21 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         if (indexedTable.IndexDescriptionSize()) {
             const auto& baseTable = indexedTable.GetTableDescription();
 
-            // An index is materialized if the backup has impl tables for it. Before the impl-table
-            // items are created this is known from the downloaded schemes; afterwards (and after a
-            // restart) - from the already created impl-table child items.
-            THashSet<TString> materializedIndexes;
-            if (item.MaterializedIndexes.empty()) {
-                const TString prefix = TStringBuilder() << item.DstPathName << "/";
-                for (ui32 childIdx : item.ChildItems) {
-                    if (childIdx >= importInfo.Items.size()) {
-                        continue;
-                    }
-                    const TString& childPath = importInfo.Items[childIdx].DstPathName;
-                    if (!childPath.StartsWith(prefix)) {
-                        continue;
-                    }
-                    const auto start = prefix.size();
-                    const auto end = childPath.find('/', start);
-                    materializedIndexes.insert(childPath.substr(start, end == TString::npos ? end : end - start));
-                }
-            } else {
-                for (const auto& [metadata, scheme] : item.MaterializedIndexes) {
-                    auto pos = metadata.ImplTablePrefix.find('/');
-                    materializedIndexes.insert(pos == TStringBuf::npos ? metadata.ImplTablePrefix : metadata.ImplTablePrefix.substr(0, pos));
-                }
-            }
+            // Recheck the persisted child schemes when proposing the actual create. The
+            // destination layout can change after the getter validates the backup.
+            const auto materializedIndexes = GetMaterializedIndexSchemes(importInfo, item);
 
             std::vector<NKikimrSchemeOp::TIndexCreationConfig> compatible;
             compatible.reserve(indexedTable.IndexDescriptionSize());
-            for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
-                TString indexError;
-                bool ok = materializedIndexes.contains(indexDesc.GetName());
-                if (ok && !item.MaterializedIndexes.empty()) {
-                    ok = CheckIndexMaterializationCompatible(baseTable, indexDesc, item, indexError);
+            for (auto& indexDesc : *indexedTable.MutableIndexDescription()) {
+                if (indexDesc.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                    // A named prefix filter belongs to the base table and has no materialized files.
+                    compatible.push_back(indexDesc);
+                    continue;
                 }
-                if (ok) {
+                TString indexError;
+                const auto* schemes = materializedIndexes.FindPtr(indexDesc.GetName());
+                if (schemes && PrepareIndexMaterialization(baseTable, indexDesc, *schemes, indexError)) {
                     compatible.push_back(indexDesc);
                 } else {
                     indexesToBuild.push_back(indexDesc.GetName());

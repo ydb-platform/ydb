@@ -1,9 +1,158 @@
+#include "index_metadata.h"
 #include "metadata.h"
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NBackup {
+
+Y_UNIT_TEST_SUITE(IndexMetadataTest) {
+    Y_UNIT_TEST(SchemaMappingIndexIVs) {
+        const TString json = R"({"exportedObjects": {
+            "Table": {
+                "exportPrefix": "001",
+                "iv": "000102030405060708090A0B",
+                "indexIVs": {"index/indexImplTable": "010102030405060708090A0B"}
+            }
+        }})";
+        TSchemaMapping mapping;
+        TString error;
+        UNIT_ASSERT_C(mapping.Deserialize(json, error), error);
+        TSchemaMapping roundTrip;
+        UNIT_ASSERT_C(roundTrip.Deserialize(mapping.Serialize(), error), error);
+        UNIT_ASSERT_VALUES_EQUAL(roundTrip.Items.size(), 1);
+        const auto& item = roundTrip.Items.front();
+        UNIT_ASSERT_VALUES_EQUAL(item.ObjectPath, "Table");
+        UNIT_ASSERT_VALUES_EQUAL(item.ExportPrefix, "001");
+        UNIT_ASSERT(item.IV);
+        UNIT_ASSERT(*item.IV == TEncryptionIV::FromHexString("000102030405060708090A0B"));
+        UNIT_ASSERT_VALUES_EQUAL(item.IndexIVs.size(), 1);
+        UNIT_ASSERT(item.IndexIVs.at("index/indexImplTable") == TEncryptionIV::FromHexString("010102030405060708090A0B"));
+    }
+
+    Y_UNIT_TEST(LegacySchemaMappingWithoutIndexIVs) {
+        for (const char* json : {
+                R"({"exportedObjects":{"Table":{"exportPrefix":"001"}}})",
+                R"({"exportedObjects":{"Table":{"exportPrefix":"001","iv":"000102030405060708090A0B"}}})"}) {
+            TSchemaMapping mapping;
+            TString error;
+            UNIT_ASSERT_C(mapping.Deserialize(json, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(mapping.Items.size(), 1);
+            UNIT_ASSERT(mapping.Items.front().IndexIVs.empty());
+        }
+    }
+
+    Y_UNIT_TEST(InvalidIndexExportPrefixes) {
+        for (const TString value : {"null", "123", R"({"idx/indexImplTable":"../001"})", R"({"idx/indexImplTable":""})"}) {
+            TSchemaMapping mapping;
+            TString error;
+            UNIT_ASSERT(!mapping.Deserialize(TString(R"({"exportedObjects":{"Table":{
+                "exportPrefix":"001", "iv":"000102030405060708090A0B", "indexExportPrefixes":)") + value + "}}}", error));
+            UNIT_ASSERT_C(!error.empty(), value);
+        }
+    }
+
+    Y_UNIT_TEST(InvalidSchemaMappingIndexIV) {
+        for (const TString iv : {"null", "123", "\"\"", "\"00\"", "\"000102030405060708090A0B0C\"", "\"GG0102030405060708090A0B\""}) {
+            TSchemaMapping mapping;
+            TString error;
+            UNIT_ASSERT(!mapping.Deserialize(TString(R"({"exportedObjects":{"Table":{
+                "exportPrefix":"001", "iv":"000102030405060708090A0B",
+                "indexIVs":{"index/indexImplTable":)") + iv + "}}}}", error));
+            UNIT_ASSERT_C(!error.empty(), iv);
+        }
+    }
+
+    Y_UNIT_TEST(IndexedSchemaMappingRequiresConsistentParentIVs) {
+        for (const TString other : {
+                R"({"exportPrefix":"002"})",
+                R"({"exportPrefix":"002","iv":"00"})",
+                R"({"exportPrefix":"002","iv":"not-hex"})"}) {
+            TSchemaMapping mapping;
+            TString error;
+            UNIT_ASSERT(!mapping.Deserialize(TString(R"({"exportedObjects":{
+                "Table":{"exportPrefix":"001","iv":"000102030405060708090A0B",
+                    "indexIVs":{"idx/indexImplTable":"010102030405060708090A0B"}},
+                "Other":)") + other + "}}", error));
+            UNIT_ASSERT_C(!error.empty(), other);
+        }
+    }
+
+    Y_UNIT_TEST(IndexIVIsNotSerialized) {
+        // Authoritative index IVs live in the authenticated schema mapping only
+        TMetadata metadata;
+        metadata.AddIndex({
+            .ExportPrefix = "001",
+            .ImplTablePrefix = "index/indexImplTable",
+            .IV = TEncryptionIV::FromHexString("000102030405060708090A0B"),
+        });
+        const TString serialized = metadata.Serialize();
+        UNIT_ASSERT_C(!serialized.Contains("\"iv\""), serialized);
+
+        const auto deserialized = TMetadata::Deserialize(serialized);
+        UNIT_ASSERT(deserialized.GetIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(deserialized.GetIndexes()->size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(deserialized.GetIndexes()->front().ExportPrefix, "001");
+        UNIT_ASSERT_VALUES_EQUAL(deserialized.GetIndexes()->front().ImplTablePrefix, "index/indexImplTable");
+        UNIT_ASSERT(!deserialized.GetIndexes()->front().IV);
+    }
+
+    Y_UNIT_TEST(MakeIndexesMetadata) {
+        google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex> indexes;
+        const auto addIndex = [&](const char* name, const char* column) -> Ydb::Table::TableIndex& {
+            auto& index = *indexes.Add();
+            index.set_name(name);
+            index.add_index_columns(column);
+            return index;
+        };
+
+        // Only materialized indexes consume export prefixes. HNSW may be present in a schema-only backup.
+        addIndex("async", "value").mutable_global_async_index();
+        addIndex("hnsw", "embedding").mutable_global_hnsw_index();
+        addIndex("global", "value").mutable_global_index();
+        addIndex("bloom", "key").mutable_local_bloom_filter_index();
+        addIndex("vector", "embedding").mutable_global_vector_kmeans_tree_index();
+
+        const auto encrypted = NBackup::MakeIndexesMetadata(indexes, 3, true);
+        UNIT_ASSERT_VALUES_EQUAL(encrypted.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[0].ImplTablePrefix, "global/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[0].ExportPrefix, "003");
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[1].ImplTablePrefix, "vector/indexImplLevelTable");
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[1].ExportPrefix, "004");
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[2].ImplTablePrefix, "vector/indexImplPostingTable");
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[2].ExportPrefix, "005");
+
+        const auto plain = NBackup::MakeIndexesMetadata(indexes, 3, false);
+        UNIT_ASSERT_VALUES_EQUAL(plain.size(), 3);
+        for (const auto& index : plain) {
+            UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, index.ImplTablePrefix);
+        }
+    }
+
+    Y_UNIT_TEST(FulltextDictionaryLayouts) {
+        google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex> indexes;
+        auto& index = *indexes.Add();
+        index.set_name("text");
+        auto* relevance = index.mutable_global_fulltext_relevance_index();
+
+        // Before per-table settings, the full layout was the only one available.
+        UNIT_ASSERT_VALUES_EQUAL(NBackup::MakeIndexesMetadata(indexes, 1, false).size(), 4);
+        relevance->mutable_docs_table_settings();
+        relevance->mutable_stats_table_settings();
+        // A legacy DataShard can list the compact layout for an existing non-compact index.
+        auto compact = NBackup::MakeIndexesMetadata(indexes, 1, true);
+        UNIT_ASSERT_VALUES_EQUAL(compact.size(), 3);
+        UNIT_ASSERT(!NBackup::GetIndexMetadataIssue(indexes, compact));
+
+        relevance->mutable_dict_table_settings();
+        UNIT_ASSERT_STRING_CONTAINS(NBackup::GetIndexMetadataIssue(indexes, compact), "missing from the backup: text/indexImplDictTable");
+        const auto full = NBackup::MakeIndexesMetadata(indexes, 1, true);
+        UNIT_ASSERT_VALUES_EQUAL(full.size(), 4);
+        UNIT_ASSERT(!NBackup::GetIndexMetadataIssue(indexes, full));
+        relevance->clear_dict_table_settings();
+        UNIT_ASSERT_STRING_CONTAINS(NBackup::GetIndexMetadataIssue(indexes, full), "unexpected materialized index table in the backup: text/indexImplDictTable");
+    }
+}
 
 Y_UNIT_TEST_SUITE(BackupMetadataTest) {
     Y_UNIT_TEST(SourceDatabase) {

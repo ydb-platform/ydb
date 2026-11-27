@@ -2436,8 +2436,38 @@ void FillLocalBloomNgramFilterIndexSettings(Ydb::Table::LocalBloomNgramFilterInd
     }
 }
 
+bool ValidateIndexImplTableDescriptions(const NKikimrSchemeOp::TTableDescription& table, TString& error) {
+    for (const auto& index : table.GetTableIndexes()) {
+        switch (index.GetType()) {
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+        case NKikimrSchemeOp::EIndexTypeInvalid:
+            continue;
+        default:
+            break;
+        }
+
+        const TVector<TString> keys(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());
+        // HNSW descriptions use the same table settings layout as KMeans.
+        const auto expected = index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+            ? (keys.size() > 1 ? NTableIndex::NKMeans::PrefixTablePosition : NTableIndex::NKMeans::PostingTablePosition) + 1
+            : NTableIndex::GetImplTables(index.GetType(), keys).size();
+        if (static_cast<size_t>(index.IndexImplTableDescriptionsSize()) < expected) {
+            error = TStringBuilder() << "Incomplete description of index '" << index.GetName()
+                << "': expected at least " << expected << " implementation table descriptions, got "
+                << index.IndexImplTableDescriptionsSize();
+            return false;
+        }
+    }
+    return true;
+}
+
 template <typename TYdbProto>
 void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in) {
+    TString error;
+    Y_ENSURE(ValidateIndexImplTableDescriptions(in, error), error);
 
     for (const auto& tableIndex : in.GetTableIndexes()) {
         auto index = out.add_indexes();
@@ -2730,7 +2760,8 @@ bool IsSingleIntegerPrimaryKey(const Ydb::Table::CreateTableRequest& in) {
 } // anonymous
 
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
-    const Ydb::Table::CreateTableRequest& in, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error) {
+    const Ydb::Table::CreateTableRequest& in, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error,
+    const std::function<bool(const Ydb::Table::TableIndex&)>& includeIndex) {
 
     auto returnError = [&status, &error](Ydb::StatusIds::StatusCode code, const TString& msg) -> bool {
         status = code;
@@ -2745,6 +2776,9 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     const bool rowIdMode = !IsSingleIntegerPrimaryKey(in);
 
     for (const auto& index : in.indexes()) {
+        if (includeIndex && !includeIndex(index)) {
+            continue;
+        }
         auto indexDesc = out.MutableIndexDescription()->Add();
 
         if (index.name().empty()) {

@@ -5,6 +5,9 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/json_reader.h>
 
+#include <util/generic/yexception.h>
+#include <util/string/builder.h>
+
 namespace NKikimr::NBackup {
 
 void TMetadata::AddFullBackup(TFullBackupMetadata::TPtr fb) {
@@ -51,6 +54,14 @@ void TMetadata::AddIndex(const TIndexMetadata& index) {
 
 const std::optional<std::vector<TIndexMetadata>>& TMetadata::GetIndexes() const {
     return Indexes;
+}
+
+void TMetadata::SetAnonymousBloomPrefixes(TSet<ui32> prefixes) {
+    AnonymousBloomPrefixes = std::move(prefixes);
+}
+
+const std::optional<TSet<ui32>>& TMetadata::GetAnonymousBloomPrefixes() const {
+    return AnonymousBloomPrefixes;
 }
 
 void TMetadata::SetRateLimiterResources(std::vector<TRateLimiterResourceMetadata> resources) {
@@ -126,6 +137,14 @@ TString TMetadata::Serialize() const {
     }
     m["indexes"] = indexes;
 
+    if (AnonymousBloomPrefixes) {
+        NJson::TJsonArray prefixes;
+        for (ui32 length : *AnonymousBloomPrefixes) {
+            prefixes.AppendValue(length);
+        }
+        m["anonymous_bloom_prefixes"] = std::move(prefixes);
+    }
+
     if (RateLimiterResources) {
         NJson::TJsonArray resources;
         for (const auto& resource : *RateLimiterResources) {
@@ -181,6 +200,15 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
         }
     }
 
+    if (json.Has("anonymous_bloom_prefixes")) {
+        auto& prefixes = result.AnonymousBloomPrefixes.emplace();
+        for (const auto& value : json["anonymous_bloom_prefixes"].GetArraySafe()) {
+            const auto length = value.GetUIntegerSafe();
+            Y_ENSURE(length > 0 && length <= Max<ui32>(), "Invalid anonymous Bloom prefix length");
+            prefixes.insert(static_cast<ui32>(length));
+        }
+    }
+
     if (json.Has("indexes")) {
         result.Indexes.emplace();
         const NJson::TJsonValue& indexes = json["indexes"];
@@ -230,6 +258,22 @@ TString TSchemaMapping::Serialize() const {
         if (item.IV) {
             writer.Write("iv", item.IV->GetHexString());
         }
+        if (!item.IndexIVs.empty()) {
+            writer.WriteKey("indexIVs");
+            writer.OpenMap();
+            for (const auto& [path, iv] : item.IndexIVs) {
+                writer.Write(path, iv.GetHexString());
+            }
+            writer.CloseMap();
+        }
+        if (!item.IndexExportPrefixes.empty()) {
+            writer.WriteKey("indexExportPrefixes");
+            writer.OpenMap();
+            for (const auto& [path, prefix] : item.IndexExportPrefixes) {
+                writer.Write(path, prefix);
+            }
+            writer.CloseMap();
+        }
         writer.CloseMap();
     }
     writer.CloseMap();
@@ -252,33 +296,68 @@ bool TSchemaMapping::Deserialize(const TString& jsonContent, TString& error) {
         return false;
     }
 
-    bool hasIV = false;
-    bool first = true;
-    for (const auto& [exportObject, info] : mapping.GetMap()) {
+    const auto& objects = mapping.GetMap();
+    const bool encrypted = !objects.empty() && objects.begin()->second.Has("iv");
+    const auto parseIV = [&](const NJson::TJsonValue& value, TEncryptionIV& result) {
+        if (!value.IsString()) {
+            error = "IV in schema mapping json is not a string";
+            return false;
+        }
+        try {
+            result = TEncryptionIV::FromHexString(value.GetString());
+            if (result.Size() == TEncryptionIV::SIZE) {
+                return true;
+            }
+            error = "Invalid IV size in schema mapping json";
+        } catch (const std::exception& e) {
+            error = TStringBuilder() << "Invalid IV in schema mapping json: " << e.what();
+        }
+        return false;
+    };
+    for (const auto& [exportObject, info] : objects) {
         const NJson::TJsonValue& exportPrefix = info["exportPrefix"];
-        const NJson::TJsonValue& iv = info["iv"];
         if (!exportPrefix.IsString()) {
             error = "Incorrect exportPrefix";
             return false;
         }
-        if (first) {
-            hasIV = info.Has("iv");
-        } else {
-            first = false;
-            if (hasIV != info.Has("iv")) {
-                error = "Incorrect iv in schema mapping json";
-                return false;
-            }
-        }
-        if (hasIV && !iv.IsString()) {
-            error = "IV in schema mapping json is not a string";
+        if (info.Has("iv") != encrypted) {
+            error = "Inconsistent encryption settings in schema mapping json";
             return false;
         }
         TItem& item = Items.emplace_back();
         item.ExportPrefix = exportPrefix.GetString();
         item.ObjectPath = exportObject;
-        if (hasIV) {
-            item.IV = TEncryptionIV::FromHexString(iv.GetString());
+        if (encrypted && !parseIV(info["iv"], item.IV.ConstructInPlace())) {
+            return false;
+        }
+        if (info.Has("indexIVs")) {
+            const auto& indexIVs = info["indexIVs"];
+            if (!encrypted || !indexIVs.IsMap()) {
+                error = "Incorrect indexIVs in schema mapping json";
+                return false;
+            }
+            for (const auto& [path, indexIV] : indexIVs.GetMap()) {
+                TEncryptionIV parsedIV;
+                if (!parseIV(indexIV, parsedIV)) {
+                    return false;
+                }
+                item.IndexIVs.emplace(path, std::move(parsedIV));
+            }
+        }
+        if (info.Has("indexExportPrefixes")) {
+            const auto& prefixes = info["indexExportPrefixes"];
+            if (!encrypted || !prefixes.IsMap()) {
+                error = "Incorrect indexExportPrefixes in schema mapping json";
+                return false;
+            }
+            for (const auto& [path, prefix] : prefixes.GetMap()) {
+                // Encrypted implementation tables are stored in numbered subdirectories.
+                if (!prefix.IsString() || prefix.GetString().empty() || prefix.GetString().find_first_not_of("0123456789") != TString::npos) {
+                    error = "Invalid index export prefix in schema mapping json";
+                    return false;
+                }
+                item.IndexExportPrefixes.emplace(path, prefix.GetString());
+            }
         }
     }
     return true;

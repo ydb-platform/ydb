@@ -838,6 +838,12 @@ private:
                 .ObjectPath = item.GetSourcePath(),
                 .IV = item.HasIV() ? TMaybe<NBackup::TEncryptionIV>(NBackup::TEncryptionIV::FromBinaryString(item.GetIV())) : Nothing()
             });
+            for (const auto& [path, indexIV] : item.GetIndexIVs().GetIVs()) {
+                schemaMapping.Items.back().IndexIVs.emplace(path, NBackup::TEncryptionIV::FromBinaryString(indexIV));
+            }
+            for (const auto& index : item.GetIndexExportPrefixes().GetIndexes()) {
+                schemaMapping.Items.back().IndexExportPrefixes.emplace(index.GetImplTablePrefix(), index.GetExportPrefix());
+            }
         }
 
         TMaybe<NBackup::TEncryptionIV> iv;

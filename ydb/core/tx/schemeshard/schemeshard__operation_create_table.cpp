@@ -632,8 +632,16 @@ public:
         const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
 
         std::optional<TString> defaultPoolKind = InferDefaultPoolKind(domainInfo->EffectiveStoragePools(), schema.GetPartitionConfig());
+        auto initialConfig = TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind);
+        const auto& config = schema.GetPartitionConfig();
+        if (Transaction.GetInternal() && schema.GetIsRestore() && config.HasEnableFilterByKey()
+                && !config.GetEnableFilterByKey() && config.ByKeyFilterPrefixesSize()) {
+            // A backup describes the final state. Prefixes can have been added after disabling the full-key filter.
+            initialConfig.SetEnableFilterByKey(false);
+            schema.MutablePartitionConfig()->ClearEnableFilterByKey();
+        }
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), schema.GetColumns(), AppData(), isServerless, errStr)
+        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, initialConfig, schema.GetPartitionConfig(), schema.GetColumns(), AppData(), isServerless, errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;

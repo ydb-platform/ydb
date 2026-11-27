@@ -61,6 +61,19 @@ namespace NGRpcService {
 
 using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 
+void AddAuditLogReason(TAuditLogParts& parts, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues);
+
+template <typename TResponse>
+NYql::TIssues GetResponseAuditIssues(const TResponse& response) {
+    NYql::TIssues issues;
+    if constexpr (requires { response.operation().issues(); }) {
+        NYql::IssuesFromMessage(response.operation().issues(), issues);
+    } else if constexpr (requires { response.issues(); }) {
+        NYql::IssuesFromMessage(response.issues(), issues);
+    }
+    return issues;
+}
+
 inline void EndGrpcRequestSpanWithStatus(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status) {
     if (!span) {
         return;
@@ -1172,8 +1185,11 @@ public:
         return AuditLogParts;
     }
 
-    void AuditLogRequestEnd(Ydb::StatusIds::StatusCode status) {
+    void AuditLogRequestEnd(Ydb::StatusIds::StatusCode status, const NYql::TIssues& responseIssues = {}) {
         if (AuditLogHook) {
+            const auto& issues = !responseIssues.Empty() ? responseIssues
+                : !AuditResponseIssues.Empty() ? AuditResponseIssues : IssueManager_.GetIssues();
+            AddAuditLogReason(AuditLogParts, status, issues);
             AuditLogHook(status, GetAuditLogParts());
             // Drop hook to avoid double logging in case when operation implemention
             // invokes both FinishRequest() (indirectly) and FinishStream()
@@ -1191,6 +1207,11 @@ public:
     }
 
     bool Write(TResponse&& message, const grpc::WriteOptions& options = {}) {
+        if constexpr (requires { message.status(); }) {
+            if (AuditLogHook && message.status() != Ydb::StatusIds::SUCCESS) {
+                AuditResponseIssues = GetResponseAuditIssues(message);
+            }
+        }
         return Ctx_->Write(std::move(message), options);
     }
 
@@ -1201,13 +1222,15 @@ public:
     }
 
     bool WriteAndFinish(TResponse&& message, Ydb::StatusIds::StatusCode status, const grpc::Status& grpcStatus = grpc::Status::OK) {
-        AuditLogRequestEnd(status);
+        AuditLogRequestEnd(status, AuditLogHook && status != Ydb::StatusIds::SUCCESS
+            ? GetResponseAuditIssues(message) : NYql::TIssues{});
         FinishSpan(status);
         return Ctx_->WriteAndFinish(std::move(message), grpcStatus);
     }
 
     bool WriteAndFinish(TResponse&& message, Ydb::StatusIds::StatusCode status, const grpc::WriteOptions& options, const grpc::Status& grpcStatus = grpc::Status::OK) {
-        AuditLogRequestEnd(status);
+        AuditLogRequestEnd(status, AuditLogHook && status != Ydb::StatusIds::SUCCESS
+            ? GetResponseAuditIssues(message) : NYql::TIssues{});
         FinishSpan(status);
         return Ctx_->WriteAndFinish(std::move(message), options, grpcStatus);
     }
@@ -1230,6 +1253,7 @@ private:
     const TRequestAuxSettings AuxSettings;
 
     TAuditLogParts AuditLogParts;
+    NYql::TIssues AuditResponseIssues;
     TAuditLogHook AuditLogHook;
 };
 
@@ -1494,8 +1518,11 @@ public:
     }
 
     void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
+        if (AuditLogHook && status != Ydb::StatusIds::SUCCESS) {
+            CaptureSerializedAuditIssues(in);
+        }
         auto data = MakeByteBufferFromSerializedResult(std::move(in));
-        if (flag == IRequestCtx::EStreamCtrl::FINISH) {
+        if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
             AuditLogRequestEnd(status);
         }
         if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
@@ -1505,8 +1532,11 @@ public:
     }
 
     void SendSerializedResult(TRope&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
+        if (AuditLogHook && status != Ydb::StatusIds::SUCCESS) {
+            CaptureSerializedAuditIssues(in);
+        }
         auto data = MakeByteBufferFromSerializedResult(std::move(in));
-        if (flag == IRequestCtx::EStreamCtrl::FINISH) {
+        if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
             AuditLogRequestEnd(status);
         }
         if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
@@ -1640,6 +1670,11 @@ private:
     void Reply(NProtoBuf::Message* resp, ui32 status) override {
         // End Of Request for non streaming requests
         const bool finishRequest = RequestFinished || !Ctx_->IsStreamCall();
+        if (AuditLogHook && status != Ydb::StatusIds::SUCCESS) {
+            if (const auto* response = dynamic_cast<const TResponse*>(resp)) {
+                AuditResponseIssues = GetResponseAuditIssues(*response);
+            }
+        }
         if (finishRequest) {
             AuditLogRequestEnd(Ydb::StatusIds::StatusCode(status));
         }
@@ -1663,8 +1698,20 @@ private:
         return Ctx_->Reply(resp, status);
     }
 
+    void CaptureSerializedAuditIssues(const TString& data) {
+        TResponse response;
+        if (response.ParseFromString(data)) {
+            AuditResponseIssues = GetResponseAuditIssues(response);
+        }
+    }
+
+    void CaptureSerializedAuditIssues(const TRope& data) {
+        CaptureSerializedAuditIssues(data.ConvertToString());
+    }
+
     void AuditLogRequestEnd(Ydb::StatusIds::StatusCode status) {
         if (AuditLogHook) {
+            AddAuditLogReason(AuditLogParts, status, AuditResponseIssues.Empty() ? IssueManager.GetIssues() : AuditResponseIssues);
             AuditLogHook(status, GetAuditLogParts());
             // Drop hook to avoid double logging in case when operation implemention
             // invokes both FinishRequest() (indirectly) and FinishStream()
@@ -1701,6 +1748,7 @@ private:
     std::function<TFinishWrapper(std::function<void()>&&)> FinishWrapper = &GetStdFinishWrapper;
 
     TAuditLogParts AuditLogParts;
+    NYql::TIssues AuditResponseIssues;
     TAuditLogHook AuditLogHook;
     bool RequestFinished = false;
     bool IsTracingDecided_ = false;

@@ -200,6 +200,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         }
     }
 
+    ui64 GetMaxInMemoryBytes(ui64 cacheLimit) const {
+        const double ratio = Config.GetTryKeepInMemoryMaxRatio();
+        // Avoid converting the unlimited ui64 value through double when no cap is configured.
+        return ratio == 1.0 ? cacheLimit : static_cast<ui64>(cacheLimit * ratio);
+    }
+
     // Reloading into a full tier would evict another page, and the two would trade places forever.
     bool InMemoryTierHasRoomFor(ui64 pageSize) const {
         const ui32 tier = static_cast<ui32>(NTable::NPage::ECacheMode::TryKeepInMemory);
@@ -208,7 +214,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
     ui64 InMemoryTierRoomBytes() const {
         const ui32 tier = static_cast<ui32>(ECacheMode::TryKeepInMemory);
-        const ui64 limit = Cache.GetTierLimit(tier);
+        // Resident pages may be evicted in steps. Admit preloads against the final cap immediately.
+        const ui64 limit = Min(Cache.GetTierLimit(tier), GetMaxInMemoryBytes(GetTargetCacheLimitBytes()));
         const ui64 size = Cache.GetTierSize(tier);
         return limit > size ? limit - size : 0;
     }
@@ -237,9 +244,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
-        const double ratio = Config.GetTryKeepInMemoryMaxRatio();
-        // Avoid converting the unlimited ui64 value through double when no cap is configured.
-        const ui64 maxInMemoryBytes = ratio == 1.0 ? newLimit : static_cast<ui64>(newLimit * ratio);
+        const ui64 maxInMemoryBytes = GetMaxInMemoryBytes(newLimit);
         const ui32 inMemoryTier = static_cast<ui32>(ECacheMode::TryKeepInMemory);
         const ui64 inMemoryLimit = adjustLimit(Cache.GetTierLimit(inMemoryTier), maxInMemoryBytes);
         const ui64 inMemoryDemand = Min(newLimit, GetInMemoryLimitBytes());
@@ -263,6 +268,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
     }
 
     void DoGC() {
+        const ui64 activeBytesBeforeTierEviction = StatActiveBytes;
+        const ui64 inMemoryBytesBeforeTierEviction = ActiveInMemoryBytes;
         // A tier can exceed its new limit even when total cache usage is below the overall limit.
         // Enforce limits here, after handlers finish moving pages between tiers.
         // With no in-memory allocation or pages, preserve the regular-only GC eviction order.
@@ -270,6 +277,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         if (Cache.GetTierLimit(inMemoryTier) != 0 || Cache.GetTierSize(inMemoryTier) != 0) {
             Evict(Cache.EnsureLimits());
         }
+
+        ui64 evictedBytes = activeBytesBeforeTierEviction - StatActiveBytes;
+        ui64 evictedInMemoryBytes = inMemoryBytesBeforeTierEviction - ActiveInMemoryBytes;
 
         // maybe we already have enough useless pages
         // update StatActiveBytes + StatPassiveBytes
@@ -280,8 +290,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         const ui64 configActiveReservedBytes = cacheLimit * Config.GetActivePagesReservationPercent() / 100;
 
         THashSet<TCollection*> recheck;
-        ui64 evictedBytes = 0;
-        ui64 evictedInMemoryBytes = 0;
         // Evict pages from the cache until *all* used bytes get under the cache limit,
         // but stop if *active* bytes get under configActiveReservedBytes to avoid the case
         // where we just make all pages passive without actually freeing any memory.
@@ -1641,8 +1649,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             evictedBytes += pageSize;
         }
 
-        Counters.EvictedPages->Add(evictedPages);
-        Counters.EvictedBytes->Add(evictedBytes);
+        if (evictedPages) {
+            Counters.EvictedPages->Add(evictedPages);
+            Counters.EvictedBytes->Add(evictedBytes);
+        }
     }
 
     void EvictNow(TPage* page, THashSet<TCollection*>& recheck) {

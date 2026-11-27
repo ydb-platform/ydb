@@ -8,8 +8,11 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/protos/bootstrap.pb.h>
+
+#include <util/stream/str.h>
 
 #include <limits>
 
@@ -140,7 +143,11 @@ struct TSharedPageCacheMock {
         return config;
     }
 
-    TSharedPageCacheMock(const TSharedCacheConfig& config = DefaultConfig(), bool enableSchedule = false) {
+    TSharedPageCacheMock(const TSharedCacheConfig& config = DefaultConfig(), bool enableSchedule = false,
+            IOutputStream* log = nullptr) {
+        if (log) {
+            Runtime.SetLogBackend(new TStreamLogBackend(log));
+        }
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
@@ -3389,6 +3396,44 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 1);
     }
 
+    Y_UNIT_TEST(InMemory_PreloadUsesFinalRatioDuringIncrementalDecrease) {
+        for (double ratio : {0.0, 0.25}) {
+            auto config = TSharedPageCacheMock::DefaultConfig();
+            config.SetMaxLimitDecreaseStepBytes(PAGE_TOTAL_SIZE);
+            TSharedPageCacheMock cache(config);
+            auto regular = MakeIntrusive<TPageCollectionMock>(1ul, 4u);
+            auto inMemory = MakeIntrusive<TPageCollectionMock>(2ul, 4u);
+            const TVector<TPageLocation> pages = {_P(0), _P(1), _P(2), _P(3)};
+            cache.Request(cache.Sender1, regular, pages);
+            cache.CheckFetches({TFetch{40, regular, pages}});
+            cache.Provide(regular, pages);
+            auto pinned = cache.CheckResults({TFetch{1, regular, pages}});
+            cache.Attach(cache.Sender2, inMemory, ECacheMode::TryKeepInMemory);
+            cache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(cache.Counters->PassivePages->Val(), 4);
+
+            TBlockEvents<TKikimrEvents::TEvWakeup> continuations(cache.Runtime, [](const auto& ev) {
+                return ev->Get()->Tag == static_cast<ui64>(EWakeupTag::DoLimitDecrease);
+            });
+            // The four pinned pages become reclaimable as the first decrease step runs.
+            pinned.clear();
+            NKikimrConfig::TAppConfig update;
+            update.MutableSharedCacheConfig()->CopyFrom(config);
+            update.MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(ratio);
+            cache.UpdateConfig(update);
+            if (ratio > 0) {
+                cache.CheckFetches({TFetch{10, inMemory, {_P(0)}}});
+                cache.Provide(inMemory, {_P(0)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+                cache.CheckResults({TFetch{0, inMemory, {_P(0)}}});
+            }
+            cache.CheckFetches({});
+
+            continuations.Stop().Unblock();
+            cache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(cache.Counters->ActiveInMemoryBytes->Val(), ratio > 0 ? PAGE_TOTAL_SIZE : 0);
+        }
+    }
+
     Y_UNIT_TEST(InMemory_MaxRatioUpdateDuringIncrementalDecrease) {
         for (double newRatio : {0.5, 1.0}) {
             auto config = TSharedPageCacheMock::DefaultConfig();
@@ -3466,6 +3511,33 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 3);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 1);
         UNIT_ASSERT(continuations.empty());
+    }
+
+    Y_UNIT_TEST(GC_ReportsBytesEvictedFromBothTiers) {
+        TStringStream log;
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetTryKeepInMemoryMaxRatio(0.5);
+        config.SetMaxLimitDecreaseStepBytes(0);
+        TSharedPageCacheMock cache(config, false, &log);
+        auto inMemory = MakeIntrusive<TPageCollectionMock>(1ul, 2u);
+        auto regular = MakeIntrusive<TPageCollectionMock>(2ul, 2u);
+        const TVector<TPageLocation> pages = {_P(0), _P(1)};
+
+        cache.Attach(cache.Sender1, inMemory, ECacheMode::TryKeepInMemory);
+        cache.CheckFetches({TFetch{20, inMemory, pages}});
+        cache.Provide(inMemory, pages, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        cache.CheckResults({TFetch{0, inMemory, pages}});
+        cache.Request(cache.Sender2, regular, pages);
+        cache.CheckFetches({TFetch{20, regular, pages}});
+        cache.Provide(regular, pages);
+        cache.CheckResults({TFetch{1, regular, pages}});
+
+        log.Clear();
+        cache.SetLimit(2 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Counters->EvictedBytes->Val(), 2 * PAGE_TOTAL_SIZE);
+        const TString expected = TStringBuilder() << "EvictedBytes: " << 2 * PAGE_TOTAL_SIZE
+            << "B EvictedInMemoryBytes: " << PAGE_TOTAL_SIZE << "B";
+        UNIT_ASSERT_STRING_CONTAINS(log.Str(), expected);
     }
 
     Y_UNIT_TEST(InMemory_MaxRatioAndMemoryIncrementalDecrease) {

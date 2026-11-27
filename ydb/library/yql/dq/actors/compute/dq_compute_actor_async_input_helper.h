@@ -4,6 +4,7 @@
 #include "dq_compute_actor_metrics.h"
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/wilson/wilson_event_budget.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -43,8 +44,17 @@ public:
     virtual i64 GetFreeSpace() const = 0;
     virtual void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TMaybe<TInstant> watermark, i64 space, bool finished) = 0;
 
-    TMaybe<EResumeSource> PollAsyncInput(TDqComputeActorMetrics& metricsReporter, i64 asyncInputPushLimit) {
+    TMaybe<EResumeSource> PollAsyncInput(TDqComputeActorMetrics& metricsReporter, i64 asyncInputPushLimit,
+            NWilson::TSpan* trace = nullptr, NWilson::TSpanEventBudget* events = nullptr) {
         if (Finished) {
+            if (trace && events) {
+                events->Event(*trace, 10, "async input poll skipped: finished", [&] {
+                    NWilson::TKeyValueList attributes;
+                    attributes["input_index"] = static_cast<i64>(Index);
+                    attributes["poll_performed"] = false;
+                    return attributes;
+                });
+            }
             CA_LOG_T("Skip polling async input[" << Index << "]: finished");
             return {};
         }
@@ -65,6 +75,18 @@ public:
                 CA_LOG_D("Poll async input " << Index << ", stop input by back pressure (initial free space: " << freeSpace << ", read from async input: " << space << " bytes)");
             }
 
+            if (trace && events) {
+                events->Event(*trace, 10, "async input poll returned", [&] {
+                    NWilson::TKeyValueList attributes;
+                    attributes["input_index"] = static_cast<i64>(Index);
+                    attributes["poll_performed"] = true;
+                    attributes["free_bytes_before_poll"] = freeSpace;
+                    attributes["returned_bytes"] = space;
+                    attributes["returned_rows"] = static_cast<i64>(batch.RowCount());
+                    attributes["finished"] = finished;
+                    return attributes;
+                });
+            }
             metricsReporter.ReportAsyncInputData(Index, batch.RowCount(), space, watermark);
 
             const bool emptyBatch = batch.empty();
@@ -77,6 +99,15 @@ public:
             }
 
         } else {
+            if (trace && events) {
+                events->Event(*trace, 10, "async input poll skipped: backpressure", [&] {
+                    NWilson::TKeyValueList attributes;
+                    attributes["input_index"] = static_cast<i64>(Index);
+                    attributes["poll_performed"] = false;
+                    attributes["free_bytes_before_poll"] = freeSpace;
+                    return attributes;
+                });
+            }
             CA_LOG_T("Skip polling async input[" << Index << "]: no free space: " << freeSpace);
             return EResumeSource::CAPollAsyncNoSpace; // If there is no free space in buffer, => we have something to process
         }

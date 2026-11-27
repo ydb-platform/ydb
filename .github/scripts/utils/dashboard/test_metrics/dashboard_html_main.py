@@ -88,7 +88,6 @@ def build_html_dashboard(
   <meta charset="utf-8" />
   <title>Chunk Resource Dashboard</title>
   <link rel="icon" type="image/svg+xml" href="{favicon_href}" />
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
     :root {{
       --fg:#1f2328; --muted:#656d76; --line:#e6e8eb; --soft:#f6f8fa;
@@ -100,6 +99,7 @@ def build_html_dashboard(
       color: var(--fg); background: #fff;
       font: 14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
     }}
+    body.is-booting {{ overflow: hidden; }}
     a {{ color: var(--accent); text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     button, .tabbtn, .help-btn, select, input[type="text"] {{
@@ -168,6 +168,156 @@ def build_html_dashboard(
     .tab {{ display: none; }}
     .tab.active {{ display: block; }}
     .row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
+    .measured-body {{ display: flex; gap: 16px; align-items: flex-start; }}
+    .measured-nav {{ flex: 0 0 460px; min-width: 0; }}
+    .measured-nav input[type="search"] {{ width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 6px 8px; border: 1px solid #d0d7de; border-radius: 6px; }}
+    .measured-test-hits {{ max-height: 180px; overflow: auto; margin: 0 0 8px 0; padding: 0; list-style: none; font-size: 12px; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; }}
+    .measured-test-hits li {{ padding: 6px 8px; cursor: pointer; border-bottom: 1px solid #f0f2f4; }}
+    .measured-test-hits li:hover, .measured-test-hits li.on {{ background: #e7f3ff; }}
+    .measured-test-hits .hit-name {{ word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+    .measured-test-hits .hit-chunk {{ color: #6b7280; }}
+    .measured-top {{
+      margin: 0 0 8px; padding: 8px; border: 1px solid #d0d7de; border-radius: 8px;
+      background: #fff; font-size: 12px;
+    }}
+    .measured-top-head {{
+      display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 6px;
+    }}
+    .measured-top-head b {{ font-size: 12px; }}
+    .measured-top-head label {{ color: #656d76; display: inline-flex; align-items: center; gap: 4px; }}
+    .measured-top-head select {{ font: inherit; padding: 2px 6px; }}
+    .measured-top-list {{
+      max-height: 220px; overflow: auto; margin: 0; padding: 0; list-style: none;
+      border-top: 1px solid #eef1f4;
+    }}
+    .measured-top-list li {{
+      display: grid; grid-template-columns: 28px minmax(72px, auto) 1fr;
+      gap: 8px; align-items: baseline; padding: 5px 4px;
+      border-bottom: 1px solid #f0f2f4; cursor: pointer;
+    }}
+    .measured-top-list li:hover, .measured-top-list li.on {{ background: #e7f3ff; }}
+    .measured-top-list .rank {{ color: #8c959f; font-variant-numeric: tabular-nums; text-align: right; }}
+    .measured-top-list .val {{
+      font-weight: 700; font-variant-numeric: tabular-nums; color: #9a3412;
+      white-space: nowrap;
+    }}
+    .measured-top-list .name {{
+      min-width: 0; word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }}
+    .measured-top-list .sub {{ display: block; color: #6b7280; font-weight: 400; font-size: 11px; }}
+    .measured-tree {{ max-height: 520px; overflow: auto; border: 1px solid #d0d7de; border-radius: 8px; background: #fafbfc; font-size: 12px; }}
+    .measured-tree button {{ border: 0; background: transparent; cursor: pointer; font: inherit; text-align: left; }}
+    .measured-tree .mt-row {{ display: flex; align-items: flex-start; gap: 2px; }}
+    .measured-tree .mt-twist, .measured-tree .mt-spacer {{ flex: 0 0 16px; width: 16px; padding: 4px 0; color: #57606a; }}
+    .measured-tree .mt-pick {{ flex: 1; min-width: 0; padding: 3px 6px; border-radius: 4px; }}
+    .measured-tree .mt-pick:hover {{ background: #eef2f6; }}
+    .measured-tree .mt-pick.on {{ background: #e7f3ff; }}
+    .measured-tree .mt-name {{ font-weight: 600; }}
+    .measured-tree .mt-chunk .mt-name {{ font-weight: 400; }}
+    .measured-tree .stats {{ display: block; color: #6b7280; font-weight: 400; font-variant-numeric: tabular-nums; }}
+    .measured-tree .outcomes {{ margin-top: 1px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }}
+    .measured-tree .stat-max {{ color: #9a3412; font-weight: 700; background: #ffedd5; padding: 0 3px; border-radius: 3px; }}
+    .measured-tree .st, #measuredMeta .st {{ display: inline-block; padding: 0 5px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }}
+    .measured-tree .st-pass, #measuredMeta .st-pass {{ color: #166534; background: #dcfce7; }}
+    .measured-tree .st-fail, #measuredMeta .st-fail {{ color: #fff; background: #dc2626; }}
+    .measured-tree .st-mute, #measuredMeta .st-mute {{ color: #fff; background: #7c3aed; }}
+    .measured-tree .st-skip, #measuredMeta .st-skip {{ color: #fff; background: #6b7280; }}
+    .measured-tree .st-nl, #measuredMeta .st-nl {{ color: #fff; background: #6c757d; }}
+    .measured-tree .st-other, #measuredMeta .st-other {{ color: #374151; background: #e5e7eb; }}
+    .measured-tree .odur, #measuredMeta .odur {{ color: #6b7280; font-variant-numeric: tabular-nums; }}
+    .measured-meta-wrap {{
+      display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;
+    }}
+    #measuredMeta {{
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 8px 10px; border: 1px solid #e6e8eb; border-radius: 8px;
+      background: #f6f8fa; color: var(--fg); font-size: 12px; line-height: 1.45;
+      min-width: 0; flex: 1;
+    }}
+    #measuredMeta .measured-meta-title {{
+      font-weight: 650; font-size: 13px; word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }}
+    #measuredMeta .measured-meta-grid {{
+      display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline;
+    }}
+    #measuredMeta .measured-meta-item {{
+      display: inline-flex; gap: 6px; align-items: baseline;
+      font-variant-numeric: tabular-nums;
+    }}
+    #measuredMeta .measured-meta-item em {{
+      font-style: normal; color: #656d76; font-weight: 500; font-size: 11px;
+    }}
+    #measuredMeta .measured-meta-item strong {{ font-weight: 650; }}
+    #measuredMeta .measured-meta-signals,
+    #measuredMeta .measured-meta-note {{
+      color: #656d76; font-size: 11px;
+    }}
+    #measuredMeta .measured-contention {{
+      margin-top: 2px; padding: 8px 10px; border: 1px solid #e6e8eb; border-radius: 8px;
+      background: #fff; color: var(--fg); font-size: 12px; line-height: 1.45;
+    }}
+    #measuredMeta .measured-contention-title {{
+      font-weight: 650; font-size: 12px; margin-bottom: 4px;
+    }}
+    #measuredMeta .measured-contention-dim {{
+      margin-top: 8px;
+    }}
+    #measuredMeta .measured-contention-dim:first-of-type {{ margin-top: 4px; }}
+    #measuredMeta .measured-contention-head {{
+      color: #656d76; font-size: 11px; margin-bottom: 4px;
+    }}
+    #measuredMeta .measured-contention-list {{
+      margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px;
+    }}
+    #measuredMeta .measured-contention-list button {{
+      display: flex; gap: 8px; align-items: baseline; width: 100%;
+      border: 0; background: transparent; padding: 3px 6px; border-radius: 4px;
+      text-align: left; cursor: pointer; font: inherit; color: inherit;
+    }}
+    #measuredMeta .measured-contention-list button:hover {{ background: #e7f3ff; }}
+    #measuredMeta .measured-contention-list .rank {{
+      color: #8c959f; font-variant-numeric: tabular-nums; min-width: 1.2em; text-align: right;
+    }}
+    #measuredMeta .measured-contention-list .val {{
+      font-variant-numeric: tabular-nums; font-weight: 650; white-space: nowrap; min-width: 7em;
+    }}
+    #measuredMeta .measured-contention-list .name {{
+      min-width: 0; word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+    }}
+    #measuredMeta .measured-contention-list .sub {{
+      display: block; color: #6b7280; font-weight: 400; font-size: 11px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }}
+    #measuredMeta .measured-contention-empty {{ color: #656d76; font-size: 11px; }}
+    #measuredMeta .outcomes {{ display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }}
+    .measured-charts {{ flex: 1; min-width: 0; }}
+    .measured-test-list {{ margin: 0 0 10px 0; padding: 0; list-style: none; font-size: 12px; line-height: 1.45; }}
+    .measured-test-list li {{ display: flex; gap: 8px; align-items: flex-start; padding: 3px 6px; border-radius: 4px; }}
+    .measured-test-list li.on {{ background: #e7f3ff; }}
+    .measured-test-list .swatch {{ flex: 0 0 10px; width: 10px; height: 10px; margin-top: 5px; border-radius: 2px; }}
+    .measured-test-list .tbody {{ flex: 1; min-width: 0; }}
+    .measured-test-list .tline {{ display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }}
+    .measured-test-list .tname {{ min-width: 0; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+    .measured-test-list .tmeta {{ flex: 0 0 auto; color: #6b7280; font-variant-numeric: tabular-nums; white-space: nowrap; }}
+    .measured-test-list .tlogs {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }}
+    .measured-test-list .tlogs a {{ color: #0969da; text-decoration: none; }}
+    .measured-test-list .tlogs a:hover {{ text-decoration: underline; }}
+    .measured-test-list .st, .measured-test-list .ebadge {{ display: inline-block; padding: 0 6px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }}
+    .measured-test-list .st-pass {{ color: #166534; background: #dcfce7; }}
+    .measured-test-list .st-fail {{ color: #fff; background: #dc2626; }}
+    .measured-test-list .st-mute {{ color: #fff; background: #7c3aed; }}
+    .measured-test-list .st-skip {{ color: #fff; background: #6b7280; }}
+    .measured-test-list .st-other {{ color: #374151; background: #e5e7eb; }}
+    .measured-test-list .eb-TIMEOUT {{ color: #fff; background: #ff8c00; }}
+    .measured-test-list .eb-VERIFY {{ color: #fff; background: #b22222; }}
+    .measured-test-list .eb-SANITIZER {{ color: #fff; background: #ff4500; }}
+    .measured-test-list .eb-XFAILED {{ color: #fff; background: #6f42c1; }}
+    .measured-test-list .eb-POSSIBLE_OOM {{ color: #fff; background: #d63384; }}
+    .measured-test-list .eb-NOT_LAUNCHED {{ color: #fff; background: #6c757d; }}
+    .measured-test-list .eb-other {{ color: #fff; background: #475569; }}
     .row1 {{ display: grid; grid-template-columns: 1fr; gap: 16px; }}
     .chart {{ width: 100%; height: 420px; min-width: 0; }}
     .wide {{ width: 100%; height: 520px; }}
@@ -286,9 +436,68 @@ def build_html_dashboard(
       border: 1px solid #ffbeba; background: #ffebe9; border-radius: 4px;
       color: #a40e26; font-size: 13px;
     }}
+    @keyframes dash-spin {{ to {{ transform: rotate(360deg); }} }}
+    .dash-spinner {{
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid #d0d7de; border-top-color: var(--accent);
+      border-radius: 50%; animation: dash-spin .7s linear infinite;
+      vertical-align: -2px; flex: 0 0 auto;
+    }}
+    .dash-boot-overlay {{
+      position: fixed; inset: 0; z-index: 99999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; padding: 24px;
+      background: rgba(255,255,255,0.94);
+      color: var(--fg); font-size: 15px; text-align: center;
+    }}
+    .dash-boot-overlay[hidden] {{ display: none !important; }}
+    .dash-boot-overlay .dash-spinner {{
+      width: 28px; height: 28px; border-width: 3px;
+    }}
+    .dash-boot-overlay #dashboardBootText {{
+      max-width: 520px; line-height: 1.4; color: #424a53;
+    }}
+    .dash-boot-overlay .dash-boot-sub {{
+      font-size: 12px; color: var(--muted); max-width: 520px;
+    }}
+    .measured-charts {{ position: relative; }}
+    .measured-charts.is-loading .wide,
+    .measured-charts.is-loading .measured-test-list {{
+      opacity: 0.35; pointer-events: none;
+    }}
+    .measured-charts-loading {{
+      position: absolute; inset: 0; z-index: 5;
+      display: none; flex-direction: column; align-items: center; justify-content: flex-start;
+      gap: 10px; padding: 56px 16px 16px;
+      background: rgba(255,255,255,0.78); border-radius: 8px;
+      color: var(--muted); font-size: 13px; text-align: center;
+    }}
+    .measured-charts.is-loading .measured-charts-loading {{ display: flex; }}
+    .measured-charts-loading .dash-spinner {{ width: 22px; height: 22px; border-width: 3px; }}
+    #measuredMeta .load-inline {{
+      display: inline-flex; align-items: center; gap: 6px; margin-top: 4px;
+      color: var(--muted);
+    }}
+    #measuredMeta .load-inline.is-error {{ color: #a40e26; }}
+    .measured-nav.is-busy {{ opacity: 0.65; pointer-events: none; }}
   </style>
 </head>
-<body>
+<body class="is-booting">
+  <div id="dashboardBoot" class="dash-boot-overlay" role="status" aria-live="polite"
+       style="position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;background:rgba(255,255,255,0.94);text-align:center;font:15px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1f2328;">
+    <span class="dash-spinner" aria-hidden="true"
+          style="display:inline-block;width:28px;height:28px;border:3px solid #d0d7de;border-top-color:#0969da;border-radius:50%;animation:dash-spin .7s linear infinite;"></span>
+    <span id="dashboardBootText">Loading dashboard…</span>
+    <span class="dash-boot-sub" id="dashboardBootSub">Preparing first paint…</span>
+  </div>
+  <script>
+    // Let the boot overlay paint before any heavy sync work (Plotly CDN / JSON).
+    window.__dashBootPaint = new Promise(function(resolve) {{
+      requestAnimationFrame(function() {{
+        requestAnimationFrame(resolve);
+      }});
+    }});
+  </script>
   <div id="dashboardLoadError"></div>
   <div id="chartTip"></div>
   <div id="dashboardHeader" class="dash-header">
@@ -357,6 +566,67 @@ def build_html_dashboard(
       </span>
     </span>
   </div>
+  <div id="measuredWrap" style="display:none;margin:12px 0 16px 0;padding:10px 12px;border:1px solid #d0d7de;border-radius:8px;background:#fff;">
+    <div class="measured-meta-wrap">
+      <b>Measured per test (cgroup layers)</b>
+      <div id="measuredMeta"></div>
+    </div>
+    <div class="measured-body">
+      <div class="measured-nav">
+        <div class="measured-top" id="measuredTop">
+          <div class="measured-top-head">
+            <b>Top chunks</b>
+            <label>by
+              <select id="measuredTopMetric">
+                <option value="max_cpu" selected>CPU cores</option>
+                <option value="max_ram_gb">RAM GB</option>
+                <option value="max_write_mbps">disk write MB/s</option>
+                <option value="max_read_mbps">disk read MB/s</option>
+                <option value="max_cpu_throttled_pct">CPU throttle %</option>
+                <option value="max_cpu_psi_pct">PSI CPU %</option>
+                <option value="max_memory_psi_pct">PSI mem %</option>
+                <option value="max_io_psi_pct">PSI I/O %</option>
+                <option value="cpu_throttled_usec_delta">CPU throttled time</option>
+              </select>
+            </label>
+            <label>N
+              <select id="measuredTopN">
+                <option value="20">20</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+            <label title="When checked, rank only chunks under the current tree selection">
+              <input type="checkbox" id="measuredTopInSelection" /> in selection
+            </label>
+          </div>
+          <ol id="measuredTopList" class="measured-top-list"></ol>
+        </div>
+        <input id="measuredTestSearch" type="search" placeholder="Find test by name…" />
+        <ol id="measuredTestHits" class="measured-test-hits" style="display:none;"></ol>
+        <div id="measuredTree" class="measured-tree"></div>
+      </div>
+      <div class="measured-charts" id="measuredChartsPane">
+        <div id="measuredChartsLoading" class="measured-charts-loading" aria-live="polite">
+          <span class="dash-spinner" aria-hidden="true"></span>
+          <span id="measuredChartsLoadingText">Loading measured series…</span>
+        </div>
+        <div id="measuredTestsLane" class="wide" style="height:90px;display:none;"></div>
+        <ol id="measuredTestsList" class="measured-test-list" style="display:none;"></ol>
+        <div id="measuredCpu" class="wide" style="height:280px;"></div>
+        <div id="measuredCpuHover" class="hoverbox">Hover CPU layers to see sorted contributors</div>
+        <div id="measuredRam" class="wide" style="height:280px;"></div>
+        <div id="measuredRamHover" class="hoverbox">Hover RAM layers to see sorted contributors</div>
+        <div id="measuredWrite" class="wide" style="height:280px;"></div>
+        <div id="measuredWriteHover" class="hoverbox">Hover write layers to see sorted contributors</div>
+        <div id="measuredRead" class="wide" style="height:280px;"></div>
+        <div id="measuredReadHover" class="hoverbox">Hover read layers to see sorted contributors</div>
+        <div id="measuredPressure" class="wide" style="height:320px;display:none;"></div>
+        <div id="measuredPressureHover" class="hoverbox">Hover to inspect per-chunk throttling and PSI</div>
+      </div>
+    </div>
+  </div>
+  <div id="hostContentionChart" class="wide" style="display:none;height:320px;"></div>
   <div class="tabs" id="tabsBar" style="display: none;">
     <button id="tabBtnChunk" class="tabbtn active" onclick="showTab('chunkTab')">By Suite+Chunk</button>
     <button id="tabBtnSuite" class="tabbtn" onclick="showTab('suiteTab')">By Suite</button>
@@ -543,6 +813,7 @@ def build_html_dashboard(
           <ul>
             <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
             <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
+            <li><b>Measured per test:</b> stacked layers from <code>ya-test-*</code> cgroups (CPU/RAM/disk every 3s), plus cgroup CPU throttling/PSI when available. Select a suite/chunk in the measured panel. Ticks: <code>resources_monitor.jsonl</code> (<code>kind=test</code>). High PSI some = this chunk waited; open a PSI Top row to see <b>Delayed by</b> neighbors ranked by disk/CPU/RAM use at the peak-PSI moment.</li>
             <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
             <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
             <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
@@ -594,12 +865,109 @@ def build_html_dashboard(
 
     (async function() {{
     const dataUrl = {data_url_js};
+    const bootEl = document.getElementById('dashboardBoot');
+    const bootText = document.getElementById('dashboardBootText');
+    const bootSub = document.getElementById('dashboardBootSub');
+    function setBootText(msg, sub) {{
+      if (bootText) bootText.textContent = msg;
+      if (bootSub && sub != null) bootSub.textContent = sub;
+      if (bootEl) {{
+        bootEl.hidden = false;
+        bootEl.style.display = 'flex';
+      }}
+      document.body.classList.add('is-booting');
+    }}
+    function hideBoot() {{
+      if (bootEl) {{
+        bootEl.hidden = true;
+        bootEl.style.display = 'none';
+      }}
+      document.body.classList.remove('is-booting');
+    }}
+    function formatBytes(n) {{
+      if (!Number.isFinite(n) || n < 0) return '?';
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    }}
+    function loadScript(src) {{
+      return new Promise((resolve, reject) => {{
+        const existing = document.querySelector('script[data-dash-src="' + src + '"]');
+        if (window.Plotly && src.indexOf('plotly') !== -1) {{
+          resolve();
+          return;
+        }}
+        if (existing) {{
+          existing.addEventListener('load', () => resolve());
+          existing.addEventListener('error', () => reject(new Error('Failed to load ' + src)));
+          return;
+        }}
+        const s = document.createElement('script');
+        s.src = src;
+        s.async = true;
+        s.dataset.dashSrc = src;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Failed to load ' + src));
+        document.head.appendChild(s);
+      }});
+    }}
+    try {{
+      await (window.__dashBootPaint || Promise.resolve());
+      setBootText('Loading chart library…', 'Plotly from CDN');
+      await loadScript('https://cdn.plot.ly/plotly-2.35.2.min.js');
+    }} catch (err) {{
+      hideBoot();
+      const el = document.getElementById('dashboardLoadError');
+      if (el) {{
+        el.style.display = 'block';
+        el.textContent = 'Failed to load Plotly: ' + err;
+      }}
+      return;
+    }}
+    async function fetchJsonWithProgress(url, onProgress) {{
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const total = Number(resp.headers.get('Content-Length')) || 0;
+      if (!resp.body || !resp.body.getReader) {{
+        if (onProgress && total) onProgress(total, total);
+        return await resp.json();
+      }}
+      const reader = resp.body.getReader();
+      const chunks = [];
+      let received = 0;
+      while (true) {{
+        const {{ done, value }} = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.byteLength;
+        if (onProgress) onProgress(received, total);
+      }}
+      const buf = new Uint8Array(received);
+      let offset = 0;
+      for (const chunk of chunks) {{
+        buf.set(chunk, offset);
+        offset += chunk.byteLength;
+      }}
+      if (onProgress) onProgress(received, total || received);
+      return JSON.parse(new TextDecoder('utf-8').decode(buf));
+    }}
     let data;
     try {{
-      const resp = await fetch(dataUrl);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      data = await resp.json();
+      setBootText('Downloading dashboard data…', dataUrl);
+      data = await fetchJsonWithProgress(dataUrl, (received, total) => {{
+        if (total > 0) {{
+          const pct = Math.min(100, Math.round(100 * received / total));
+          setBootText(
+            'Downloading dashboard data… ' + pct + '%',
+            formatBytes(received) + ' / ' + formatBytes(total)
+          );
+        }} else {{
+          setBootText('Downloading dashboard data…', formatBytes(received));
+        }}
+      }});
+      setBootText('Building charts…', 'Parsing payload and rendering Plotly layers');
     }} catch (err) {{
+      hideBoot();
       const el = document.getElementById('dashboardLoadError');
       if (el) {{
         el.style.display = 'block';
@@ -693,7 +1061,7 @@ def build_html_dashboard(
     function formatHeadlineNumber(metric, value) {{
       const n = Number(value);
       if (!Number.isFinite(n)) return '—';
-      if (metric === 'cpu' || metric === 'ram' || metric === 'disk') return n.toFixed(1);
+      if (metric === 'cpu' || metric === 'ram' || metric === 'disk' || metric === 'pct' || metric === 'queue') return n.toFixed(1);
       return String(Math.round(n));
     }}
     function formatHeadlineValue(metric, value) {{
@@ -946,14 +1314,28 @@ def build_html_dashboard(
         if (!(cpuHost || ramHost || diskRead || diskWrite)) return '';
         const samples = Math.round(Number((cpuHost || ramHost || diskRead || {{}}).samples || 0));
         const sampleNote = samples ? ' · ' + String(samples) + ' samples' : '';
+        const hostRows = [
+          ['CPU, cores', 'cpu', cpuHost, hostCapacity('cpu')],
+          ['RAM, GB', 'ram', ramHost, hostCapacity('ram')],
+          ['Disk read, MB/s', 'disk', diskRead, null],
+          ['Disk write, MB/s', 'disk', diskWrite, null],
+        ];
+        if (title.indexOf('tests') >= 0) {{
+          [
+            ['CPU iowait, %', 'pct', hs.cpu_iowait_pct],
+            ['CPU PSI some, %', 'pct', hs.pressure_cpu_some_pct],
+            ['CPU PSI full, %', 'pct', hs.pressure_cpu_full_pct],
+            ['Memory PSI some, %', 'pct', hs.pressure_memory_some_pct],
+            ['Memory PSI full, %', 'pct', hs.pressure_memory_full_pct],
+            ['I/O PSI some, %', 'pct', hs.pressure_io_some_pct],
+            ['I/O PSI full, %', 'pct', hs.pressure_io_full_pct],
+            ['Disk busy, %', 'pct', hs.disk_busy_pct],
+            ['Disk queue, requests', 'queue', hs.disk_io_in_progress],
+          ].forEach(row => {{ if (row[2]) hostRows.push(row.concat([null])); }});
+        }}
         return (
           '<div class="headline-block"><h4>' + title + sampleNote + '</h4>' +
-          statTable([
-            ['CPU, cores', 'cpu', cpuHost, hostCapacity('cpu')],
-            ['RAM, GB', 'ram', ramHost, hostCapacity('ram')],
-            ['Disk read, MB/s', 'disk', diskRead, null],
-            ['Disk write, MB/s', 'disk', diskWrite, null],
-          ], true) +
+          statTable(hostRows, true) +
           '</div>'
         );
       }}
@@ -2228,7 +2610,7 @@ def build_html_dashboard(
       if (traces.length) Plotly.addTraces(plotId, traces);
     }}
 
-    function stackedArea(divId, xs, tracks, title, yTitle, stepMode) {{
+    function stackedArea(divId, xs, tracks, title, yTitle, stepMode, fitXToData) {{
       const names = Object.keys(tracks);
       const xDisp = (xs || []).map(xToDisplay);
       const traces = names.map((n) => {{
@@ -2245,8 +2627,17 @@ def build_html_dashboard(
           hoverinfo: 'none',
         }};
       }});
-      const ax = axisLayout(xDisp, true);
-      Plotly.newPlot(divId, traces, {{
+      // Measured cgroup series are short-lived; pinning them to the full ya-make
+      // evlog range collapses the plot to a one-pixel spike.
+      const ax = axisLayout(xDisp, !fitXToData);
+      if (fitXToData && xDisp.length) {{
+        const ms = xDisp.map(_toMs).filter(v => v != null).sort((a, b) => a - b);
+        if (ms.length) {{
+          const pad = Math.max(1000, (ms[ms.length - 1] - ms[0]) * 0.05);
+          ax.range = [new Date(ms[0] - pad).toISOString(), new Date(ms[ms.length - 1] + pad).toISOString()];
+        }}
+      }}
+      return Plotly.newPlot(divId, traces, {{
         title: false,
         xaxis: Object.assign(ax, {{
           titlefont: {{size: 11, color: '#8c959f'}},
@@ -2277,6 +2668,7 @@ def build_html_dashboard(
       if (unit === 'active') return String(Math.round(y));
       if (unit === 'tests') return String(Math.round(y));
       if (unit === 'GB') return y.toFixed(3);
+      if (unit === 'MB/s') return y.toFixed(2);
       return y.toFixed(3);
     }}
 
@@ -2285,6 +2677,7 @@ def build_html_dashboard(
       if (unit === 'tests') return 0.5;
       if (unit === 'GB') return 0.001;   // ~1 MB
       if (unit === 'cores') return 0.01; // suppress tiny CPU noise shown as 0.000
+      if (unit === 'MB/s') return 0.01;
       return 0.0;
     }}
 
@@ -2315,13 +2708,28 @@ def build_html_dashboard(
       tip.style.left = Math.max(8, x) + 'px';
       tip.style.top = Math.max(8, y) + 'px';
     }}
-    function showChartTip(ev) {{
+    function hoverContributionRows(ev, unit) {{
+      const rows = (ev.points || []).map(p => ({{
+        name: p && p.data ? p.data.name : '',
+        y: Number(p && p.y || 0),
+      }})).filter(p => isSuiteContribution(p.name));
+      const total = rows.reduce((sum, row) => sum + row.y, 0);
+      const eps = minVisibleValue(unit);
+      const top = rows.filter(row => row.y > eps).sort((a, b) => b.y - a.y).slice(0, 40);
+      return {{ total: total, top: top }};
+    }}
+    function hoverTotalLine(total, unit) {{
+      return 'Total: ' + formatValue(Number(total) || 0, unit) + ' ' + unit;
+    }}
+    function showChartTip(ev, unit) {{
       const tip = document.getElementById('chartTip');
       if (!tip || !ev || !ev.points || !ev.points.length) return;
       clearTimeout(chartTipHideTimer);
       const label = formatPointTime(ev.points[0]);
       const seen = new Set();
       const lines = [];
+      const contrib = unit ? hoverContributionRows(ev, unit) : null;
+      if (contrib) lines.push(hoverTotalLine(contrib.total, unit));
       for (const p of ev.points) {{
         const line = hoverPointLine(p);
         if (!line || seen.has(line)) continue;
@@ -2415,15 +2823,12 @@ def build_html_dashboard(
         if (!ev || !ev.points || !ev.points.length) return;
         const point = ev.points[0];
         const label = formatPointTime(point);
-        const eps = minVisibleValue(unit);
-        const rows = ev.points
-          .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > eps && isSuiteContribution(p.name))
-          .sort((a, b) => b.y - a.y);
-        const top = rows.slice(0, 40);
-        const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
+        const contrib = hoverContributionRows(ev, unit);
+        const lines = [hoverTotalLine(contrib.total, unit)].concat(
+          contrib.top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`)
+        );
         panel.textContent = `t=${{label}}\\n` + lines.join('\\n');
-        showChartTip(ev);
+        showChartTip(ev, unit);
       }});
       plot.on('plotly_unhover', () => {{
         panel.textContent = '';
@@ -2763,6 +3168,46 @@ def build_html_dashboard(
           margin: {{l: 48, r: 8, t: 8, b: 72}},
         }}, {{ responsive: true, displayModeBar: 'hover', displaylogo: false }});
       }}
+      const hostSignals = ro.host_resource_signals || {{}};
+      const hostChart = document.getElementById('hostContentionChart');
+      if (hostChart && Object.keys(hostSignals).length) {{
+        const signalNames = {{
+          cpu_iowait_pct: 'CPU iowait',
+          pressure_cpu_some_pct: 'CPU PSI some',
+          pressure_cpu_full_pct: 'CPU PSI full',
+          pressure_memory_some_pct: 'Memory PSI some',
+          pressure_memory_full_pct: 'Memory PSI full',
+          pressure_io_some_pct: 'I/O PSI some',
+          pressure_io_full_pct: 'I/O PSI full',
+          disk_busy_pct: 'Disk busy',
+          disk_io_in_progress: 'Disk I/O in progress',
+        }};
+        const traces = Object.keys(signalNames).filter(name => hostSignals[name]).map((name, index) => {{
+          const isQueue = name === 'disk_io_in_progress';
+          return {{
+            x: xDisp,
+            y: hostSignals[name],
+            type: 'scatter',
+            mode: 'lines',
+            name: signalNames[name],
+            yaxis: isQueue ? 'y2' : 'y',
+            connectgaps: false,
+            line: {{ width: 2, color: ['#d97706','#7c3aed','#0284c7','#65a30d','#dc2626','#0f766e','#c026d3','#1d4ed8','#b45309'][index % 9] }},
+            hovertemplate: '%{{fullData.name}}: %{{y:.2f}}' + (isQueue ? ' requests<extra></extra>' : '%<extra></extra>'),
+          }};
+        }});
+        if (traces.length) {{
+          hostChart.style.display = '';
+          Plotly.newPlot(hostChart, traces, {{
+            title: 'Host contention signals (iowait, PSI, disk queue)',
+            xaxis: axisLayout(xDisp),
+            yaxis: {{ title: 'Stall / busy time (%)', rangemode: 'tozero' }},
+            yaxis2: {{ title: 'Requests in progress', overlaying: 'y', side: 'right', rangemode: 'tozero' }},
+            hovermode: 'x unified',
+            hoverlabel: {{ namelength: -1 }},
+          }}, {{ responsive: true }});
+        }}
+      }}
     }}
     attachSortedHover('cpuLayerSuite', 'cpuHoverSuite', 'cores');
     attachSortedHover('ramLayerSuite', 'ramHoverSuite', 'GB');
@@ -2894,6 +3339,1307 @@ def build_html_dashboard(
       }}
     }}
     window.applyLayerToggles = applyLayerToggles;
+
+    const measuredList = (data.resources_overlay && data.resources_overlay.measured_tests) || [];
+    const measuredChunkTests = (data.resources_overlay && data.resources_overlay.measured_chunk_tests) || {{}};
+    const measuredSeriesDir = (data.resources_overlay && data.resources_overlay.measured_series_dir)
+      || 'resources_tests';
+    const measuredOverviewUrl = (data.resources_overlay && data.resources_overlay.measured_series_overview_url)
+      || (measuredSeriesDir + '/overview.json');
+    const measuredTotalsUrl = (data.resources_overlay && data.resources_overlay.measured_series_totals_url)
+      || (measuredSeriesDir + '/totals.json');
+    const measuredSuiteUrlTemplate = (data.resources_overlay && data.resources_overlay.measured_series_suite_url_template)
+      || (measuredSeriesDir + '/suites/{{suite}}.json');
+    const measuredWrap = document.getElementById('measuredWrap');
+    const MEASURED_PALETTE = ['#d97706','#7c3aed','#0284c7','#65a30d','#dc2626','#0f766e','#c026d3','#1d4ed8','#b45309','#15803d','#be123c','#4338ca'];
+    const MEASURED_CHART_TOP_N = 40;
+    const MEASURED_PRESSURE_MAX_ROWS = 8;
+    const MEASURED_AXIS_MAX_POINTS = 2500;
+    const MEASURED_HOLD_SEC = 8;
+    const MEASURED_EDGE_PAD_SEC = 0.05;
+    const MEASURED_OTHER_TOTALS = 'other (all cgroups)';
+    const MEASURED_OTHER_SELECTION = 'other (rest of selection)';
+    const MEASURED_SUITE_FETCH_CONCURRENCY = 12;
+    const _measuredColors = {{}};
+    const _measuredSeriesByKey = {{}};
+    const _measuredLoadedSuites = new Set();
+    let _measuredOverviewPromise = null;
+    let _measuredTotalsPromise = null;
+    let _measuredTotals = null;
+    let _measuredPlotXs = [];
+    let _measuredLastSel = {{kind: 'all'}};
+    const _origColorForTrack = colorForTrack;
+    colorForTrack = function(trackName) {{
+      if (_measuredColors[trackName]) return _measuredColors[trackName];
+      return _origColorForTrack(trackName);
+    }};
+    function measuredPeak(track) {{
+      return (track || []).reduce((m, v) => Math.max(m, Number(v) || 0), 0);
+    }}
+    function measuredSuiteShardUrl(suite) {{
+      const name = String(suite || 'unknown').replaceAll('/', '.');
+      return String(measuredSuiteUrlTemplate).replaceAll('{{suite}}', name);
+    }}
+    function mergeMeasuredSeries(obj) {{
+      Object.keys(obj || {{}}).forEach(key => {{ _measuredSeriesByKey[key] = obj[key]; }});
+    }}
+    function setMeasuredLoading(on, text, isError) {{
+      const pane = document.getElementById('measuredChartsPane');
+      const label = document.getElementById('measuredChartsLoadingText');
+      const nav = document.querySelector('#measuredWrap .measured-nav');
+      const metaStatus = document.getElementById('measuredLoadStatus');
+      if (pane) pane.classList.toggle('is-loading', !!on);
+      if (label && text) label.textContent = text;
+      if (nav) nav.classList.toggle('is-busy', !!on);
+      if (metaStatus) {{
+        if (!on && !isError) {{
+          metaStatus.remove();
+        }} else if (text) {{
+          metaStatus.className = 'load-inline' + (isError ? ' is-error' : '');
+          metaStatus.innerHTML = isError
+            ? escapeHtml(text)
+            : ('<span class="dash-spinner" aria-hidden="true"></span><span>' + escapeHtml(text) + '</span>');
+        }}
+      }}
+    }}
+    function loadMeasuredOverview() {{
+      if (_measuredOverviewPromise) return _measuredOverviewPromise;
+      _measuredOverviewPromise = fetch(measuredOverviewUrl)
+        .then(resp => {{
+          if (!resp.ok) throw new Error(measuredOverviewUrl + ': ' + resp.status + ' ' + resp.statusText);
+          return resp.json();
+        }})
+        .then(obj => {{
+          mergeMeasuredSeries(obj);
+          return obj;
+        }})
+        .catch(err => {{
+          _measuredOverviewPromise = null;
+          throw err;
+        }});
+      return _measuredOverviewPromise;
+    }}
+    function loadMeasuredTotals() {{
+      if (_measuredTotals) return Promise.resolve(_measuredTotals);
+      if (_measuredTotalsPromise) return _measuredTotalsPromise;
+      _measuredTotalsPromise = fetch(measuredTotalsUrl)
+        .then(resp => {{
+          if (!resp.ok) throw new Error(measuredTotalsUrl + ': ' + resp.status + ' ' + resp.statusText);
+          return resp.json();
+        }})
+        .then(obj => {{
+          _measuredTotals = obj || null;
+          return _measuredTotals;
+        }})
+        .catch(err => {{
+          _measuredTotalsPromise = null;
+          throw err;
+        }});
+      return _measuredTotalsPromise;
+    }}
+    function loadMeasuredSuiteShard(suite) {{
+      const name = String(suite || 'unknown');
+      if (_measuredLoadedSuites.has(name)) return Promise.resolve();
+      const url = measuredSuiteShardUrl(name);
+      return fetch(url)
+        .then(resp => {{
+          if (!resp.ok) throw new Error(url + ': ' + resp.status + ' ' + resp.statusText);
+          return resp.json();
+        }})
+        .then(obj => {{
+          mergeMeasuredSeries(obj);
+          _measuredLoadedSuites.add(name);
+        }});
+    }}
+    function mapPool(items, limit, worker) {{
+      const list = items || [];
+      if (!list.length) return Promise.resolve([]);
+      const out = new Array(list.length);
+      let next = 0;
+      const run = () => {{
+        if (next >= list.length) return Promise.resolve();
+        const idx = next;
+        next += 1;
+        return Promise.resolve(worker(list[idx], idx)).then(value => {{
+          out[idx] = value;
+          return run();
+        }});
+      }};
+      const n = Math.min(Math.max(1, limit || 1), list.length);
+      return Promise.all(Array.from({{ length: n }}, () => run())).then(() => out);
+    }}
+    function ensureMeasuredSeriesForRows(rows, sel, onStatus) {{
+      const status = (msg) => {{ if (onStatus) onStatus(msg); }};
+      const wantAllTotals = !sel || sel.kind === 'all';
+      // Prefix/chunk views must load every suite in the selection — top-N alone
+      // under-counts concurrent load (ydb/ looked like ~30c while Σpeaks was 7k).
+      const suitesToLoad = wantAllTotals
+        ? [...new Set(measuredRowsForChart(rows).rows.map(row => row.suite).filter(Boolean))]
+        : [...new Set((rows || []).map(row => row.suite).filter(Boolean))];
+      let chain = Promise.resolve().then(() => {{
+        // Totals are cheap and give a stable coarse axis even for prefix residuals.
+        status('Fetching measured totals…');
+        return loadMeasuredTotals().catch(err => {{
+          if (wantAllTotals) throw err;
+          console.warn('measured totals unavailable', err);
+        }});
+      }});
+      if (wantAllTotals) {{
+        chain = chain.then(() => {{
+          status('Fetching measured overview…');
+          return loadMeasuredOverview();
+        }});
+      }}
+      return chain.then(() => {{
+        const needSuites = suitesToLoad.filter(suite => !_measuredLoadedSuites.has(suite));
+        if (!needSuites.length) return;
+        let done = 0;
+        status('Fetching suite shards 0/' + needSuites.length + '…');
+        return mapPool(needSuites, MEASURED_SUITE_FETCH_CONCURRENCY, suite =>
+          loadMeasuredSuiteShard(suite).then(() => {{
+            done += 1;
+            if (done === needSuites.length || done === 1 || done % 5 === 0) {{
+              status('Fetching suite shards ' + done + '/' + needSuites.length + '…');
+            }}
+          }})
+        );
+      }}).then(() => _measuredSeriesByKey);
+    }}
+    function alignMeasuredSeries(xsOut, xsSrc, ysSrc, fillZero) {{
+      if (!xsOut.length) return [];
+      if (!xsSrc || !xsSrc.length || !ysSrc || !ysSrc.length) {{
+        return xsOut.map(() => (fillZero ? 0 : null));
+      }}
+      const out = [];
+      let j = 0;
+      const t0 = Number(xsSrc[0]);
+      const t1 = Number(xsSrc[xsSrc.length - 1]);
+      for (let i = 0; i < xsOut.length; i += 1) {{
+        const t = Number(xsOut[i]);
+        if (!(t >= t0 && t <= t1)) {{
+          out.push(fillZero ? 0 : null);
+          continue;
+        }}
+        while (j + 1 < xsSrc.length && Number(xsSrc[j + 1]) <= t) j += 1;
+        const sampleT = Number(xsSrc[j]);
+        // Do not hold a sample across multi-minute axis gaps — that becomes a
+        // Plotly triangle when the next point finally drops to zero.
+        if (!Number.isFinite(sampleT) || (t - sampleT) > MEASURED_HOLD_SEC) {{
+          out.push(fillZero ? 0 : null);
+          continue;
+        }}
+        const value = ysSrc[j];
+        out.push(value == null ? (fillZero ? 0 : null) : Number(value) || 0);
+      }}
+      return out;
+    }}
+    function addMeasuredEdgeGuards(keep, sxs) {{
+      if (!sxs || !sxs.length) return;
+      const t0 = Number(sxs[0]);
+      const t1 = Number(sxs[sxs.length - 1]);
+      if (!Number.isFinite(t0) || !Number.isFinite(t1)) return;
+      keep.add(t0);
+      keep.add(t1);
+      keep.add(t0 - MEASURED_EDGE_PAD_SEC);
+      keep.add(t1 + MEASURED_EDGE_PAD_SEC);
+    }}
+    function downsampleMeasuredXs(xs, maxPoints) {{
+      if (!maxPoints || xs.length <= maxPoints) return xs.slice();
+      const last = xs.length - 1;
+      const out = [];
+      for (let i = 0; i < maxPoints; i += 1) out.push(xs[Math.round(i * last / (maxPoints - 1))]);
+      return out;
+    }}
+    function measuredRowsForChart(rows) {{
+      const src = (rows || []).slice().sort((a, b) => (Number(b.max_cpu) || 0) - (Number(a.max_cpu) || 0));
+      if (src.length <= MEASURED_CHART_TOP_N) return {{ rows: src, truncated: false }};
+      return {{ rows: src.slice(0, MEASURED_CHART_TOP_N), truncated: true, total: src.length }};
+    }}
+    function buildMeasuredTracksFromSeries(namedRows, field, fillZero, opts) {{
+      const options = opts || {{}};
+      const useTotals = !!options.useTotals;
+      const residualRows = options.residualRows || null;
+      const otherLabel = options.otherLabel || MEASURED_OTHER_SELECTION;
+      const seriesList = [];
+      const namedKeys = new Set();
+      (namedRows || []).forEach(row => {{
+        const series = (_measuredSeriesByKey || {{}})[row.key];
+        if (!series) return;
+        namedKeys.add(row.key);
+        seriesList.push({{
+          key: row.key,
+          label: row.label || series.label || row.key,
+          xs: series.xs_evlog_sec || [],
+          ys: series[field] || [],
+        }});
+      }});
+      const residualSeries = [];
+      if (!useTotals && residualRows && residualRows.length) {{
+        residualRows.forEach(row => {{
+          if (!row || namedKeys.has(row.key)) return;
+          const series = (_measuredSeriesByKey || {{}})[row.key];
+          if (!series) return;
+          residualSeries.push({{
+            xs: series.xs_evlog_sec || [],
+            ys: series[field] || [],
+          }});
+        }});
+      }}
+      let xs = [];
+      const seen = new Set();
+      const addX = (x) => {{
+        const n = Number(x);
+        if (!Number.isFinite(n) || seen.has(n)) return;
+        seen.add(n);
+        xs.push(n);
+      }};
+      seriesList.forEach(s => {{
+        (s.xs || []).forEach(addX);
+        addMeasuredEdgeGuards(seen, s.xs || []);
+      }});
+      // Prefer the precomputed totals axis when summing thousands of residual
+      // series (prefix like ydb/) — union of all native samples is too large.
+      if ((useTotals || residualSeries.length) && _measuredTotals && Array.isArray(_measuredTotals.xs_evlog_sec)) {{
+        (_measuredTotals.xs_evlog_sec || []).forEach(addX);
+      }}
+      // Re-materialize xs from seen after edge guards (guards only mutated the set).
+      xs = [...seen].filter(Number.isFinite).sort((a, b) => a - b);
+      // Keep native sample times for short selected windows; only thin a huge union.
+      if (xs.length > MEASURED_AXIS_MAX_POINTS) {{
+        const keep = new Set(downsampleMeasuredXs(xs, MEASURED_AXIS_MAX_POINTS));
+        const keepSeriesEdges = (sxs) => {{
+          if (!sxs || !sxs.length) return;
+          if (sxs.length <= 16 || (Number(sxs[sxs.length - 1]) - Number(sxs[0])) <= 120) {{
+            sxs.forEach(x => keep.add(Number(x)));
+          }} else {{
+            keep.add(Number(sxs[0]));
+            keep.add(Number(sxs[sxs.length - 1]));
+          }}
+          addMeasuredEdgeGuards(keep, sxs);
+        }};
+        seriesList.forEach(s => keepSeriesEdges(s.xs || []));
+        if (!residualSeries.length) {{
+          // Only pin every residual edge when the residual set is small.
+        }} else if (residualSeries.length <= 80) {{
+          residualSeries.forEach(s => keepSeriesEdges(s.xs || []));
+        }}
+        if (_measuredTotals && Array.isArray(_measuredTotals.xs_evlog_sec)) {{
+          downsampleMeasuredXs(_measuredTotals.xs_evlog_sec, Math.min(1200, MEASURED_AXIS_MAX_POINTS)).forEach(x => keep.add(Number(x)));
+        }}
+        xs = [...keep].filter(Number.isFinite).sort((a, b) => a - b);
+      }}
+      const tracks = {{}};
+      seriesList.forEach(s => {{
+        tracks[s.label] = alignMeasuredSeries(xs, s.xs, s.ys, fillZero);
+      }});
+      const namedSum = xs.map((_, i) => seriesList.reduce(
+        (sum, s) => sum + (Number(tracks[s.label][i]) || 0), 0
+      ));
+      if (useTotals && _measuredTotals && Array.isArray(_measuredTotals.xs_evlog_sec) && Array.isArray(_measuredTotals[field])) {{
+        const totalAligned = alignMeasuredSeries(xs, _measuredTotals.xs_evlog_sec, _measuredTotals[field], true);
+        const other = totalAligned.map((v, i) => Math.max(0, (Number(v) || 0) - namedSum[i]));
+        if (other.some(v => v > 1e-6)) tracks[MEASURED_OTHER_TOTALS] = other;
+      }} else if (residualSeries.length) {{
+        const other = xs.map(() => 0);
+        residualSeries.forEach(s => {{
+          const aligned = alignMeasuredSeries(xs, s.xs, s.ys, true);
+          for (let i = 0; i < other.length; i += 1) other[i] += Number(aligned[i]) || 0;
+        }});
+        if (other.some(v => v > 1e-6)) tracks[otherLabel] = other;
+      }}
+      return {{ xs: xs, tracks: tracks, namedSum: namedSum }};
+    }}
+    function topMeasuredTracks(tracks, limit) {{
+      const residualNames = new Set([MEASURED_OTHER_TOTALS, MEASURED_OTHER_SELECTION, 'other']);
+      const names = Object.keys(tracks || {{}}).sort((a, b) => {{
+        if (residualNames.has(a) && !residualNames.has(b)) return 1;
+        if (residualNames.has(b) && !residualNames.has(a)) return -1;
+        return measuredPeak(tracks[b]) - measuredPeak(tracks[a]);
+      }});
+      const ordered = {{}};
+      const named = names.filter(n => !residualNames.has(n));
+      const reserved = names.filter(n => residualNames.has(n));
+      if (named.length <= limit) {{
+        reserved.forEach(n => {{ ordered[n] = tracks[n]; }});
+        named.slice().reverse().forEach(n => {{ ordered[n] = tracks[n]; }});
+        return ordered;
+      }}
+      const top = named.slice(0, limit);
+      const rest = named.slice(limit);
+      const otherNamed = tracks[rest[0]].map((_, i) => rest.reduce((s, n) => s + (Number(tracks[n][i]) || 0), 0));
+      const residualKey = reserved[0] || 'other';
+      if (tracks[residualKey]) {{
+        ordered[residualKey] = tracks[residualKey].map((v, i) => (Number(v) || 0) + otherNamed[i]);
+      }} else {{
+        ordered.other = otherNamed;
+      }}
+      top.slice().reverse().forEach(n => {{ ordered[n] = tracks[n]; }});
+      return ordered;
+    }}
+    function plotMeasuredLayersFromRows(rows, titleSuffix, useTotals) {{
+      if (!window.Plotly) return;
+      const picked = measuredRowsForChart(rows);
+      const withTotals = !!(useTotals && _measuredTotals);
+      const trackOpts = {{
+        useTotals: withTotals,
+        residualRows: withTotals ? null : rows,
+        otherLabel: withTotals ? MEASURED_OTHER_TOTALS : MEASURED_OTHER_SELECTION,
+      }};
+      const built = {{
+        cpu: buildMeasuredTracksFromSeries(picked.rows, 'cpu_cores', true, trackOpts),
+        ram: buildMeasuredTracksFromSeries(picked.rows, 'ram_gb', true, trackOpts),
+        write: buildMeasuredTracksFromSeries(picked.rows, 'disk_write_mbps', true, trackOpts),
+        read: buildMeasuredTracksFromSeries(picked.rows, 'disk_read_mbps', true, trackOpts),
+      }};
+      _measuredPlotXs = built.cpu.xs || [];
+      const stackPeak = (layer) => {{
+        const names = Object.keys(layer.tracks || {{}});
+        if (!names.length || !(layer.xs || []).length) return 0;
+        let peak = 0;
+        for (let i = 0; i < layer.xs.length; i += 1) {{
+          let sum = 0;
+          names.forEach(n => {{ sum += Number(layer.tracks[n][i]) || 0; }});
+          if (sum > peak) peak = sum;
+        }}
+        return peak;
+      }};
+      let suffix = titleSuffix;
+      if (picked.truncated) suffix += ' · top ' + picked.rows.length + '/' + picked.total + ' named';
+      if (withTotals && built.cpu.tracks[MEASURED_OTHER_TOTALS]) {{
+        suffix += ' · + residual of all ' + ((_measuredTotals && _measuredTotals.series_count) || '') + ' cgroups';
+      }} else if (built.cpu.tracks[MEASURED_OTHER_SELECTION]) {{
+        suffix += ' · + residual of selection';
+      }}
+      const cpuPeak = stackPeak(built.cpu);
+      const ramPeak = stackPeak(built.ram);
+      if (cpuPeak > 0) suffix += ' · concurrent peak ' + cpuPeak.toFixed(1) + 'c / ' + ramPeak.toFixed(1) + 'G';
+      const charts = [
+        ['measuredCpu', built.cpu, 'Layered measured CPU' + suffix, 'cores'],
+        ['measuredRam', built.ram, 'Layered measured RAM' + suffix, 'GB'],
+        ['measuredWrite', built.write, 'Layered measured disk write' + suffix, 'MB/s'],
+        ['measuredRead', built.read, 'Layered measured disk read' + suffix, 'MB/s'],
+      ];
+      const pending = charts.map(([divId, layer, title, unit]) => {{
+        const tracks = topMeasuredTracks(layer.tracks, 50);
+        Object.keys(tracks).forEach((name, i) => {{
+          _measuredColors[name] = (name === 'other' || name === MEASURED_OTHER_TOTALS || name === MEASURED_OTHER_SELECTION)
+            ? '#bdbdbd'
+            : MEASURED_PALETTE[i % MEASURED_PALETTE.length];
+        }});
+        // Step lines avoid multi-minute Plotly triangles across sparse gaps.
+        return Promise.resolve(stackedArea(divId, layer.xs || [], tracks, title, unit, true, true));
+      }});
+      return Promise.all(pending).then(() => {{
+        attachMeasuredHover('measuredCpu', 'measuredCpuHover', 'cores');
+        attachMeasuredHover('measuredRam', 'measuredRamHover', 'GB');
+        attachMeasuredHover('measuredWrite', 'measuredWriteHover', 'MB/s');
+        attachMeasuredHover('measuredRead', 'measuredReadHover', 'MB/s');
+        return {{ cpuPeak: cpuPeak, ramPeak: ramPeak }};
+      }});
+    }}
+    function plotMeasuredPressureFromRows(rows, titleSuffix) {{
+      const el = document.getElementById('measuredPressure');
+      const panel = document.getElementById('measuredPressureHover');
+      if (!el || !window.Plotly) return Promise.resolve();
+      if ((rows || []).length === 0 || (rows || []).length > MEASURED_PRESSURE_MAX_ROWS) {{
+        el.style.display = 'none';
+        if (panel) {{
+          panel.style.display = (rows || []).length > MEASURED_PRESSURE_MAX_ROWS ? '' : 'none';
+          panel.textContent = (rows || []).length > MEASURED_PRESSURE_MAX_ROWS
+            ? 'Select one chunk (or a small suite) to inspect cgroup throttling / PSI'
+            : 'Hover to inspect per-chunk throttling and PSI';
+        }}
+        return Promise.resolve();
+      }}
+      const pressureFields = [
+        ['cpu_throttled_pct', 'CPU throttled'],
+        ['cpu_psi_some_pct', 'CPU PSI some'],
+        ['cpu_psi_full_pct', 'CPU PSI full'],
+        ['memory_psi_some_pct', 'Memory PSI some'],
+        ['memory_psi_full_pct', 'Memory PSI full'],
+        ['io_psi_some_pct', 'I/O PSI some'],
+        ['io_psi_full_pct', 'I/O PSI full'],
+      ];
+      const union = new Set();
+      rows.forEach(row => {{
+        const series = (_measuredSeriesByKey || {{}})[row.key];
+        (series && series.xs_evlog_sec || []).forEach(x => union.add(Number(x)));
+      }});
+      const xs = [...union].filter(Number.isFinite).sort((a, b) => a - b);
+      const tracks = {{}};
+      rows.forEach(row => {{
+        const series = (_measuredSeriesByKey || {{}})[row.key];
+        if (!series) return;
+        pressureFields.forEach(([field, name]) => {{
+          const ys = series[field];
+          if (!ys || !ys.some(v => v != null)) return;
+          tracks[(row.label || series.label || row.key) + ' · ' + name] =
+            alignMeasuredSeries(xs, series.xs_evlog_sec || [], ys, false);
+        }});
+      }});
+      const names = Object.keys(tracks);
+      if (!names.length || !xs.length) {{
+        el.style.display = 'none';
+        if (panel) panel.style.display = 'none';
+        return Promise.resolve();
+      }}
+      el.style.display = '';
+      if (panel) panel.style.display = '';
+      const xDisp = xs.map(xToDisplay);
+      const pressAx = axisLayout(xDisp, false);
+      const pressMs = xDisp.map(_toMs).filter(v => v != null).sort((a, b) => a - b);
+      if (pressMs.length) {{
+        const pad = Math.max(1000, (pressMs[pressMs.length - 1] - pressMs[0]) * 0.05);
+        pressAx.range = [new Date(pressMs[0] - pad).toISOString(), new Date(pressMs[pressMs.length - 1] + pad).toISOString()];
+      }}
+      const traces = names.map((name, i) => ({{
+        x: xDisp,
+        y: tracks[name],
+        type: 'scatter',
+        mode: 'lines',
+        name: name,
+        connectgaps: false,
+        line: {{ width: 2, color: MEASURED_PALETTE[i % MEASURED_PALETTE.length] }},
+        hovertemplate: '%{{fullData.name}}: %{{y:.2f}}%<extra></extra>',
+      }}));
+      return Plotly.newPlot(el, traces, {{
+        title: 'Cgroup throttling and pressure' + titleSuffix,
+        xaxis: pressAx,
+        yaxis: {{ title: 'Interval time (%)', rangemode: 'tozero' }},
+        hovermode: 'x unified',
+        hoverlabel: {{ namelength: -1 }},
+        margin: {{ t: 48, r: 20, b: 30, l: 52 }},
+      }}, {{ responsive: true }}).then(() => {{
+        el.on('plotly_hover', (ev) => {{
+          if (!panel || !ev || !ev.points || !ev.points.length) return;
+          panel.textContent = ev.points.map(p => `${{p.data.name}}: ${{Number(p.y).toFixed(2)}}%`).join(' · ');
+        }});
+        el.on('plotly_unhover', () => {{ if (panel) panel.textContent = 'Hover to inspect per-chunk throttling and PSI'; }});
+      }});
+    }}
+    let _measuredActiveTests = [];
+    function testAtSec(tSec) {{
+      if (!Number.isFinite(Number(tSec))) return null;
+      const t = Number(tSec);
+      return (_measuredActiveTests || []).find(row => Number(row.start_sec) <= t && t < Number(row.end_sec)) || null;
+    }}
+    function highlightMeasuredTest(name) {{
+      document.querySelectorAll('#measuredTestsList li').forEach(li => {{
+        li.classList.toggle('on', Boolean(name) && li.dataset.name === name);
+      }});
+    }}
+    function measuredStatusLabel(status) {{
+      const u = String(status || '').toUpperCase().replace(/\\s+/g, '_');
+      if (u === 'OK' || u === 'PASS' || u === 'PASSED' || u === 'GOOD') return 'PASS';
+      if (u === 'FAILED' || u === 'FAIL' || u === 'ERROR') return 'FAIL';
+      if (u === 'MUTE' || u === 'MUTED') return 'MUTE';
+      if (u === 'SKIP' || u === 'SKIPPED') return 'SKIP';
+      if (u === 'NOT_LAUNCHED' || u === 'NOTLAUNCHED') return 'NOT LAUNCHED';
+      return u;
+    }}
+    function measuredStatusClass(label) {{
+      if (label === 'PASS') return 'st-pass';
+      if (label === 'FAIL') return 'st-fail';
+      if (label === 'MUTE') return 'st-mute';
+      if (label === 'SKIP') return 'st-skip';
+      if (label === 'NOT LAUNCHED') return 'st-nl';
+      return 'st-other';
+    }}
+    function measuredErrorTags(errorType) {{
+      return String(errorType || '').split(',').map(s => s.trim()).filter(Boolean);
+    }}
+    function measuredErrorBadgeClass(tag) {{
+      const u = String(tag || '').toUpperCase().replace(/\\s+/g, '_');
+      if (u === 'TIMEOUT' || u === 'VERIFY' || u === 'SANITIZER' || u === 'XFAILED' || u === 'POSSIBLE_OOM' || u === 'NOT_LAUNCHED') return 'eb-' + u;
+      return 'eb-other';
+    }}
+    function measuredErrorBadgeLabel(tag) {{
+      const u = String(tag || '').toUpperCase().replace(/\\s+/g, '_');
+      if (u === 'POSSIBLE_OOM') return 'possible OOM';
+      if (u === 'NOT_LAUNCHED') return 'NOT LAUNCHED';
+      return String(tag || '').toUpperCase();
+    }}
+    function resolveArtifactUrl(url) {{
+      const raw = String(url || '').trim();
+      if (!raw) return '';
+      if (/^https?:\\/\\//i.test(raw)) return raw;
+      const base = String((data.config && data.config.artifacts_url) || '').trim();
+      if (!base) return raw;
+      return base.replace(/\\/?$/, '/') + raw.replace(/^\\//, '');
+    }}
+    function measuredLogEntries(links) {{
+      const src = links && typeof links === 'object' ? links : {{}};
+      const preferred = ['stderr', 'stdout', 'log', 'Log', 'logsdir'];
+      const skip = new Set(['core', 'binary']);
+      const names = [];
+      preferred.forEach(name => {{ if (src[name] && !names.includes(name)) names.push(name); }});
+      Object.keys(src).sort().forEach(name => {{
+        const kind = String(name).toLowerCase().replace(/\\d+$/, '').trim();
+        if (skip.has(kind) || kind.endsWith(' core') || kind.endsWith(' binary')) return;
+        if (src[name] && !names.includes(name)) names.push(name);
+      }});
+      return names.map(name => ({{ name: name, url: resolveArtifactUrl(src[name]) }})).filter(x => x.url);
+    }}
+    function measuredTestHoverLine(point) {{
+      const test = testAtSec(sourceSecFromPoint(point));
+      highlightMeasuredTest(test && test.name);
+      if (!test) return '';
+      const status = measuredStatusLabel(test.status);
+      const tags = measuredErrorTags(test.error_type).map(measuredErrorBadgeLabel);
+      const extra = [status, ...tags].filter(Boolean).join(' · ');
+      return test.name + ' (' + Number(test.duration_sec || 0).toFixed(1) + 's' + (extra ? ', ' + extra : '') + ')';
+    }}
+    function attachMeasuredHover(plotId, panelId, unit) {{
+      const plot = document.getElementById(plotId);
+      const panel = document.getElementById(panelId);
+      if (!plot || !panel) return;
+      plot.classList.add('tz-hover');
+      plot.on('plotly_hover', (ev) => {{
+        if (!ev || !ev.points || !ev.points.length) return;
+        const point = ev.points[0];
+        const label = formatPointTime(point);
+        const testLine = measuredTestHoverLine(point);
+        const contrib = hoverContributionRows(ev, unit);
+        const lines = [hoverTotalLine(contrib.total, unit)].concat(
+          contrib.top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`)
+        );
+        panel.textContent = (testLine ? testLine + '\\n' : '') + `t=${{label}}\\n` + lines.join('\\n');
+        showChartTip(ev, unit);
+        const tip = document.getElementById('chartTip');
+        if (tip && testLine && tip.style.display !== 'none' && !(tip.textContent || '').includes(testLine)) {{
+          tip.textContent = testLine + '\\n' + (tip.textContent || '');
+        }}
+      }});
+      plot.on('plotly_unhover', () => {{
+        panel.textContent = 'Move cursor over chart to see sorted contributors';
+        highlightMeasuredTest('');
+        hideChartTipSoon();
+      }});
+    }}
+    function testsForMeasuredSelection(sel) {{
+      if (!sel || sel.kind !== 'chunk') return [];
+      const row = measuredList.find(r => r.key === sel.key) || {{}};
+      return measuredChunkTests[row.label] || measuredChunkTests[sel.key] || [];
+    }}
+    function testsForMeasuredRow(row) {{
+      if (!row) return [];
+      return measuredChunkTests[row.label] || measuredChunkTests[row.key] || [];
+    }}
+    function emptyMeasuredOutcomes() {{
+      return {{ pass: 0, fail: 0, mute: 0, skip: 0, nl: 0, other: 0, duration: 0, n: 0 }};
+    }}
+    function measuredOutcomeKey(test) {{
+      const tags = measuredErrorTags(test && test.error_type).map(tag => String(tag).toUpperCase().replace(/\\s+/g, '_'));
+      const label = measuredStatusLabel(test && test.status);
+      if (label === 'NOT LAUNCHED' || tags.includes('NOT_LAUNCHED')) return 'nl';
+      if (label === 'MUTE') return 'mute';
+      if (label === 'SKIP') return 'skip';
+      if (label === 'FAIL') return 'fail';
+      if (label === 'PASS') return 'pass';
+      return 'other';
+    }}
+    function addMeasuredOutcomes(dst, src) {{
+      dst.pass += src.pass;
+      dst.fail += src.fail;
+      dst.mute += src.mute;
+      dst.skip += src.skip;
+      dst.nl += src.nl;
+      dst.other += src.other;
+      dst.duration += src.duration;
+      dst.n += src.n;
+      return dst;
+    }}
+    function outcomesForTests(tests) {{
+      const out = emptyMeasuredOutcomes();
+      (tests || []).forEach(test => {{
+        out[measuredOutcomeKey(test)] += 1;
+        out.duration += Number(test.duration_sec) || 0;
+        out.n += 1;
+      }});
+      return out;
+    }}
+    function outcomesForRows(rows) {{
+      const out = emptyMeasuredOutcomes();
+      (rows || []).forEach(row => {{
+        if (!row._outcomes) row._outcomes = outcomesForTests(testsForMeasuredRow(row));
+        addMeasuredOutcomes(out, row._outcomes);
+      }});
+      return out;
+    }}
+    function measuredDurText(sec) {{
+      const s = Number(sec) || 0;
+      if (s >= 3600) return (s / 3600).toFixed(1) + 'h';
+      if (s >= 90) return (s / 60).toFixed(1) + 'm';
+      return s.toFixed(1) + 's';
+    }}
+    function measuredOutcomesHtml(out) {{
+      const parts = [];
+      const add = (n, cls, label) => {{
+        if (!n) return;
+        parts.push('<span class="st ' + cls + '">' + n + ' ' + label + '</span>');
+      }};
+      add(out.pass, 'st-pass', 'pass');
+      add(out.fail, 'st-fail', 'fail');
+      add(out.mute, 'st-mute', 'mute');
+      add(out.skip, 'st-skip', 'skip');
+      add(out.nl, 'st-nl', 'nl');
+      add(out.other, 'st-other', '?');
+      parts.push('<span class="odur">' + measuredDurText(out.duration) + '</span>');
+      return parts.join('');
+    }}
+    function plotMeasuredTestLane(tests) {{
+      const el = document.getElementById('measuredTestsLane');
+      const list = document.getElementById('measuredTestsList');
+      if (!el) return Promise.resolve();
+      if (!tests || !tests.length) {{
+        _measuredActiveTests = [];
+        el.style.display = 'none';
+        if (list) {{ list.style.display = 'none'; list.innerHTML = ''; }}
+        return Promise.resolve();
+      }}
+      el.style.display = '';
+      el.style.height = '90px';
+      _measuredActiveTests = tests;
+      const xs = _measuredPlotXs.length
+        ? _measuredPlotXs
+        : tests.flatMap(t => [Number(t.start_sec), Number(t.end_sec)]).filter(Number.isFinite).sort((a, b) => a - b);
+      const traces = tests.map((t, i) => {{
+        const color = MEASURED_PALETTE[i % MEASURED_PALETTE.length];
+        return {{
+          type: 'scatter',
+          mode: 'lines',
+          x: [xToDisplay(t.start_sec), xToDisplay(t.end_sec)],
+          y: [1, 1],
+          line: {{ width: 18, color: color }},
+          name: t.name,
+          hovertemplate: t.name + '<br>' + Number(t.duration_sec || 0).toFixed(1) + 's' +
+            (measuredStatusLabel(t.status) ? '<br>' + measuredStatusLabel(t.status) : '') +
+            (measuredErrorTags(t.error_type).length ? '<br>' + measuredErrorTags(t.error_type).map(measuredErrorBadgeLabel).join(', ') : '') +
+            '<extra></extra>',
+          showlegend: false,
+        }};
+      }});
+      if (list) {{
+        list.style.display = '';
+        list.innerHTML = tests.map((t, i) => {{
+          const color = MEASURED_PALETTE[i % MEASURED_PALETTE.length];
+          const from = formatTimeLabel(xToDisplay(t.start_sec));
+          const to = formatTimeLabel(xToDisplay(t.end_sec));
+          const status = measuredStatusLabel(t.status);
+          const badges = (status ? '<span class="st ' + measuredStatusClass(status) + '">' + escapeHtml(status) + '</span>' : '') +
+            measuredErrorTags(t.error_type).map(tag =>
+              '<span class="ebadge ' + measuredErrorBadgeClass(tag) + '">' + escapeHtml(measuredErrorBadgeLabel(tag)) + '</span>'
+            ).join('');
+          const logs = measuredLogEntries(t.links).map(link =>
+            '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener">' + escapeHtml(link.name) + '</a>'
+          ).join('');
+          return '<li data-name="' + escapeHtml(t.name) + '"><span class="swatch" style="background:' + color + '"></span>' +
+            '<span class="tbody"><span class="tline"><span class="tname">' + escapeHtml(t.name) + '</span>' + badges + '</span>' +
+            (logs ? '<span class="tlogs">' + logs + '</span>' : '') + '</span>' +
+            '<span class="tmeta">' + escapeHtml(from) + ' – ' + escapeHtml(to) +
+            ' · ' + Number(t.duration_sec || 0).toFixed(1) + 's</span></li>';
+        }}).join('');
+      }}
+      if (!window.Plotly) return Promise.resolve();
+      const laneXs = xs.map(xToDisplay);
+      const laneAx = axisLayout(laneXs, false);
+      const laneMs = laneXs.map(_toMs).filter(v => v != null).sort((a, b) => a - b);
+      if (laneMs.length) {{
+        const pad = Math.max(1000, (laneMs[laneMs.length - 1] - laneMs[0]) * 0.05);
+        laneAx.range = [new Date(laneMs[0] - pad).toISOString(), new Date(laneMs[laneMs.length - 1] + pad).toISOString()];
+      }}
+      return Plotly.newPlot(el, traces, {{
+        title: 'Tests in this chunk',
+        xaxis: laneAx,
+        yaxis: {{ visible: false, range: [0.4, 1.6] }},
+        hovermode: 'closest',
+        margin: {{ t: 36, r: 20, b: 24, l: 40 }},
+        height: 90,
+      }}, {{ responsive: true }}).then(() => {{
+        el.on('plotly_hover', (ev) => {{
+          if (!ev || !ev.points || !ev.points.length) return;
+          measuredTestHoverLine(ev.points[0]);
+          showChartTip(ev);
+        }});
+        el.on('plotly_unhover', () => {{
+          highlightMeasuredTest('');
+          hideChartTipSoon();
+        }});
+      }});
+    }}
+    function applyMeasuredTestBands(tests) {{
+      const shapes = (tests || []).map((t, i) => {{
+        const color = MEASURED_PALETTE[i % MEASURED_PALETTE.length];
+        return {{
+          type: 'rect',
+          xref: 'x',
+          yref: 'paper',
+          x0: xToDisplay(t.start_sec),
+          x1: xToDisplay(t.end_sec),
+          y0: 0,
+          y1: 1,
+          fillcolor: hexToRgba(color, 0.10),
+          line: {{ width: 1, color: hexToRgba(color, 0.35) }},
+          layer: 'below',
+        }};
+      }});
+      if (!window.Plotly) return Promise.resolve();
+      // Wait until each Plotly graph finished newPlot; relayout during init hits
+      // Plotly's internal `_guiEditing` and blows up measured selection.
+      return Promise.all(['measuredCpu', 'measuredRam', 'measuredWrite', 'measuredRead', 'measuredPressure'].map(id => {{
+        const plot = document.getElementById(id);
+        if (!plot || !plot.data || plot.style.display === 'none') return Promise.resolve();
+        return Promise.resolve(Plotly.relayout(plot, {{ shapes: shapes, annotations: [] }})).catch(err => {{
+          console.warn('measured band relayout failed', id, err);
+        }});
+      }}));
+    }}
+    function measuredAgg(rows) {{
+      let cpu = 0, ram = 0, write = 0, read = 0;
+      (rows || []).forEach(row => {{
+        cpu += Number(row.max_cpu) || 0;
+        ram += Number(row.max_ram_gb) || 0;
+        write += Number(row.max_write_mbps) || 0;
+        read += Number(row.max_read_mbps) || 0;
+      }});
+      return {{ n: (rows || []).length, cpu: cpu, ram_gb: ram, write_mbps: write, read_mbps: read }};
+    }}
+    function measuredSignalsText(rows) {{
+      const src = rows || [];
+      const max = key => {{
+        const vals = src.map(r => Number(r[key])).filter(Number.isFinite);
+        return vals.length ? Math.max(...vals) : null;
+      }};
+      const sum = key => {{
+        const vals = src.map(r => Number(r[key])).filter(Number.isFinite);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+      }};
+      const fmt = value => value == null ? '—' : Number(value).toFixed(1) + '%';
+      const fields = ['max_cpu_throttled_pct','max_cpu_psi_pct','max_memory_psi_pct','max_io_psi_pct'];
+      const present = src.some(r => fields.some(k => r[k] != null));
+      if (!present) return 'cgroup pressure: n/a';
+      const events = ['memory_high_events_delta','memory_max_events_delta','memory_oom_events_delta','memory_oom_kill_events_delta'].map(sum);
+      const throttledPeriods = sum('cpu_nr_throttled_delta');
+      const throttledUsec = sum('cpu_throttled_usec_delta');
+      const throttleCounts = throttledPeriods != null || throttledUsec != null
+        ? ' (' + (throttledPeriods == null ? '—' : Math.round(throttledPeriods)) + ' periods, ' + (throttledUsec == null ? '—' : (throttledUsec / 1000000).toFixed(2) + 's') + ')'
+        : '';
+      const text = 'throttle ' + fmt(max('max_cpu_throttled_pct')) + throttleCounts + ' · PSI CPU/mem/I/O ' +
+        fmt(max('max_cpu_psi_pct')) + '/' + fmt(max('max_memory_psi_pct')) + '/' + fmt(max('max_io_psi_pct'));
+      const haveEvents = events.some(v => v != null);
+      return text + (haveEvents ? ' · mem high/max/oom/kill ' + events.map(v => v == null ? '—' : String(Math.round(v))).join('/') : '');
+    }}
+    function measuredSignalsHtml(rows) {{
+      const src = rows || [];
+      const max = key => {{
+        const vals = src.map(r => Number(r[key])).filter(Number.isFinite);
+        return vals.length ? Math.max(...vals) : null;
+      }};
+      const sum = key => {{
+        const vals = src.map(r => Number(r[key])).filter(Number.isFinite);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+      }};
+      const fields = ['max_cpu_throttled_pct','max_cpu_psi_pct','max_memory_psi_pct','max_io_psi_pct'];
+      if (!src.some(r => fields.some(k => r[k] != null))) {{
+        return '<div class="measured-meta-signals">Cgroup pressure: n/a</div>';
+      }}
+      const pct = value => value == null ? '—' : Number(value).toFixed(1) + '%';
+      const throttledPeriods = sum('cpu_nr_throttled_delta');
+      const throttledUsec = sum('cpu_throttled_usec_delta');
+      const throttleExtra = (throttledPeriods != null || throttledUsec != null)
+        ? ' (' + (throttledPeriods == null ? '—' : Math.round(throttledPeriods)) + ' periods, ' +
+          (throttledUsec == null ? '—' : (throttledUsec / 1000000).toFixed(2) + 's') + ')'
+        : '';
+      const memEvents = [
+        sum('memory_high_events_delta'),
+        sum('memory_max_events_delta'),
+        sum('memory_oom_events_delta'),
+        sum('memory_oom_kill_events_delta'),
+      ].map(v => v == null ? '—' : String(Math.round(v))).join(' / ');
+      return '<div class="measured-meta-signals">' +
+        '<span class="measured-meta-item"><em>CPU throttle</em> <strong>' + pct(max('max_cpu_throttled_pct')) + throttleExtra + '</strong></span> · ' +
+        '<span class="measured-meta-item"><em>PSI CPU</em> <strong>' + pct(max('max_cpu_psi_pct')) + '</strong></span> · ' +
+        '<span class="measured-meta-item"><em>PSI mem</em> <strong>' + pct(max('max_memory_psi_pct')) + '</strong></span> · ' +
+        '<span class="measured-meta-item"><em>PSI I/O</em> <strong>' + pct(max('max_io_psi_pct')) + '</strong></span> · ' +
+        '<span class="measured-meta-item"><em>mem events high/max/oom/kill</em> <strong>' + memEvents + '</strong></span>' +
+        '</div>';
+    }}
+    function measuredContentionSelfText(dim, selfScores) {{
+      const s = selfScores || {{}};
+      if (dim === 'io') {{
+        return 'self w' + Number(s.write_mbps || 0).toFixed(1) +
+          ' r' + Number(s.read_mbps || 0).toFixed(1) + ' MB/s';
+      }}
+      if (dim === 'cpu') return 'self ' + Number(s.cpu_cores || 0).toFixed(2) + ' cores';
+      if (dim === 'memory') return 'self ' + Number(s.ram_gb || 0).toFixed(2) + ' GB';
+      return '';
+    }}
+    function measuredContentionValText(dim, row) {{
+      if (dim === 'io') {{
+        return 'w' + Number(row.write_mbps || 0).toFixed(1) +
+          ' r' + Number(row.read_mbps || 0).toFixed(1) + ' MB/s';
+      }}
+      if (dim === 'cpu') return Number(row.cpu_cores || 0).toFixed(2) + ' cores';
+      if (dim === 'memory') return Number(row.ram_gb || 0).toFixed(2) + ' GB';
+      return Number(row.score || 0).toFixed(1);
+    }}
+    function measuredContentionHtml(row) {{
+      const c = row && row.contention;
+      if (!c) return '';
+      const dims = [
+        ['io', 'PSI I/O'],
+        ['cpu', 'PSI CPU'],
+        ['memory', 'PSI mem'],
+      ];
+      let body = '';
+      dims.forEach(([dim, title]) => {{
+        const block = c[dim];
+        if (!block) return;
+        const top = block.top || [];
+        const head = title + ' peak ' + Number(block.psi_pct || 0).toFixed(1) + '% · ' +
+          measuredContentionSelfText(dim, block.self) +
+          ' · neighbors ranked by use at that moment (not by their PSI)';
+        let list = '';
+        if (!top.length) {{
+          list = '<div class="measured-contention-empty">No other measured cgroups with significant use nearby — host/device or unmeasured load.</div>';
+        }} else {{
+          list = '<ol class="measured-contention-list">' + top.map((peer, i) => {{
+            const bits = [];
+            if (peer.psi_pct != null) bits.push('their PSI ' + Number(peer.psi_pct).toFixed(1) + '%');
+            if (Number(peer.chunks || 1) > 1) bits.push(Number(peer.chunks) + ' cgroups');
+            const sub = bits.length ? ('<span class="sub">' + escapeHtml(bits.join(' · ')) + '</span>') : '';
+            return '<li><button type="button" data-contend-key="' + escapeHtml(peer.key || '') +
+              '" data-contend-suite="' + escapeHtml(peer.suite || '') + '">' +
+              '<span class="rank">' + (i + 1) + '</span>' +
+              '<span class="val">' + escapeHtml(measuredContentionValText(dim, peer)) + '</span>' +
+              '<span class="name">' + escapeHtml(peer.label || peer.key || '') + sub + '</span>' +
+              '</button></li>';
+          }}).join('') + '</ol>';
+        }}
+        body += '<div class="measured-contention-dim"><div class="measured-contention-head">' +
+          escapeHtml(head) + '</div>' + list + '</div>';
+      }});
+      if (!body) return '';
+      return '<div class="measured-contention">' +
+        '<div class="measured-contention-title">Delayed by (at peak PSI)</div>' +
+        '<div class="measured-meta-note">High PSI means this chunk waited. Click a neighbor to inspect it.</div>' +
+        body + '</div>';
+    }}
+    function measuredStatsText(agg, hideCount) {{
+      // Compact form for the tree; header uses measuredMetaHtml.
+      const body = agg.cpu.toFixed(2) + 'c · ' + agg.ram_gb.toFixed(2) + 'G · w' +
+        agg.write_mbps.toFixed(1) + ' r' + agg.read_mbps.toFixed(1);
+      if (hideCount) return body;
+      return agg.n + (agg.n > 1 ? ' · Σpeaks ' : ' · ') + body;
+    }}
+    function measuredMetaItem(label, value) {{
+      return '<span class="measured-meta-item"><em>' + escapeHtml(label) + '</em> <strong>' + value + '</strong></span>';
+    }}
+    function measuredMetaHtml(title, agg, outcomes, rows) {{
+      const multi = agg.n > 1;
+      const cpuLabel = multi ? 'sum of CPU peaks' : 'CPU peak';
+      const ramLabel = multi ? 'sum of RAM peaks' : 'RAM peak';
+      const grid = [
+        measuredMetaItem('chunks', String(agg.n)),
+        measuredMetaItem(cpuLabel, agg.cpu.toFixed(2) + ' cores'),
+        measuredMetaItem(ramLabel, agg.ram_gb.toFixed(2) + ' GB'),
+        measuredMetaItem('disk write peak', agg.write_mbps.toFixed(1) + ' MB/s'),
+        measuredMetaItem('disk read peak', agg.read_mbps.toFixed(1) + ' MB/s'),
+      ].join('');
+      return '<div class="measured-meta-title">' + escapeHtml(title) + '</div>' +
+        '<div class="measured-meta-grid">' + grid +
+        '<span class="outcomes">' + measuredOutcomesHtml(outcomes) + '</span></div>' +
+        measuredSignalsHtml(rows);
+    }}
+    function measuredAggExtremes(aggs) {{
+      const ext = {{ cpu: 0, ram_gb: 0, write_mbps: 0, read_mbps: 0 }};
+      (aggs || []).forEach(agg => {{
+        ext.cpu = Math.max(ext.cpu, Number(agg.cpu) || 0);
+        ext.ram_gb = Math.max(ext.ram_gb, Number(agg.ram_gb) || 0);
+        ext.write_mbps = Math.max(ext.write_mbps, Number(agg.write_mbps) || 0);
+        ext.read_mbps = Math.max(ext.read_mbps, Number(agg.read_mbps) || 0);
+      }});
+      return ext;
+    }}
+    function suiteChunkExtremes(rows) {{
+      return measuredAggExtremes((rows || []).map(row => ({{
+        cpu: Number(row.max_cpu) || 0,
+        ram_gb: Number(row.max_ram_gb) || 0,
+        write_mbps: Number(row.max_write_mbps) || 0,
+        read_mbps: Number(row.max_read_mbps) || 0,
+      }})));
+    }}
+    function measuredStatMark(text, isMax) {{
+      return isMax ? ('<span class="stat-max">' + text + '</span>') : text;
+    }}
+    function measuredStatPartsHtml(cpu, ram, write, read, extremes, siblingCount) {{
+      const cpuTxt = Number(cpu || 0).toFixed(2);
+      const ramTxt = Number(ram || 0).toFixed(2);
+      const writeTxt = Number(write || 0).toFixed(1);
+      const readTxt = Number(read || 0).toFixed(1);
+      const canMark = siblingCount > 1 && extremes;
+      return measuredStatMark(cpuTxt + 'c', canMark && extremes.cpu > 0 && cpuTxt === extremes.cpu.toFixed(2)) +
+        ' · ' + measuredStatMark(ramTxt + 'G', canMark && extremes.ram_gb > 0 && ramTxt === extremes.ram_gb.toFixed(2)) +
+        ' · ' + measuredStatMark('w' + writeTxt, canMark && extremes.write_mbps > 0 && writeTxt === extremes.write_mbps.toFixed(1)) +
+        ' ' + measuredStatMark('r' + readTxt, canMark && extremes.read_mbps > 0 && readTxt === extremes.read_mbps.toFixed(1));
+    }}
+    function measuredStatsHtml(agg, extremes, siblingCount, hideCount) {{
+      const body = measuredStatPartsHtml(agg.cpu, agg.ram_gb, agg.write_mbps, agg.read_mbps, extremes, siblingCount);
+      if (hideCount) return body;
+      return agg.n + (agg.n > 1 ? ' · Σpeaks ' : ' · ') + body;
+    }}
+    function measuredChunkStatsHtml(row, extremes, chunkCount) {{
+      return measuredStatPartsHtml(row.max_cpu, row.max_ram_gb, row.max_write_mbps, row.max_read_mbps, extremes, chunkCount);
+    }}
+    function buildMeasuredForest() {{
+      const root = {{ name: 'all', path: '', children: {{}}, rows: [] }};
+      measuredList.forEach(row => {{
+        const parts = String(row.suite || 'unknown').split('/').filter(Boolean);
+        let node = root;
+        node.rows.push(row);
+        let path = '';
+        parts.forEach(part => {{
+          path = path ? (path + '/' + part) : part;
+          if (!node.children[part]) node.children[part] = {{ name: part, path: path, children: {{}}, rows: [] }};
+          node = node.children[part];
+          node.rows.push(row);
+        }});
+      }});
+      return root;
+    }}
+    const measuredForest = buildMeasuredForest();
+    const measuredOpen = new Set();
+    function measuredAncestorPaths(path) {{
+      const parts = String(path || '').split('/').filter(Boolean);
+      const out = [];
+      let cur = '';
+      parts.forEach(part => {{
+        cur = cur ? (cur + '/' + part) : part;
+        out.push(cur);
+      }});
+      return out;
+    }}
+    function openMeasuredPath(path, includeSelf) {{
+      measuredAncestorPaths(path).forEach((p, i, arr) => {{
+        if (includeSelf || i < arr.length - 1) measuredOpen.add(p);
+      }});
+    }}
+    function measuredRowsForSelection(sel) {{
+      if (!sel || sel.kind === 'all') return measuredList;
+      if (sel.kind === 'chunk') return measuredList.filter(row => row.key === sel.key);
+      const path = sel.path || sel.suite || '';
+      return measuredList.filter(row => row.suite === path || String(row.suite || '').startsWith(path + '/'));
+    }}
+    function measuredLabelsForSelection(sel) {{
+      return measuredRowsForSelection(sel).map(row => row.label);
+    }}
+    function selectMeasured(sel) {{
+      const rows = measuredRowsForSelection(sel);
+      const agg = measuredAgg(rows);
+      const meta = document.getElementById('measuredMeta');
+      const title = (!sel || sel.kind === 'all')
+        ? 'all suites'
+        : (sel.kind === 'chunk' ? ((measuredList.find(r => r.key === sel.key) || {{}}).label || sel.key) : (sel.path || sel.suite));
+      const outcomes = outcomesForRows(rows);
+      if (meta) {{
+        const contention = (sel && sel.kind === 'chunk' && rows.length === 1)
+          ? measuredContentionHtml(rows[0])
+          : '';
+        meta.innerHTML = measuredMetaHtml(title, agg, outcomes, rows) + contention +
+          '<div id="measuredLoadStatus" class="load-inline"></div>';
+      }}
+      const suffix = (!sel || sel.kind === 'all') ? ' (all)' : (sel.kind === 'chunk' ? ' (one chunk)' : ' / ' + (sel.path || sel.suite));
+      if (sel && (sel.path || sel.suite)) openMeasuredPath(sel.path || sel.suite, false);
+      if (sel && sel.kind === 'chunk' && (sel.path || sel.suite)) openMeasuredPath(sel.path || sel.suite, true);
+      renderMeasuredTree(sel);
+      const chunkTests = testsForMeasuredSelection(sel);
+      const token = {{}};
+      window._measuredSelectToken = token;
+      _measuredLastSel = sel || {{kind: 'all'}};
+      setMeasuredLoading(true, 'Loading measured series…');
+      ensureMeasuredSeriesForRows(rows, sel, (msg) => {{
+        if (window._measuredSelectToken !== token) return;
+        setMeasuredLoading(true, msg);
+      }}).then(() => {{
+        if (window._measuredSelectToken !== token) return null;
+        setMeasuredLoading(true, 'Drawing measured charts…');
+        const useTotals = !sel || sel.kind === 'all';
+        return Promise.resolve(plotMeasuredLayersFromRows(rows, suffix, useTotals))
+          .then((peaks) => plotMeasuredPressureFromRows(rows, suffix).then(() => peaks))
+          .then((peaks) => plotMeasuredTestLane(chunkTests).then(() => peaks))
+          .then((peaks) => applyMeasuredTestBands(chunkTests).then(() => peaks));
+      }}).then((peaks) => {{
+        if (window._measuredSelectToken !== token) return;
+        setMeasuredLoading(false);
+        hideBoot();
+        if (meta && peaks && (peaks.cpuPeak > 0 || peaks.ramPeak > 0)) {{
+          const note = document.createElement('div');
+          note.className = 'measured-meta-note';
+          note.textContent = 'Charts: concurrent cgroup load (peak ' +
+            Number(peaks.cpuPeak || 0).toFixed(1) + ' cores / ' +
+            Number(peaks.ramPeak || 0).toFixed(1) +
+            ' GB). Numbers above for multi-chunk nodes are sums of per-chunk peaks, not concurrent usage.';
+          meta.appendChild(note);
+        }}
+      }}).catch((err) => {{
+        if (window._measuredSelectToken !== token) return;
+        const msg = (err && err.message) ? err.message : String(err);
+        // Fetch failures mention the URL/status; Plotly races (e.g. `_guiEditing`)
+        // should not look like a missing series payload.
+        const isFetch = /overview\\.json|totals\\.json|suites\\/|Failed to fetch|NetworkError|status|HTTP/i.test(msg);
+        console.error(isFetch ? 'Failed to load measured series' : 'Measured plot failed', err);
+        if (!isFetch) {{
+          setMeasuredLoading(false);
+          hideBoot();
+          return;
+        }}
+        setMeasuredLoading(false, 'Failed to load measured series: ' + msg, true);
+        hideBoot();
+      }});
+    }}
+    function renderMeasuredNode(node, depth, sel, siblingExtremes, siblingCount) {{
+      const childNames = Object.keys(node.children).sort();
+      const chunks = node.rows.filter(row => row.suite === node.path).slice().sort((a, b) => {{
+        const ca = a.chunk == null ? 1e9 : Number(a.chunk);
+        const cb = b.chunk == null ? 1e9 : Number(b.chunk);
+        return ca - cb;
+      }});
+      const hasKids = childNames.length > 0 || chunks.length > 0;
+      const open = measuredOpen.has(node.path);
+      const selected = sel && sel.kind === 'prefix' && sel.path === node.path;
+      let html = '<div class="mt-row" style="padding-left:' + (depth * 12) + 'px">';
+      html += hasKids
+        ? ('<button type="button" class="mt-twist" data-toggle="' + escapeHtml(node.path) + '">' + (open ? '▼' : '▶') + '</button>')
+        : '<span class="mt-spacer"></span>';
+      html += '<button type="button" class="mt-pick' + (selected ? ' on' : '') + '" data-kind="prefix" data-path="' + escapeHtml(node.path) + '">' +
+        '<span class="mt-name">' + escapeHtml(node.name) + '</span>' +
+        '<span class="stats">' + measuredStatsHtml(measuredAgg(node.rows), siblingExtremes, siblingCount) + '</span>' +
+        '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows(node.rows)) + '</span>' +
+        '<span class="stats">' + escapeHtml(measuredSignalsText(node.rows)) + '</span></button></div>';
+      if (open && hasKids) {{
+        const kids = childNames.map(name => node.children[name]);
+        const kidExt = measuredAggExtremes(kids.map(k => measuredAgg(k.rows)));
+        kids.forEach(child => {{ html += renderMeasuredNode(child, depth + 1, sel, kidExt, kids.length); }});
+        const extremes = suiteChunkExtremes(chunks);
+        chunks.forEach(row => {{
+          const on = sel && sel.kind === 'chunk' && sel.key === row.key;
+          html += '<div class="mt-row mt-chunk" style="padding-left:' + ((depth + 1) * 12) + 'px">' +
+            '<span class="mt-spacer"></span>' +
+            '<button type="button" class="mt-pick' + (on ? ' on' : '') + '" data-kind="chunk" data-key="' + escapeHtml(row.key) + '" data-path="' + escapeHtml(node.path) + '">' +
+            '<span class="mt-name">' + escapeHtml(row.chunk == null ? row.label : '[' + row.chunk + ']') + '</span>' +
+            '<span class="stats">' + measuredChunkStatsHtml(row, extremes, chunks.length) + '</span>' +
+            '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows([row])) + '</span>' +
+            '<span class="stats">' + escapeHtml(measuredSignalsText([row])) + '</span></button></div>';
+        }});
+      }}
+      return html;
+    }}
+    function renderMeasuredTree(sel) {{
+      const tree = document.getElementById('measuredTree');
+      if (!tree) return;
+      const childNames = Object.keys(measuredForest.children).sort();
+      const allOn = !sel || sel.kind === 'all';
+      let html = '<div class="mt-row"><span class="mt-spacer"></span>' +
+        '<button type="button" class="mt-pick' + (allOn ? ' on' : '') + '" data-kind="all">' +
+        '<span class="mt-name">all</span><span class="stats">' + measuredStatsText(measuredAgg(measuredList)) + '</span>' +
+        '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows(measuredList)) + '</span>' +
+        '<span class="stats">' + escapeHtml(measuredSignalsText(measuredList)) + '</span></button></div>';
+      const topKids = childNames.map(name => measuredForest.children[name]);
+      const topExt = measuredAggExtremes(topKids.map(k => measuredAgg(k.rows)));
+      topKids.forEach(child => {{ html += renderMeasuredNode(child, 1, sel, topExt, topKids.length); }});
+      tree.innerHTML = html;
+    }}
+    const measuredTreeEl = document.getElementById('measuredTree');
+    if (measuredTreeEl) {{
+      measuredTreeEl.addEventListener('click', (ev) => {{
+        const twist = ev.target.closest('[data-toggle]');
+        if (twist) {{
+          const path = twist.dataset.toggle;
+          if (measuredOpen.has(path)) measuredOpen.delete(path);
+          else measuredOpen.add(path);
+          renderMeasuredTree(window._measuredSel || {{kind: 'all'}});
+          return;
+        }}
+        const pick = ev.target.closest('.mt-pick');
+        if (!pick) return;
+        if (pick.dataset.kind === 'all') selectMeasured({{kind: 'all'}});
+        else if (pick.dataset.kind === 'chunk') selectMeasured({{kind: 'chunk', key: pick.dataset.key, path: pick.dataset.path, suite: pick.dataset.path}});
+        else selectMeasured({{kind: 'prefix', path: pick.dataset.path, suite: pick.dataset.path}});
+      }});
+    }}
+    const _selectMeasured = selectMeasured;
+    selectMeasured = function(sel) {{
+      window._measuredSel = sel || {{kind: 'all'}};
+      _selectMeasured(sel || {{kind: 'all'}});
+      renderMeasuredTop();
+    }};
+    function measuredTopMetricMeta(metric) {{
+      if (metric === 'max_ram_gb') return {{ key: 'max_ram_gb', unit: ' GB', digits: 2 }};
+      if (metric === 'max_write_mbps') return {{ key: 'max_write_mbps', unit: ' MB/s write', digits: 1 }};
+      if (metric === 'max_read_mbps') return {{ key: 'max_read_mbps', unit: ' MB/s read', digits: 1 }};
+      if (metric === 'max_cpu_throttled_pct') return {{ key: 'max_cpu_throttled_pct', unit: '% throttle', digits: 1 }};
+      if (metric === 'max_cpu_psi_pct') return {{ key: 'max_cpu_psi_pct', unit: '% PSI CPU', digits: 1 }};
+      if (metric === 'max_memory_psi_pct') return {{ key: 'max_memory_psi_pct', unit: '% PSI mem', digits: 1 }};
+      if (metric === 'max_io_psi_pct') return {{ key: 'max_io_psi_pct', unit: '% PSI I/O', digits: 1 }};
+      if (metric === 'cpu_throttled_usec_delta') {{
+        return {{ key: 'cpu_throttled_usec_delta', unit: 's throttled', digits: 2, scale: 1 / 1000000 }};
+      }}
+      return {{ key: 'max_cpu', unit: ' cores', digits: 2 }};
+    }}
+    function measuredTopRawValue(row, meta) {{
+      const n = Number(row && row[meta.key]);
+      if (!Number.isFinite(n)) return 0;
+      return meta.scale ? n * meta.scale : n;
+    }}
+    function formatMeasuredTopValue(row, meta) {{
+      return measuredTopRawValue(row, meta).toFixed(meta.digits) + meta.unit;
+    }}
+    function renderMeasuredTop() {{
+      const list = document.getElementById('measuredTopList');
+      const metricEl = document.getElementById('measuredTopMetric');
+      const nEl = document.getElementById('measuredTopN');
+      const scopeEl = document.getElementById('measuredTopInSelection');
+      if (!list || !metricEl || !nEl) return;
+      const meta = measuredTopMetricMeta(metricEl.value);
+      const limit = Math.max(1, Number(nEl.value) || 50);
+      const sel = window._measuredSel || {{kind: 'all'}};
+      const inSelection = !!(scopeEl && scopeEl.checked && sel && sel.kind !== 'all');
+      const src = inSelection ? measuredRowsForSelection(sel) : measuredList;
+      const ranked = (src || []).slice().sort((a, b) =>
+        measuredTopRawValue(b, meta) - measuredTopRawValue(a, meta)
+      ).slice(0, limit);
+      const selectedKey = sel && sel.kind === 'chunk' ? sel.key : null;
+      const contendDim = metricEl.value === 'max_io_psi_pct' ? 'io'
+        : (metricEl.value === 'max_cpu_psi_pct' ? 'cpu'
+          : (metricEl.value === 'max_memory_psi_pct' ? 'memory' : null));
+      list.innerHTML = ranked.map((row, i) => {{
+        const on = selectedKey && row.key === selectedKey ? ' on' : '';
+        const extras = [
+          Number(row.max_cpu || 0).toFixed(2) + ' cores',
+          Number(row.max_ram_gb || 0).toFixed(2) + ' GB',
+          'write ' + Number(row.max_write_mbps || 0).toFixed(1) + ' MB/s',
+          'read ' + Number(row.max_read_mbps || 0).toFixed(1) + ' MB/s',
+        ];
+        const peer = contendDim && row.contention && row.contention[contendDim] &&
+          (row.contention[contendDim].top || [])[0];
+        if (peer && peer.label) extras.push('delayed by ' + peer.label);
+        return '<li class="' + on.trim() + '" data-key="' + escapeHtml(row.key || '') +
+          '" data-suite="' + escapeHtml(row.suite || '') + '">' +
+          '<span class="rank">' + (i + 1) + '</span>' +
+          '<span class="val">' + escapeHtml(formatMeasuredTopValue(row, meta)) + '</span>' +
+          '<span class="name">' + escapeHtml(row.label || row.key || '') +
+          '<span class="sub">' + escapeHtml(extras.join(' · ')) + '</span></span></li>';
+      }}).join('') || '<li class="muted" style="display:block;padding:8px;cursor:default">No measured chunks</li>';
+      list._rows = ranked;
+    }}
+    function buildMeasuredTestIndex() {{
+      const out = [];
+      const seen = new Set();
+      Object.keys(measuredChunkTests || {{}}).forEach(label => {{
+        if (String(label).startsWith('ya-test-')) return;
+        const row = measuredList.find(r => r.label === label);
+        (measuredChunkTests[label] || []).forEach(test => {{
+          const id = label + '|' + test.name;
+          if (seen.has(id)) return;
+          seen.add(id);
+          out.push({{
+            name: test.name,
+            label: label,
+            key: row && row.key,
+            suite: row && row.suite,
+            chunk: row && row.chunk,
+          }});
+        }});
+      }});
+      return out;
+    }}
+    const measuredTestIndex = buildMeasuredTestIndex();
+    function jumpToMeasuredTest(hit) {{
+      if (!hit || !hit.key) return;
+      if (hit.suite) openMeasuredPath(hit.suite, true);
+      selectMeasured({{kind: 'chunk', key: hit.key, path: hit.suite, suite: hit.suite}});
+      highlightMeasuredTest(hit.name);
+    }}
+    function renderMeasuredTestHits(query) {{
+      const box = document.getElementById('measuredTestHits');
+      if (!box) return;
+      const q = String(query || '').trim().toLowerCase();
+      if (!q) {{
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+      }}
+      const hits = measuredTestIndex.filter(hit =>
+        String(hit.name || '').toLowerCase().includes(q) ||
+        String(hit.label || '').toLowerCase().includes(q)
+      ).slice(0, 40);
+      box.style.display = hits.length ? '' : 'none';
+      box.innerHTML = hits.map((hit, i) =>
+        '<li data-idx="' + i + '"><div class="hit-name">' + escapeHtml(hit.name) + '</div>' +
+        '<div class="hit-chunk">' + escapeHtml(hit.label || '') + '</div></li>'
+      ).join('') || '<li>No matches</li>';
+      box._hits = hits;
+    }}
+    const measuredSearchEl = document.getElementById('measuredTestSearch');
+    const measuredHitsEl = document.getElementById('measuredTestHits');
+    if (measuredSearchEl) {{
+      measuredSearchEl.addEventListener('input', () => renderMeasuredTestHits(measuredSearchEl.value));
+    }}
+    if (measuredHitsEl) {{
+      measuredHitsEl.addEventListener('click', (ev) => {{
+        const li = ev.target.closest('li');
+        if (!li || li.dataset.idx == null) return;
+        const hit = (measuredHitsEl._hits || [])[Number(li.dataset.idx)];
+        jumpToMeasuredTest(hit);
+      }});
+    }}
+    ['measuredTopMetric', 'measuredTopN', 'measuredTopInSelection'].forEach(id => {{
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', renderMeasuredTop);
+    }});
+    const measuredTopListEl = document.getElementById('measuredTopList');
+    if (measuredTopListEl) {{
+      measuredTopListEl.addEventListener('click', (ev) => {{
+        const li = ev.target.closest('li[data-key]');
+        if (!li || !li.dataset.key) return;
+        const suite = li.dataset.suite || '';
+        if (suite) openMeasuredPath(suite, true);
+        selectMeasured({{kind: 'chunk', key: li.dataset.key, path: suite, suite: suite}});
+      }});
+    }}
+    const measuredMetaEl = document.getElementById('measuredMeta');
+    if (measuredMetaEl) {{
+      measuredMetaEl.addEventListener('click', (ev) => {{
+        const btn = ev.target.closest('button[data-contend-key]');
+        if (!btn || !btn.dataset.contendKey) return;
+        const suite = btn.dataset.contendSuite || '';
+        if (suite) openMeasuredPath(suite, true);
+        selectMeasured({{kind: 'chunk', key: btn.dataset.contendKey, path: suite, suite: suite}});
+      }});
+    }}
+    if (measuredWrap && measuredList.length) {{
+      measuredWrap.style.display = '';
+      renderMeasuredTop();
+      setBootText('Loading measured cgroup series…', 'Fetching totals / overview and drawing measured charts');
+      const suites = [...new Set(measuredList.map(row => row.suite).filter(Boolean))];
+      if (suites.length === 1) {{
+        openMeasuredPath(suites[0], false);
+        selectMeasured({{kind: 'prefix', path: suites[0], suite: suites[0]}});
+      }} else {{
+        selectMeasured({{kind: 'all'}});
+      }}
+    }} else {{
+      hideBoot();
+    }}
+    const _toggleSuiteMarkersOrig = toggleSuiteMarkers;
+    toggleSuiteMarkers = function(suitePath, enabled) {{
+      _toggleSuiteMarkersOrig(suitePath, enabled);
+      if (!enabled || !measuredList.length) return;
+      if (measuredList.some(row => row.suite === suitePath || String(row.suite || '').startsWith(suitePath + '/'))) {{
+        openMeasuredPath(suitePath, false);
+        selectMeasured({{kind: 'prefix', path: suitePath, suite: suitePath}});
+      }}
+    }};
 
     const suiteSearchEl = document.getElementById('suiteSearch');
     if (suiteSearchEl) {{

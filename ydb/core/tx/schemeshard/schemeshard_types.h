@@ -55,6 +55,11 @@ struct TSchemeLimits {
     ui64 MaxPQPartitions = 1000000;
 
     // export & import
+    // Successful history does not consume the ordinary quota up to these limits.
+    // Further successful operations count towards MaxExports/MaxImports as well,
+    // bounding the total without preventing in-flight operations from completing.
+    static constexpr ui64 MaxSuccessfulExports = 100;
+    static constexpr ui64 MaxSuccessfulImports = 100;
     ui64 MaxExports = 10;
     ui64 MaxImports = 10;
 

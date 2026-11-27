@@ -9,6 +9,7 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -1022,13 +1023,20 @@ const TPath::TChecker& TPath::TChecker::ExportsLimit(ui64 delta, EStatus status)
     }
 
     TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
-    if (Path.SS->Exports.size() + delta <= domainInfo->GetSchemeLimits().MaxExports) {
+    const ui64 successful = CountIf(Path.SS->Exports, [](const auto& entry) {
+        return entry.second->State == TExportInfo::EState::Done;
+    });
+    const ui64 counted = Path.SS->Exports.size() - Min(successful, TSchemeLimits::MaxSuccessfulExports);
+    const ui64 limit = domainInfo->GetSchemeLimits().MaxExports;
+    if (delta <= limit && counted <= limit - delta) {
         return *this;
     }
 
     return Fail(status, TStringBuilder() << "exports count limit exceeded"
         << ", limit: " << domainInfo->GetSchemeLimits().MaxExports
         << ", exports: " << Path.SS->Exports.size()
+        << ", successful: " << successful
+        << ", successful allowance: " << TSchemeLimits::MaxSuccessfulExports
         << ", delta: " << delta);
 }
 
@@ -1038,13 +1046,20 @@ const TPath::TChecker& TPath::TChecker::ImportsLimit(ui64 delta, EStatus status)
     }
 
     TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
-    if (Path.SS->Imports.size() + delta <= domainInfo->GetSchemeLimits().MaxImports) {
+    const ui64 successful = CountIf(Path.SS->Imports, [](const auto& entry) {
+        return entry.second->State == TImportInfo::EState::Done;
+    });
+    const ui64 counted = Path.SS->Imports.size() - Min(successful, TSchemeLimits::MaxSuccessfulImports);
+    const ui64 limit = domainInfo->GetSchemeLimits().MaxImports;
+    if (delta <= limit && counted <= limit - delta) {
         return *this;
     }
 
     return Fail(status, TStringBuilder() << "imports count limit exceeded"
         << ", limit: " << domainInfo->GetSchemeLimits().MaxImports
-        << ", exports: " << Path.SS->Imports.size()
+        << ", imports: " << Path.SS->Imports.size()
+        << ", successful: " << successful
+        << ", successful allowance: " << TSchemeLimits::MaxSuccessfulImports
         << ", delta: " << delta);
 }
 

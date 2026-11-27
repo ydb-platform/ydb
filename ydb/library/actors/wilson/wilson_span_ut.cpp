@@ -45,12 +45,14 @@ Y_UNIT_TEST_SUITE(TSpan) {
         }
         UNIT_ASSERT_VALUES_EQUAL(handler.trace_id(), submit.trace_id());
         UNIT_ASSERT_VALUES_EQUAL(handler.parent_span_id(), submit.span_id());
-        bool wall = false, cpu = false;
+        bool wall = false, cpu = false, recipient = false, context = false;
         for (const auto& attribute : handler.attributes()) {
             wall |= attribute.key() == "ydb.handler.wall_us";
             cpu |= attribute.key() == "ydb.handler.thread_cpu_us";
+            recipient |= attribute.key() == "ydb.actor.recipient_x1";
+            context |= attribute.key() == "ydb.actor.incoming_context";
         }
-        UNIT_ASSERT(wall && cpu);
+        UNIT_ASSERT(wall && cpu && recipient && context);
         UNIT_ASSERT_VALUES_EQUAL(submit.events(0).name(), "mailbox push entered");
         UNIT_ASSERT_VALUES_EQUAL(submit.events(1).name(), "mailbox push returned");
     }

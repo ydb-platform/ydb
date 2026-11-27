@@ -1253,6 +1253,11 @@ namespace NActors {
                     handoff.Attribute("ydb.ic.receive_connection_epoch", static_cast<i64>(TraceConnectionEpoch));
                     handoff.Attribute("ydb.ic.peer_node_id", static_cast<i64>(NodeId));
                     handoff.Attribute("ydb.ic.event_type", static_cast<i64>(descr.Type));
+                    handoff.Attribute("ydb.ic.message_token", ev->TraceId.ToTraceresponseHeader());
+                    handoff.Attribute("ydb.ic.source_x1", static_cast<i64>(ev->Sender.RawX1()));
+                    handoff.Attribute("ydb.ic.source_x2", static_cast<i64>(ev->Sender.RawX2()));
+                    handoff.Attribute("ydb.ic.recipient_x1", static_cast<i64>(ev->GetRecipientRewrite().RawX1()));
+                    handoff.Attribute("ydb.ic.recipient_x2", static_cast<i64>(ev->GetRecipientRewrite().RawX2()));
                     handoff.Event("event reconstructed", {{"monotonic_us", static_cast<i64>(TMonotonic::Now().MicroSeconds())}});
                     ev->TraceId = handoff.GetTraceId();
                 }

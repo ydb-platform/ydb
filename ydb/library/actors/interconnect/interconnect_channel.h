@@ -105,6 +105,8 @@ namespace NActors {
                 wilsonSpan->Attribute("ydb.ic.peer_node_id", static_cast<i64>(PeerNodeId));
                 wilsonSpan->Attribute("ydb.ic.channel_id", static_cast<i64>(ChannelId));
                 wilsonSpan->Attribute("ydb.ic.event_type", static_cast<i64>(event.Descr.Type));
+                // This exact context is serialized with the physical message.
+                wilsonSpan->Attribute("ydb.ic.message_token", wilsonSpan->GetTraceId().ToTraceresponseHeader());
                 wilsonSpan->Attribute("ydb.ic.enqueue_monotonic_us", static_cast<i64>(TMonotonic::Now().MicroSeconds()));
                 wilsonSpan->Attribute("ydb.ic.end_boundary", TString("descriptor_buffered"));
                 wilsonSpan->Attribute("OutputQueueItems", static_cast<i64>(Queue.size()));

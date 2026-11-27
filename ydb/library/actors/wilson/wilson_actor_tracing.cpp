@@ -18,6 +18,11 @@ public:
         Span.Attribute("ydb.process.epoch", static_cast<i64>(GetProcessTraceEpoch()));
         Span.Attribute("ydb.actor.pool_id", static_cast<i64>(pool));
         Span.Attribute("ydb.actor.event_type", static_cast<i64>(event.GetTypeRewrite()));
+        Span.Attribute("ydb.actor.source_x1", static_cast<i64>(event.Sender.RawX1()));
+        Span.Attribute("ydb.actor.source_x2", static_cast<i64>(event.Sender.RawX2()));
+        Span.Attribute("ydb.actor.recipient_x1", static_cast<i64>(event.GetRecipientRewrite().RawX1()));
+        Span.Attribute("ydb.actor.recipient_x2", static_cast<i64>(event.GetRecipientRewrite().RawX2()));
+        Span.Attribute("ydb.actor.incoming_context", event.TraceId.ToTraceresponseHeader());
         if (Handler) {
             Span.Attribute("ydb.actor.activity_type", static_cast<i64>(activity));
         }

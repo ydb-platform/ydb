@@ -124,7 +124,6 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2, bo
     ])", FormatResultSetYson(exec.GetResultSet(0)));
 }
 
-// Compiles the explain AST and returns the program of the physical stage that contains the callable.
 NYql::TExprNode::TPtr FindStageProgram(const TString& ast, NYql::TExprContext& ctx, TStringBuf callable) {
     auto parsed = NYql::ParseAst(ast);
     UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
@@ -150,8 +149,6 @@ bool HasMember(const NYql::TExprNode::TPtr& program, TStringBuf name) {
     }));
 }
 
-// Runs the query with and without the narrowing and checks that the results are equal.
-// checkAst gets the explain AST of both runs.
 void CheckNarrowWindowAggregateResults(const TString& query,
     const std::function<void(const TString& ast, bool narrow)>& checkAst = {})
 {
@@ -318,13 +315,11 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
                 SELECT Key, Text, Data, unused_fat_col, SUM(Data) OVER w AS total
                 FROM $input WINDOW w AS (PARTITION BY Text
             )" << order << ");", [&](const TString& ast, bool narrow) {
-                // The join side keeps the wide row.
                 UNIT_ASSERT_C(ast.Contains("unused_fat_col"), ast);
                 NYql::TExprContext ctx;
                 const auto aggregate = FindStageProgram(ast, ctx, "AggrAdd");
                 UNIT_ASSERT_C(HasMember(aggregate, "Data"), ast);
                 if (ordered) {
-                    // The sort key stays in the aggregate input.
                     UNIT_ASSERT_C(HasMember(aggregate, "Key"), ast);
                 }
                 UNIT_ASSERT_VALUES_EQUAL_C(HasMember(aggregate, "unused_fat_col"), !narrow, ast);
@@ -344,7 +339,6 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
         )");
     }
 
-    // No partition key and no aggregate argument: the aggregate input keeps a single column.
     Y_UNIT_TEST(NarrowWindowAggregateInputCountOverWholeTable) {
         CheckNarrowWindowAggregateResults(R"(
             $input = SELECT Key, Text, Data,

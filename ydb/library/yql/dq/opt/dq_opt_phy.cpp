@@ -442,8 +442,6 @@ TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const 
 
 namespace {
 
-// Collects the fields of the lambda argument #argIndex that the lambda body reads.
-// Returns false if the argument is used in any other way than Member (e.g. passed as a whole row).
 bool CollectUsedFields(const TCoLambda& lambda, size_t argIndex, TSet<TStringBuf>& usedFields) {
     if (lambda.Args().Size() <= argIndex) {
         return false;
@@ -454,12 +452,9 @@ bool CollectUsedFields(const TCoLambda& lambda, size_t argIndex, TSet<TStringBuf
     }
     TParentsMap parents;
     GatherParents(lambda.Ref(), parents);
-    // HaveFieldsSubset also returns false once usedFields covers the whole row: nothing to drop then.
     return HaveFieldsSubset(lambda.Body().Ptr(), arg, usedFields, parents);
 }
 
-// Condense1 switch handler. IsKeySwitch(row, state, rowKey, stateKey) is expanded only by the peephole
-// optimizer, so here it still takes the whole row, but reads it only through rowKey.
 bool CollectSwitchUsedFields(const TCoLambda& lambda, TSet<TStringBuf>& usedFields) {
     const auto& body = lambda.Body().Ref();
     const auto& row = lambda.Args().Arg(0).Ref();
@@ -471,8 +466,6 @@ bool CollectSwitchUsedFields(const TCoLambda& lambda, TSet<TStringBuf>& usedFiel
     return CollectUsedFields(lambda, 0, usedFields);
 }
 
-// PartitionsByKeys whose handler only folds the partition with Condense1 and reads rows by Member:
-// wraps the input into ExtractMembers of the read fields. Returns the node unchanged otherwise.
 TExprBase DqNarrowPartitionsByKeysInput(TExprBase node, TExprContext& ctx) {
     const auto maybePartition = node.Maybe<TCoPartitionsByKeys>();
     if (!maybePartition) {
@@ -488,9 +481,6 @@ TExprBase DqNarrowPartitionsByKeysInput(TExprBase node, TExprContext& ctx) {
         return node;
     }
 
-    // The partition stream must have exactly one consumer: the input of a Condense1.
-    // Then rows are reachable only through the Condense1 lambdas. Chopper, a pass-through stream,
-    // a second consumer etc. may forward whole rows, so they are left untouched.
     const auto handler = partition.ListHandlerLambda();
     if (handler.Args().Size() != 1) {
         return node;
@@ -514,7 +504,6 @@ TExprBase DqNarrowPartitionsByKeysInput(TExprBase node, TExprContext& ctx) {
     }
     const TCoCondense1 condense1(condense);
 
-    // Every row consumer must read rows only by Member; this rejects e.g. AGGREGATE_LIST(TableRow()) (#59253).
     TSet<TStringBuf> usedFields;
     if (!CollectUsedFields(partition.KeySelectorLambda(), 0, usedFields) ||
         !CollectUsedFields(condense1.InitHandler(), 0, usedFields) ||
@@ -530,7 +519,6 @@ TExprBase DqNarrowPartitionsByKeysInput(TExprBase node, TExprContext& ctx) {
     }
 
     if (usedFields.empty()) {
-        // E.g. COUNT(*) without keys. Keep one (preferably fixed-size) column instead of a Struct<> stream.
         const TItemExprType* keep = rowType.GetItems().front();
         for (const auto* item : rowType.GetItems()) {
             if (IsFixedSizeData(item->GetItemType())) {
@@ -654,8 +642,6 @@ TExprBase DqBuildPartitionsStageStub(
         }
 
         if constexpr (std::is_base_of<TCoPartitionsByKeys, TPartition>::value) {
-            // DqPushExtractMembersToStage moves the projection into the producer stage,
-            // then this rule runs again on the narrow input.
             if (narrowInput) {
                 if (auto narrowed = DqNarrowPartitionsByKeysInput(node, ctx); narrowed.Raw() != node.Raw()) {
                     return narrowed;

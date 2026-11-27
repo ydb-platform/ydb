@@ -128,7 +128,6 @@ public:
     NCommon::TConfSetting<bool, Static> _EnablePrecompute;
     NCommon::TConfSetting<bool, Static> UseFinalizeByKey;
     NCommon::TConfSetting<bool, Static> EnableDqReplicate;
-    // Drop input columns a PartitionsByKeys over Condense1 (e.g. a full-frame window aggregate) does not read. PRAGMA dq.EnableNarrowWindowAggregateInput.
     NCommon::TConfSetting<bool, Static> EnableNarrowWindowAggregateInput;
     NCommon::TConfSetting<TString, Static> WatermarksMode;
     NCommon::TConfSetting<bool, Static> WatermarksEnableIdlePartitions;

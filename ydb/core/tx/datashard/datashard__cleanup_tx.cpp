@@ -12,6 +12,7 @@ public:
     { }
 
     TTxType GetTxType() const override { return TXTYPE_CLEANUP; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (!Self->IsStateActive()) {
@@ -106,6 +107,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_CLEANUP_VOLATILE; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (!Self->IsStateActive()) {

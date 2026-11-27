@@ -672,7 +672,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDat
         LocksCache().Locks[lock.LockId] = lock;
 
     bool extractKeys = WriteTx->IsTxInfoLoaded();
-
+    KeyedWithoutValidation = HasUserTableKeys();
     WriteTx = std::make_shared<TValidatedWriteTx>(self, GetGlobalTxId(), GetReceivedAt(), *WriteRequest, WriteRequestTraceId, IsMvccSnapshotRead());
     if (WriteTx->Ready() && extractKeys) {
         WriteTx->ExtractKeys(db.GetScheme(), true);

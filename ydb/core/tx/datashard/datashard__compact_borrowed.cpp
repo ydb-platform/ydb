@@ -13,6 +13,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_COMPACT_BORROWED; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Ev->Get()->Record;

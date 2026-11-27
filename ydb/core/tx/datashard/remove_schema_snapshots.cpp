@@ -9,6 +9,7 @@ public:
     { }
 
     TTxType GetTxType() const override { return TXTYPE_REMOVE_SCHEMA_SNAPSHOTS; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         while (!Self->PendingSchemaSnapshotsToGc.empty()) {

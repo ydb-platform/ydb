@@ -71,6 +71,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_UPDATE_FOLLOWER_READ_EDGE; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Y_ENSURE(Self->UpdateFollowerReadEdgePending);

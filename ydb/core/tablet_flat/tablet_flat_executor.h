@@ -313,7 +313,8 @@ public:
     }
     virtual void ReleaseTxData(TTxMemoryProvider &/*provider*/, const TActorContext &/*ctx*/) {}
     virtual TTxType GetTxType() const { return UnknownTxType; }
-    virtual bool IsKeyedOperation() const { return false; }
+    // Include unclassified transaction CPU in split-by-load decisions.
+    virtual bool IsKeyedOperation() const { return true; }
 
     virtual void Describe(IOutputStream &out) const
     {

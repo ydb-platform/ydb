@@ -2198,10 +2198,11 @@ class TDataShard::TReadOperation : public TOperation, public IReadOperation {
     static constexpr ui32 Flags = NTxDataShard::TTxFlags::ReadOnly | NTxDataShard::TTxFlags::Immediate;
 
 public:
-    TReadOperation(TDataShard* ds, TInstant receivedAt, ui64 localReadId)
-        : TOperation(TBasicOpInfo(EOperationKind::ReadTx, Flags, 0, receivedAt, localReadId))
+    TReadOperation(TDataShard* ds, TInstant receivedAt, const TReadIteratorState& state)
+        : TOperation(TBasicOpInfo(EOperationKind::ReadTx, Flags, 0, receivedAt, state.LocalReadId),
+                     state.PathId.OwnerId != ds->TabletID())
         , Self(ds)
-        , LocalReadId(localReadId)
+        , LocalReadId(state.LocalReadId)
     {}
 
     void BuildExecutionPlan(bool loaded) override
@@ -3818,7 +3819,7 @@ public:
                 state.SnapshotAcquired = Self->GetSnapshotManager().IsSnapshotRetentionEnabled();
             }
 
-            Op = new TReadOperation(Self, ctx.Now(), LocalReadId);
+            Op = new TReadOperation(Self, ctx.Now(), state);
 
             Op->BuildExecutionPlan(false);
             Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op);
@@ -3838,7 +3839,7 @@ public:
         Y_ENSURE(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
-        KeyedOperation = KeyedOperation || Op->HasUserTableKeys();
+        KeyedOperation = Op->HasUserTableKeys();
 
         YDB_LOG_TRACE_CTX(ctx, "TTxReadViaPipeline Execute",
             {"txType", GetTxType()},

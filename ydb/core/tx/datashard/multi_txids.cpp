@@ -348,6 +348,8 @@ public:
         : Self(self)
     {}
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
         Self.GetMultiTxIdManager().RunCleanup(db);

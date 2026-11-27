@@ -16,6 +16,7 @@ class TTxDirectBase : public TTransactionBase<TDataShard> {
     TOperation::TPtr Op;
     TVector<EExecutionUnitKind> CompleteList;
     bool WaitComplete = false;
+    bool KeyedOperation = false;
 
 public:
     TTxDirectBase(TDataShard* ds, TEvRequest ev)
@@ -24,9 +25,7 @@ public:
     {
     }
 
-    bool IsKeyedOperation() const override {
-        return true;
-    }
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxDirectBase Execute",
@@ -40,6 +39,7 @@ public:
         if (Ev) {
             const ui64 tieBreaker = Self->NextTieBreakerIndex++;
             Op = new TDirectTransaction(ctx.Now(), tieBreaker, Ev);
+            KeyedOperation = Op->HasUserTableKeys();
             Op->BuildExecutionPlan(false);
             Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op);
 

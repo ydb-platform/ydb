@@ -29,6 +29,7 @@ public:
     }
 
     TTxType GetTxType() const override { return TXTYPE_CDC_STREAM_EMIT_HEARTBEATS; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Self->State != TShardState::Ready || Self->DatabaseFreeze.GetStage() >= NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC) {

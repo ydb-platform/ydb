@@ -1438,6 +1438,7 @@ struct TLoadAndSplitSimulator {
     void SetCpuWithKeys(ui32 followerId, ui32 cpuWithKeysPercent) {
         const ui64 cpuWithKeys = CpuLoadMicroseconds(cpuWithKeysPercent);
         const ui64 totalCpu = MetricsPatchByFollowerIdPeriodic.at(followerId).GetCPU();
+        Y_ENSURE(totalCpu >= cpuWithKeys);
         TableStatsPatchByFollowerIdPeriodic[followerId].SetCPUWithKeys(cpuWithKeys);
         TableStatsPatchByFollowerIdPeriodic[followerId].SetCPUWithoutKeys(totalCpu - cpuWithKeys);
         TableStatsPatchByFollowerIdStats[followerId].SetCPUWithKeys(cpuWithKeys);

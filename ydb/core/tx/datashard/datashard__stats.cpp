@@ -247,6 +247,8 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_GET_TABLE_STATS; }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
@@ -617,6 +619,8 @@ public:
             table.LastTableChangeTimestamp = ctx.Monotonic();
         }
     }
+
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Self->State != TShardState::Ready)

@@ -70,6 +70,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_DATABASE_FREEZE; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& request = Request->Get()->Record;

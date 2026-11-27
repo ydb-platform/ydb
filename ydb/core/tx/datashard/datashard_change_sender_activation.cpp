@@ -20,6 +20,7 @@ public:
     TTxType GetTxType() const override {
         return TXTYPE_ACTIVATE_CHANGE_SENDER;
     }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxActivateChangeSender Execute",
@@ -81,6 +82,7 @@ public:
     TTxType GetTxType() const override {
         return TXTYPE_ACTIVATE_CHANGE_SENDER_ACK;
     }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxActivateChangeSenderAck Execute",

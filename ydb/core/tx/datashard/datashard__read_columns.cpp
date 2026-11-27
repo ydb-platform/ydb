@@ -19,6 +19,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_RELEASE_SNAPSHOT_REFERENCE; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Self->GetSnapshotManager().ReleaseReference(SnapshotKey, txc.DB, ctx.Now());
@@ -205,6 +206,7 @@ public:
     }
 
     TTxType GetTxType() const override { return TXTYPE_READ_COLUMNS; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         // FIXME: we need to transform HEAD into some non-repeatable snapshot here

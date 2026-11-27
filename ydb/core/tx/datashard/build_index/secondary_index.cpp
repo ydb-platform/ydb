@@ -781,7 +781,9 @@ public:
         , Ev(std::move(ev)) {
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) {
+    bool IsKeyedOperation() const override { return false; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto& request = Ev->Get()->Record;
         const ui64 buildId = request.GetId();
         const ui64 seqNoGeneration = request.GetSeqNoGeneration();
@@ -809,7 +811,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) {
+    void Complete(const TActorContext&) override {
         // nothing
     }
 
@@ -824,7 +826,9 @@ public:
         , Ev(std::move(ev)) {
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) {
+    bool IsKeyedOperation() const override { return false; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         auto& record = Ev->Get()->Record;
         BuildId = record.GetId();
         const ui64 seqNoGeneration = record.GetRequestSeqNoGeneration();
@@ -845,7 +849,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) {
+    void Complete(const TActorContext& ctx) override {
         if (!ShouldSkip) {
             auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
             copy->Record = Ev->Get()->Record;

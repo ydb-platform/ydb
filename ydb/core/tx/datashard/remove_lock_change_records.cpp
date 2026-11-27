@@ -11,6 +11,7 @@ public:
     { }
 
     TTxType GetTxType() const override { return TXTYPE_REMOVE_LOCK_CHANGE_RECORDS; }
+    bool IsKeyedOperation() const override { return false; }
 
     static constexpr size_t MaxRecordsToRemove = 1000;
 

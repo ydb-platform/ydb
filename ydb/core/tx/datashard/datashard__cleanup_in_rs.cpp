@@ -76,6 +76,7 @@ public:
     {
         return TXTYPE_REMOVE_OLD_IN_READ_SETS;
     }
+    bool IsKeyedOperation() const override { return false; }
 
 private:
 };
@@ -154,6 +155,7 @@ public:
     {
         return TXTYPE_CHECK_IN_READ_SETS;
     }
+    bool IsKeyedOperation() const override { return false; }
 
 private:
 };

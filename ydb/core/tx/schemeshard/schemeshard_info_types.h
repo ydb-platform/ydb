@@ -556,9 +556,8 @@ struct TPartitionStats {
     }
 
     /**
-     * CPU usage to compare with the split-by-load threshold: only the load
-     * of operations with keys goes down after the split. Falls back to the total
-     * CPU usage for datashards which don't report it separately.
+     * DataShard includes keyed and unclassified operations in the CPU usage
+     * for split-by-load. Older DataShards report only total CPU usage.
      */
     ui64 GetSplitCpuUsage() const {
         return CPUWithKeys.value_or(CPU);

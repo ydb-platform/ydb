@@ -16,6 +16,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SCHEMA_CHANGED; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TxId = Ev->Get()->Record.GetTxId();

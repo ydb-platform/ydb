@@ -120,6 +120,8 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_PLAN_PREDICTED_TXS; }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Self->ScheduledPlanPredictedTxs = false;
 

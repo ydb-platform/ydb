@@ -1,3 +1,4 @@
+#include "datashard_active_transaction.h"
 #include "datashard_ut_common_kqp.h"
 #include <ydb/core/tablet_flat/shared_cache_counters.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
@@ -1910,11 +1911,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
     }
 
     /**
-     * Verify that CPU spent on operations which actually touch table rows by key
-     * (an UPSERT write, a SELECT read) is attributed to CPUWithKeys, while CPU spent
-     * on non-keyed background bookkeeping (i.e. idling, with no user requests at all)
-     * is attributed to CPUWithoutKeys and CPUWithKeys decays back down once the
-     * keyed load stops.
+     * Verify that UPSERT and SELECT contribute to CPUWithKeys and that the
+     * measured load decays toward the idle baseline once user requests stop.
      */
     Y_UNIT_TEST(CpuUsageAttributedToKeyedOperations) {
         TPortManager pm;
@@ -1965,22 +1963,36 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         UNIT_ASSERT_GT(afterRead.GetCPUWithKeys(), afterRead.GetCPUWithoutKeys());
 
-        // Once the keyed load stops, only the small keyless bookkeeping tick
-        // (see TDataShard::CollectCpuUsage) keeps CPUWithoutKeys alive, and
-        // CPUWithKeys should decay back down.
         runtime.SimulateSleep(TDuration::Seconds(60));
         auto idleAfter = sampleStats("idle after the load stopped");
 
         UNIT_ASSERT_LT(idleAfter.GetCPUWithKeys(), afterRead.GetCPUWithKeys());
     }
 
+    Y_UNIT_TEST(DistributedEraseKeepsCpuClassificationAfterUnloadingKeys) {
+        for (bool hasKeys : {false, true}) {
+            TActiveTransaction tx(TBasicOpInfo(EOperationKind::DistributedErase, 0, 0, TInstant::Zero(), 1));
+            UNIT_ASSERT(tx.HasUserTableKeys()); // the payload is not loaded yet
+
+            NKikimrTxDataShard::TDistributedEraseTransaction body;
+            auto* rows = body.MutableEraseRowsRequest();
+            rows->SetTableId(1);
+            rows->AddKeyColumnIds(1);
+            if (hasKeys) {
+                rows->AddKeyColumns(TSerializedCellVec::Serialize({TCell::Make(ui32(1))}));
+            }
+            tx.SetTxBody(body.SerializeAsString());
+            UNIT_ASSERT(tx.BuildDistributedEraseTx());
+            UNIT_ASSERT_VALUES_EQUAL(tx.HasUserTableKeys(), hasKeys);
+
+            tx.ClearTxBody();
+            tx.ClearDistributedEraseTx();
+            UNIT_ASSERT_VALUES_EQUAL(tx.HasUserTableKeys(), hasKeys);
+        }
+    }
+
     /**
-     * Verify that TTxUploadRows (BulkUpsert -- the raw upload-rows protocol
-     * used by bulk import and by the BulkUpsert API, as opposed to a regular
-     * KQP-driven UPSERT) is counted as a keyed operation. Unlike the regular
-     * write path, TTxDirectBase::IsKeyedOperation() (its base class) returns
-     * a hardcoded true rather than deriving it from HasKeysInfo()/KeysCount(),
-     * since a bulk upload always operates on explicit row keys by construction.
+     * Verify that direct BulkUpsert requests with row keys contribute to CPUWithKeys.
      */
     Y_UNIT_TEST(BulkUpsertIsKeyedOperation) {
         TPortManager pm;

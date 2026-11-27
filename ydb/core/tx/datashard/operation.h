@@ -767,14 +767,14 @@ public:
         return GetKeysInfo().ReadsCount + GetKeysInfo().WritesCount;
     }
     /**
-     * Returns true if operation accesses keys of user tables, i.e. its CPU
-     * usage depends on the key range of the shard. Keys of system tables
-     * (e.g. locks of a commit or rollback without user operations) don't count.
+     * Classifies CPU usage for split-by-load. Loaded validation info identifies
+     * user-table keys and excludes operations on system tables alone.
+     * Until the keys are known, operations count towards split-by-load by default.
      */
     bool HasUserTableKeys() const
     {
         if (!HasKeysInfo()) {
-            return false;
+            return KeyedWithoutValidation;
         }
         for (const auto& key : GetKeysInfo().Keys) {
             if (!TSysTables::IsSystemTable(key.Key->TableId)) {
@@ -943,8 +943,9 @@ protected:
     {
     }
 
-    TOperation(const TBasicOpInfo &op)
+    TOperation(const TBasicOpInfo &op, bool keyedWithoutValidation = true)
         : TBasicOpInfo(op)
+        , KeyedWithoutValidation(keyedWithoutValidation)
         , Cookie(0)
         , CurrentUnit(0)
     {
@@ -969,6 +970,8 @@ protected:
     void ClearInputData() { InputData = nullptr; }
 
     TActorId Target;
+    // Used before validation and retained when validated keys are unloaded.
+    bool KeyedWithoutValidation;
 
 private:
     THPTimer TotalTimer;

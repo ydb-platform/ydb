@@ -28,6 +28,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
@@ -609,6 +610,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_TRANSFER_SNAPSHOT_ACK; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         NIceDb::TNiceDb db(txc.DB);
@@ -666,6 +668,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_PARTITIONING_CHANGED; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Y_ENSURE(!Self->ChangesQueue && Self->ChangeSenderActivator.AllAcked());

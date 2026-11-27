@@ -8087,7 +8087,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr &ev,
 }
 
 void TSchemeShard::ScheduleConditionalEraseRun(const TActorContext& ctx) {
-    ctx.Schedule(TDuration::Minutes(1), new TEvPrivate::TEvRunConditionalErase());
+    ctx.Schedule(CondEraseRunInterval, new TEvPrivate::TEvRunConditionalErase());
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvRunConditionalErase::TPtr& ev, const TActorContext& ctx) {
@@ -9436,6 +9436,7 @@ void TSchemeShard::ConfigureExternalSources(
 
 void TSchemeShard::ConfigureCondErase(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext &ctx) {
     MaxTTLShardsInFlight = config.GetMaxTTLShardsInFlight();
+    CondEraseRunInterval = TDuration::Seconds(std::max(ui32(1), config.GetCondEraseRunIntervalSeconds()));
     CondEraseResponseBatchSize = config.GetCondEraseResponseBatchSize();
     CondEraseResponseBatchMaxTime = TDuration::MilliSeconds(
         std::max(ui32(1), std::min(ui32(1000), config.GetCondEraseResponseBatchMaxTimeMs()))
@@ -9443,6 +9444,7 @@ void TSchemeShard::ConfigureCondErase(const NKikimrConfig::TSchemeShardConfig& c
 
     YDB_LOG_NOTICE_CTX(ctx, "Conditional erase configured",
         {"shardsInFlight", MaxTTLShardsInFlight},
+        {"runInterval", CondEraseRunInterval},
         {"batchSize", CondEraseResponseBatchSize},
         {"batchMaxTime", CondEraseResponseBatchMaxTime},
     );

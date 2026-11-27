@@ -31,6 +31,7 @@ class TestBase(Query):
                                                    extra_feature_flags=cls.get_extra_feature_flags(),
                                                    disabled_feature_flags=cls.get_disabled_feature_flags(),
                                                    datashard_config=cls.get_datashard_config(),
+                                                   scheme_shard_config=cls.get_scheme_shard_config(),
                                                    column_shard_config={
                                                        'disabled_on_scheme_shard': False,
                                                        'lag_for_compaction_before_tierings_ms': 0,
@@ -70,6 +71,10 @@ class TestBase(Query):
 
     @classmethod
     def get_datashard_config(cls):
+        return {}
+
+    @classmethod
+    def get_scheme_shard_config(cls):
         return {}
 
     @classmethod

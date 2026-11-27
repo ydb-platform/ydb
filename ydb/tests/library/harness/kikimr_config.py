@@ -215,6 +215,7 @@ class KikimrConfigGenerator(object):
             lb_user_database_root=None,
             shutdown_config=None,
             replication_config=None,
+            scheme_shard_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -494,6 +495,9 @@ class KikimrConfigGenerator(object):
 
         if datashard_config:
             self.yaml_config["data_shard_config"] = datashard_config
+
+        if scheme_shard_config:
+            self.yaml_config["scheme_shard_config"] = scheme_shard_config
 
         if column_shard_config:
             self.yaml_config["column_shard_config"] = column_shard_config

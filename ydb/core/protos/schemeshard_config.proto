@@ -47,4 +47,7 @@ message TSchemeShardConfig {
 
     // maximum recent index build operations to maintain (older ones are removed)
     optional uint32 MaxStoredIndexBuilds = 11 [default = 1000];
+
+    // Periodic TTL scheduler wakeup; zero is clamped to one second.
+    optional uint32 CondEraseRunIntervalSeconds = 12 [default = 60];
 }

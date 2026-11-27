@@ -95,7 +95,7 @@ bool TInFlightReadsInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     return true;
 }
 
-bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
+bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
     NIceDb::TNiceDb db(txc.DB);
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId)) {
         return false;
@@ -189,6 +189,10 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         }
     }
 
+    // a finished stage does not run again
+    if (Self->ProcessingParams) {
+        Self->MediatorTime.RegisterAndStartCatchUp(*Self->ProcessingParams, ctx);
+    }
     return true;
 }
 

@@ -65,7 +65,9 @@ void TColumnShard::OnAllPortionsLoaded(const TActorContext& ctx) {
         portionsCount += granule->GetPortions().size();
     }
     StartupTimeline.OnAllPortionsLoaded(portionsCount, DeferredPortionLoader.GetBatchesLoaded());
-    EnqueueBackgroundActivities();
+    if (MediatorTime.Ready()) {
+        EnqueueBackgroundActivities();
+    }
 }
 
 }   // namespace NKikimr::NColumnShard

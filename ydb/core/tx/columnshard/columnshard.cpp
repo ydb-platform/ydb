@@ -95,13 +95,11 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         YDB_LOG_INFO("",
             {"event", "initialize_shard"},
             {"step", "SignalTabletActive"});
-        TryRegisterMediatorTimeCast();
         EnqueueProgressTx(ctx);
         OnTieringModified();
     }
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
-    EnqueueBackgroundActivities();
-    BackgroundSessionsManager->Start();
+    TryMakeMediatorTimeReady(ctx);
     ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
@@ -359,7 +357,6 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         YDB_LOG_DEBUG("",
             {"event", "TEvPrivate::TEvPeriodicWakeup"},
             {"tabletId", TabletID()});
-        SendWaitPlanStep(GetOutdatedStep());
         EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
@@ -376,38 +373,6 @@ void TColumnShard::Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorCon
     } else if (ev->Get()->Tag == 1) {
         DrainWriteQueue(ctx, true);
     }
-}
-
-void TColumnShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext&) {
-    const auto* msg = ev->Get();
-    Y_ABORT_UNLESS(msg->TabletId == TabletID());
-    MediatorTimeCastEntry = msg->Entry;
-    Y_ABORT_UNLESS(MediatorTimeCastEntry);
-    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Registered with mediator time cast at tablet",
-        {"tabletId", TabletID()});
-
-    RescheduleWaitingReads();
-}
-
-void TColumnShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext&) {
-    const auto* msg = ev->Get();
-    Y_ABORT_UNLESS(msg->TabletId == TabletID());
-
-    Y_ABORT_UNLESS(MediatorTimeCastEntry);
-    ui64 step = MediatorTimeCastEntry->Get(TabletID());
-    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Notified by mediator time cast at tablet",
-        {"planStep", step},
-        {"tabletId", TabletID()});
-
-    for (auto it = MediatorTimeCastWaitingSteps.begin(); it != MediatorTimeCastWaitingSteps.end();) {
-        if (step < *it) {
-            break;
-        }
-        it = MediatorTimeCastWaitingSteps.erase(it);
-    }
-
-    RescheduleWaitingReads();
-    EnqueueBackgroundActivities(true);
 }
 
 void TColumnShard::UpdateIndexCounters() {

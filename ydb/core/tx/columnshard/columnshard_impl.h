@@ -25,6 +25,7 @@
 #include "loading/deferred_portion_loader.h"
 #include "local_db_backup/events.h"
 #include "maintenance/cut_history/find_empty_history_intervals.h"
+#include "mediator_time/mediator_time.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
@@ -300,6 +301,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvUpdateChannelApproximateFreeSpace::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActorContext& ctx);
@@ -467,7 +469,12 @@ private:
 protected:
     STFUNC(StateInit) {
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
-        StateInitImpl(ev, SelfId());
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
+            HFunc(TEvMediatorTimecast::TEvSubscribeReadStepResult, Handle);
+            default:
+                StateInitImpl(ev, SelfId());
+        }
     }
 
     STFUNC(StateBroken) {
@@ -521,9 +528,7 @@ private:
     ui64 StatsReportRound = 0;
     TString OwnerPath;
 
-    TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
-    bool MediatorTimeCastRegistered = false;
-    TSet<ui64> MediatorTimeCastWaitingSteps;
+    TMediatorTime MediatorTime;
     const TDuration PeriodicWakeupActivationPeriod;
     TDuration FailActivationDelay = TDuration::Seconds(1);
     const TDuration StatsReportInterval;
@@ -589,11 +594,11 @@ private:
     ui32 JitterIntervalMS = 200;
     ui32 BaseStatsEvInflight = 0;
     ui32 ExecutorStatsEvInflight = 0;
-    void TryRegisterMediatorTimeCast();
-    void UnregisterMediatorTimeCast();
+    bool HoldUntilMediatorTimeReady(TAutoPtr<IEventHandle>& ev);
+    void TryMakeMediatorTimeReady(const TActorContext& ctx);
+    void OnMediatorTimeReady();
 
-    bool WaitPlanStep(ui64 step);
-    void SendWaitPlanStep(ui64 step);
+    void WaitPlanStep(ui64 step);
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
     NOlap::TSnapshot GetMaxReadVersionForSchema(const ui64 schemaVersion) const;
@@ -603,12 +608,9 @@ private:
     std::unique_ptr<NOlap::ISnapshotHolders> GetSnapshotHolders() const;
     ui64 GetOutdatedStep() const;
 
-    TDuration GetTxCompleteLag() const {
-        ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
-        return ProgressTxController->GetTxCompleteLag(mediatorTime);
-    }
+    TDuration GetTxCompleteLag() const;
 
-    void EnqueueBackgroundActivities(const bool periodic = false);
+    void EnqueueBackgroundActivities();
     virtual void Enqueue(STFUNC_SIG) override;
 
     void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);

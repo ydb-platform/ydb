@@ -9,6 +9,7 @@ SRCS(
     columnshard__init.cpp
     columnshard__load_portions.cpp
     columnshard__locks.cpp
+    columnshard__mediator_time.cpp
     columnshard__notify_tx_completion.cpp
     columnshard__overload.cpp
     columnshard__plan_step.cpp
@@ -67,6 +68,7 @@ PEERDIR(
     ydb/core/tx/columnshard/loading
     ydb/core/tx/columnshard/local_db_backup
     ydb/core/tx/columnshard/maintenance/cut_history
+    ydb/core/tx/columnshard/mediator_time
     ydb/core/tx/columnshard/normalizer
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/overload_manager
@@ -114,6 +116,7 @@ RECURSE(
 RECURSE_FOR_TESTS(
     hooks/abstract
     maintenance/cut_history
+    mediator_time
     ut_local_db_backup
     ut_rw
     ut_schema

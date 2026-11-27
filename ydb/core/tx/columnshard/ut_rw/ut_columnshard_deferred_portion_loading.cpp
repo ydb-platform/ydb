@@ -166,15 +166,7 @@ public:
     }
 
     ui64 GetSimpleCounter(const TString& name) {
-        ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, new TEvTablet::TEvGetCounters());
-        const auto ev = Runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(Sender);
-        for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
-            if (counter.GetName() == name) {
-                return counter.GetValue();
-            }
-        }
-        UNIT_FAIL("counter " << name << " not found");
-        return 0;
+        return NTxUT::GetSimpleCounter(Runtime, Sender, name);
     }
 
     void NotifyLockGone() {

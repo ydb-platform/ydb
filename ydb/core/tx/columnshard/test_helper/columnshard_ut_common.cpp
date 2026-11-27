@@ -4,6 +4,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/tx_processing.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
@@ -124,6 +125,7 @@ void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender) {
 namespace {
 std::optional<TPlanStep> ProposeSchemaTxOptional(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
     auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, txId, txBody, 0, 0);
+    *event->Record.MutableProcessingParams() = ExtractProcessingParams(*runtime.GetAppData().DomainsInfo->GetDomain());
     const auto now = runtime.GetTimeProvider()->Now();
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
@@ -721,6 +723,19 @@ void VerifyNoBackupOrRestoreArtifacts(TTestBasicRuntime& runtime, const NYDBTest
 
     UNIT_ASSERT_VALUES_EQUAL(CountTxInfoRows(runtime, tabletId), 0u);
     UNIT_ASSERT_VALUES_EQUAL(CountBackgroundSessionsRows(runtime, tabletId), 0u);
+}
+
+ui64 GetSimpleCounter(TTestBasicRuntime& runtime, const TActorId& sender, const TString& name) {
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvTablet::TEvGetCounters());
+    const auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(sender, TDuration::Seconds(10));
+    UNIT_ASSERT_C(ev, "no counter response for " << name);
+    for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+        if (counter.GetName() == name) {
+            return counter.GetValue();
+        }
+    }
+    UNIT_FAIL("counter " << name << " not found");
+    return 0;
 }
 
 }   // namespace NKikimr::NTxUT

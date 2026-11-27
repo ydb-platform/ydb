@@ -18,6 +18,7 @@ private:
     TEvColumnShard::TEvProposeTransaction::TPtr Ev;
     std::shared_ptr<TTxController::ITransactionOperator> TxOperator;
     std::optional<TTxController::TTxInfo> TxInfo;
+    bool ProcessingParamsSaved = false;
 
 public:
     TTxProposeTransaction(TColumnShard* self, TEvColumnShard::TEvProposeTransaction::TPtr& ev)
@@ -45,6 +46,7 @@ public:
         if (!Self->ProcessingParams && record.HasProcessingParams()) {
             Self->ProcessingParams.emplace().CopyFrom(record.GetProcessingParams());
             Schema::SaveSpecialProtoValue(db, Schema::EValueIds::ProcessingParams, *Self->ProcessingParams);
+            ProcessingParamsSaved = true;
         }
 
         if (record.HasSchemeShardId()) {
@@ -95,7 +97,9 @@ public:
             {"this", (ui64)this},
             {"opTx", TxOperator->GetTxInfo().DebugString()});
 
-        Self->TryRegisterMediatorTimeCast();
+        if (ProcessingParamsSaved) {
+            Self->MediatorTime.Register(*Self->ProcessingParams, ctx);
+        }
 
         if (TxOperator->IsFail()) {
             TxOperator->SendReply(*Self, ctx);

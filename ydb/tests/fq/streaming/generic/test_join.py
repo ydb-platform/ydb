@@ -1254,7 +1254,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
         path = f"{kikimr.get_database_name()}/{query_name}"
         try:
             kikimr.ydb_client.query(f"""
-                CREATE STREAMING QUERY {query_name} AS DO BEGIN
+                CREATE STREAMING QUERY {query_name} WITH (STATS_COLLECTION_MODE="PROFILE") AS DO BEGIN
                 {sql}
                 END DO;
             """)

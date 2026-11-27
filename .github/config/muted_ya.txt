@@ -1,3 +1,4 @@
+ydb/core/blob_depot/ut BlobDepotAgentDisconnect.DisconnectOfUncreditedWaiterUnblocksNextWrite
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepotMoveData.KeepDoesNotTouchMovingRecord
@@ -55,6 +56,7 @@ ydb/tests/fq/streaming/logbroker py3test.sole chunk
 ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_stop_cluster[kikimr0-partition_balancing-one_cluster]
 ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_stop_cluster[kikimr0-partition_balancing-three_clusters]
 ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_stop_cluster[kikimr0-partition_balancing-two_clusters]
+ydb/tests/fq/yds test_recovery.py.TestRecovery.test_recovery[ydb_cluster0]
 ydb/tests/fq/yds test_recovery_mz.py.TestRecovery.test_recovery[ydb_cluster0]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_one_dc_external_recovery

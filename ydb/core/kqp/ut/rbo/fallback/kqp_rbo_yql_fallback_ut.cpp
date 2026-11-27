@@ -326,8 +326,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {"SELECT a, c FROM `/Root/t1` VIEW idx_b ORDER BY a;", "[[1;[100]];[2;[200]];[3;[300]]]"},
         };
         for (const auto& [query, expected] : cases) {
+            // A compilation failure without retry can close the query session.
+            auto readSession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
             const auto before = GetNewRBOCompileCounters(kikimr);
-            auto selected = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            auto selected = readSession.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(selected.IsSuccess(), !FallbackOnRowTables || FallbackToYql,
                 query << ": " << selected.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL_C(HasFallbackIssue(selected.GetIssues()), FallbackOnRowTables && FallbackToYql,

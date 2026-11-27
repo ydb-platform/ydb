@@ -15,6 +15,7 @@
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
@@ -1144,6 +1145,63 @@ void AssertReadMessage(
     UNIT_ASSERT_VALUES_EQUAL(actual.GetSeqNo(), static_cast<i64>(expected.SeqNo));
     UNIT_ASSERT_VALUES_EQUAL(actual.GetLogicalMessageCount(), expected.LogicalMessageCount);
     UNIT_ASSERT_VALUES_EQUAL(actual.GetData(), expected.Data);
+}
+
+Y_UNIT_TEST(RejectForwardedWriteFromStoppedMirrorer) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    TActorId tablet;
+    auto init = tc.Runtime->AddObserver<TEvPQ::TEvInitComplete>([&](auto& ev) {
+        tablet = ev->Recipient;
+    });
+    TActorId mirrorer;
+    auto credentials = tc.Runtime->AddObserver<TEvPQ::TEvInitCredentials>([&](auto& ev) {
+        mirrorer = ev->Sender;
+        ev.Reset();
+    });
+
+    auto config = MakePQTabletConfig({.partitions = 1, .writeSpeed = 50_MB}, {}, *tc.Runtime, 1);
+    auto applyConfig = [&] {
+        SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config, tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
+        tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    };
+    config.MutablePartitionConfig()->MutableMirrorFrom()->SetMirrorConsumerOffsets(true);
+    applyConfig();
+    UNIT_ASSERT(tablet && mirrorer);
+    const auto oldMirrorer = mirrorer;
+
+    auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+    request->FromMirrorer = true;
+    auto* partition = request->Record.MutablePartitionRequest();
+    partition->SetPartition(0);
+    partition->SetMessageNo(0);
+    partition->SetCmdWriteOffset(0);
+    auto* message = partition->AddCmdWrite();
+    message->SetSeqNo(1);
+    message->SetDisableDeduplication(true);
+    message->SetLogicalMessageCount(1);
+    message->SetData("payload");
+    TBlockEvents<TEvPQ::TEvWrite> writes(*tc.Runtime);
+    tc.Runtime->Send(tablet, oldMirrorer, request.Release());
+    tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(writes.size(), 1);
+
+    config.SetVersion(2);
+    config.MutablePartitionConfig()->ClearMirrorFrom();
+    applyConfig();
+    config.SetVersion(3);
+    config.MutablePartitionConfig()->MutableMirrorFrom()->SetMirrorConsumerOffsets(true);
+    applyConfig();
+    UNIT_ASSERT_UNEQUAL(mirrorer, oldMirrorer);
+
+    TBlockEvents<TEvPQ::TEvError> errors(*tc.Runtime);
+    writes.Stop().Unblock();
+    tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(errors.front()->Get()->Error, "Mirroring has stopped");
+    errors.Stop().Unblock();
+    PQGetPartInfo(0, 0, tc);
 }
 
 void TestMirroredOffsetSurvivesRestart(bool kafkaBatch) {

@@ -41,17 +41,17 @@ struct TEvents {
             : Consumer(consumer)
             , Addresses(std::move(addresses))
             , Callback(std::move(callback)) {
-            AFL_VERIFY(Addresses.size());
-            AFL_VERIFY(Callback);
+            YDB_LOG_VERIFY(Addresses.size());
+            YDB_LOG_VERIFY(Callback);
         }
 
         THashSet<TAddress> ExtractAddresses() {
-            AFL_VERIFY(!AddressesExtracted);
+            YDB_LOG_VERIFY(!AddressesExtracted);
             AddressesExtracted = true;
             return std::move(Addresses);
         }
         std::shared_ptr<ICallback> ExtractCallback() {
-            AFL_VERIFY(!CallbackExtracted);
+            YDB_LOG_VERIFY(!CallbackExtracted);
             CallbackExtracted = true;
             return std::move(Callback);
         }

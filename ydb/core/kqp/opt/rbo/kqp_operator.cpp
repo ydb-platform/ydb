@@ -255,6 +255,9 @@ TIntrusivePtr<TOpRead> TOpRead::FromExpr(TExprNode::TPtr node, TInfoUnitRegistry
     if (const auto settings = opSource.Settings()) {
         read->ForcePrimary = TKqpReadTableSettings::Parse(settings.Cast()).ForcePrimary;
     }
+    if (const auto index = opSource.Index()) {
+        read->ForceIndex = index.Cast().StringValue();
+    }
     return read;
 }
 

@@ -13,13 +13,17 @@ enum EServiceId {
 
 struct TEvSubscribeGrpcCancel : public TEventPB<TEvSubscribeGrpcCancel, NKikimrGRpcService::TEvSubscribeGrpcCancel, EvSubscribeGrpcCancel> {
     TEvSubscribeGrpcCancel() = default;
-    TEvSubscribeGrpcCancel(const NActors::TActorId& subscriber) {
+    TEvSubscribeGrpcCancel(const NActors::TActorId& subscriber, ui64 requestId = 0) {
         ActorIdToProto(subscriber, Record.MutableSubscriber());
+        Record.SetRequestId(requestId);
     }
 };
 
 struct TEvClientLost : public TEventPB<TEvClientLost, NKikimrGRpcService::TEvClientLost, EvClientLost> {
     TEvClientLost() = default;
+    explicit TEvClientLost(ui64 requestId) {
+        Record.SetRequestId(requestId);
+    }
 };
 
 }

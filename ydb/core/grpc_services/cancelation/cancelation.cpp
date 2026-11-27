@@ -14,13 +14,14 @@ void PassSubscription(const TEvSubscribeGrpcCancel* ev, IRequestCtxMtSafe* reque
     NActors::TActorSystem* as)
 {
     auto subscriber = ActorIdFromProto(ev->Record.GetSubscriber());
-    requestCtx->SetFinishAction([subscriber, as]() {
-        as->Send(subscriber, new TEvClientLost);
+    const ui64 requestId = ev->Record.GetRequestId();
+    requestCtx->SetFinishAction([subscriber, as, requestId]() {
+        as->Send(subscriber, new TEvClientLost(requestId));
     });
 }
 
 void SubscribeRemoteCancel(const NActors::TActorId& service, const NActors::TActorId& subscriber,
-    NActors::TActorSystem* as)
+    NActors::TActorSystem* as, ui64 requestId)
 {
     // Track delivery: `service` is the per-request gRPC actor, which may have already
     // raced ahead and died on its own client-lost before this subscription arrives.
@@ -29,8 +30,8 @@ void SubscribeRemoteCancel(const NActors::TActorId& service, const NActors::TAct
     // FlagTrackDelivery the actor system bounces TEvUndelivered back to `subscriber`,
     // which can then treat it as client lost. The sender is set to `subscriber` so the
     // undelivered notification is routed there.
-    as->Send(new NActors::IEventHandle(service, subscriber, new TEvSubscribeGrpcCancel(subscriber),
-        NActors::IEventHandle::FlagTrackDelivery));
+    as->Send(new NActors::IEventHandle(service, subscriber, new TEvSubscribeGrpcCancel(subscriber, requestId),
+        NActors::IEventHandle::FlagTrackDelivery, requestId));
 }
 
 }

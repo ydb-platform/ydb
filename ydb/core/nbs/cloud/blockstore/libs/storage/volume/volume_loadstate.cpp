@@ -1,6 +1,8 @@
 #include "volume_actor.h"
 #include "volume_database.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_VOLUME
+
 namespace NYdb::NBS::NStorage {
 
 using namespace NActors;
@@ -36,11 +38,8 @@ void TVolumeActor::CompleteLoadState(
 {
     PartitionTabletId = args.PartitionTabletId;
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_VOLUME,
-        "Loaded partition tablet id %lu",
-        PartitionTabletId);
+    YDB_LOG_INFO_CTX(ctx, "Loaded partition tablet id",
+        {"partitionTabletId", PartitionTabletId});
 
     // Pipes open only after the id has been loaded.
     SignalTabletActive(ctx);

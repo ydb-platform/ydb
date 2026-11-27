@@ -282,6 +282,27 @@ void CheckFullFrameDropsUnusedColumn(bool narrow, bool ordered) {
     CompareYsonUnordered(FullFrameSumWithFatColumnExpected(), FormatResultSetYson(exec.GetResultSet(0)));
 }
 
+void CheckNarrowWindowAggregateResults(const TString& query) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
+    TKikimrRunner kikimr(appConfig);
+    auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+    TString expected;
+    for (bool narrow : {false, true}) {
+        const TString configuredQuery = TStringBuilder()
+            << "--!syntax_v1\nPRAGMA ydb.EnableNarrowWindowAggregateInput = '" << (narrow ? "true" : "false") << "';\n"
+            << query;
+        auto result = session.ExecuteQuery(configuredQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        const auto actual = FormatResultSetYson(result.GetResultSet(0));
+        if (narrow) {
+            CompareYsonUnordered(expected, actual);
+        } else {
+            expected = actual;
+        }
+    }
+}
+
 void CheckStandardWindowFunctionAst(const TString& projection, bool useSortForPartitionsByKeys) {
     CheckWindowFunctionAst(
         TStringBuilder()
@@ -419,6 +440,35 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
 
     Y_UNIT_TEST(WindowFunctionFullFrameOrderedAggregateDropsUnusedColumn) {
         CheckFullFrameDropsUnusedColumn(true, true);
+    }
+
+    Y_UNIT_TEST(NarrowWindowAggregateInputKeepsPlainWholeRowAggregate) {
+        CheckNarrowWindowAggregateResults(R"(
+            $input = SELECT Key, Text, Data, CAST(Key AS String) AS trace_id,
+                Text AS extra1, Text AS extra2, Text AS extra3
+            FROM `/Root/EightShard`;
+            SELECT COUNT(*) AS rows, COUNT(DISTINCT trace_id) AS unique_rows,
+                Yson::From(ListSort(AGGREGATE_LIST(TableRow()), ($row) -> ($row.Key))) AS all_rows
+            FROM $input;
+        )");
+    }
+
+    Y_UNIT_TEST(NarrowWindowAggregateInputKeepsNestedWindowResults) {
+        CheckNarrowWindowAggregateResults(R"(
+            $first = SELECT Key, Text, Data, SUM(Data) OVER (PARTITION BY Text) AS total
+            FROM `/Root/EightShard`;
+            SELECT Key, Text, Data, total, SUM(total) OVER (PARTITION BY Text) AS second_total
+            FROM $first;
+        )");
+    }
+
+    Y_UNIT_TEST(NarrowWindowAggregateInputKeepsDistinctWindowResults) {
+        CheckNarrowWindowAggregateResults(R"(
+            SELECT Key, Text, Data,
+                SUM(Data) OVER w AS total, COUNT(DISTINCT Data) OVER w AS distinct_values
+            FROM `/Root/EightShard`
+            WINDOW w AS (PARTITION BY Text);
+        )");
     }
 
     Y_UNIT_TEST(WindowFunctionFullFrameFromJoinAst) {

@@ -2942,9 +2942,74 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
     return ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(args)), ctx.NewCallable(pos, "AsStruct", std::move(structItems)));
 }
 
+// Only the aggregate side of a full-frame window needs this subset. The join keeps the input intact.
+TExprNode::TPtr NarrowFullFrameAggregateInput(const TExprNode::TPtr& input, const TStructExprType& rowType,
+    const TExprNodeList& keyColumns, const TExprNode::TPtr& frames, const TExprNode::TPtr& sortTraits,
+    TExprNode::TPtr& sortKey, TExprContext& ctx)
+{
+    TSet<TStringBuf> usedFields;
+    for (const auto& key : keyColumns) {
+        usedFields.insert(key->Content());
+    }
+    for (const auto& frame : frames->Children()) {
+        for (ui32 i = 1; i < frame->ChildrenSize(); ++i) {
+            const auto& aggregate = frame->Child(i);
+            if (aggregate->ChildrenSize() == 3) {
+                // DISTINCT traits take the column value, whose type need not be a struct.
+                usedFields.insert(aggregate->Child(2)->Content());
+                continue;
+            }
+            const auto* argumentType = aggregate->Child(1)->Head().GetTypeAnn()
+                ->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            for (const auto* item : argumentType->GetItems()) {
+                usedFields.insert(item->GetName());
+            }
+        }
+    }
+
+    auto aggregateSortKey = sortKey;
+    if (sortTraits->IsCallable("SortTraits")) {
+        TCoSortTraits traits(sortTraits);
+        const auto* sortRowType = traits.ListType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
+            ->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        TParentsMap parents;
+        GatherParents(traits.SortKeySelectorLambda().Ref(), parents);
+        TSet<TStringBuf> sortFields;
+        if (HaveFieldsSubset(traits.SortKeySelectorLambda().Body().Ptr(), traits.SortKeySelectorLambda().Args().Arg(0).Ref(), sortFields, parents)) {
+            TVector<const TItemExprType*> sortItems;
+            for (const auto* item : sortRowType->GetItems()) {
+                if (sortFields.contains(item->GetName())) {
+                    sortItems.push_back(item);
+                }
+            }
+            // The sort cast must accept precisely the fields read by its selector.
+            aggregateSortKey = ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(
+                traits.SortKeySelectorLambda().Ref(), *ctx.MakeType<TStructExprType>(sortItems), ctx));
+            usedFields.insert(sortFields.begin(), sortFields.end());
+        } else {
+            // An opaque selector can use the whole row described by SortTraits.
+            for (const auto* item : sortRowType->GetItems()) {
+                usedFields.insert(item->GetName());
+            }
+        }
+    }
+
+    TExprNodeList members;
+    for (const auto* item : rowType.GetItems()) {
+        if (usedFields.contains(item->GetName())) {
+            members.push_back(ctx.NewAtom(input->Pos(), item->GetName()));
+        }
+    }
+    if (members.empty() || members.size() == rowType.GetSize()) {
+        return input;
+    }
+    sortKey = std::move(aggregateSortKey);
+    return ctx.NewCallable(input->Pos(), "ExtractMembers", {input, ctx.NewList(input->Pos(), std::move(members))});
+}
+
 TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode::TPtr& inputList,
                                            const TExprNode::TPtr& originalKeyColumns, const TExprNode::TPtr& sortTraits, const TExprNode::TPtr& frames,
-                                           const TExprNode::TPtr& sessionTraits, const TExprNode::TPtr& sessionColumns, TExprContext& ctx)
+                                           const TExprNode::TPtr& sessionTraits, const TExprNode::TPtr& sessionColumns, TExprContext& ctx, bool narrowFullFrameAggregateInput)
 {
     TExprNode::TPtr sessionKey;
     TExprNode::TPtr sessionInit;
@@ -3183,13 +3248,20 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
         // clang-format on
     }
 
+    auto aggregateInput = input;
+    auto aggregateSortKey = sortKey;
+    if (narrowFullFrameAggregateInput && sessionTraits->IsCallable("Void")) {
+        aggregateInput = NarrowFullFrameAggregateInput(input, *ctx.MakeType<TStructExprType>(rowItems),
+            keyColumns, frames, sortTraits, aggregateSortKey, ctx);
+    }
+
     // clang-format off
     auto aggregated = ctx.Builder(pos)
         .Callable("PartitionsByKeys")
-            .Add(0, input)
+            .Add(0, aggregateInput)
             .Add(1, keySelector)
             .Add(2, sortOrder)
-            .Add(3, sortKey)
+            .Add(3, aggregateSortKey)
             .Add(4, partitionByKeysLambda)
         .Seal().Build();
     // clang-format on
@@ -3351,7 +3423,7 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
 
 TExprNode::TPtr TryExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode::TPtr& inputList, const TExprNode::TPtr& keyColumns,
                                               const TExprNode::TPtr& sortTraits, const TExprNode::TPtr& frames, const TExprNode::TPtr& sessionTraits,
-                                              const TExprNode::TPtr& sessionColumns, TExprContext& ctx)
+                                              const TExprNode::TPtr& sessionColumns, TExprContext& ctx, bool narrowFullFrameAggregateInput)
 {
     TExprNodeList nonCompactAggregatingFullFrames;
     TExprNodeList otherFrames;
@@ -3395,7 +3467,7 @@ TExprNode::TPtr TryExpandNonCompactFullFrames(TPositionHandle pos, const TExprNo
 
     auto fullFrames = ctx.NewList(pos, std::move(nonCompactAggregatingFullFrames));
     auto nonFullFrames = ctx.NewList(pos, std::move(otherFrames));
-    auto expanded = ExpandNonCompactFullFrames(pos, inputList, keyColumns, sortTraits, fullFrames, sessionTraits, sessionColumns, ctx);
+    auto expanded = ExpandNonCompactFullFrames(pos, inputList, keyColumns, sortTraits, fullFrames, sessionTraits, sessionColumns, ctx, narrowFullFrameAggregateInput);
 
     if (sessionTraits && !sessionTraits->IsCallable("Void")) {
         // clang-format off
@@ -4017,8 +4089,8 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos,
                                            const TExprNode::TPtr& sessionColumns,
                                            const TStructExprType& outputRowType,
                                            TExprContext& ctx,
-                                           TTypeAnnotationContext& types) {
-    if (auto expanded = TryExpandNonCompactFullFrames(pos, inputList, keyColumns, sortTraits, frames, sessionTraits, sessionColumns, ctx)) {
+                                           TTypeAnnotationContext& types, bool narrowFullFrameAggregateInput) {
+    if (auto expanded = TryExpandNonCompactFullFrames(pos, inputList, keyColumns, sortTraits, frames, sessionTraits, sessionColumns, ctx, narrowFullFrameAggregateInput)) {
         YQL_CLOG(INFO, Core) << "Expanded non-compact CalcOverWindow";
         return expanded;
     }
@@ -4129,7 +4201,7 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos,
 
 } // namespace
 
-TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types, bool narrowFullFrameAggregateInput) {
     YQL_ENSURE(node->IsCallable({"CalcOverWindow", "CalcOverSessionWindow", "CalcOverWindowGroup"}));
 
     auto input = node->ChildPtr(0);
@@ -4148,7 +4220,7 @@ TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& 
     if (calc.Frames().Size() != 0 || calc.SessionColumns().Size() != 0) {
         const TStructExprType& outputRowType = *node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         input = ExpandSingleCalcOverWindow(node->Pos(), input, calc.Keys().Ptr(), calc.SortSpec().Ptr(), calc.Frames().Ptr(),
-                                           calc.SessionSpec().Ptr(), calc.SessionColumns().Ptr(), outputRowType, ctx, types);
+                                           calc.SessionSpec().Ptr(), calc.SessionColumns().Ptr(), outputRowType, ctx, types, narrowFullFrameAggregateInput);
     }
 
     calcs.erase(calcs.begin());

@@ -7,13 +7,17 @@ SRCS(
     dq_hash_join_type_ut.cpp
     dq_opt_hypergraph_ut.cpp
     dq_opt_interesting_orderings_ut.cpp
+    dq_opt_window_ut.cpp
 )
 
 PEERDIR(
     ydb/library/yql/dq/opt
+    yql/essentials/minikql/invoke_builtins/no_llvm
+    yql/essentials/providers/common/udf_resolve
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/stub
+    yql/essentials/udfs/common/set/impl
 )
 
 SIZE(SMALL)

@@ -79,7 +79,7 @@ jobs:
           echo "|---|---|"
           echo "| Decision | **${gate_action}** |"
           echo "| Queue size | ${queue_size} (vars.POSTCOMMIT_QUEUE_THRESHOLD=${queue_threshold}) |"
-          echo "| Max age filter | ${max_age_hours}h |"
+          echo "| Max age filter | ${max_age_hours}h (vars.POSTCOMMIT_GATE_CONFIG.ignore_pr_check_older_than_hours) |"
           echo "| Ignored stale PR-check | ${ignored_stale} |"
           echo ""
           if (( queue_size > 0 )); then

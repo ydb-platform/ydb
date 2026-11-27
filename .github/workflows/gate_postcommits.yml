@@ -24,41 +24,6 @@ jobs:
         queued_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/${{github.repository}}/actions/runs?per_page=1000\&page=1\&status=queued\&event=pull_request_target)
 
-        queue_items=$(jq --argjson max_age "$max_age_seconds" '
-          def fmt_duration:
-            if . < 60 then "\(.|floor)s"
-            elif . < 3600 then "\((./60)|floor)m"
-            elif . < 86400 then "\((./3600)|floor)h \(((./60)|floor % 60))m"
-            else "\((./86400)|floor)d \(((./3600)|floor % 24))h"
-            end;
-          [.workflow_runs[]
-            | select(.name == "PR-check")
-            | . + {
-                waiting_seconds: (now - (.updated_at | fromdate)),
-                age_seconds: (now - (.created_at | fromdate))
-              }
-            | select(.waiting_seconds > 60 and .age_seconds <= $max_age)
-            | {
-                id,
-                title: (.display_title // .head_branch // ("run #" + (.id|tostring))),
-                html_url,
-                branch: .head_branch,
-                waiting: (.waiting_seconds | fmt_duration),
-                waiting_seconds,
-                age: (.age_seconds | fmt_duration)
-              }
-          ]
-          | sort_by(-.waiting_seconds)
-        ' <<<"$queued_json")
-        queue_size=$(jq 'length' <<<"$queue_items")
-        ignored_stale=$(jq --argjson max_age "$max_age_seconds" '
-          [.workflow_runs[]
-            | select(.name == "PR-check")
-            | select((now - (.updated_at | fromdate)) > 60)
-            | select((now - (.created_at | fromdate)) > $max_age)
-          ] | length
-        ' <<<"$queued_json")
-
         pr_check_items=$(jq --argjson max_age "$max_age_seconds" '
           def fmt_duration:
             if . < 60 then "\(.|floor)s"
@@ -80,13 +45,14 @@ jobs:
                 branch: .head_branch,
                 waiting: (.waiting_seconds | fmt_duration),
                 waiting_seconds,
-                age: (.age_seconds | fmt_duration),
                 ignored: (.age_seconds > $max_age)
               }
           ]
           | sort_by(-.waiting_seconds)
         ' <<<"$queued_json")
         pr_check_queue_size=$(jq 'length' <<<"$pr_check_items")
+        queue_size=$(jq '[.[] | select(.ignored | not)] | length' <<<"$pr_check_items")
+        ignored_stale=$(jq '[.[] | select(.ignored)] | length' <<<"$pr_check_items")
 
         postcommit_queued_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/${{github.repository}}/actions/runs?per_page=1000\&page=1\&status=queued\&event=push)
@@ -101,8 +67,7 @@ jobs:
           [.workflow_runs[]
             | select(.name == "PR-check" or (.name | startswith("Postcommit_")))
             | . + {
-                waiting_seconds: (now - (.updated_at | fromdate)),
-                age_seconds: (now - (.created_at | fromdate))
+                waiting_seconds: (now - (.updated_at | fromdate))
               }
             | select(.waiting_seconds > 60)
             | {
@@ -112,8 +77,7 @@ jobs:
                 html_url,
                 branch: .head_branch,
                 waiting: (.waiting_seconds | fmt_duration),
-                waiting_seconds,
-                age: (.age_seconds | fmt_duration)
+                waiting_seconds
               }
           ]
           | sort_by(-.waiting_seconds)
@@ -147,14 +111,13 @@ jobs:
           echo "### Queued PR-check (>60s)"
           echo ""
           if (( pr_check_queue_size > 0 )); then
-            echo "| Gate | Waiting | Age | Branch | Run |"
-            echo "|------|---------|-----|--------|-----|"
+            echo "| Gate | Waiting | Branch | Run |"
+            echo "|------|---------|--------|-----|"
             jq -r '
-              def paint($s):
-                if .ignored then "~~\($s)~~" else $s end;
               .[]
               | (if .ignored then "ignored" else "counted" end) as $gate
-              | "| \($gate) | \(paint(.waiting)) | \(paint(.age)) | \(paint("`\(.branch)`")) | \(paint("[\(.title|gsub("\\|"; "\\|"))](\(.html_url))")) |"
+              | (if .ignored then "~~[\(.title|gsub("\\|"; "\\|"))](\(.html_url))~~" else "[\(.title|gsub("\\|"; "\\|"))](\(.html_url))" end) as $run
+              | "| \($gate) | \(.waiting) | `\(.branch)` | \($run) |"
             ' <<<"$pr_check_items"
           else
             echo "_No queued PR-check runs._"
@@ -163,37 +126,65 @@ jobs:
           echo "### Queued postcommit (>60s)"
           echo ""
           if (( postcommit_queue_size > 0 )); then
-            echo "| Waiting | Age | Workflow | Branch | Run |"
-            echo "|---------|-----|----------|--------|-----|"
-            jq -r '.[] | "| \(.waiting) | \(.age) | `\(.name)` | `\(.branch)` | [\(.title|gsub("\\|"; "\\|"))](\(.html_url)) |"' <<<"$postcommit_items"
+            echo "| Waiting | Workflow | Branch | Run |"
+            echo "|---------|----------|--------|-----|"
+            jq -r '.[] | "| \(.waiting) | `\(.name)` | `\(.branch)` | [\(.title|gsub("\\|"; "\\|"))](\(.html_url)) |"' <<<"$postcommit_items"
           else
             echo "_No queued postcommit runs._"
           fi
         } >> "$GITHUB_STEP_SUMMARY"
 
         echo "Requesting a list of runners to update labels..."
-        j1=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" -w "%{http_code}\n" \
-          https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100\&page=1)
-        http_code=$(echo "$j1" | tail -n 1)
-        echo "Result code: $http_code"
-        if [ "$http_code" != "200" ];then
-          echo "HTTP result code is not 200, exiting"
-          echo "$j1"
-          exit 1
-        fi
+        runners_json='{"runners":[]}'
+        page=1
+        while true; do
+          page_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" -w "\n%{http_code}" \
+            "https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100&page=${page}")
+          http_code=$(printf '%s\n' "$page_json" | tail -n 1)
+          body=$(printf '%s\n' "$page_json" | sed '$d')
+          echo "Runners page ${page} result code: $http_code"
+          if [ "$http_code" != "200" ]; then
+            echo "HTTP result code is not 200, exiting"
+            echo "$body"
+            exit 1
+          fi
+          runners_json=$(jq -s '{runners: (.[0].runners + .[1].runners)}' <<<"$runners_json"$'\n'"$body")
+          page_count=$(jq '.runners | length' <<<"$body")
+          if [ "$page_count" -lt 100 ]; then
+            break
+          fi
+          page=$((page + 1))
+        done
 
-        echo "$j1" | sed '$d' | jq "$query" | while read x;do
+        label_failures=0
+        while read -r x; do
+          [ -z "$x" ] && continue
           echo "Runner: $x"
           if (( queue_size > queue_threshold )); then
-            curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -X DELETE -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+            response=$(curl --retry 3 --retry-delay 2 -sS -w "\n%{http_code}" -X DELETE -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels/postcommit
+              "https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels/postcommit" || true)
           else
-            curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+            response=$(curl --retry 3 --retry-delay 2 -sS -w "\n%{http_code}" -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels \
-              -d '{"labels":["postcommit"]}'
+              "https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels" \
+              -d '{"labels":["postcommit"]}' || true)
           fi
-        done
+          label_http=$(printf '%s\n' "$response" | tail -n 1)
+          if [ "$label_http" = "404" ]; then
+            echo "Runner $x gone (404), skipping"
+            continue
+          fi
+          if [[ ! "$label_http" =~ ^2[0-9][0-9]$ ]]; then
+            echo "Failed to update runner $x: HTTP $label_http"
+            printf '%s\n' "$response" | sed '$d'
+            label_failures=$((label_failures + 1))
+          fi
+        done < <(jq -r "$query" <<<"$runners_json")
+
         echo "Runner labels synchronized"
+        if (( label_failures > 0 )); then
+          echo "Label update failures: $label_failures"
+          exit 1
+        fi

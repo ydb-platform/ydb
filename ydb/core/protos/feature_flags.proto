@@ -508,4 +508,5 @@ message TFeatureFlags {
     optional bool EnableConsistentVectorIndexBuild = 405 [default = true];
     optional bool EnableReadSecretRpcHandler = 406 [default = false];
     optional bool EnableCdcKeyRangeHeartbeats = 407 [default = false];
+    optional bool EnableTopicChangesData = 408 [default = false];
 }

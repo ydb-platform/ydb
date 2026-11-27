@@ -26,6 +26,7 @@ public:
         TypeMeta = 'i',
         TypeTxMeta = 'I',
         TypeMLPConsumerData = 'c',
+        TypeTopicChangesData = 't',
     };
 
     enum EMark : char {
@@ -42,7 +43,8 @@ public:
         ServiceTypeData = 'D',
         ServiceTypeTmpData = 'X',
         ServiceTypeMeta = 'J',
-        ServiceTypeTxMeta = 'K'
+        ServiceTypeTxMeta = 'K',
+        ServiceTypeTopicChangesData = 'T'
     };
 
     TKeyPrefix(EType type, const TPartitionId& partition)
@@ -104,6 +106,9 @@ public:
             case TypeTxMeta:
             case ServiceTypeTxMeta:
                 return TypeTxMeta;
+            case TypeTopicChangesData:
+            case ServiceTypeTopicChangesData:
+                return TypeTopicChangesData;
         }
         AFL_ENSURE(false)("type_char", *PtrType());
         return TypeNone;
@@ -429,6 +434,20 @@ private:
     ui16 PartNo;
     ui16 InternalPartsCount;
     TMaybe<ui64> OffsetDelta;
+};
+
+// t<partition:10>_<endOffset:20>_<schemaVersion:20> ('T' for supportive partitions).
+class TSchemaChangesKey : public TKeyPrefix {
+public:
+    TSchemaChangesKey(const TPartitionId& partition, ui64 endOffset, ui64 schemaVersion);
+    static TSchemaChangesKey FromString(const TString& key, const TPartitionId& partition);
+
+    ui64 GetOffset() const;
+    ui64 GetSchemaVersion() const;
+
+private:
+    ui64 EndOffset;
+    ui64 SchemaVersion;
 };
 
 inline

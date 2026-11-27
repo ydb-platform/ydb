@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/core/persqueue/common/partition_id.h>
@@ -41,6 +43,7 @@ struct TReadInfo : TLogPrefix {
     bool IsSubscription;
 
     TVector<TRequestedBlob> Blobs; //offset, count, value
+    std::vector<TSchemaChangesKey> SchemaChangesKeys;
     ui64 CachedOffset; //offset of head can be bigger than last databody offset
     TVector<TClientBlob> Cached; //records from head
     TActorId PipeClient;

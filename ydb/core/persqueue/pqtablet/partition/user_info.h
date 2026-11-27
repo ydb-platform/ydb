@@ -115,6 +115,10 @@ struct TUserInfo: public TUserInfoBase, public TAtomicRefCount<TUserInfo> {
         return WriteLagMs.GetValue();
     }
 
+    bool IsReplicationConsumer() const {
+        return Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION;
+    }
+
 private:
     friend class TUsersInfoStorage;
     void SetImportant(bool important, TDuration availabilityPeriod);

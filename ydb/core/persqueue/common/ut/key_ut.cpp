@@ -343,4 +343,55 @@ Y_UNIT_TEST(DefaultKey) {
 
 } // Y_UNIT_TEST_SUITE(TKeyTest)
 
+Y_UNIT_TEST_SUITE(TSchemaChangesKeyTest) {
+
+Y_UNIT_TEST(SerializationAndCopy) {
+    const TPartitionId partition(7);
+    const TString serialized = "t0000000007_00000000000000003322_00000000000000000008";
+    const TSchemaChangesKey key(partition, 3322, 8);
+    UNIT_ASSERT_VALUES_EQUAL(key.ToString(), serialized);
+    const auto restored = TSchemaChangesKey::FromString(serialized, partition);
+    const TSchemaChangesKey copy(restored);
+    UNIT_ASSERT_VALUES_EQUAL(copy.ToString(), serialized);
+    UNIT_ASSERT_VALUES_EQUAL(copy.GetOffset(), 3322u);
+    UNIT_ASSERT_VALUES_EQUAL(copy.GetSchemaVersion(), 8u);
+    UNIT_ASSERT_EQUAL(copy.GetType(), TKeyPrefix::TypeTopicChangesData);
+    UNIT_ASSERT_EQUAL(copy.GetPartition(), partition);
+}
+
+Y_UNIT_TEST(BoundariesAndServicePartition) {
+    for (const auto& partition : {TPartitionId(7), ServicePartition()}) {
+        for (const ui64 version : {ui64{0}, ui64{Max<ui32>()} + 1, Max<ui64>()}) {
+            const TSchemaChangesKey key(partition, Max<ui64>(), version);
+            const auto restored = TSchemaChangesKey::FromString(key.ToString(), partition);
+            UNIT_ASSERT_VALUES_EQUAL(restored.GetOffset(), Max<ui64>());
+            UNIT_ASSERT_VALUES_EQUAL(restored.GetSchemaVersion(), version);
+            UNIT_ASSERT_EQUAL(restored.GetPartition(), partition);
+            UNIT_ASSERT_VALUES_EQUAL(restored.ToString(), key.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(key.ToString()[0], partition.IsSupportivePartition() ? 'T' : 't');
+        }
+        const TSchemaChangesKey first(partition, 0, 9);
+        const TSchemaChangesKey second(partition, 0, 10);
+        const TSchemaChangesKey next(partition, 1, 0);
+        UNIT_ASSERT(first.ToString() < second.ToString());
+        UNIT_ASSERT(second.ToString() < next.ToString());
+        const auto [from, to] = MakeKeyPrefixRange(TKeyPrefix::TypeTopicChangesData, partition);
+        UNIT_ASSERT(from.ToString() < first.ToString());
+        UNIT_ASSERT(next.ToString() < to.ToString());
+    }
+}
+
+Y_UNIT_TEST(InvalidKeys) {
+    const TPartitionId partition(7);
+    const TString serialized = "t0000000007_00000000000000003322_00000000000000000008";
+    UNIT_ASSERT_EXCEPTION(TSchemaChangesKey::FromString(serialized.substr(1), partition), yexception);
+    UNIT_ASSERT_EXCEPTION(TSchemaChangesKey::FromString(serialized + "|", partition), yexception);
+    UNIT_ASSERT_EXCEPTION(TSchemaChangesKey::FromString(serialized, TPartitionId(8)), yexception);
+    UNIT_ASSERT_EXCEPTION(TSchemaChangesKey::FromString("t0000000007_00000000000000003322:00000000000000000008", partition), yexception);
+    UNIT_ASSERT_EXCEPTION(TSchemaChangesKey::FromString("t0000000007_00000000000000003322_18446744073709551616", partition), yexception);
+    UNIT_ASSERT_EXCEPTION(TSchemaChangesKey::FromString("d0000000007_00000000000000003322_00000_0000000000_00000", partition), yexception);
+}
+
+} // Y_UNIT_TEST_SUITE(TSchemaChangesKeyTest)
+
 } // namespace NKikimr::NPQ

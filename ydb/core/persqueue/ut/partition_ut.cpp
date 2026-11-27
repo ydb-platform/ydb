@@ -156,6 +156,18 @@ public:
         return partition.PendingReplicationData.has_value();
     }
 
+    static void AddSchemaChangeKey(TPartition& partition, ui64 version, ui64 offset) {
+        partition.SchemaChangesIndex.AddKey(partition.Partition, version, offset);
+    }
+
+    static bool ReadSchemaChanges(TPartition& partition, TReadInfo& info, const TActorContext& ctx) {
+        return partition.ProcessReadSchemaChanges(ctx, info, partition.NextReadCookie());
+    }
+
+    static size_t PendingReads(const TPartition& partition) {
+        return partition.ReadInfo.size();
+    }
+
 private:
     TInitMetaStep* MetaStep;
 };
@@ -9623,6 +9635,126 @@ private:
     TActorId Edge;
     std::function<void(const TActorContext&)> Body;
 };
+
+Y_UNIT_TEST_F(SchemaChangesReadUsesDirectKvAndDistinctCookies, TPartitionFixture) {
+    auto* partition = CreatePartition();
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1)));
+    TPartitionTestWrapper::AddSchemaChangeKey(*partition, 8, 0);
+    TPartitionTestWrapper::AddSchemaChangeKey(*partition, 9, 0);
+
+    auto startReads = [&](const TActorContext& ctx) {
+        for (ui64 destination : {101, 102}) {
+            auto info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, 0, 0, 0, 10, 2_MB);
+            info.Destination = destination;
+            if (destination == 102) {
+                info.Size = 512_KB;
+            }
+            UNIT_ASSERT(TPartitionTestWrapper::ReadSchemaChanges(*partition, info, ctx));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::PendingReads(*partition), 2);
+    };
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, startReads));
+    auto first = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(5));
+    auto second = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT(first && second);
+    UNIT_ASSERT(first->Record.GetCookie() != second->Record.GetCookie());
+    for (const auto* request : {first.Get(), second.Get()}) {
+        UNIT_ASSERT(request->Record.GetCookie() & TPartition::SchemaChangesReadCookieMask);
+        UNIT_ASSERT_VALUES_EQUAL(request->Record.CmdReadSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(request->Record.GetCmdRead(0).GetKey(), TSchemaChangesKey(TPartitionId(1), 0, 8).ToString());
+        UNIT_ASSERT_VALUES_EQUAL(request->Record.GetCmdRead(1).GetKey(), TSchemaChangesKey(TPartitionId(1), 0, 9).ToString());
+    }
+    const auto oldReadOffset = TPartitionTestWrapper::GetUserInfo(*partition, "user")->ReadOffset;
+
+    // Complete concurrent reads in reverse order, including a value larger than 512 KiB.
+    for (const auto& [cookie, destination, payloadSize] : {
+            std::tuple{second->Record.GetCookie(), ui64{102}, size_t{600 * 1024}},
+            std::tuple{first->Record.GetCookie(), ui64{101}, size_t{10}}}) {
+        auto response = MakeHolder<TEvKeyValue::TEvResponse>();
+        response->Record.SetCookie(cookie);
+        response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+        for (const char marker : {'a', 'b'}) {
+            auto* result = response->Record.AddReadResult();
+            result->SetStatus(NKikimrProto::OK);
+            result->SetValue(TString(payloadSize, marker));
+        }
+        SendEvent(response.Release());
+        auto answer = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT(answer);
+        UNIT_ASSERT_VALUES_EQUAL(answer->Cookie, destination);
+        const auto& result = answer->Response->GetPartitionResponse().GetCmdReadResult();
+        const int expectedResults = destination == 102 ? 1 : 2;
+        UNIT_ASSERT_VALUES_EQUAL(result.ResultSize(), expectedResults);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetRealReadOffset(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetLastOffset(), -1);
+        for (int i = 0; i < expectedResults; ++i) {
+            UNIT_ASSERT(result.GetResult(i).GetIsServiceTopicChangesMessage());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult(i).GetOffset(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult(i).GetData(), TString(payloadSize, 'a' + i));
+        }
+    }
+    const auto* user = TPartitionTestWrapper::GetUserInfo(*partition, "user");
+    UNIT_ASSERT_VALUES_EQUAL(user->ActiveReads, 0);
+    UNIT_ASSERT_VALUES_EQUAL(user->ReadOffset, oldReadOffset);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::PendingReads(*partition), 0);
+
+    // A late duplicate must not be interpreted as a persist response.
+    bool poisoned = false;
+    auto poisonObserver = Ctx->Runtime->AddObserver<NActors::TEvents::TEvPoisonPill>([&](auto&) {
+        poisoned = true;
+    });
+    auto duplicate = MakeHolder<TEvKeyValue::TEvResponse>();
+    duplicate->Record.SetCookie(first->Record.GetCookie());
+    duplicate->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+    SendEvent(duplicate.Release());
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(10));
+    UNIT_ASSERT(!poisoned);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::PendingReads(*partition), 0);
+}
+
+Y_UNIT_TEST_F(SchemaChangesReadErrorsFinishRequest, TPartitionFixture) {
+    auto* partition = CreatePartition();
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1)));
+    TPartitionTestWrapper::AddSchemaChangeKey(*partition, 8, 0);
+
+    for (ui32 errorCase = 0; errorCase < 3; ++errorCase) {
+        auto startRead = [&](const TActorContext& ctx) {
+            auto info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, 0);
+            info.Destination = 101;
+            UNIT_ASSERT(TPartitionTestWrapper::ReadSchemaChanges(*partition, info, ctx));
+        };
+        Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, startRead));
+        auto request = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(5));
+        UNIT_ASSERT(request);
+        auto response = MakeHolder<TEvKeyValue::TEvResponse>();
+        response->Record.SetCookie(request->Record.GetCookie());
+        response->Record.SetStatus(errorCase == 0 ? NMsgBusProxy::MSTATUS_ERROR : NMsgBusProxy::MSTATUS_OK);
+        if (errorCase == 1) {
+            response->Record.AddReadResult()->SetStatus(NKikimrProto::NODATA);
+        }
+        // Case 2: a successful response with a missing result.
+        SendEvent(response.Release());
+        auto error = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>(TDuration::Seconds(5));
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_VALUES_EQUAL(error->Cookie, 101);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "user")->ActiveReads, 0);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::PendingReads(*partition), 0);
+    }
+}
+
+Y_UNIT_TEST_F(SchemaChangesReadWithoutMatchingOffsetFallsThrough, TPartitionFixture) {
+    auto* partition = CreatePartition();
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1)));
+    TPartitionTestWrapper::AddSchemaChangeKey(*partition, 8, 0);
+    auto probe = [&](const TActorContext& ctx) {
+        auto info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, 1);
+        UNIT_ASSERT(!TPartitionTestWrapper::ReadSchemaChanges(*partition, info, ctx));
+        UNIT_ASSERT_VALUES_EQUAL(info.User, "user");
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::PendingReads(*partition), 0);
+    };
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, probe));
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<NActors::TEvents::TEvWakeup>(Ctx->Edge, TDuration::Seconds(5)));
+}
 
 Y_UNIT_TEST_F(InitRestoresEmptyPartitionOffsetsFromMirroredOffset, TPartitionFixture) {
     constexpr ui64 mirroredOffset = 300000000001;

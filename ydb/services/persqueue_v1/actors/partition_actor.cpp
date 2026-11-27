@@ -679,6 +679,12 @@ bool FillBatchedData(
             message->set_message_group_id(GetBatchSourceId(currentBatch));
             auto* msgMeta = message->mutable_metadata_items();
             *msgMeta = (proto.GetMessageMeta());
+
+            if (r.GetIsServiceTopicChangesMessage()) {
+                auto* metadata = message->add_metadata_items();
+                metadata->set_key("_ydb_service_topic_changes_message");
+                metadata->set_value("true");
+            }
         }
         hasData = true;
     }

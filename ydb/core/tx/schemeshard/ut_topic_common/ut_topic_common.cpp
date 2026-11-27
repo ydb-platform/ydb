@@ -52,4 +52,49 @@ Y_UNIT_TEST_SUITE(TPqGroupTests) {
             UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "reason=" << reason);
         }
     }
+
+    ui64 SchemaVersion(TTestBasicRuntime& runtime, const TString& path) {
+        ui64 version = 0;
+        TestDescribeResult(DescribePath(runtime, path), {
+            NLs::PathExist,
+            NLs::Finished, [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                version = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetSchemaVersion();
+            }
+        });
+        return version;
+    }
+
+    Y_UNIT_TEST(AlterIncrementsSchemaVersion) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+            "Name: \"PQGroup\""
+            "TotalGroupCount: 1 "
+            "PartitionPerTablet: 1 "
+            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(SchemaVersion(runtime, "/MyRoot/PQGroup"), 0);
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot",
+            "Name: \"PQGroup\""
+            "TotalGroupCount: 2 "
+            "PartitionPerTablet: 1 ");
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(SchemaVersion(runtime, "/MyRoot/PQGroup"), 1);
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot",
+            "Name: \"PQGroup\""
+            "TotalGroupCount: 1 "
+            "PartitionPerTablet: 1 ",
+            {NKikimrScheme::StatusInvalidParameter});
+        UNIT_ASSERT_VALUES_EQUAL(SchemaVersion(runtime, "/MyRoot/PQGroup"), 1);
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot",
+            "Name: \"PQGroup\""
+            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 20} SchemaVersion: 100}");
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(SchemaVersion(runtime, "/MyRoot/PQGroup"), 2);
+    }
 }

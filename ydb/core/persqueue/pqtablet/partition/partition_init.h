@@ -136,6 +136,14 @@ private:
     void LoadMeta(const NKikimrClient::TResponse& kvResponse);
 };
 
+class TInitLastChangesHistoryStep: public TBaseKVStep {
+public:
+    TInitLastChangesHistoryStep(TInitializer* initializer);
+
+    void Execute(const TActorContext& ctx) override;
+    void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
+};
+
 class TInitInfoRangeStep: public TBaseKVStep {
 public:
     TInitInfoRangeStep(TInitializer* initializer);

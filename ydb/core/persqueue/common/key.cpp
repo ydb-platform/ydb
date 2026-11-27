@@ -3,6 +3,37 @@
 
 namespace NKikimr::NPQ {
 
+TSchemaChangesKey::TSchemaChangesKey(const TPartitionId& partition, ui64 endOffset, ui64 schemaVersion)
+    : TKeyPrefix(TypeTopicChangesData, partition)
+    , EndOffset(endOffset)
+    , SchemaVersion(schemaVersion)
+{
+    const auto suffix = Sprintf("_%020" PRIu64 "_%020" PRIu64, endOffset, schemaVersion);
+    Append(suffix.data(), suffix.size());
+}
+
+TSchemaChangesKey TSchemaChangesKey::FromString(const TString& key, const TPartitionId& partition) {
+    constexpr size_t digits = 20;
+    constexpr size_t offsetPos = UnmarkedSize() + 1;
+    constexpr size_t versionPos = offsetPos + digits + 1;
+    const TKeyPrefix prefix(TypeTopicChangesData, partition);
+    AFL_ENSURE(key.size() == versionPos + digits)("key", key)("partition", partition);
+    AFL_ENSURE(key.StartsWith(prefix.ToString()) && key[UnmarkedSize()] == '_' && key[versionPos - 1] == '_')
+        ("key", key)("partition", partition);
+    const auto endOffset = ::FromString<ui64>(TStringBuf(key.data() + offsetPos, digits));
+    const auto schemaVersion = ::FromString<ui64>(TStringBuf(key.data() + versionPos, digits));
+    return TSchemaChangesKey(partition, endOffset, schemaVersion);
+}
+
+ui64 TSchemaChangesKey::GetOffset() const {
+    return EndOffset;
+}
+
+ui64 TSchemaChangesKey::GetSchemaVersion() const {
+    return SchemaVersion;
+}
+
+
 std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, const TPartitionId& partition)
 {
     TKeyPrefix from(type, partition);
@@ -128,6 +159,9 @@ void TKeyPrefix::SetTypeImpl(EType type, bool isServicePartition)
         case TypeTxMeta:
             c = ServiceTypeTxMeta;
             break;
+        case TypeTopicChangesData:
+            c = ServiceTypeTopicChangesData;
+            break;
         default:
             AFL_ENSURE(false)("type", static_cast<int>(type))("type_char", c);
         }
@@ -144,6 +178,7 @@ bool TKeyPrefix::HasServiceType() const
     case ServiceTypeTmpData:
     case ServiceTypeMeta:
     case ServiceTypeTxMeta:
+    case ServiceTypeTopicChangesData:
         return true;
     default:
         return false;

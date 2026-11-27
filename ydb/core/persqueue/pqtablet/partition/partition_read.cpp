@@ -998,6 +998,11 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
             {"effectiveOffset", offset}
     );
 
+    // Cookie zero is reserved for internal timestamp probes, which need message data.
+    if (read->Cookie != 0 && userInfo->IsReplicationConsumer() && ProcessReadSchemaChanges(ctx, info, cookie)) {
+        return;
+    }
+
     if (offset == GetEndOffset() && !(read->Timeout == 0 && read->IsInternal())) { // Why? If read timeout = 0 we wait?
         const ui32 maxTimeout = IsActive() ? 30000 : 1000;
         if (read->Timeout > maxTimeout) {
@@ -1300,6 +1305,113 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
                                                      std::move(blobs));
 
     ctx.Send(BlobCache, request.Release());
+}
+
+bool TPartition::ProcessReadSchemaChanges(const TActorContext& ctx, TReadInfo& info, ui64 cookie) {
+    auto keys = SchemaChangesIndex.Lookup(info.Offset);
+    if (keys.empty()) {
+        return false;
+    }
+    // Lookup walks backwards; deliver changes in schema-version order.
+    std::reverse(keys.begin(), keys.end());
+
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(SchemaChangesReadCookieMask | cookie);
+    for (const auto& key : keys) {
+        request->Record.AddCmdRead()->SetKey(key.ToString());
+    }
+
+    auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
+    if (info.Destination != 0) {
+        ++userInfo.ActiveReads;
+        userInfo.UpdateReadingTimeAndState(GetEndOffset(), ctx.Now());
+    }
+    info.SchemaChangesKeys = std::move(keys);
+    const bool inserted = ReadInfo.emplace(cookie, std::move(info)).second;
+    AFL_ENSURE(inserted)("cookie", cookie);
+    ctx.Send(TabletActorId, request.Release());
+    return true;
+}
+
+void TPartition::HandleSchemaChangesReadResponse(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    const auto& response = ev->Get()->Record;
+    const ui64 cookie = response.GetCookie() & ~SchemaChangesReadCookieMask;
+    auto it = ReadInfo.find(cookie);
+    if (it == ReadInfo.end()) {
+        // The consumer was removed or the read was cancelled.
+        return;
+    }
+    TReadInfo info = std::move(it->second);
+    ReadInfo.erase(it);
+
+    auto* userInfo = UsersInfoStorage->GetIfExists(info.User);
+    auto finish = [&](ui64 answerSize) {
+        if (userInfo && info.Destination != 0) {
+            userInfo->ReadDone(ctx, ctx.Now(), answerSize, 0, info.ClientDC,
+                               TabletActorId, info.IsExternalRead, GetEndOffset());
+        }
+        OnReadRequestFinished(info.Destination, answerSize, 0, info.User, ctx);
+    };
+    auto fail = [&](NPersQueue::NErrorCode::EErrorCode code, const TString& reason) {
+        ReplyError(ctx, info.Destination, code, reason, info.ReplyTo);
+        TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
+        TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
+        finish(0);
+    };
+
+    if (!userInfo) {
+        fail(NPersQueue::NErrorCode::BAD_REQUEST, GetConsumerDeletedMessage(info.User));
+        return;
+    }
+    if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+        fail(NPersQueue::NErrorCode::ERROR, TStringBuilder() << "Cannot read schema changes: " << response.GetErrorReason());
+        return;
+    }
+    if (response.ReadResultSize() != info.SchemaChangesKeys.size()) {
+        fail(NPersQueue::NErrorCode::ERROR, "Incomplete KV response for schema changes");
+        return;
+    }
+    for (const auto& result : response.GetReadResult()) {
+        if (result.GetStatus() != NKikimrProto::OK || result.GetValue().empty()) {
+            fail(NPersQueue::NErrorCode::ERROR, "Cannot read schema change value from KV");
+            return;
+        }
+    }
+
+    auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(info.Destination, info.IsInternal);
+    auto& record = *answer->Response;
+    record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    record.SetErrorCode(NPersQueue::NErrorCode::OK);
+    auto* readResult = record.MutablePartitionResponse()->MutableCmdReadResult();
+    readResult->SetWaitQuotaTimeMs(info.WaitQuotaTime.MilliSeconds());
+    readResult->SetStartOffset(GetStartOffset());
+    readResult->SetEndOffset(GetEndOffset());
+    readResult->SetMaxOffset(GetEndOffset());
+    readResult->SetRealReadOffset(info.Offset);
+    // Reading metadata does not consume a message offset, including offset zero.
+    readResult->SetLastOffset(static_cast<i64>(info.Offset) - 1);
+    readResult->SetReadFromTimestampMs(info.ReadTimestampMs);
+    readResult->SetSizeLag(GetSizeLag(info.Offset));
+    ui64 size = 0;
+    for (size_t i = 0; i < info.SchemaChangesKeys.size(); ++i) {
+        const auto& value = response.GetReadResult(i).GetValue();
+        auto* result = readResult->AddResult();
+        result->SetOffset(info.SchemaChangesKeys[i].GetOffset());
+        result->SetData(value);
+        result->SetIsServiceTopicChangesMessage(true);
+        size += value.size();
+        // Like data reads, allow the first indivisible record to exceed the limit.
+        if (size >= info.Size || static_cast<ui32>(readResult->ResultSize()) >= info.Count) {
+            break;
+        }
+    }
+    readResult->SetSizeEstimate(record.ByteSizeLong());
+    const ui64 answerSize = record.ByteSizeLong();
+    TabletCounters.Cumulative()[COUNTER_PQ_READ_OK].Increment(1);
+    TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(answerSize);
+    TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_OK].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
+    ctx.Send(ReplyTo(info.Destination, info.ReplyTo), answer.Release());
+    finish(answerSize);
 }
 
 TString TPartition::GetConsumerDeletedMessage(TStringBuf consumerName) {

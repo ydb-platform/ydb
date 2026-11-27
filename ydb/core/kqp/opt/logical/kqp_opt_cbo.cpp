@@ -244,7 +244,9 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
             return IsLookupJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, *this);
         }
         case EJoinAlgoType::MapJoin:
-            return joinKind != EJoinKind::OuterJoin && joinKind != EJoinKind::Exclusion && right->Stats.ByteSize < 1e6;
+            // Map join lowers to MapJoinCore. Grace join lowers to DqBlockHashJoin,
+            // which reports its state and is partitioned across tasks.
+            return false;
         case EJoinAlgoType::GraceJoin:
             return true;
         case EJoinAlgoType::ReverseBlockJoin:

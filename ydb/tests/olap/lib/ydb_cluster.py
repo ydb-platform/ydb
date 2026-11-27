@@ -119,8 +119,9 @@ class YdbCluster:
         return subpath if subpath else cls._tables_path
 
     @classmethod
-    def get_full_tables_path(cls, subpath: str = '') -> str:
-        return f'/{cls.ydb_database}/{cls.get_tables_path(subpath)}'
+    def get_full_tables_path(cls, subpath: str = '', *, use_tables_prefix: bool = True) -> str:
+        path = cls.get_tables_path(subpath) if use_tables_prefix else subpath
+        return f"/{cls.ydb_database.strip('/')}/{path}"
 
     @classmethod
     def get_monitoring_urls(cls) -> list[YdbCluster.MonitoringUrl]:

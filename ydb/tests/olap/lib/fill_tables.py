@@ -3,11 +3,12 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from decimal import Decimal
 import json
 import logging
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -88,7 +89,7 @@ class TableFiller:
     def __init__(self, cli: str, *, static_nodes=None, key_file='', token_file='', resource_parts=16, attempts=3):
         self.cli = os.path.abspath(cli)
         self.static_nodes = static_nodes
-        self.database = '/' + YdbCluster.ydb_database.lstrip('/')
+        self.database = '/' + YdbCluster.ydb_database.strip('/')
         self.auth = ()
         if key_file:
             self.auth = ('--sa-key-file', os.path.abspath(key_file))
@@ -259,8 +260,27 @@ class TableFiller:
                 sleep(5)
         raise RuntimeError(f'Import of {dataset.path} part {part} on {worker.host} failed: exit {return_code}')
 
+    def _dataset_path(self, path: str) -> PurePosixPath:
+        if not isinstance(path, str) or not path.strip('/'):
+            raise ValueError('Specify a non-empty dataset table path')
+        if path.startswith('/'):
+            full_path = '/' + path.lstrip('/')
+        else:
+            full_path = YdbCluster.get_full_tables_path(path, use_tables_prefix=False)
+        absolute = PurePosixPath(full_path)
+        if not absolute.is_relative_to(self.database) or absolute == PurePosixPath(self.database) or '..' in absolute.parts:
+            raise ValueError(f'Dataset path {path!r} must identify a table or folder under {self.database}')
+        return absolute
+
     def _fill(self, dataset, index, resources):
-        count = len(resources) if resources else len(self.workers) if dataset.uses_generator else 1
+        count = len(resources) if resources else 1
+        if dataset.uses_generator:
+            count = len(self.workers)
+            if dataset.workload == 'tpcds':
+                scale = Decimal(str(dataset.scale))
+                if scale != scale.to_integral_value():
+                    # TPC-DS partitions the rounded-up scale before truncating row counts.
+                    count = 1
         with ThreadPoolExecutor(max_workers=min(count, len(self.workers))) as executor:
             # Keep one active import per worker for this dataset, even when there are more resource parts.
             def import_parts(worker_index, worker):
@@ -273,7 +293,7 @@ class TableFiller:
 
     def _wait_compaction(self, dataset: Dataset, timeout: float, datashard_compaction: str):
         cli = [self.cli, '-e', YdbCluster.ydb_endpoint, '-d', self.database, *self.auth]
-        path = f'{self.database}/{dataset.path.strip("/")}'
+        path = str(self._dataset_path(dataset.path))
         entries = json.loads(execute_command(
             'localhost', cli + ['scheme', 'ls', '--format', 'json', '-l', '-R', path],
             timeout=60,
@@ -320,9 +340,11 @@ class TableFiller:
             raise ValueError(f'Unknown DataShard compaction method: {datashard_compaction}')
         if compaction_timeout < 0:
             raise ValueError('Compaction timeout must be nonnegative')
-        paths = sorted(Path(dataset.path.strip('/')).parts for dataset in datasets)
-        if not paths or not paths[0] or any(b[:len(a)] == a for a, b in zip(paths, paths[1:])):
+        normalized = [(dataset, self._dataset_path(dataset.path)) for dataset in datasets]
+        paths = sorted(path.parts for _, path in normalized)
+        if not paths or any(b[:len(a)] == a for a, b in zip(paths, paths[1:])):
             raise ValueError('Specify datasets with distinct, non-overlapping table paths')
+        datasets = [replace(dataset, path=str(path.relative_to(self.database))) for dataset, path in normalized]
         resources = {
             workload: find_resources(workload, self.resource_parts)
             for workload in sorted({d.workload for d in datasets if d.needs_resources})

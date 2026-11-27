@@ -164,13 +164,14 @@ def column_compaction_query(tables):
 
 def wait_column_compaction(tables, execute_query, *, timeout=None, interval=1):
     deadline = None if timeout is None else time.monotonic() + timeout
-    while tables:
+    pending_tables = tables
+    while pending_tables:
         remaining = None if deadline is None else deadline - time.monotonic()
         if remaining is not None and remaining <= 0:
-            raise TimeoutError(f'Compaction timed out for {", ".join(tables)}')
+            raise TimeoutError(f'Compaction timed out for {", ".join(pending_tables)}')
         rows = execute_query(column_compaction_query(tables), remaining)
         pending = {row['table_path']: row['pending'] for row in rows}
-        tables = [table for table in tables if pending[table]]
-        if tables:
+        pending_tables = [table for table in tables if pending[table]]
+        if pending_tables:
             delay = interval if deadline is None else min(interval, max(0, deadline - time.monotonic()))
             time.sleep(delay)

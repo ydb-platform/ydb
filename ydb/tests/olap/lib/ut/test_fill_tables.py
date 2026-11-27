@@ -104,3 +104,68 @@ def test_query_import_uses_selected_data(monkeypatch, tmp_path, remote, input_ki
     assert len(imports) == 1
     assert bundled_data.is_dir() == bundled
     assert not (suite / 'import' / 'selected_table').exists()
+
+
+@pytest.mark.parametrize(('workload', 'scale', 'count'), [
+    ('tpcds', '1.5', 1),
+    ('tpcds', 0.1, 1),
+    ('tpcds', '2.0', 2),
+    ('tpch', '0.1', 2),
+])
+def test_generator_worker_count(monkeypatch, workload, scale, count):
+    from ydb.tests.olap.lib.fill_tables import Dataset
+
+    filler = TableFiller('ydb')
+    filler.workers = ['worker1', 'worker2']
+    calls = []
+    monkeypatch.setattr(filler, '_import_part', lambda dataset, worker, index, part, total, resource: calls.append((worker, part, total)))
+
+    filler._fill(Dataset(workload, 'target', scale=scale), 0, None)
+
+    assert sorted(calls) == [(f'worker{i + 1}', i, count) for i in range(count)]
+
+
+@pytest.mark.parametrize('paths', [('data', '/Root/db/data'), ('/Root/db/data', 'data/child')])
+def test_fill_rejects_overlapping_paths(monkeypatch, paths):
+    from ydb.tests.olap.lib.fill_tables import Dataset
+
+    monkeypatch.setattr(YdbCluster, 'ydb_database', '/Root/db')
+    monkeypatch.setattr(YdbCluster, '_tables_path', 'test-prefix')
+    with pytest.raises(ValueError, match='non-overlapping'):
+        TableFiller('ydb').fill([Dataset('tpch', path) for path in paths])
+
+
+def test_fill_normalizes_absolute_path(monkeypatch):
+    from ydb.tests.olap.lib import fill_tables
+
+    monkeypatch.setattr(YdbCluster, 'ydb_database', '/Root/db')
+    monkeypatch.setattr(YdbCluster, '_tables_path', 'test-prefix')
+    filler = TableFiller('ydb')
+    filler.workers = []
+    calls = []
+    monkeypatch.setattr(filler, 'init', lambda dataset: calls.append(dataset.path))
+    monkeypatch.setattr(filler, '_fill', lambda dataset, *args: calls.append(dataset.path))
+
+    def execute(host, command, **kwargs):
+        assert command[-1] == '/Root/db/data'
+        return ExecutionResult('{"type":"directory"}', '', False, 0)
+
+    monkeypatch.setattr(fill_tables, 'execute_command', execute)
+
+    filler.fill([fill_tables.Dataset('tpch', '/Root/db/data/')])
+
+    assert calls == ['data', 'data']
+
+
+def test_wait_column_compaction_checks_all_tables_until_idle_together():
+    from ydb.tests.olap.lib.compaction import wait_column_compaction
+
+    tables = ['/Root/db/first', '/Root/db/second']
+    pending_counts = iter([(0, 1), (1, 0), (0, 0)])
+
+    def execute(query, remaining):
+        assert all(f'{table}/.sys/' in query for table in tables)
+        return [{'table_path': table, 'pending': pending} for table, pending in zip(tables, next(pending_counts))]
+
+    wait_column_compaction(tables, execute, timeout=10, interval=0)
+    assert next(pending_counts, None) is None

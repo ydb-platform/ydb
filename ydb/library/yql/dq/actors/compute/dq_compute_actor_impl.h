@@ -237,7 +237,7 @@ protected:
         , WatermarkGeneratorTracker(LogPrefix, taskCounters)
         , TaskCounters(taskCounters)
         , MetricsReporter(taskCounters)
-        , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, traceId, "ComputeActor")
+        , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, NWilson::TTraceId(traceId), "ComputeActor")
         , LifecycleSpan(6, std::move(traceId), "ComputeActor lifecycle", NWilson::EFlags::AUTO_END)
         , Running(!Task.GetCreateSuspended())
         , PassExceptions(passExceptions)

@@ -278,6 +278,39 @@ TEST(TableTest, ColumnFamilyCompressionLevelRoundTrip) {
     }
 }
 
+TEST(TableTest, ChangefeedCompressionRoundTripAndOverwrite) {
+    using namespace NTable;
+
+    Ydb::Table::Changefeed proto;
+    proto.mutable_compression()->mutable_zstd()->set_level(22);
+
+    TChangefeedDescription("feed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+        .WithCompression(TChangefeedCompressionZstd{7})
+        .SerializeTo(proto);
+    ASSERT_TRUE(proto.has_compression());
+    ASSERT_TRUE(proto.compression().has_zstd());
+    ASSERT_TRUE(proto.compression().zstd().has_level());
+    EXPECT_EQ(proto.compression().zstd().level(), 7);
+
+    auto roundTrip = TProtoAccessor::FromProto(proto);
+    const auto* roundTripZstd = std::get_if<TChangefeedCompressionZstd>(&roundTrip.GetCompression());
+    ASSERT_NE(roundTripZstd, nullptr);
+    ASSERT_TRUE(roundTripZstd->Level);
+    EXPECT_EQ(*roundTripZstd->Level, 7);
+
+    TChangefeedDescription("feed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+        .WithCompression(TChangefeedCompressionZstd{})
+        .SerializeTo(proto);
+    ASSERT_TRUE(proto.compression().has_zstd());
+    EXPECT_FALSE(proto.compression().zstd().has_level());
+
+    TChangefeedDescription("feed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+        .WithCompression(TChangefeedCompressionNone{})
+        .SerializeTo(proto);
+    ASSERT_TRUE(proto.compression().has_none());
+    EXPECT_FALSE(proto.compression().has_zstd());
+}
+
 TEST(TableTest, ZstdColumnFamilyRequests) {
     TMockTableService tableService;
     std::unique_ptr<grpc::Server> grpcServer;

@@ -620,7 +620,7 @@ message Changefeed {
     bool user_sids = 12;
     // Emit user trace identifier (trace_id) or not.
     bool trace_ids = 13;
-    // Compression applied to every changefeed message.
+    // Compression applied to change records. Resolved timestamp messages remain uncompressed.
     ChangefeedCompression compression = 14;
 }
 
@@ -669,7 +669,7 @@ message ChangefeedDescription {
     bool user_sids = 11;
     // State of emitting of user trace identifier (trace_id) or not.
     bool trace_ids = 12;
-    // Compression applied to every changefeed message.
+    // Compression applied to change records. Resolved timestamp messages remain uncompressed.
     ChangefeedCompression compression = 13;
 }
 

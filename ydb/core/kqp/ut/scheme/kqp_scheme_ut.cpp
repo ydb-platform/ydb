@@ -8941,7 +8941,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         const auto explicitLevel = TChangefeedDescription(
             "explicit", EChangefeedMode::Updates, EChangefeedFormat::Json)
-            .WithCompression(EChangefeedCompression::Zstd, 7);
+            .WithCompression(TChangefeedCompressionZstd{7});
         result = session.AlterTable("/Root/table", TAlterTableSettings()
             .AppendAddChangefeeds(explicitLevel)
         ).ExtractValueSync();
@@ -8949,7 +8949,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         const auto defaultLevel = TChangefeedDescription(
             "default", EChangefeedMode::Updates, EChangefeedFormat::Json)
-            .WithCompression(EChangefeedCompression::Zstd);
+            .WithCompression(TChangefeedCompressionZstd{});
         result = session.AlterTable("/Root/table", TAlterTableSettings()
             .AppendAddChangefeeds(defaultLevel)
         ).ExtractValueSync();
@@ -8961,30 +8961,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const auto& changefeeds = describeResult.GetTableDescription().GetChangefeedDescriptions();
         UNIT_ASSERT_VALUES_EQUAL(changefeeds.size(), 2);
         for (const auto& changefeed : changefeeds) {
-            UNIT_ASSERT_VALUES_EQUAL(changefeed.GetCompression(), EChangefeedCompression::Zstd);
-            UNIT_ASSERT(changefeed.GetCompressionLevel());
+            const auto* zstd = std::get_if<TChangefeedCompressionZstd>(&changefeed.GetCompression());
+            UNIT_ASSERT(zstd);
+            UNIT_ASSERT(zstd->Level);
             if (changefeed.GetName() == "explicit") {
-                UNIT_ASSERT_VALUES_EQUAL(*changefeed.GetCompressionLevel(), 7);
+                UNIT_ASSERT_VALUES_EQUAL(*zstd->Level, 7);
             } else if (changefeed.GetName() == "default") {
-                UNIT_ASSERT_VALUES_EQUAL(*changefeed.GetCompressionLevel(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(*zstd->Level, 3);
             } else {
                 UNIT_FAIL(TStringBuilder() << "Unexpected changefeed: " << changefeed.GetName());
             }
         }
 
-        const auto noneWithLevel = TChangefeedDescription(
-            "none_with_level", EChangefeedMode::Updates, EChangefeedFormat::Json)
-            .WithCompression(EChangefeedCompression::None, 3);
-        result = session.AlterTable("/Root/table", TAlterTableSettings()
-            .AppendAddChangefeeds(noneWithLevel)
-        ).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "compression level requires ZSTD");
-
         for (const i32 level : {0, 23}) {
             const auto invalidLevel = TChangefeedDescription(
                 TStringBuilder() << "invalid_" << level, EChangefeedMode::Updates, EChangefeedFormat::Json)
-                .WithCompression(EChangefeedCompression::Zstd, level);
+                .WithCompression(TChangefeedCompressionZstd{level});
             result = session.AlterTable("/Root/table", TAlterTableSettings()
                 .AppendAddChangefeeds(invalidLevel)
             ).ExtractValueSync();
@@ -9009,7 +9001,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         const auto changefeed = TChangefeedDescription(
             "feed", EChangefeedMode::Updates, EChangefeedFormat::Json)
-            .WithCompression(EChangefeedCompression::Zstd, 7);
+            .WithCompression(TChangefeedCompressionZstd{7});
         result = session.AlterTable("/Root/table", TAlterTableSettings()
             .AppendAddChangefeeds(changefeed)
         ).ExtractValueSync();

@@ -2862,14 +2862,14 @@ void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
 
     switch (in.GetCompression()) {
     case NKikimrSchemeOp::ECdcStreamCompressionZstd: {
-        auto& compression = *out.mutable_compression();
-        compression.set_codec(Ydb::Table::ChangefeedCompression::CODEC_ZSTD);
+        auto& zstd = *out.mutable_compression()->mutable_zstd();
         if (in.HasCompressionLevel()) {
-            compression.set_level(in.GetCompressionLevel());
+            zstd.set_level(in.GetCompressionLevel());
         }
         break;
     }
     case NKikimrSchemeOp::ECdcStreamCompressionNone:
+        out.mutable_compression()->mutable_none();
         break;
     default:
         break;
@@ -2945,27 +2945,24 @@ bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out
 
     if (in.has_compression()) {
         const auto& compression = in.compression();
-        switch (compression.codec()) {
-        case Ydb::Table::ChangefeedCompression::CODEC_NONE:
-            if (compression.has_level()) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = "Changefeed compression level requires ZSTD compression";
-                return false;
-            }
+        switch (compression.codec_case()) {
+        case Ydb::Table::ChangefeedCompression::kNone:
             out.SetCompression(NKikimrSchemeOp::ECdcStreamCompressionNone);
             break;
-        case Ydb::Table::ChangefeedCompression::CODEC_ZSTD:
+        case Ydb::Table::ChangefeedCompression::kZstd: {
             out.SetCompression(NKikimrSchemeOp::ECdcStreamCompressionZstd);
-            if (compression.has_level()) {
-                if (compression.level() < 1 || compression.level() > 22) {
+            const auto& zstd = compression.zstd();
+            if (zstd.has_level()) {
+                if (zstd.level() < 1 || zstd.level() > 22) {
                     status = Ydb::StatusIds::BAD_REQUEST;
                     error = "Changefeed ZSTD compression level must be in range [1, 22]";
                     return false;
                 }
-                out.SetCompressionLevel(compression.level());
+                out.SetCompressionLevel(zstd.level());
             }
             break;
-        default:
+        }
+        case Ydb::Table::ChangefeedCompression::CODEC_NOT_SET:
             status = Ydb::StatusIds::BAD_REQUEST;
             error = "Invalid changefeed compression codec";
             return false;

@@ -5,6 +5,7 @@
 #include "types.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
@@ -53,6 +54,7 @@ namespace NKikimr::NBsController {
             TBlobStorageGroupType Type;
             TMap<TVDiskID, TVDiskInfo> VDisks;
             std::shared_ptr<TGroupGeometryInfo> Geometry;
+            TMirror3dcGroupConfiguration Mirror3dcConfiguration;
         };
 
         struct TVDiskStatusUpdate {

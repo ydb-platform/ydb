@@ -772,6 +772,13 @@ public:
             friend std::strong_ordering operator <=>(const TGroupStatus&, const TGroupStatus&) = default;
         } Status;
 
+        TMirror3dcGroupConfiguration GetMirror3dcConfiguration() const {
+            TMirror3dcGroupConfiguration config;
+            config.State = Mirror3dcState.value_or(config.State);
+            config.Realms = FailRealmStates.value_or(config.Realms);
+            return config;
+        }
+
         // group status depends on the IsReady value for every VDisk; so it has to be updated every time there is possible
         // change; source of this change include:
         // 1. Node disconnection

@@ -1,5 +1,7 @@
 #include "util.h"
 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
+
 namespace NKikimr::NBsController {
 
     NKikimrBlobStorage::TUpdateSettings FromBscConfig(const NKikimrBlobStorage::TBscConfig &config) {
@@ -60,5 +62,30 @@ namespace NKikimr::NBsController {
         return result;
     }
 
+    bool CheckGroupReassignmentFailModel(const TMirror3dcGroupConfiguration& config,
+            const TBlobStorageGroupInfo::TGroupVDisks& failed) {
+        const TBlobStorageGroupInfo::TTopology& topology = *failed.GetTopology();
+        if (config == TMirror3dcGroupConfiguration{}) {
+            return topology.GetQuorumChecker().CheckFailModelForGroup(failed);
+        }
+        if (topology.GType.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc || topology.GetTotalFailRealmsNum() != 3) {
+            return false;
+        }
+        return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(config, failed);
+    }
+
+    TBlobStorageGroupInfo::TGroupVDisks GetExcludedVDisks(const TMirror3dcGroupConfiguration& config,
+            const TBlobStorageGroupInfo::TTopology& topology) {
+        TBlobStorageGroupInfo::TGroupVDisks excluded(&topology);
+        if (config != TMirror3dcGroupConfiguration{} && topology.GetTotalFailRealmsNum() == config.Realms.size()) {
+            for (ui32 order = 0; order < topology.GetTotalVDisksNum(); ++order) {
+                TVDiskIdShort id = topology.GetVDiskId(order);
+                if (IsExcluded(config.Realms[id.FailRealm])) {
+                    excluded |= {&topology, id};
+                }
+            }
+        }
+        return excluded;
+    }
 
 }  // NKikimr::NBsController

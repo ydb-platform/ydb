@@ -158,14 +158,18 @@ public:
         if (topology.GetTotalFailRealmsNum() != 3) {
             return topology.GetQuorumChecker().CheckFailModelForGroup(failedDisks);
         }
-        const TMirror3dcGroupState& groupState = info.GetMirror3dcState();
-        const TMirror3dcFailRealmStates& realms = groupState.FailRealmStates;
-        EMirror3dcGroupState state = groupState.State;
-        if (!IsValidMirror3dcGroupConfiguration({state, realms})) {
+        const TMirror3dcGroupState& state = info.GetMirror3dcState();
+        return CheckFailModelForGroup({state.State, state.FailRealmStates}, failedDisks);
+    }
+
+    // The caller selects a mirror-3-dc topology with exactly three fail realms.
+    static bool CheckFailModelForGroup(const TMirror3dcGroupConfiguration& config,
+            const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) {
+        if (!IsValidMirror3dcGroupConfiguration(config)) {
             return false;
         }
-        TMirror3dcGroupLayouts layouts = *GetMirror3dcGroupLayouts(state);
-        TMirror3dcWriteQuorumChecker checker(realms, layouts.Write, GetMirror3dcReadLayout(state), state);
+        TMirror3dcGroupLayouts layouts = *GetMirror3dcGroupLayouts(config.State);
+        TMirror3dcWriteQuorumChecker checker(config.Realms, layouts.Write, GetMirror3dcReadLayout(config.State), config.State);
         return checker.HasStartupQuorum(CountFailedDomainsByRealm(failedDisks));
     }
 

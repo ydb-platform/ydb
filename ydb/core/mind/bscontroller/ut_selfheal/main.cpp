@@ -262,6 +262,119 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
         TTestSelfHeal(3, 4, 3, 4, 128, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc).RunTestCorrectMoves();
     }
 
+    void TestSelfHealMirror3dcSoloInv2(bool loseSecondIncludedVDisk) {
+        using TVSlot = NKikimrBlobStorage::TBaseConfig::TVSlot;
+
+        constexpr ui32 nodesPerDC = 4;
+        TTestSelfHeal cluster(3, nodesPerDC, 1, 1, 1, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc);
+        cluster.InitCluster();
+        cluster.Env.Wait(TDuration::Seconds(120));
+
+        NKikimrBlobStorage::TBaseConfig initial = cluster.RequestBasicConfig();
+        UNIT_ASSERT_VALUES_EQUAL(initial.GroupSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(initial.VSlotSize(), 9);
+        ui32 groupId = initial.GetGroup(0).GetGroupId();
+        TVector<TVSlot> included;
+        TSet<ui32> usedNodes;
+        for (const TVSlot& slot : initial.GetVSlot()) {
+            UNIT_ASSERT(slot.GetReady());
+            ui32 nodeId = slot.GetVSlotId().GetNodeId();
+            usedNodes.insert(nodeId);
+            if (nodeId <= nodesPerDC) {
+                included.push_back(slot);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(included.size(), 3);
+        ui32 includedRealm = included.front().GetFailRealmIdx();
+        auto failed = std::ranges::find_if(included, [&](const TVSlot& slot) {
+            return slot.GetVSlotId().GetNodeId() != cluster.Env.NodeId;
+        });
+        UNIT_ASSERT(failed != included.end());
+
+        NKikimrBlobStorage::TConfigRequest request;
+        // Establish the copy guarantee in the fixture before switching off the excluded DCs.
+        request.SetIgnoreGroupFailModelChecks(true);
+        request.SetIgnoreDegradedGroupsChecks(true);
+        NKikimrBlobStorage::TDefineGroupState::TGroupDefinition* definition =
+            request.AddCommand()->MutableDefineGroupState()->AddGroups();
+        definition->SetGroupId(groupId);
+        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_SOLO_INV2);
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            definition->AddFailRealmStates(realm == includedRealm
+                ? NKikimrBlobStorage::TDataCenterState::INCLUDED : NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        }
+        NKikimrBlobStorage::TConfigResponse response = cluster.Env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+
+        for (ui32 nodeId = nodesPerDC + 1; nodeId <= 3 * nodesPerDC; ++nodeId) {
+            cluster.Env.Runtime->StopNode(nodeId);
+        }
+        cluster.Env.Runtime->StopNode(failed->GetVSlotId().GetNodeId());
+        if (loseSecondIncludedVDisk) {
+            auto second = std::ranges::find_if(included, [&](const TVSlot& slot) {
+                ui32 nodeId = slot.GetVSlotId().GetNodeId();
+                return nodeId != cluster.Env.NodeId && nodeId != failed->GetVSlotId().GetNodeId();
+            });
+            UNIT_ASSERT(second != included.end());
+            cluster.Env.Runtime->StopNode(second->GetVSlotId().GetNodeId());
+        }
+        cluster.Env.Wait(TDuration::Seconds(120));
+
+        NKikimrBlobStorage::TBaseConfig before = cluster.RequestBasicConfig();
+        ui32 generation = before.GetGroup(0).GetGroupGeneration();
+        UNIT_ASSERT_VALUES_EQUAL(ui32(before.GetGroup(0).GetMirror3dcState()), ui32(NKikimrBlobStorage::TGroupState::DC_SOLO_INV2));
+        UNIT_ASSERT_VALUES_EQUAL(std::ranges::count_if(before.GetVSlot(), [](const TVSlot& slot) { return slot.GetReady(); }),
+            loseSecondIncludedVDisk ? 1 : 2);
+
+        // FAULTY requests urgent SelfHeal. BROKEN would also run the fitter in this transaction.
+        request.Clear();
+        const NKikimrBlobStorage::TVSlotId& failedLocation = failed->GetVSlotId();
+        cluster.Env.UpdateDriveStatus(TPDiskId(failedLocation.GetNodeId(), failedLocation.GetPDiskId()),
+            NKikimrBlobStorage::FAULTY, &request);
+        response = cluster.Env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        cluster.Env.Wait(TDuration::Seconds(240));
+
+        NKikimrBlobStorage::TBaseConfig after = cluster.RequestBasicConfig();
+        const NKikimrBlobStorage::TBaseConfig::TGroup& group = after.GetGroup(0);
+        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), generation + !loseSecondIncludedVDisk);
+        if (loseSecondIncludedVDisk) {
+            // Exercise the fitter's independent safety check by issuing the same reassignment directly.
+            request.Clear();
+            request.SetAllowUnusableDisks(true);
+            request.SetSettleOnlyOnOperationalDisks(true);
+            request.SetIgnoreGroupReserve(true);
+            NKikimrBlobStorage::TReassignGroupDisk* command = request.AddCommand()->MutableReassignGroupDisk();
+            command->SetGroupId(groupId);
+            command->SetGroupGeneration(generation);
+            command->SetFailRealmIdx(includedRealm);
+            command->SetFailDomainIdx(failed->GetFailDomainIdx());
+            command->SetVDiskIdx(failed->GetVDiskIdx());
+            response = cluster.Env.Invoke(request);
+            UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(ui32(response.GetStatus(0).GetFailReason()),
+                ui32(NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData));
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(NKikimrBlobStorage::TGroupState::DC_SOLO_INV2));
+            auto replacement = std::ranges::find_if(after.GetVSlot(), [&](const TVSlot& slot) {
+                return slot.GetGroupGeneration() == group.GetGroupGeneration() && slot.GetFailRealmIdx() == includedRealm
+                    && slot.GetFailDomainIdx() == failed->GetFailDomainIdx() && slot.GetVDiskIdx() == failed->GetVDiskIdx();
+            });
+            UNIT_ASSERT(replacement != after.GetVSlot().end());
+            ui32 nodeId = replacement->GetVSlotId().GetNodeId();
+            UNIT_ASSERT(nodeId <= nodesPerDC && !usedNodes.contains(nodeId));
+            UNIT_ASSERT(replacement->GetReady());
+        }
+    }
+
+    Y_UNIT_TEST(SelfHealMirror3dcSoloInv2ReplacesFaultyPDisk) {
+        TestSelfHealMirror3dcSoloInv2(false);
+    }
+
+    Y_UNIT_TEST(SelfHealMirror3dcSoloInv2RejectsUnsafeReplacement) {
+        TestSelfHealMirror3dcSoloInv2(true);
+    }
+
     Y_UNIT_TEST(DecommitRejected) {
         for (const bool useRejected : {false, true}) {
             constexpr ui32 numNodes = 3 + 3 + 6 + 3;

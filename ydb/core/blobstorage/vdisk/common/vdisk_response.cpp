@@ -11,7 +11,6 @@ namespace NKikimr {
 template <class TRecord>
 void ReportResponse(const TRecord& record, const TCommonHandleClass& handleClass, const TIntrusivePtr<TVDiskContext>& vCtx);
 void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLogPrefix, std::atomic<ui32>& curFlags);
-void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup);
 void UpdateMonResponseStatus(NKikimrProto::EReplyStatus status, const TCommonHandleClass& handleClass, const std::shared_ptr<NMonGroup::TResponseStatusGroup>& monGroup);
 
 void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, const TIntrusivePtr<TVDiskContext>& vCtx, const TCommonHandleClass& handleClass) {
@@ -173,22 +172,37 @@ void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpace
     if (!monGroup) {
         return;
     }
-    if (!(flags & NKikimrBlobStorage::StatusIsValid)) {
+    const auto color = StatusFlagToValidSpaceColor(flags);
+    if (!color) {
         return;
     }
 
-    if (flags & NKikimrBlobStorage::StatusDiskSpaceRed) {
-        monGroup->ResponsesWithDiskSpaceRed().Inc();
-    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceOrange) {
-        monGroup->ResponsesWithDiskSpaceOrange().Inc();
-    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightOrange) {
-        monGroup->ResponsesWithDiskSpaceLightOrange().Inc();
-    } else if (flags & NKikimrBlobStorage::StatusDiskSpacePreOrange) {
-        monGroup->ResponsesWithDiskSpacePreOrange().Inc();
-    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceYellowStop) {
-        monGroup->ResponsesWithDiskSpaceYellowStop().Inc();
-    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) {
-        monGroup->ResponsesWithDiskSpaceLightYellowMove().Inc();
+    using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+    switch (*color) {
+        case TColor::BLACK:
+        case TColor::RED:
+            monGroup->ResponsesWithDiskSpaceRed().Inc();
+            break;
+        case TColor::ORANGE:
+            monGroup->ResponsesWithDiskSpaceOrange().Inc();
+            break;
+        case TColor::PRE_ORANGE:
+            monGroup->ResponsesWithDiskSpacePreOrange().Inc();
+            break;
+        case TColor::LIGHT_ORANGE:
+            monGroup->ResponsesWithDiskSpaceLightOrange().Inc();
+            break;
+        case TColor::YELLOW:
+            monGroup->ResponsesWithDiskSpaceYellowStop().Inc();
+            break;
+        case TColor::LIGHT_YELLOW:
+            monGroup->ResponsesWithDiskSpaceLightYellowMove().Inc();
+            break;
+        case TColor::CYAN:
+        case TColor::GREEN:
+        case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
+            break;
     }
 }
 

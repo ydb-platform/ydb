@@ -1,3 +1,4 @@
+#include <ydb/library/actors/wilson/wilson_actor_tracing.h>
 #include <ydb/core/subsystems/actor_system_monitoring/subsystem.h>
 #include <ydb/core/subsystems/inmemory_metrics_monitoring/subsystem.h>
 #include <ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart/resources.h>
@@ -1178,6 +1179,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             }
         }
         if (wilsonUploader) {
+            setup->EventTracing = NWilson::CreateActorEventTracing();
             setup->LocalServices.emplace_back(
                 NWilson::MakeWilsonUploaderId(),
                 TActorSetupCmd(wilsonUploader.release(), TMailboxType::ReadAsFilled, appData->BatchPoolId));

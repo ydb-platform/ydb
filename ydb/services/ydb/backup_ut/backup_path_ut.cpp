@@ -646,6 +646,10 @@ void ExportEmptyDirectoriesImpl(TBackupTestFixture& f) {
     explicitCollision.AppendItem(typename TExportSettings::TItem{.Src = "dir3", .Dst = "archive"});
     explicitCollision.AppendItem(typename TExportSettings::TItem{.Src = "dir3/metadata.json", .Dst = "archive/metadata.json"});
     f.WaitOpStatus(traits.Export(f, explicitCollision), EStatus::BAD_REQUEST);
+    auto available = traits.MakeExportSettingsCustomDest(f, parent, "available");
+    available.AppendItem(typename TExportSettings::TItem{.Src = "dir3", .Dst = "archive"});
+    available.AppendItem(typename TExportSettings::TItem{.Src = "dir3/metadata.json", .Dst = "archive/permissions.pb.enc"});
+    f.WaitOpSuccess(traits.Export(f, available));
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
@@ -2514,6 +2518,24 @@ void CancelWhileProcessingImpl(TBackupTestFixture& f, bool isOlap) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE_F(PathAliasingExplicitExport, TPathAliasExplicitExportFixture) {
+    Y_UNIT_TEST(ExportEmptyDirectoriesWithAliasedCliPath) {
+        auto& flags = Server().GetRuntime()->GetAppData().FeatureFlags;
+        flags.SetEnableRelativePaths(true);
+        flags.SetEnableDirectoryExport(true);
+        auto settings = MakeExportSettings("/Root/export-base-alias");
+        settings.AppendItem(NExport::TExportToFsSettings::TItem{.Src = "/Root/export-base-alias"});
+        settings.Header({{YDB_CLIENT_CAPABILITIES, YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT}});
+        settings.AppendExcludeRegexp(".*");
+        settings.AppendExcludeRegexp("^/Root/export-base-alias(?:$|/(?!dir1/dir2/dir3$))");
+        WaitOpSuccess(YdbExportClient().ExportToFs(settings).GetValueSync());
+        NKikimr::NBackup::TSchemaMapping mapping;
+        TString error;
+        const auto path = TFsPath(GetTempDir().Path()) / "SchemaMapping" / "mapping.json";
+        UNIT_ASSERT_C(mapping.Deserialize(TFileInput(path).ReadAll(), error), error);
+        UNIT_ASSERT_VALUES_EQUAL(mapping.Items.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(mapping.Items.front().ObjectPath, "dir1/dir2/dir3");
+    }
+
     Y_UNIT_TEST(RelativeExportAndImportItemsUseAliases) {
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
         auto exportSettings = MakeExportSettings("export-base-alias/");

@@ -161,6 +161,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         TString Destination;
         bool Resolved = false;
         bool ExplicitDestination = false;
+        TString CliPath;
     };
 
     enum class EStage {
@@ -174,8 +175,17 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         return "[CreateExport]";
     }
 
+    static bool IsCliLeaf(NSchemeCache::TSchemeCacheNavigate::EKind kind) {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        return kind == TNavigate::KindTable || kind == TNavigate::KindColumnTable
+            || kind == TNavigate::KindView || kind == TNavigate::KindTopic;
+    }
+
     bool IsItemSupportedInExport(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) const {
         if (NBackup::IsOmittedFromBackup(entry.Attributes)) {
+            return false;
+        }
+        if (CliDirectorySelection && entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindPath && !IsCliLeaf(entry.Kind)) {
             return false;
         }
 
@@ -213,10 +223,12 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         }
     }
 
-    static bool IsLikeDirectory(NSchemeCache::TSchemeCacheNavigate::EKind kind) {
+    bool IsLikeDirectory(NSchemeCache::TSchemeCacheNavigate::EKind kind) const {
         return kind == NSchemeCache::TSchemeCacheNavigate::KindPath
             || kind == NSchemeCache::TSchemeCacheNavigate::KindSubdomain
-            || kind == NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain;
+            || kind == NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain
+            || (CliDirectorySelection && (kind == NSchemeCache::TSchemeCacheNavigate::KindOlapStore
+                || kind == NSchemeCache::TSchemeCacheNavigate::KindBackupCollection));
     }
 
     IEventBase* MakeRequest() override {
@@ -236,7 +248,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         auto* exportSettings = TTraits::GetSettings(createExport);
         *exportSettings = request.settings();
-        if (AbsoluteExcludePaths) {
+        if (CliDirectorySelection) {
             exportSettings->mutable_exclude_regexps()->DeleteSubrange(0, 1);
         }
 
@@ -278,7 +290,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 && !HasCommonSourcePathPrefix(fullPath) && fullPath != CommonSourcePath) {
                 fullPath = CommonSourcePath + fullPath;
             }
-            if (!AbsoluteExcludePaths && IsExcludedFromExport(fullPath)) {
+            if (!CliDirectorySelection && IsExcludedFromExport(fullPath)) {
                 continue;
             }
             paths.emplace_back(fullPath);
@@ -289,6 +301,9 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             }
             it->second.Destination = TTraits::GetDestination(item);
             it->second.ExplicitDestination = !it->second.Destination.empty();
+            if (CliDirectorySelection) {
+                it->second.CliPath = CanonizePath(item.source_path());
+            }
         }
 
         if constexpr (TTraits::HasSourcePath) {
@@ -442,12 +457,12 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 if (IsLikeDirectory(kind)) {
                     DirectoryItems[path] = it->second;
                 }
-                if (AbsoluteExcludePaths && IsExcludedFromExport(path)) {
+                if (CliDirectorySelection && IsExcludedFromExport(it->second.CliPath)) {
                     ExportItems.erase(it);
                     continue;
                 }
                 if (!IsItemSupportedInExport(entry)) {
-                    if (IsLikeDirectory(kind)) { // If directories/databases are not supported => it is OK, they are expanded and then thrown
+                    if (IsLikeDirectory(kind) || CliDirectorySelection) {
                         ExportItems.erase(it);
                     } else {
                         return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Item \""
@@ -476,7 +491,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                     ExportItems.erase(path);
                     continue;
                 }
-                if (IsItemSupportedInExport(entry) && !IsExcludedFromExport(path)) {
+                if (IsItemSupportedInExport(entry) && !IsExcludedFromExport(CliDirectorySelection ? directory.CliPath : path)) {
                     directory.Resolved = true;
                     ExportItems.try_emplace(path, directory);
                 } else {
@@ -484,22 +499,32 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 }
                 for (const NSchemeCache::TSchemeCacheNavigate::TListNodeEntry::TChild& child : entry.ListNodeEntry->Children) {
                     const NSchemeCache::TSchemeCacheNavigate::EKind kind = child.Kind;
-                    if (isRoot && kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
+                    if (CliDirectorySelection && path.EndsWith(NNaming::METADATA_DIR_NAME) && child.Name == "secrets"
+                        && IsLikeDirectory(kind)) {
+                        // RecursiveList skips the legacy secrets directory even
+                        // when the caller explicitly selects .metadata.
+                        continue;
+                    }
+                    if ((isRoot || CliDirectorySelection) && kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
                         // Skip children that we don't want to export
                         if (NNaming::IsInternalName(child.Name)) {
                             continue;
                         }
                     }
                     const TString childPath = CanonizePath(TStringBuilder() << path << "/" << child.Name);
+                    TString cliPath;
+                    if (CliDirectorySelection) {
+                        cliPath = CanonizePath(TStringBuilder() << directory.CliPath << "/" << child.Name);
+                    }
                     TString destination;
                     if (directory.Destination) {
                         destination = TStringBuilder() << directory.Destination << "/" << child.Name;
                     }
                     if (IsLikeDirectory(kind)) {
-                        DirectoryItems.insert({childPath, TExportItemInfo{.Destination = destination}});
+                        DirectoryItems.insert({childPath, TExportItemInfo{.Destination = destination, .CliPath = std::move(cliPath)}});
                     } else {
                         // We'll remove all unsupported children on ResolveExpandedPaths stage
-                        if (!IsExcludedFromExport(childPath)) {
+                        if ((!CliDirectorySelection || IsCliLeaf(kind)) && !IsExcludedFromExport(CliDirectorySelection ? cliPath : childPath)) {
                             ExportItems.insert({childPath, TExportItemInfo{.Destination = destination}});
                         }
                     }
@@ -605,7 +630,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
     bool IsExcludedFromExport(const TString& exportPath) const {
         const char* path = exportPath.c_str();
-        if (!AbsoluteExcludePaths && HasCommonSourcePathPrefix(exportPath)) {
+        if (!CliDirectorySelection && HasCommonSourcePathPrefix(exportPath)) {
             path += CommonSourcePath.size() + 1; // prefix + /
         }
         for (const auto& regexp : ExcludeRegexps) {
@@ -627,7 +652,7 @@ public:
 
         const auto& settings = request.settings();
         InitCommonSourcePath();
-        AbsoluteExcludePaths = (IsS3Export || IsFsExport)
+        CliDirectorySelection = (IsS3Export || IsFsExport)
             && this->Request->HasClientCapability(NYdb::YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT);
 
         if constexpr (TTraits::HasEncryption) {
@@ -646,7 +671,7 @@ public:
         }
 
         try {
-            if (AbsoluteExcludePaths) {
+            if (CliDirectorySelection) {
                 if (!AppData()->FeatureFlags.GetEnableDirectoryExport()) {
                     return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Directory export is disabled");
                 }
@@ -763,7 +788,7 @@ private:
     THashMap<TString, TExportItemInfo> ExportItems;
     THashMap<TString, TExportItemInfo> DirectoryItems;
     std::vector<TRegExMatch> ExcludeRegexps;
-    bool AbsoluteExcludePaths = false;
+    bool CliDirectorySelection = false;
 }; // TExportRPC
 
 class TExportToYtRPC: public TExportRPC<TExportToYtRPC, TEvExportToYtRequest> {

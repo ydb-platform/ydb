@@ -453,7 +453,14 @@ private:
                     prefixes.push_back({item.source_path(), std::move(prefix),
                         exportInfo.Items[i].SourcePathType == NKikimrSchemeOp::EPathTypeDir, !destination.empty() && !inherited.contains(i)});
                 }
-                if (!ResolveDirectoryExportPrefixes(prefixes, !GetCommonDestination(settings).empty(), explain)) {
+                const TDirectoryExportFiles files{
+                    .HasMapping = !GetCommonDestination(settings).empty(),
+                    .Encrypted = settings.has_encryption_settings(),
+                    .Permissions = exportInfo.EnablePermissions,
+                    .Checksums = exportInfo.EnableChecksums,
+                    .CompletionMarker = std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>,
+                };
+                if (!ResolveDirectoryExportPrefixes(prefixes, files, explain)) {
                     return false;
                 }
                 for (ui32 i : xrange(prefixes.size())) {

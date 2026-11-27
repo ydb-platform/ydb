@@ -470,7 +470,9 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
             // A node without the capability must filter out the entire request.
             settings.AppendExcludeRegexp(".*");
             if (settings.Item_.empty()) {
-                settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database});
+                TString source = CommonSourcePath ? CommonSourcePath : config.Database;
+                NConsoleClient::AdjustPath(source, config);
+                settings.AppendItem(typename TSettings::TItem{.Src = source});
             }
             for (const auto& pattern : ExclusionPatterns) {
                 settings.AppendExcludeRegexp(pattern.GetRegExpr());

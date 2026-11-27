@@ -64,6 +64,7 @@ class YdbCluster:
             self.ic_port: int = ports.get('ic', 0)
             self.mon_port: int = ports.get('http-mon', 0)
             self.grpc_port: int = ports.get('grpc', 0)
+            self.grpcs_port: int = ports.get('grpcs', 0)
             self.kafka_port: int = self._load_kafka_port(self.host, self.mon_port) if load_kafka_port else 0
             self.disconnected: bool = desc.get('Disconnected', False)
             self.version: str = ss.get('Version', '')

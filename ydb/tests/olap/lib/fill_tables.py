@@ -104,11 +104,15 @@ class TableFiller:
             return {'localhost': YdbCluster.ydb_endpoint}
         scheme = 'grpcs' if YdbCluster.ydb_endpoint.startswith('grpcs://') else 'grpc'
         nodes = YdbCluster.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)
+        host_ports = sorted(
+            (node.host, node.grpcs_port if scheme == 'grpcs' else node.grpc_port)
+            for node in nodes if node.host and not node.disconnected
+        )
         endpoints = {}
-        for node in sorted(nodes, key=lambda node: (node.host, node.grpc_port)):
-            if node.host and node.grpc_port and not node.disconnected:
-                address = f'[{node.host}]' if ':' in node.host else node.host
-                endpoints.setdefault(node.host, f'{scheme}://{address}:{node.grpc_port}')
+        for host, port in host_ports:
+            if port:
+                address = f'[{host}]' if ':' in host else host
+                endpoints.setdefault(host, f'{scheme}://{address}:{port}')
         return endpoints
 
     def __enter__(self):

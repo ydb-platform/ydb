@@ -24,7 +24,6 @@ api_get() {
     "$url"
 }
 
-pr_check_items='[]'
 queued_json=$(api_get \
   "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100&page=1&status=queued&event=pull_request_target") || queued_json='{"workflow_runs":[]}'
 

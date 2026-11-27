@@ -422,7 +422,25 @@ public:
             return result;
         }
 
-        if (!op.HasConfig() && !op.HasState() && !op.HasAlterTransfer()) {
+        const bool registerChangefeeds = op.HasManagesChangefeeds();
+        if (registerChangefeeds) {
+            if (!Transaction.GetInternal() || !path.Base()->IsReplication() || !op.GetManagesChangefeeds()
+                || op.HasConfig() || op.HasState() || op.HasAlterTransfer())
+            {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Invalid changefeed registration");
+                return result;
+            }
+            if (replication->Description.GetState().HasDone()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Replication is already DONE");
+                return result;
+            }
+            if (replication->Description.GetManagesChangefeeds()) {
+                result->SetStatus(NKikimrScheme::StatusSuccess);
+                return result;
+            }
+        }
+
+        if (!registerChangefeeds && !op.HasConfig() && !op.HasState() && !op.HasAlterTransfer()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Empty alter");
             return result;
         }
@@ -431,6 +449,20 @@ public:
             result->SetError(NKikimrScheme::StatusInvalidParameter,
                 "It is not allowed to change both settings and the state of the replication in the same query. Please submit separate queries for each action");
             return result;
+        }
+
+        if (op.GetState().HasDone() && replication->Description.GetManagesChangefeeds()) {
+            if (op.GetState().GetDone().GetFailoverMode() != NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_FORCE) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Changefeed mirroring requires FAILOVER_MODE = 'FORCE' to finish replication");
+                return result;
+            }
+
+            if (!AppData()->FeatureFlags.GetEnableCdcHandoff()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Finishing replication with managed changefeeds requires EnableCdcHandoff on the destination SchemeShard");
+                return result;
+            }
         }
 
         if (op.HasState() && !ValidateAlterState(*result, replication->Description, op.GetState())) {
@@ -446,6 +478,9 @@ public:
         }
 
         auto alterData = replication->CreateNextVersion();
+        if (registerChangefeeds) {
+            alterData->Description.SetManagesChangefeeds(true);
+        }
 
         if (op.HasState()) {
             alterData->Description.MutableState()->CopyFrom(op.GetState());
@@ -537,9 +572,13 @@ public:
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterReplication, path.Base()->PathId);
-        txState.Shards.emplace_back(replication->AlterData->ControllerShardIdx,
-            ETabletType::ReplicationController, TTxState::ConfigureParts);
-        txState.State = TTxState::CreateParts;
+        if (registerChangefeeds) {
+            txState.State = TTxState::Propose;
+        } else {
+            txState.Shards.emplace_back(replication->AlterData->ControllerShardIdx,
+                ETabletType::ReplicationController, TTxState::ConfigureParts);
+            txState.State = NextState();
+        }
 
         path.Base()->LastTxId = OperationId.GetTxId();
         path.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
@@ -550,7 +589,7 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        SetState(NextState());
+        SetState(txState.State);
         return result;
     }
 

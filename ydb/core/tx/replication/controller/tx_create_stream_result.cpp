@@ -53,6 +53,19 @@ public:
             return true;
         }
 
+        if (Replication->GetState() == TReplication::EState::Removing
+            && target->GetKind() == TReplication::ETargetKind::CdcTopic
+            && target->GetStreamState() == TReplication::EStreamState::Creating)
+        {
+            // The source consumer request has settled, so DROP can now remove it.
+            target->Shutdown(ctx);
+            target->SetStreamState(TReplication::EStreamState::Removing);
+            NIceDb::TNiceDb db(txc.DB);
+            db.Table<Schema::SrcStreams>().Key(rid, tid).Update(
+                NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
+            return true;
+        }
+
         if (Replication->GetDesiredState() == TReplication::EState::Done) {
             // The source request may have committed before its creator stopped.
             // Preserve its cleanup metadata without reviving setup or failing DONE.

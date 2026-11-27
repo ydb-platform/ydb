@@ -19,7 +19,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/algorithm.h>
 #include <util/generic/scope.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
@@ -133,36 +132,12 @@ class TTopicMirroringFixture {
     static constexpr const char* SourceTopic = "/Root/src/topic";
     static constexpr const char* DestinationTopic = "/Root/topic";
 
-    static TFeatureFlags Flags() {
-        TFeatureFlags flags;
-        flags.FeatureFlags.SetEnableTopicReplication(true);
-        flags.FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
-        return flags;
-    }
-
     std::optional<TEnv<>> RemoteSource;
 
-    struct TOffsets {
-        ui64 End;
-        ui64 Committed;
-    };
-
-    static TOffsets GetOffsets(TEnv<>& env, const TString& topic, const TString& consumer, ui32 partitionId = 0) {
-        NYdb::NTopic::TTopicClient client(env.GetDriver());
-        const auto result = env.RunCall([&] {
-            return client.DescribeConsumer(topic, consumer, NYdb::NTopic::TDescribeConsumerSettings()
-                .IncludeStats(true)).GetValueSync();
-        });
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        const auto& partitions = result.GetConsumerDescription().GetPartitions();
-        const auto selected = FindIf(partitions, [partitionId](const auto& partition) {
-            return partition.GetPartitionId() == partitionId;
-        });
-        UNIT_ASSERT_C(selected != partitions.end(), "Missing partition " << partitionId << " on " << topic);
-        const auto& partition = *selected;
-        UNIT_ASSERT(partition.GetPartitionStats());
-        UNIT_ASSERT(partition.GetPartitionConsumerStats());
-        return {partition.GetPartitionStats()->GetEndOffset(), partition.GetPartitionConsumerStats()->GetCommittedOffset()};
+    static TTopicOffsets GetOffsets(TEnv<>& env, const TString& topic, const TString& consumer, ui32 partitionId = 0) {
+        const auto offsets = GetTopicOffsets(env, topic, consumer, partitionId);
+        UNIT_ASSERT(offsets);
+        return *offsets;
     }
 
     TString MirrorConsumer;
@@ -181,8 +156,8 @@ public:
     explicit TTopicMirroringFixture(const TString& sourceHost = "localhost", bool stopBeforeCreateResult = false,
             TMirrorReaderFactory* mirrorReaderFactory = nullptr, const TString& sourceWriteMode = {},
             EStart start = EStart::Immediate, ui32 partitionCount = 1)
-        : RemoteSource(stopBeforeCreateResult ? std::nullopt : std::optional<TEnv<>>(std::in_place, Flags()))
-        , Destination(Flags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
+        : RemoteSource(stopBeforeCreateResult ? std::nullopt : std::optional<TEnv<>>(std::in_place, TopicReplicationFlags()))
+        , Destination(TopicReplicationFlags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
         , Source(RemoteSource ? *RemoteSource : Destination)
     {
         Source.RunCall([&] {
@@ -227,7 +202,7 @@ public:
             WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
                 CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", endpoint.c_str()));
         if (stopBeforeCreateResult) {
-            Wait([&] { return createResultBlocked; });
+            WaitForReplication(Destination, [&] { return createResultBlocked; });
             return;
         }
         WaitMirror(true);
@@ -251,26 +226,13 @@ public:
         return result->Get()->GetRecord().GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
     }
 
-    template <typename TCondition>
-    void Wait(const TCondition& ready, const TString& description = "topic mirroring") {
-        const auto deadline = TInstant::Now() + TDuration::Seconds(60);
-        while (!ready()) {
-            UNIT_ASSERT_C(TInstant::Now() < deadline, "Timed out waiting for " << description);
-            if (Destination.GetRuntime().IsRealThreads()) {
-                Sleep(TDuration::MilliSeconds(10));
-            } else {
-                Destination.GetRuntime().SimulateSleep(TDuration::MilliSeconds(10));
-            }
-        }
-    }
-
     void WaitMirror(bool enabled) {
-        Wait([&] { return Config().GetPartitionConfig().HasMirrorFrom() == enabled; });
+        WaitForReplication(Destination, [&] { return Config().GetPartitionConfig().HasMirrorFrom() == enabled; });
     }
 
     void Done() {
         Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');");
-        Wait([&] { return Destination.GetDescription("/Root/replication")
+        WaitForReplication(Destination, [&] { return Destination.GetDescription("/Root/replication")
             .GetPathDescription().GetReplicationDescription().GetState().HasDone(); });
     }
 
@@ -358,16 +320,9 @@ public:
         const auto commit = CommitSourceConsumerOffset(offset);
         UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
 
-        NYdb::NTopic::TTopicClient destination(Destination.GetDriver());
-        Wait([&] {
-            const auto result = destination.DescribeConsumer(DestinationTopic, Consumer,
-                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            const auto& partitions = result.GetConsumerDescription().GetPartitions();
-            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-            const auto& stats = partitions.front().GetPartitionConsumerStats();
-            return stats && stats->GetCommittedOffset() == offset;
-        });
+        WaitForTopicOffsets(Destination, DestinationTopic, Consumer, [&](const TTopicOffsets& offsets) {
+            return offsets.Committed == offset;
+        }, "destination consumer commit");
     }
 
     void ReplicateFirstMessage() {
@@ -393,21 +348,20 @@ public:
     }
 
     void WaitForOffsets(ui64 end, ui64 appOffset, ui32 partitionId = 0) {
-        TString description;
-        Wait([&] {
-            const auto destination = GetOffsets(Destination, DestinationTopic, Consumer, partitionId);
+        TString description = "destination partition offsets";
+        WaitForTopicOffsets(Destination, DestinationTopic, Consumer, [&](const TTopicOffsets& destination) {
             description = TStringBuilder() << "destination partition " << partitionId << " to reach end offset " << end
                 << " and application offset " << appOffset << " (observed " << destination.End
                 << " and " << destination.Committed << ')';
             return destination.End == end && destination.Committed == appOffset;
-        }, description);
+        }, description, partitionId);
 
-        Wait([&] {
-            const auto source = GetOffsets(Source, SourceTopic, MirrorConsumer, partitionId);
+        description = "source mirror consumer offsets";
+        WaitForTopicOffsets(Source, SourceTopic, MirrorConsumer, [&](const TTopicOffsets& source) {
             description = TStringBuilder() << "source mirror consumer " << MirrorConsumer
                 << " to commit partition " << partitionId << " through offset " << end << " (observed " << source.Committed << ')';
             return source.End == end && source.Committed == end;
-        }, description);
+        }, description, partitionId);
     }
 
     void Write(const TVector<TString>& payloads, ui32 partitionId = 0) {
@@ -448,7 +402,7 @@ private:
             .Path(topic).ProducerId("blocked-producer").MessageGroupId("blocked-producer").Codec(ECodec::RAW)
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy()));
         bool sent = false;
-        Wait([&] {
+        WaitForReplication(env, [&] {
             auto event = writer->GetEvent();
             if (!event) {
                 return false;
@@ -496,7 +450,7 @@ private:
         }
         auto reader = client.CreateReadSession(settings.AppendTopics(TTopicReadSettings(topic).AppendPartitionIds(partitionId)));
         size_t index = 0;
-        Wait([&] {
+        WaitForReplication(env, [&] {
             auto event = reader->GetEvent();
             if (!event) {
                 return false;

@@ -513,4 +513,6 @@ message TFeatureFlags {
     // A DataShard restarted on an older binary after PREPARED can detach the table
     // while ignoring ActivateCdcStreams.
     optional bool EnableCdcHandoff = 408 [default = false];
+    // Enable only after the destination meets the EnableCdcHandoff rollout requirements.
+    optional bool EnableCdcReplication = 409 [default = false];
 }

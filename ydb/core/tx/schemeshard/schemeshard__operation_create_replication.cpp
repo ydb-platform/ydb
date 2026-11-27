@@ -555,6 +555,7 @@ public:
         } else {
             desc.MutableState()->MutablePaused();
         }
+        desc.ClearManagesChangefeeds();
         auto replication = TReplicationInfo::Create(std::move(desc));
         context.SS->Replications.Set(path->PathId, replication);
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);

@@ -79,10 +79,10 @@ TString CheckCdcActivation(const TTxTransaction& tx, const TPath& tablePath, TOp
     if (!expectedOwner.OwnerId || !expectedOwner.LocalPathId
         || !config.HasOwnerPathId() || TPathId::FromProto(config.GetOwnerPathId()) != expectedOwner
         || config.GetMode() != TConfig::REPLICATION_MODE_READ_ONLY
-        || config.GetConsistencyLevel() != TConfig::CONSISTENCY_LEVEL_ROW
+        || !EqualToOneOf(config.GetConsistencyLevel(), TConfig::CONSISTENCY_LEVEL_ROW, TConfig::CONSISTENCY_LEVEL_GLOBAL)
         || EqualToOneOf(config.GetImportState(), TConfig::WAITING_IMPORT, TConfig::IMPORTING))
     {
-        return "CDC activation requires the exact owner of a read-only ROW replica";
+        return "CDC activation requires the exact owner of a read-only replica";
     }
 
     THashSet<TPathId> selected;

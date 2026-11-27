@@ -3204,6 +3204,9 @@ public:
                     config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER);
                 }
             }
+            if (settings.Settings.AllowRowForTopicsInGlobal) {
+                config.SetAllowRowForTopicsInGlobal(true);
+            }
             if (const auto& initialScan = settings.Settings.InitialScan) {
                 config.SetInitialScan(*initialScan);
             }

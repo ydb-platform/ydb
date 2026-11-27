@@ -2,6 +2,10 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
+
+#include <functional>
+#include <optional>
 
 namespace NKikimrSchemeOp {
     class TPersQueueGroupDescription;
@@ -16,5 +20,31 @@ struct TTestTopicDescription {
 };
 
 THolder<NKikimrSchemeOp::TPersQueueGroupDescription> MakeTopicDescription(const TTestTopicDescription& desc);
+
+class TFeatureFlags;
+template <bool UseDatabase> class TEnv;
+
+TFeatureFlags TopicReplicationFlags();
+void WaitForReplication(TEnv<true>& env, const std::function<bool()>& ready,
+    const TString& description = "topic replication");
+
+struct TTopicOffsets {
+    ui64 Start;
+    ui64 End;
+    ui64 Committed;
+};
+
+std::optional<TTopicOffsets> GetTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer, ui32 partitionId = 0);
+void WaitForTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer,
+    const std::function<bool(const TTopicOffsets&)>& ready, const TString& description, ui32 partitionId = 0);
+
+struct TTopicRecord {
+    TString Data;
+    ui64 Offset;
+    TString Producer;
+    ui64 SeqNo;
+};
+
+TVector<TTopicRecord> ReadTopic(TEnv<true>& env, const TString& topic, size_t count, ui64 firstOffset = 0);
 
 }

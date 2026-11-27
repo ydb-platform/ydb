@@ -154,7 +154,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         if (Cdc->Refusal
             && google::protobuf::util::MessageDifferencer::Equivalent(TxBody, Cdc->Refusal->Proposal))
         {
-            return Error(NKikimrScheme::StatusPreconditionFailed, Cdc->Refusal->Reason);
+            return Error(Cdc->Refusal->Status, Cdc->Refusal->Reason, TxBody.HasCreateCdcStream());
         }
         if (TxBody.HasCreateCdcStream() && Cdc->InitialCreateTxId) {
             TxId = Cdc->InitialCreateTxId;
@@ -173,13 +173,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (Cdc->TablePartitionCount != Cdc->Definition.GetTopicPartitions()) {
                 return Error(NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
                     << "Cannot create CDC mirror: source feed has " << Cdc->Definition.GetTopicPartitions()
-                    << " partitions, destination table has " << Cdc->TablePartitionCount);
+                    << " partitions, destination table has " << Cdc->TablePartitionCount, true);
             }
             Cdc->FillCreate(TxBody);
             return ExecuteCdcTx();
         }
         if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
-            return Error(record.GetStatus(), record.GetReason());
+            const bool parentGone = Cdc->Describe == ECdcPath::Table
+                && record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist;
+            return Error(record.GetStatus(), record.GetReason(), parentGone);
         }
 
         const auto& desc = record.GetPathDescription();
@@ -200,7 +202,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void HandleCdcTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
         TString error;
-        if (!Cdc->CheckTable(record, PathId, SchemeShardId, Owner, error)) {
+        if (!Cdc->CheckTable(record, PathId, SchemeShardId, Consistency, Owner, error)) {
             return Error(NKikimrScheme::StatusPreconditionFailed, error);
         }
 
@@ -210,7 +212,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void HandleCdcStream(const NKikimrScheme::TEvDescribeSchemeResult& record) {
         TString error;
         if (!Cdc->CheckStream(record, SchemeShardId, Owner, error)) {
-            return Error(NKikimrScheme::StatusPreconditionFailed, error);
+            const auto& self = record.GetPathDescription().GetSelf();
+            const bool otherCreator = self.GetCreateTxId() && self.GetCreateTxId() != Cdc->InitialCreateTxId;
+            return Error(NKikimrScheme::StatusPreconditionFailed, error, otherCreator);
         }
 
         DescribeCdc(ECdcPath::Topic);
@@ -657,20 +661,27 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return;
         }
 
-        // SchemeShard also uses ResourceExhausted for the per-table changefeed limit.
-        if (Cdc && record.GetStatus() == NKikimrScheme::StatusResourceExhausted
-            && record.GetReason().StartsWith("the limit of operations with tx type "))
-        {
-            return Retry();
-        }
-
-        if (Cdc && EqualToOneOf(record.GetStatus(), NKikimrScheme::StatusAlreadyExists,
-                NKikimrScheme::StatusPreconditionFailed))
-        {
-            if (record.GetStatus() == NKikimrScheme::StatusPreconditionFailed) {
-                Cdc->Refusal = TCdcCreation::TRefusal{TxBody, record.GetReason()};
+        if (Cdc) {
+            const auto status = record.GetStatus();
+            // SchemeShard also uses ResourceExhausted for the per-table changefeed limit.
+            if (status == NKikimrScheme::StatusResourceExhausted
+                && record.GetReason().StartsWith("the limit of operations with tx type "))
+            {
+                return Retry();
             }
-            return AllocateTxId();
+            if (status == NKikimrScheme::StatusAlreadyExists) {
+                return AllocateTxId();
+            }
+            const bool createRejected = TxBody.HasCreateCdcStream() && EqualToOneOf(status,
+                NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusPathIsNotDirectory,
+                NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusNameConflict,
+                NKikimrScheme::StatusInvalidParameter, NKikimrScheme::StatusReadOnly,
+                NKikimrScheme::StatusAccessDenied, NKikimrScheme::StatusQuotaExceeded,
+                NKikimrScheme::StatusResourceExhausted);
+            if (status == NKikimrScheme::StatusPreconditionFailed || createRejected) {
+                Cdc->Refusal = TCdcCreation::TRefusal{TxBody, status, record.GetReason()};
+                return AllocateTxId();
+            }
         }
 
         switch (record.GetStatus()) {
@@ -1168,12 +1179,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         PassAway();
     }
 
-    void Error(NKikimrScheme::EStatus status, const TString& error) {
+    void Error(NKikimrScheme::EStatus status, const TString& error, bool cdcStreamAbsent = false) {
         YDB_LOG_ERROR("Error",
             {"status", status},
             {"reason", error});
 
-        Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, status, error));
+        auto result = MakeHolder<TEvPrivate::TEvCreateDstResult>(ReplicationId, TargetId, status, error);
+        result->CdcStreamAbsent = cdcStreamAbsent;
+        Send(Parent, result.Release());
         PassAway();
     }
 
@@ -1283,10 +1296,10 @@ public:
     }
 
     TDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy, const TString& database,
-            const TPathId& replicationPathId, ui64 rid, ui64 tid, const TString& srcPath, TDstCdcSettings&& settings)
+            const TPathId& replicationPathId, ui64 rid, ui64 tid, const TString& srcPath, EConsistencyLevel consistency, TDstCdcSettings&& settings)
         : TDstCreator(parent, schemeShardId, proxy, replicationPathId, rid, tid,
             TReplication::ETargetKind::Topic, srcPath, {}, EReplicationMode::ReadOnly,
-            EConsistencyLevel::Row, database, true, TReplication::EState::Ready, false, {})
+            consistency, database, true, TReplication::EState::Ready, false, {})
     {
         Cdc = std::make_unique<TCdcCreation>(TCdcCreation{.Settings = std::move(settings)});
         NeedToCheck = true;
@@ -1294,8 +1307,8 @@ public:
 
     TDstCreator(const TActorId& parent, ui64 schemeShardId, const TString& database,
             const TPathId& replicationPathId, ui64 rid, ui64 tid,
-            const NKikimrReplicationController::TCdcTarget& birth)
-        : TDstCreator(parent, schemeShardId, {}, database, replicationPathId, rid, tid, {}, TDstCdcSettings{
+            EConsistencyLevel consistency, const NKikimrReplicationController::TCdcTarget& birth)
+        : TDstCreator(parent, schemeShardId, {}, database, replicationPathId, rid, tid, {}, consistency, TDstCdcSettings{
             .TablePathId = TPathId::FromProto(birth.GetTablePathId()),
             .Consumer = birth.GetTopicSetup().GetReplicationSourceConsumer(),
         })
@@ -1461,9 +1474,10 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     Y_ABORT_UNLESS(target);
 
     if (const auto* cdc = TTargetCdc::Cast(target)) {
+        const auto consistency = ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings());
         if (cdc->GetCdc().HasInitialCreateTxId()) {
             return new TDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetDatabase(),
-                replication->GetPathId(), replication->GetId(), targetId, cdc->GetCdc());
+                replication->GetPathId(), replication->GetId(), targetId, consistency, cdc->GetCdc());
         }
         const auto* table = replication->FindTarget(cdc->GetCdc().GetParentTargetId());
         Y_ABORT_UNLESS(table && table->GetDstPathId());
@@ -1474,7 +1488,7 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         };
         return new TDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
             replication->GetDatabase(), replication->GetPathId(), replication->GetId(), targetId,
-            target->GetSrcPath(), std::move(settings));
+            target->GetSrcPath(), consistency, std::move(settings));
     }
 
     if (target->GetKind() == TReplication::ETargetKind::Topic) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/defs.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
 namespace NKikimrReplication {
     class TReplicationConfig;
@@ -9,6 +10,6 @@ namespace NKikimrReplication {
 namespace NKikimr::NReplication::NController {
 
 IActor* CreateTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
-    const NKikimrReplication::TReplicationConfig& config);
+    const NKikimrReplication::TReplicationConfig& config, TPathId cdcOwner = {});
 
 }

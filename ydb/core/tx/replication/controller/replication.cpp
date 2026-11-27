@@ -117,10 +117,12 @@ class TReplication::TImpl: public TLagProvider {
                 return ErrorState("Not implemented");
 
             case NKikimrReplication::TReplicationConfig::kSpecific:
-            case NKikimrReplication::TReplicationConfig::kTransferSpecific:
+            case NKikimrReplication::TReplicationConfig::kTransferSpecific: {
                 TargetDiscovererRevision = CredentialsRevision;
-                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, Config));
+                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, Config,
+                    Config.GetReplicateChangefeeds() ? PathId : TPathId{}));
                 break;
+            }
 
             default:
                 return ErrorState(TStringBuilder() << "Unexpected targets: " << Config.GetTargetCase());
@@ -346,6 +348,8 @@ public:
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
         KeepResourceId(Config, config);
         config.SetInitialScan(Config.GetInitialScan());
+        config.SetReplicateChangefeeds(Config.GetReplicateChangefeeds());
+        config.SetAllowRowForTopicsInGlobal(Config.GetAllowRowForTopicsInGlobal());
         if (Config.GetSrcConnectionParams().SerializeAsString() != config.GetSrcConnectionParams().SerializeAsString()) {
             // A deferred ALTER installs the config before ResetCredentials.
             // Invalidate the old callbacks immediately, including A -> B -> A.

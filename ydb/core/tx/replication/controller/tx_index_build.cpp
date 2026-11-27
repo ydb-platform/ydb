@@ -76,7 +76,7 @@ TVector<TString> TController::GetCommitTablePaths(const TRowVersion& version) co
     }
 
     for (const auto* target : replication->GetTargets()) {
-        if (target->GetDstState() == TReplication::EDstState::Removing) {
+        if (IsTopicTarget(target->GetKind()) || target->GetDstState() == TReplication::EDstState::Removing) {
             continue;
         }
 

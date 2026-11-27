@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -8,11 +9,9 @@
 
 #include <optional>
 
-namespace NKikimrScheme {
-class TEvDescribeSchemeResult;
-}
-
 namespace NKikimr::NReplication::NController {
+
+enum class EConsistencyLevel;
 
 struct TDstCdcSettings {
     TPathId TablePathId;
@@ -37,13 +36,14 @@ struct TCdcCreation {
     EPath Describe = EPath::Table;
     struct TRefusal {
         NKikimrSchemeOp::TModifyScheme Proposal;
+        NKikimrScheme::EStatus Status;
         TString Reason;
     };
     std::optional<TRefusal> Refusal;
 
     bool Prepare(const NYdb::NTopic::TTopicDescription& topic, const TString& database, TString& error);
     bool CheckTable(const NKikimrScheme::TEvDescribeSchemeResult& record,
-        const TPathId& replicationPathId, ui64 schemeShardId, TString& owner, TString& error);
+        const TPathId& replicationPathId, ui64 schemeShardId, EConsistencyLevel consistency, TString& owner, TString& error);
     bool CheckStream(const NKikimrScheme::TEvDescribeSchemeResult& record, ui64 schemeShardId,
         const TString& owner, TString& error);
     bool CheckTopic(const NKikimrScheme::TEvDescribeSchemeResult& record, ui64 schemeShardId,

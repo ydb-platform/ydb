@@ -139,6 +139,18 @@ public:
                 {"rid", rid},
                 {"tid", tid},
                 {"pathId", Ev->Get()->DstPathId});
+        } else if (cdc && Ev->Get()->CdcStreamAbsent
+            && (Replication->GetState() == TReplication::EState::Removing
+                || (Replication->GetDesiredState() == TReplication::EState::Done
+                    && cdc->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::STOPPING)))
+        {
+            auto& state = cdc->GetCdc();
+            state.ClearInitialCreateTxId();
+            state.SetPhase(NKikimrReplicationController::TCdcTarget::FINISHED);
+            target->SetDstState(TReplication::EDstState::Done);
+            cdc->Shutdown(ctx);
+            db.Table<Schema::Targets>().Key(rid, tid).Update(
+                NIceDb::TUpdate<Schema::Targets::Cdc>(state.SerializeAsString()));
         } else {
             target->SetDstState(TReplication::EDstState::Error);
             target->SetIssue(TStringBuilder() << "Create dst error"

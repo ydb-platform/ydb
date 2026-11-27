@@ -1236,6 +1236,9 @@ namespace {
             } else if (name == "initial_scan") {
                 YQL_ENSURE(setting.Value().Maybe<TCoBool>());
                 dstSettings.InitialScan = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
+            } else if (name == "allow_row_for_topics_in_global") {
+                YQL_ENSURE(setting.Value().Maybe<TCoBool>());
+                dstSettings.AllowRowForTopicsInGlobal = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
             } else if (name == "bootstrap") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 const auto mode = to_lower(value);

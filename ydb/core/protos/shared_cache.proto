@@ -20,6 +20,7 @@ message TSharedCacheConfig {
     optional uint64 MaxLimitDecreaseStepBytes = 9 [default = 10485760];
     // Maximum fraction of the SharedCache limit available to TryKeepInMemory pages.
     // Must be finite and in [0, 1]: 0 disables this tier, 1 allows the whole cache.
-    // Reductions are applied incrementally using MaxLimitDecreaseStepBytes.
+    // Lowering the ratio evicts in-memory pages in steps. Raising it uses free capacity
+    // immediately and displaces regular pages in steps. MaxLimitDecreaseStepBytes controls both.
     optional double TryKeepInMemoryMaxRatio = 10 [default = 1.0];
 }

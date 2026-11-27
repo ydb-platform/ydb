@@ -176,7 +176,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         RequestFromQueue(ScanRequests);
     }
 
-    // A large decrease of the total limit or in-memory cap continues after other events run.
+    // A large decrease of the total limit or either tier allocation continues after other events run.
     bool LimitDecreaseScheduled = false;
 
     ui64 GetTargetCacheLimitBytes() const {
@@ -219,10 +219,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             || InMemoryTierHasRoomFor(TPageTraits::GetSize(page));
     }
 
-    void ActualizeCacheSizeLimit() {
+    void ActualizeCacheSizeLimit(ui64 regularBytesMovingToInMemory = 0) {
         Counters.ConfigLimitBytes->Set(Config.HasMemoryLimit() ? Config.GetMemoryLimit() : 0);
 
-        // Share one continuation between total-limit and tier-cap decreases. Other events must
+        // Share one continuation between total-limit and tier-allocation decreases. Other events must
         // not apply another step while that continuation is pending.
         const ui64 configuredStep = Config.GetMaxLimitDecreaseStepBytes();
         const ui64 maxDecrease = configuredStep ? configuredStep : Max<ui64>();
@@ -242,12 +242,21 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         const ui64 maxInMemoryBytes = ratio == 1.0 ? newLimit : static_cast<ui64>(newLimit * ratio);
         const ui32 inMemoryTier = static_cast<ui32>(ECacheMode::TryKeepInMemory);
         const ui64 inMemoryLimit = adjustLimit(Cache.GetTierLimit(inMemoryTier), maxInMemoryBytes);
-        // Demand changes still release reservations immediately when pages move to the regular tier.
-        Cache.UpdateLimit(newLimit, Min(GetInMemoryLimitBytes(), inMemoryLimit));
+        const ui64 inMemoryDemand = Min(newLimit, GetInMemoryLimitBytes());
+        const ui64 targetRegularLimit = newLimit - Min(inMemoryDemand, inMemoryLimit);
+
+        // Transfer free regular capacity immediately. Limit the regular pages displaced by this step,
+        // excluding resident pages the caller is about to move into the in-memory tier itself.
+        const ui32 regularTier = static_cast<ui32>(ECacheMode::Regular);
+        const ui64 regularSize = Cache.GetTierSize(regularTier);
+        Y_DEBUG_ABORT_UNLESS(regularBytesMovingToInMemory <= regularSize);
+        const ui64 occupiedRegular = Min(regularSize - regularBytesMovingToInMemory, Cache.GetTierLimit(regularTier));
+        const ui64 regularLimit = adjustLimit(occupiedRegular, targetRegularLimit);
+        Cache.UpdateLimit(newLimit, newLimit - regularLimit);
         Counters.ActiveLimitBytes->Set(newLimit);
 
         if (!LimitDecreaseScheduled &&
-            (newLimit > targetLimit || Cache.GetTierLimit(inMemoryTier) > maxInMemoryBytes)) {
+            (newLimit > targetLimit || Cache.GetTierLimit(inMemoryTier) != Min(inMemoryDemand, maxInMemoryBytes))) {
             LimitDecreaseScheduled = true;
             Send(SelfId(), new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoLimitDecrease)));
         }
@@ -1390,12 +1399,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         };
 
         // Reserve only the pages that will change tiers; resident V1 shadows remain regular.
+        ui64 regularBytesMovingToInMemory = 0;
         for (const auto& ptr : collection.PageSet) {
             if (ptr->CacheMode != ECacheMode::TryKeepInMemory && !skipPageType(ptr->Type)) {
-                AliveInMemoryBytes += TPageTraits::GetSize(ptr.Get());
+                const ui64 pageSize = TPageTraits::GetSize(ptr.Get());
+                AliveInMemoryBytes += pageSize;
+                if (ptr->State == PageStateLoaded) {
+                    regularBytesMovingToInMemory += pageSize;
+                }
             }
         }
-        ActualizeCacheSizeLimit();
+        ActualizeCacheSizeLimit(regularBytesMovingToInMemory);
 
         TVector<TPage*> loadedPages;
         auto& pagesToLoad = PendingInMemoryPages[collection.Id];

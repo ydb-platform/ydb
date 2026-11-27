@@ -128,7 +128,7 @@ TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {
         TDbDriverState::TPtr strong = weak.lock();
         if (!strong) {
             return false;
-        } else {
+        } else if (!strong->LongPolling) {
 
             bool pessThreshold = strong->EndpointPool.GetPessimizationRatio() > PESSIMIZATION_DISCOVERY_THRESHOLD;
             bool expiration = strong->EndpointPool.TimeSinceLastUpdate() > ENDPOINT_UPDATE_PERIOD;

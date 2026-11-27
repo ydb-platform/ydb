@@ -62,6 +62,8 @@ public:
     const TSslCredentials SslCredentials;
     IInternalClient* Client;
     TEndpointPool EndpointPool;
+    std::atomic<bool> LongPolling{false};
+    std::string DiscoverySnapshotHash; // Accessed by the single in-flight discovery request.
     // StopCb allow client to subscribe for notifications from lower layer
     std::mutex NotifyCbsLock;
     std::array<std::vector<TCb>, static_cast<size_t>(ENotifyType::COUNT)> NotifyCbs;

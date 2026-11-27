@@ -221,6 +221,7 @@ namespace NActors {
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
             nodeAppData->SchemeOperationFactory = app0->SchemeOperationFactory;
+            nodeAppData->SystemViewScanFactory = app0->SystemViewScanFactory;
             nodeAppData->WorkloadManagerConfig = app0->WorkloadManagerConfig;
             nodeAppData->QueryServiceConfig = app0->QueryServiceConfig;
             nodeAppData->TransferWriterFactory = std::make_shared<NKikimr::Tests::MockTransferWriterFactory>();

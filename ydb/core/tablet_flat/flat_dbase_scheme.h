@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bloom_filter_defaults.h"
+#include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>
 #include "flat_table_column.h"
 #include "flat_page_iface.h"
 #include "flat_tier_policy.h"

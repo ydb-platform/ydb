@@ -9,6 +9,62 @@ namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
 
+    Y_UNIT_TEST(InvalidCommitRecordFailsRestart) {
+        for (ui32 field = 0; field < 4; ++field) {
+            TActorTestContext testCtx({.EnableSectorEncryption = false});
+            TVDiskMock vdisk(&testCtx);
+            vdisk.InitFull();
+            vdisk.ReserveChunk();
+            const auto format = testCtx.GetPDisk()->Format;
+            const ui64 offset = testCtx.SafeRunOnPDisk([](NPDisk::TPDisk *pdisk) {
+                UNIT_ASSERT(!pdisk->CommonLogger->OnFirstSectorInChunk());
+                return pdisk->Format.Offset(pdisk->CommonLogger->ChunkIdx, pdisk->CommonLogger->SectorIdx);
+            });
+            vdisk.CommitReservedChunks();
+            testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr), NKikimrProto::OK);
+
+            TString sector(format.SectorSize, '\0');
+            UNIT_ASSERT(testCtx.TestCtx.SectorMap->Read((ui8*)sector.Detach(), sector.size(), offset));
+            auto *header = reinterpret_cast<NPDisk::TFirstLogPageHeader*>(sector.Detach());
+            UNIT_ASSERT(header->Flags & NPDisk::LogPageLast);
+            UNIT_ASSERT(header->LogRecordHeader.Signature.HasCommitRecord());
+            UNIT_ASSERT_VALUES_EQUAL(header->LogRecordHeader.OwnerId, vdisk.PDiskParams->Owner);
+            auto *data = reinterpret_cast<ui8*>(header + 1);
+            auto *footer = reinterpret_cast<NPDisk::TCommitRecordFooter*>(
+                data + header->DataSize - sizeof(NPDisk::TCommitRecordFooter));
+            UNIT_ASSERT_VALUES_EQUAL(footer->CommitCount, 1);
+            const char *expectedField;
+            switch (field) {
+                case 0:
+                    header->DataSize = header->Size = sizeof(*footer) - 1;
+                    expectedField = "footer";
+                    break;
+                case 1:
+                    footer->CommitCount = Max<ui32>();
+                    expectedField = "CommitCount";
+                    break;
+                case 2:
+                    footer->UserDataSize = Max<ui64>();
+                    expectedField = "UserDataSize";
+                    break;
+                default:
+                    WriteUnaligned<ui32>(data + footer->UserDataSize, format.DiskSizeChunks());
+                    expectedField = "CommitChunks";
+                    break;
+            }
+            auto *sectorFooter = reinterpret_cast<NPDisk::TDataSectorFooter*>(
+                sector.Detach() + sector.size() - sizeof(NPDisk::TDataSectorFooter));
+            sectorFooter->Hash = NPDisk::TPDiskHashCalculator().HashSector(
+                offset, format.MagicLogChunk, (const ui8*)sector.data(), sector.size(), {});
+            UNIT_ASSERT(testCtx.TestCtx.SectorMap->Write((const ui8*)sector.data(), sector.size(), offset));
+
+            const auto result = testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, &testCtx.MainKey),
+                NKikimrProto::CORRUPTED);
+            UNIT_ASSERT_C(result->ErrorReason.Contains(expectedField), result->ErrorReason);
+        }
+    }
 
     Y_UNIT_TEST(TestSectorMapDirectWriteError) {
         auto sectorMap = MakeIntrusive<NPDisk::TSectorMap>(static_cast<ui64>(1024 * 1024), NPDisk::NSectorMap::DM_HDD);

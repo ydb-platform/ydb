@@ -72,7 +72,6 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
             {"taskId", GetTaskIdentifier()});
     }
 
-    auto g = context.EngineLogs.GranulesStorage->GetStats()->StartPackModification();
     if (PortionsToRemove.GetSize() || PortionsToMove.GetSize()) {
         PortionsToRemove.ApplyOnComplete(self, context, *FetchedDataAccessors);
         PortionsToMove.ApplyOnComplete(self, context, *FetchedDataAccessors);

@@ -38,6 +38,7 @@ namespace NKikimr {
         app->DataShardExportFactory = Mine->DataShardExportFactory.get();
         app->IoContextFactory = Mine->IoContext.get();
         app->SchemeOperationFactory = Mine->SchemeOperationFactory.get();
+        app->SystemViewScanFactory = Mine->SystemViewScanFactory.get();
 
         app->DomainsInfo = std::move(Domains);
         app->ChannelProfiles = Channels ? Channels : new TChannelProfiles;

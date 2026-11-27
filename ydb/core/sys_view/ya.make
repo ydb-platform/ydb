@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 SRCS(
+    factory.h
     scan.h
     scan.cpp
 )
@@ -17,6 +18,7 @@ PEERDIR(
     ydb/core/sys_view/query_stats
     ydb/core/sys_view/resource_pool_classifiers
     ydb/core/sys_view/resource_pools
+    ydb/core/sys_view/scan_factory
     ydb/core/sys_view/service
     ydb/core/sys_view/sessions
     ydb/core/sys_view/show_create
@@ -40,6 +42,8 @@ RECURSE(
     query_stats
     resource_pool_classifiers
     resource_pools
+    scan
+    scan_factory
     service
     show_create
     storage

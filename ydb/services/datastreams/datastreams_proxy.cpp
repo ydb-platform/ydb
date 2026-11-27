@@ -3,17 +3,19 @@
 #include "shard_iterator.h"
 #include "next_token.h"
 
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/service_datastreams.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
-#include <ydb/core/persqueue/pqtablet/partition/partition.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/lib/base/msgbus_status.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/datastreams/codes/datastreams_codes.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>

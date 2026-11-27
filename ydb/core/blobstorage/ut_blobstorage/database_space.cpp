@@ -449,8 +449,8 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
         ctx.RestartControllerKeepingBlocked(subscriber, "BS_CONTROLLER restart");
 
         // Removing the full part from the data quorum unblocks the pool without waiting for new metrics.
-        NBridgeTest::SwitchPileState(ctx.Env, 1, NKikimrBridge::TClusterState::SUSPENDED);
         const size_t numStates = subscriber.States->size();
+        NBridgeTest::SwitchPileState(ctx.Env, 1, NKikimrBridge::TClusterState::SUSPENDED);
         ctx.WaitState(subscriber, false, TDuration::Seconds(10), numStates);
 
         // A healthy part outside the data quorum must not keep the remaining full part unblocked.

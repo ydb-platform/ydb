@@ -1,4 +1,4 @@
-#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
+#include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include "datashard_ut_common_kqp.h"

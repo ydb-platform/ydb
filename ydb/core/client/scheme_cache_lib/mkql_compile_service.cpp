@@ -1,5 +1,7 @@
 #include "mkql_compile_service.h"
 
+#include <ydb/core/client/minikql_compile/mkql_compile_service.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -13,15 +15,6 @@
 #include <util/generic/queue.h>
 
 namespace NKikimr {
-
-TMiniKQLCompileServiceEvents::TEvCompile::TEvCompile(const TString& program)
-    : Program(program)
-{}
-
-TMiniKQLCompileServiceEvents::TEvCompileStatus::TEvCompileStatus(const TString& pgm, const NYql::TMiniKQLCompileResult& result)
-    : Program(pgm)
-    , Result(result)
-{}
 
 // Actor with queue of programs to compile. Creates TMiniKQLCompileActor for each program.
 class TMiniKQLCompileService : public NActors::TActorBootstrapped<TMiniKQLCompileService> {
@@ -168,16 +161,6 @@ private:
     THolder<NYql::IDbSchemeResolver> DbSchemeResolver;
 };
 
-
-TActorId MakeMiniKQLCompileServiceID() {
-    const char x[12] = "MKQLCompile";
-    return TActorId(0, TStringBuf(x, 12));
-}
-
-const TActorId& GetMiniKQLCompileServiceID() {
-    static TActorId miniKQLCompileServiceID = MakeMiniKQLCompileServiceID();
-    return miniKQLCompileServiceID;
-}
 
 IActor* CreateMiniKQLCompileService(size_t compileInflightLimit) {
     THolder<NYql::IDbSchemeResolver> resolver;

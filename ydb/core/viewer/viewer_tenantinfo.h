@@ -173,6 +173,7 @@ public:
                 auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
                 request->Record.SetView(NKikimrBridge::TStorageQuery::DATABASES);
                 request->Record.SetGroupByStoragePool(true);
+                request->Record.SetIncludeSyncMetrics(true);
                 BridgeStorageResponse = MakeRequestToTablet<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(
                     GetBSControllerId(), request.release());
             } else {
@@ -787,28 +788,41 @@ public:
         if (!poolNames) {
             return;
         }
-        THashMap<TString, const NKikimrSysView::TStoragePoolEntry*> pools;
-        for (const auto& pool : PoolsResponse->Get()->Record.GetEntries()) {
-            const auto& name = pool.GetInfo().GetName();
-            if (poolNames->contains(name) && !pools.emplace(name, &pool).second) {
-                return;
-            }
-        }
-        if (pools.size() != poolNames->size()) {
+        const auto pools = FindBridgeDatabasePoolEntries(*poolNames, PoolsResponse->Get()->Record);
+        if (!pools) {
             return;
         }
         auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
         auto& query = request->Record;
         query.SetView(NKikimrBridge::TStorageQuery::DATABASES);
         query.SetGroupByStoragePool(true);
+        query.SetIncludeSyncMetrics(true);
         query.SetFilterPools(true);
-        for (const auto& [_, pool] : pools) {
+        for (const auto& [_, pool] : *pools) {
             auto* id = query.AddStoragePoolIds();
             id->set_box_id(pool->GetKey().GetBoxId());
             id->set_pool_id(pool->GetKey().GetStoragePoolId());
         }
         BridgeStorageResponse = MakeRequestToTablet<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(
             GetBSControllerId(), request.release());
+    }
+
+    static void FillBridgeSync(const TBridgeGroupSyncStats& groups, NKikimrViewer::TBridgeDatabaseSyncInfo& sync) {
+        auto& counts = *sync.MutableGroupCountsBySyncStatus();
+        counts[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCED)] = groups.Synced;
+        counts[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCING)] = groups.Syncing;
+        counts[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::PENDING)] = groups.Pending;
+        counts[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::UNKNOWN)] = groups.Unknown;
+        if (groups.BytesRemaining || (groups.Required && groups.Synced == groups.Required && groups.BytesRemainingComplete)) {
+            sync.SetBytesRemaining(groups.BytesRemaining.value_or(0));
+            sync.SetBytesRemainingComplete(groups.BytesRemainingComplete);
+        }
+        if (groups.Required && groups.BytesPerSecond) {
+            sync.SetBytesPerSecond(*groups.BytesPerSecond);
+            if (groups.BytesRemainingComplete && groups.BytesRemaining && *groups.BytesPerSecond) {
+                sync.SetSecondsLeft(*groups.BytesRemaining / *groups.BytesPerSecond);
+            }
+        }
     }
 
     THashMap<TPathId, TBridgeDatabaseStats> GetBridgeDatabaseStats() const {
@@ -1027,6 +1041,9 @@ public:
                         tenant.SetBridgeMode(stats.Mode == NKikimrBridge::BRIDGED);
                     }
                     tenant.SetBridgeSyncStatus(stats.GetStatus());
+                    if (stats.Mode != NKikimrBridge::ORDINARY) {
+                        FillBridgeSync(stats.Groups, *tenant.MutableBridgeSync());
+                    }
                 }
                 tenant.SetCreateTime(TInstant::MicroSeconds(entry.CreateStep).MilliSeconds());
                 if (entry.SecurityObject) {

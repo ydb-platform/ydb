@@ -4,7 +4,6 @@ import random
 import string
 
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
-from ydb.tests.library.compatibility.fixtures import inter_stable_binary_path
 from ydb.tests.fq.streaming_common.common import Kikimr, counter_nodes, get_ydb_config, set_test_env
 
 logger = logging.getLogger(__name__)
@@ -18,14 +17,9 @@ def kikimr(request):
     main_binary_path = kikimr_driver_path()
 
     logger.info(f"Main binary path: {main_binary_path}")
-    logger.info(f"Stable binary path: {inter_stable_binary_path}")
 
     config = get_ydb_config(request)
     config.set_binary_paths([main_binary_path])
-
-    if param.get("is_compatibility_tests", False):
-        # Older nodes register with a slashless database name.
-        config.yaml_config["feature_flags"]["enable_relative_paths"] = False
 
     config.yaml_config["feature_flags"]["enable_secure_script_executions"] = False
     if max_message_size := param.get("max_message_size"):
@@ -34,10 +28,8 @@ def kikimr(request):
     kikimr = Kikimr(
         config,
         main_binary_path=main_binary_path,
-        stable_binary_path=inter_stable_binary_path,
         enable_discovery=param.get("enable_discovery", True),
         tenant_database="/Root/my_tenant",
-        is_compatibility_tests=param.get("is_compatibility_tests", False),
     )
     yield kikimr
     kikimr.stop()

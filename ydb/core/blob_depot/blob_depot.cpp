@@ -247,7 +247,7 @@ namespace NKikimr::NBlobDepot {
                     hotTargetBytes = Min(hotTargetBytes, start ? start - 1 : 0);
                 }
                 CoolingIndex = std::make_unique<TCoolingIndex>(*Data, TabletID(), hotTargetBytes,
-                    async.GetTargetObjectBytes());
+                    async.GetTargetObjectBytes(), async.GetRepackBelowLivePercent());
             }
         }
     }

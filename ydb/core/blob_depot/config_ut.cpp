@@ -25,6 +25,19 @@ namespace NKikimr::NBlobDepot {
             UNIT_ASSERT(ValidateDataCooling(settings));
         }
 
+        Y_UNIT_TEST(RepackingThreshold) {
+            NKikimrBlobDepot::TS3BackendSettings settings;
+            settings.MutableSettings()->SetBucket("bucket");
+            auto* async = settings.MutableAsyncMode();
+            UNIT_ASSERT_VALUES_EQUAL(async->GetRepackBelowLivePercent(), 50);
+            for (ui32 percent : {0u, 100u}) {
+                async->SetRepackBelowLivePercent(percent);
+                UNIT_ASSERT(!ValidateDataCooling(settings));
+            }
+            async->SetRepackBelowLivePercent(101);
+            UNIT_ASSERT(ValidateDataCooling(settings));
+        }
+
         Y_UNIT_TEST(PhysicalKeyPrefix) {
             NKikimrSchemeOp::TS3Settings settings;
             UNIT_ASSERT_VALUES_EQUAL(MakeS3BasePath(settings, "vg"), "vg");

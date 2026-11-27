@@ -1,7 +1,7 @@
 #include "flat_dbase_apply.h"
 #include "flat_tier_predicate.h"
 #include "util_fmt_abort.h"
-#include "bloom_filter_defaults.h"
+#include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>
 
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>

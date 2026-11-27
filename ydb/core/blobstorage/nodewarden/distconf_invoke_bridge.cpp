@@ -266,6 +266,9 @@ namespace NKikimr::NStorage {
                     if (!cmd.GetBSC()) {
                         throw TExError() << "Incorrect request";
                     }
+                    if (!state.GetUnsyncedBSC()) {
+                        return StartCommitConfirmation();
+                    }
                     state.SetUnsyncedBSC(false);
                 }
                 return StartProposition(&config);
@@ -400,7 +403,7 @@ namespace NKikimr::NStorage {
         if (!Self->SelfManagementEnabled) {
             throw TExError() << "Self-management must be enabled to roll the bridged cluster back";
         } else if (NBridge::IsRollbackPending(details)) {
-            return Finish(TResult::OK, std::nullopt); // being rolled back already, see the rollback status
+            return StartCommitConfirmation();
         } else if (details.HasPendingPileOperation()) {
             throw TExError() << "Operation on pile is in progress";
         } else if (details.PileSyncStateSize()) {
@@ -545,8 +548,14 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd) {
         RunCommonChecks();
 
-        const auto& details = Self->StorageConfig->GetClusterStateDetails();
+        const auto& current = *Self->StorageConfig;
+        const auto& details = current.GetClusterStateDetails();
         if (!details.GetBscConversionPending()) {
+            const auto& previous = current.GetPrevConfig().GetClusterStateDetails();
+            if (current.GetGeneration() && current.HasClusterState() && !NBridge::IsRollbackPending(details)
+                    && (!previous.GetBscConversionPending() || previous.GetBscConversionId() == cmd.GetBscConversionId())) {
+                return StartCommitConfirmation();
+            }
             return Finish(TResult::OK, std::nullopt); // already cleared
         } else if (cmd.GetBscConversionId() != details.GetBscConversionId()) {
             // late notification of the conversion the cluster has been rolled back from, BSC performs the current one
@@ -555,7 +564,7 @@ namespace NKikimr::NStorage {
             return Finish(TResult::OK, std::nullopt);
         }
 
-        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        NKikimrBlobStorage::TStorageConfig config = current;
         config.MutableClusterStateDetails()->ClearBscConversionPending();
         config.MutableClusterStateDetails()->ClearBscConversionId();
         StartProposition(&config);
@@ -647,7 +656,7 @@ namespace NKikimr::NStorage {
             // the notification may come late, when the operation it refers to has already been finished
             throw TExError() << "Pending pile operation is another one";
         } else if (cmd.HasErrorReason() && op.HasErrorReason() && op.GetErrorReason() == cmd.GetErrorReason()) {
-            return Finish(TResult::OK, std::nullopt); // nothing changes
+            return StartCommitConfirmation();
         }
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;

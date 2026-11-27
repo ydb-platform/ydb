@@ -443,10 +443,15 @@ public:
                 return true;
             case EType::GlobalAsync:
                 return false;
-            case EType::GlobalSyncVectorKMeansTree:
-            case EType::GlobalSyncHnsw: {
-                if (State != EIndexState::Ready) {
-                    // Do not try to update vector indexes until their build is finished
+            case EType::GlobalSyncHnsw:
+            case EType::GlobalSyncVectorKMeansTree: {
+                // A vector index accepts updates once all levels are built and the
+                // main table snapshot for the delta scan has been taken (WriteOnly).
+                // The legacy build keeps the index in WriteOnly from the start, so
+                // writes into it are allowed only with the consistent-build flag.
+                const bool allowWriteOnly = NKikimr::HasAppData() &&
+                    NKikimr::AppData()->FeatureFlags.GetEnableConsistentVectorIndexBuild();
+                if (State != EIndexState::Ready && !(allowWriteOnly && State == EIndexState::WriteOnly)) {
                     return false;
                 }
                 const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription).GetSettings();

@@ -1,37 +1,22 @@
 #include "ymq_proxy.h"
-
-#include <ydb/core/grpc_services/service_ymq.h>
-#include <ydb/core/grpc_services/grpc_request_proxy.h>
-#include <ydb/core/grpc_services/rpc_deferrable.h>
-#include <ydb/core/grpc_services/rpc_scheme_base.h>
-#include <ydb/core/protos/sqs.pb.h>
-#include <ydb/core/persqueue/pqtablet/partition/partition.h>
-#include <ydb/core/persqueue/public/pq_rl_helpers.h>
-#include <ydb/core/persqueue/public/write_meta/write_meta.h>
-
-#include <ydb/public/api/protos/ydb_topic.pb.h>
-#include <ydb/services/lib/actors/pq_schema_actor.h>
-#include <ydb/services/lib/sharding/sharding.h>
-#include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
-
-#include <util/folder/path.h>
-#include <ydb/core/ymq/actor/auth_factory.h>
-
-#include <ydb/library/http_proxy/error/error.h>
-
-#include <ydb/services/ymq/rpc_params.h>
-
+#include "rpc_params.h"
 #include "utils.h"
-#include "ydb/core/ymq/actor/log.h"
+
+#include <ydb/core/grpc_services/rpc_deferrable.h>
+#include <ydb/core/grpc_services/service_ymq.h>
+#include <ydb/core/protos/sqs.pb.h>
+#include <ydb/core/ymq/actor/actor.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/http_proxy/error/error.h>
+#include <ydb/library/services/services.pb.h>
+
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SQS
 
 
 using namespace NActors;
 using namespace NKikimrClient;
-
-using grpc::Status;
-
 
 namespace NKikimr::NYmq::V1 {
 
@@ -46,7 +31,6 @@ namespace NKikimr::NYmq::V1 {
     }
 
     using namespace NGRpcService;
-    using namespace NGRpcProxy::V1;
 
     // Names of queue attributes
     static const TString APPROXIMATE_NUMBER_OF_MESSAGES = "ApproximateNumberOfMessages";
@@ -161,7 +145,7 @@ namespace NKikimr::NYmq::V1 {
                 request->MutableCredentials()->SetOAuthToken(SecurityToken);
             }
 
-            auto actor = CreateProxyActionActor(sqsRequest, CreateReplyCallback(), true);
+            auto actor = NSQS::CreateProxyActionActor(sqsRequest, CreateReplyCallback(), true);
             ctx.RegisterWithSameMailbox(actor);
 
             TBase::Die(ctx);

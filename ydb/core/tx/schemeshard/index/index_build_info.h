@@ -97,6 +97,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         AlterSequence = 61,
         PrepareValidation = 62,
         AlterIndexTable = 63,
+        // Vector index consistent build: take a main table snapshot and switch the
+        // index to WriteOnly.
+        PrepareVectorIndex = 64,
         Done = 200,
 
         Cancellation_Applying = 350,
@@ -303,6 +306,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             RebuildCreate,  // creating new impl tables for rebuild
             Reshuffle,
             UploadClusters, // new version of Sample+Upload which runs after Reshuffle
+            Delta,
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -416,6 +420,11 @@ public:
 
     TStepId SnapshotStep;
     TTxId SnapshotTxId;
+
+    // Vector index consistent build: main table snapshot taken after the levels are
+    // built. Delta scans apply main table changes in (SnapshotTxId, DeltaSnapshotTxId].
+    TTxId DeltaSnapshotTxId;
+    TStepId DeltaSnapshotStep;
 
     TDuration ReBillPeriod = TDuration::Seconds(10);
 
@@ -802,6 +811,7 @@ public:
             {"shardIdx", shardIdx},
         );
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
+            KMeans.State != TIndexBuildInfo::TKMeans::Delta &&
             KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
             KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders)
         {

@@ -12,7 +12,33 @@
         "OAUTH2_DEVICE_CODE_TO_TOKEN",
         "REFRESH_TOKEN"
     ],
+    "groups": [
+        {"name": "databases"},
+        {"name": "viewers"},
+        {"name": "monitorings"},
+        {"name": "administrations"},
+        {"name": "unmapped"}
+    ],
     "clients": [
+        {
+            "clientId": "whoami",
+            "protocol": "openid-connect",
+            "publicClient": true,
+            "directAccessGrantsEnabled": true,
+            "standardFlowEnabled": false,
+            "protocolMappers": [
+                {
+                    "name": "ydb-audience",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-audience-mapper",
+                    "config": {
+                        "included.custom.audience": "ydb",
+                        "access.token.claim": "true",
+                        "id.token.claim": "false"
+                    }
+                }
+            ]
+        },
         {
             "clientId": "${OIDC_CLUSTER_ADMIN_CLIENT_ID}",
             "secret": "${OIDC_CLUSTER_ADMIN_CLIENT_SECRET}",

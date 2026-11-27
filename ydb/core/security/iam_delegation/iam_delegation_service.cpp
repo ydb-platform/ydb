@@ -13,9 +13,12 @@ namespace NKikimr::NIamDelegation {
 
 using namespace NActors;
 using TOperation = ydb::yc::priv::operation::Operation;
+using TControlEvents = NCloud::TEvServiceControlService;
+using TOperationEvents = NCloud::TEvOperationService;
 
 class TIamDelegationService : public TIamActorBase<TIamDelegationService> {
-private:
+    enum class ECall { Setup, Revoke };
+
     using TBase = TIamActorBase<TIamDelegationService>;
 
 public:
@@ -29,38 +32,29 @@ public:
 
     void Bootstrap() {
         Become(&TThis::StateWork);
-        // Token manager has no unsubscribe API: this node service is the sole subscriber, regardless
-        // of the number of concurrent requests or retries. The initializer selects its factory.
+        // One subscriber for the service lifetime; token manager has no unsubscribe API.
         Send(MakeTokenManagerID(), new TEvTokenManager::TEvSubscribeUpdateToken(Settings.Config.GetSystemTokenName()),
             IEventHandle::FlagTrackDelivery);
-
-        {
-            NCloud::TServiceControlServiceSettings clientSettings(Settings.Config.GetServiceControlEndpoint(), "ydb-iam-delegation");
-            clientSettings.EnableSsl = Settings.Config.GetEnableSsl();
-            clientSettings.RequestTimeoutMs = Settings.RequestTimeout.MilliSeconds();
-            ServiceControlClient = Register(NCloud::CreateServiceControlService(clientSettings));
-        }
-        {
-            NCloud::TOperationServiceSettings clientSettings(Settings.Config.GetServiceControlEndpoint(), "ydb-iam-delegation");
-            clientSettings.EnableSsl = Settings.Config.GetEnableSsl();
-            clientSettings.RequestTimeoutMs = Settings.RequestTimeout.MilliSeconds();
-            OperationClient = Register(NCloud::CreateOperationService(clientSettings));
-        }
-
-        YDB_LOG_INFO("Delegation service started",
-            {"serviceId", Settings.Config.GetServiceId()},
+        NCloud::TServiceControlServiceSettings control(Settings.Config.GetServiceControlEndpoint(), "ydb-iam-delegation");
+        control.EnableSsl = Settings.Config.GetEnableSsl();
+        control.RequestTimeoutMs = Settings.RequestTimeout.MilliSeconds();
+        ServiceControlClient = Register(NCloud::CreateServiceControlService(control));
+        NCloud::TOperationServiceSettings operations(Settings.Config.GetServiceControlEndpoint(), "ydb-iam-delegation");
+        operations.EnableSsl = Settings.Config.GetEnableSsl();
+        operations.RequestTimeoutMs = Settings.RequestTimeout.MilliSeconds();
+        OperationClient = Register(NCloud::CreateOperationService(operations));
+        YDB_LOG_INFO("Delegation service started", {"serviceId", Settings.Config.GetServiceId()},
             {"microserviceId", Settings.Config.GetMicroserviceId()},
-            {"serviceControlEndpoint", Settings.Config.GetServiceControlEndpoint()}
-        );
+            {"serviceControlEndpoint", Settings.Config.GetServiceControlEndpoint()});
     }
 
     STRICT_STFUNC(StateWork,
         hFunc(TEvIamDelegation::TEvSetupDelegation, HandleSetup);
         hFunc(TEvIamDelegation::TEvRevokeDelegation, HandleRevoke);
         // late replies after a timeout
-        IgnoreFunc(NCloud::TEvServiceControlService::TEvSetupDelegationResponse);
-        IgnoreFunc(NCloud::TEvServiceControlService::TEvRevokeDelegationResponse);
-        IgnoreFunc(NCloud::TEvOperationService::TEvGetOperationResponse);
+        IgnoreFunc(TControlEvents::TEvSetupDelegationResponse);
+        IgnoreFunc(TControlEvents::TEvRevokeDelegationResponse);
+        IgnoreFunc(TOperationEvents::TEvGetOperationResponse);
         hFunc(TEvTokenManager::TEvUpdateToken, HandleToken);
         hFunc(TEvents::TEvUndelivered, HandleUndelivered);
         cFunc(TEvents::TEvPoison::EventType, BeginShutdown);
@@ -71,6 +65,8 @@ public:
     }
 
 private:
+    static TMonotonic Now() { return TActivationContext::Monotonic(); }
+
     void HandleToken(TEvTokenManager::TEvUpdateToken::TPtr& ev) {
         const auto& update = *ev->Get();
         if (update.Id != Settings.Config.GetSystemTokenName()) {
@@ -102,15 +98,16 @@ private:
         const TActorId replyTo = ev->Sender;
         const ui64 cookie = ev->Cookie;
         const TDelegationSpec spec = ev->Get()->Spec;
-        const TString subjectId = ev->Get()->SubjectId;
+        const TString subject = ev->Get()->SubjectId;
         ev.Reset();
 
-        YDB_LOG_INFO("SetupDelegation", {"spec", spec.ToString()}, {"subjectId", subjectId});
-        TDelegationResult result = co_await Run(spec, subjectId, ECall::Setup);
+        YDB_LOG_INFO("SetupDelegation", {"spec", spec.ToString()}, {"subjectId", subject});
+        TDelegationResult result = co_await Run(spec, subject, ECall::Setup);
         if (result.IsSuccess()) {
             YDB_LOG_INFO("SetupDelegation done", {"spec", spec.ToString()});
         } else {
-            YDB_LOG_WARN("SetupDelegation failed", {"spec", spec.ToString()}, {"status", result.Status}, {"issues", result.Issues.ToOneLineString()});
+            YDB_LOG_WARN("SetupDelegation failed", {"spec", spec.ToString()},
+                {"status", result.Status}, {"issues", result.Issues.ToOneLineString()});
         }
         Send(replyTo, new TEvIamDelegation::TEvSetupDelegationResult(std::move(result)), 0, cookie);
     }
@@ -126,22 +123,18 @@ private:
         if (result.IsSuccess()) {
             YDB_LOG_INFO("RevokeDelegation done", {"spec", spec.ToString()});
         } else {
-            YDB_LOG_WARN("RevokeDelegation failed", {"spec", spec.ToString()}, {"status", result.Status}, {"issues", result.Issues.ToOneLineString()});
+            YDB_LOG_WARN("RevokeDelegation failed", {"spec", spec.ToString()},
+                {"status", result.Status}, {"issues", result.Issues.ToOneLineString()});
         }
         Send(replyTo, new TEvIamDelegation::TEvRevokeDelegationResult(std::move(result)), 0, cookie);
     }
-
-    enum class ECall {
-        Setup,
-        Revoke,
-    };
 
     // Shared scheduling never replays a mutation. A request ID is correlation
     // metadata; IAM does not guarantee idempotency for it.
     template<class TRequest, class TResponse>
     async<std::optional<TOperation>> CallOnce(TActorId client, THolder<TRequest> request,
             TStringBuf method, ECall call, TString operationId = {}, TMonotonic deadline = TMonotonic::Max()) {
-        deadline = Min(deadline, TActivationContext::Monotonic() + Settings.RequestRetryTimeout);
+        deadline = Min(deadline, Now() + Settings.RequestRetryTimeout);
         co_await GetIamCallToken(Credentials, deadline);
         const auto version = co_await WithDeadline(deadline, [this]() -> async<ui64> {
             co_return co_await RetryBackoff.Wait(Settings.RequestTimeout * 2 + TDuration::Seconds(1));
@@ -152,12 +145,12 @@ private:
         // Re-read after cooldown to observe token rotation. Local credential
         // failures do not assert an IAM service outage.
         const auto dispatchDeadline = Min(deadline,
-            TActivationContext::Monotonic() + Settings.RequestTimeout * 2 + TDuration::Seconds(1));
+            Now() + Settings.RequestTimeout * 2 + TDuration::Seconds(1));
         request->Token = co_await GetIamCallToken(Credentials, dispatchDeadline);
         request->RequestId = CreateGuidAsString();
         CheckIamCallDeadline(dispatchDeadline);
         auto response = co_await WithDeadline(Min(dispatchDeadline,
-                TActivationContext::Monotonic() + Settings.RequestTimeout + TDuration::Seconds(1)),
+                Now() + Settings.RequestTimeout + TDuration::Seconds(1)),
             &IamClientRequest, client, request.Release());
         CheckIamCallDeadline(deadline);
         if (!response) {
@@ -195,51 +188,51 @@ private:
         co_return operation;
     }
 
-    template<class TRequest>
-    void FillBinding(TRequest& request, const TDelegationSpec& spec) const {
-        request.set_service_id(Settings.Config.GetServiceId());
-        request.set_microservice_id(Settings.Config.GetMicroserviceId());
-        request.mutable_resource()->set_id(spec.CloudId);
-        request.mutable_resource()->set_type(Settings.Config.GetResourceType());
-        request.set_target_service_account_id(spec.ServiceAccountId);
-        request.mutable_referrer()->set_id(spec.ReferrerId);
-        request.mutable_referrer()->set_type(Settings.ReferrerType);
-        request.set_with_references(false);
+    template<class TRequestProto>
+    void FillBinding(TRequestProto& proto, const TDelegationSpec& spec) const {
+        proto.set_service_id(Settings.Config.GetServiceId());
+        proto.set_microservice_id(Settings.Config.GetMicroserviceId());
+        proto.mutable_resource()->set_id(spec.CloudId);
+        proto.mutable_resource()->set_type(Settings.Config.GetResourceType());
+        proto.set_target_service_account_id(spec.ServiceAccountId);
+        proto.mutable_referrer()->set_id(spec.ReferrerId);
+        proto.mutable_referrer()->set_type(Settings.ReferrerType);
+        proto.set_with_references(false);
     }
 
-    async<TDelegationResult> Run(TDelegationSpec spec, TString subjectId, ECall call) {
+    async<TDelegationResult> Run(TDelegationSpec spec, TString subject, ECall call) {
         try {
             if (spec.ServiceAccountId.empty() || spec.CloudId.empty() || spec.ReferrerId.empty()
-                    || (call == ECall::Setup && subjectId.empty())) {
+                    || (call == ECall::Setup && subject.empty())) {
                 co_return TDelegationResult::Error(Ydb::StatusIds::BAD_REQUEST, "Complete IAM binding and setup subject are required");
             }
             std::optional<TOperation> operation;
             const TStringBuf mutationMethod = call == ECall::Setup ? "ServiceControl.SetupDelegation" : "ServiceControl.RevokeDelegation";
             if (call == ECall::Setup) {
-                auto request = MakeHolder<NCloud::TEvServiceControlService::TEvSetupDelegationRequest>();
+                auto request = MakeHolder<TControlEvents::TEvSetupDelegationRequest>();
                 FillBinding(request->Request, spec);
-                request->Request.set_on_behalf_of_subject_id(subjectId);
-                operation = co_await CallOnce<NCloud::TEvServiceControlService::TEvSetupDelegationRequest,
-                    NCloud::TEvServiceControlService::TEvSetupDelegationResponse>(ServiceControlClient, std::move(request), mutationMethod, call);
+                request->Request.set_on_behalf_of_subject_id(subject);
+                operation = co_await CallOnce<TControlEvents::TEvSetupDelegationRequest,
+                    TControlEvents::TEvSetupDelegationResponse>(ServiceControlClient, std::move(request), mutationMethod, call);
             } else {
-                auto request = MakeHolder<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest>();
+                auto request = MakeHolder<TControlEvents::TEvRevokeDelegationRequest>();
                 FillBinding(request->Request, spec);
-                operation = co_await CallOnce<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest,
-                    NCloud::TEvServiceControlService::TEvRevokeDelegationResponse>(ServiceControlClient, std::move(request), mutationMethod, call);
+                operation = co_await CallOnce<TControlEvents::TEvRevokeDelegationRequest,
+                    TControlEvents::TEvRevokeDelegationResponse>(ServiceControlClient, std::move(request), mutationMethod, call);
             }
             if (!operation) {
                 co_return TDelegationResult::Success();
             }
-            const auto pollDeadline = TActivationContext::Monotonic() + Settings.OperationPollTimeout;
+            const auto pollDeadline = Now() + Settings.OperationPollTimeout;
             while (!operation->done()) {
                 CheckIamCallDeadline(pollDeadline);
-                co_await AsyncSleepUntil(Min(pollDeadline, TActivationContext::Monotonic() + Settings.OperationPollInterval));
+                co_await AsyncSleepUntil(Min(pollDeadline, Now() + Settings.OperationPollInterval));
                 CheckIamCallDeadline(pollDeadline);
-                auto request = MakeHolder<NCloud::TEvOperationService::TEvGetOperationRequest>();
+                auto request = MakeHolder<TOperationEvents::TEvGetOperationRequest>();
                 request->Request.set_operation_id(operation->id());
                 try {
-                    operation = co_await CallOnce<NCloud::TEvOperationService::TEvGetOperationRequest,
-                        NCloud::TEvOperationService::TEvGetOperationResponse>(OperationClient, std::move(request),
+                    operation = co_await CallOnce<TOperationEvents::TEvGetOperationRequest,
+                        TOperationEvents::TEvGetOperationResponse>(OperationClient, std::move(request),
                             "OperationService.Get", call, operation->id(), pollDeadline);
                 } catch (const TIamCallError& error) {
                     // Repeating a read of a known operation is safe. Transient

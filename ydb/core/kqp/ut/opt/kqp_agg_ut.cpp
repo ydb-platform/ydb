@@ -334,8 +334,11 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
         }
     }
 
-    Y_UNIT_TEST(ScalarAggregationResult) {
+    Y_UNIT_TEST_TWIN(ScalarAggregationResult, NewRbo) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();
@@ -360,50 +363,60 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
         UNIT_ASSERT(res.IsSuccess());
 
         auto insertRes = session2.ExecuteQuery(R"(
-            INSERT INTO `/Root/t1` (a, b, c, d) VALUES (1, 1, "a", "b");
-            INSERT INTO `/Root/t1` (a, b, c, d) VALUES (2, 1, "a", "b");
-            INSERT INTO `/Root/t1` (a, b, c, d) VALUES (3, 1, "a", "b");
+            INSERT INTO `/Root/t1` (a, b, c, d) VALUES (1, 1, "a"u, "b"u);
+            INSERT INTO `/Root/t1` (a, b, c, d) VALUES (2, 1, "a"u, "b"u);
+            INSERT INTO `/Root/t1` (a, b, c, d) VALUES (3, 1, "a"u, "b"u);
         )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT(insertRes.IsSuccess());
+        UNIT_ASSERT_C(insertRes.IsSuccess(), insertRes.GetIssues().ToString());
 
-        // Same as current representation of rollup.
-        std::vector<TString> queries = {
-            R"(
-                select sum(b) as sumB from `/Root/t1`
-                union all
-                select sum(b) as sumB from `/Root/t1` group by a
-                order by sumB;
-            )",
-            R"(
-                $expression =
-                (
-                    SELECT AGGREGATE_LIST(d) FROM `/Root/t1`
-                    WHERE c = "a" and d in CAST(["b", "c"] as List<Utf8>)
-                );
-
-                $expr_diff = SetDifference(ToSet(CAST(["d", "f"] as List<Utf8>)), ToSet($expression));
-                SELECT $expr_diff AS result;
-            )",
-            R"(
-                select sum(a), min(b) from `/Root/t1`
-                where b < 10;
-            )"
+        struct TTestCase {
+            TString Query;
+            TString ExpectedResult;
         };
-
-        std::vector<ui32> txCount{2, 2, 2};
-        std::vector<TString> results = {
-            R"([[[1]];[[1]];[[1]];[[3]]])",
-            R"([[[[["f";"Void"];["d";"Void"]]]]])",
-            R"([[[6];[1]]])"
+        std::vector<TTestCase> cases = {
+            {
+                // Same as current representation of rollup.
+                R"(
+                    select sum(b) as sumB from `/Root/t1`
+                    union all
+                    select sum(b) as sumB from `/Root/t1` group by a
+                    order by sumB;
+                )",
+                R"([[[1]];[[1]];[[1]];[[3]]])"
+            },
+            {
+                R"(
+                    select sum(a), min(b) from `/Root/t1`
+                    where b < 10;
+                )",
+                R"([[[6];[1]]])"
+            }
         };
+        if (!NewRbo) {
+            // AGGREGATE_LIST (list2) is not supported by NewRBO yet. Keep the legacy
+            // scalar dependency regression covered without silently falling back.
+            cases.push_back({
+                R"(
+                    $expression =
+                    (
+                        SELECT AGGREGATE_LIST(d) FROM `/Root/t1`
+                        WHERE c = "a" and d in CAST(["b", "c"] as List<Utf8>)
+                    );
 
-        for (ui32 i = 0; i < queries.size(); ++i) {
-            const auto query = queries[i];
+                    $expr_diff = SetDifference(ToSet(CAST(["d", "f"] as List<Utf8>)), ToSet($expression));
+                    SELECT $expr_diff AS result;
+                )",
+                R"([[[[["f";"Void"];["d";"Void"]]]]])"
+            });
+        }
+
+        for (const auto& testCase : cases) {
+            const auto& query = testCase.Query;
             auto result =
                 session2
                     .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
                     .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto ast = *result.GetStats()->GetAst();
             ui32 physicalTxCount = 0;
             ui32 startPosition = 0;
@@ -415,13 +428,16 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
                 startPosition = currentPosition + 1;
                 ++physicalTxCount;
             }
-            UNIT_ASSERT_VALUES_EQUAL(physicalTxCount, txCount[i]);
+            if (NewRbo) {
+                UNIT_ASSERT_C(physicalTxCount > 0, ast);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(physicalTxCount, 2);
+            }
 
             result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            TString output = FormatResultSetYson(result.GetResultSet(0));
-            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), testCase.ExpectedResult);
         }
     }
 

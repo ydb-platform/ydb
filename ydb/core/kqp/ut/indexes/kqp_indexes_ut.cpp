@@ -56,8 +56,9 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     NKikimrKqp::TKqpDefaultSettings defaultSettings;
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
-    // This direct query processor cannot retry DML with the legacy optimizer.
+    // This direct query processor cannot retry with the legacy optimizer.
     kikimrConfig->SetEnableFallbackOnDML(false);
+    kikimrConfig->SetEnableFallbackOnRowTables(false);
 
     auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>(TKqpFederatedQuerySetup{
         .HttpGateway = NYql::IHTTPGateway::Make(),
@@ -142,7 +143,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         {
             const TString query = Q_(R"(
                 UPSERT INTO `/Root/IndexedTableWithState` (key, value, value2)
-                    VALUES (1, "qq", "ww")
+                    VALUES (1u, "qq", "ww")
             )");
 
             auto explainResult = qp->SyncExplainDataQuery(query, true);
@@ -284,7 +285,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         {
             const TString query = Q_(R"(
                 UPSERT INTO `/Root/IndexedTableWithState` (key, value, value2)
-                    VALUES (1, "qq", "ww");
+                    VALUES (1u, "qq", "ww");
             )");
             auto explainResult = qp->SyncExplainDataQuery(query, true);
             UNIT_ASSERT_C(explainResult.Success(), explainResult.Issues().ToString());

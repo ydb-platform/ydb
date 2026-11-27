@@ -12,7 +12,8 @@ using namespace NYql;
 namespace {
 
 void CollectYdbStatuses(const TIssue& issue, TSet<Ydb::StatusIds::StatusCode>& statuses) {
-    if (issue.GetSeverity() == TSeverityIds::S_WARNING) {
+    // Diagnostic-only issues, including optimizer fallback notes, must not change the error status.
+    if (issue.GetSeverity() == TSeverityIds::S_WARNING || issue.GetSeverity() == TSeverityIds::S_INFO) {
         return;
     }
 

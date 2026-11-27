@@ -1635,6 +1635,15 @@ private:
         return PrepareScanQueryInternal(query, isSql, ctx, {});
     }
 
+    TMaybe<NSQLTranslation::EYqlSelect> GetYqlSelect(const TPrepareSettings& settings) const {
+        if (settings.YqlSelect || !SessionCtx->Config().GetEnableNewRBO()) {
+            return settings.YqlSelect;
+        }
+
+        // Direct host callers need the same translation mode as the NewRBO compile actor.
+        return NSQLTranslation::EYqlSelect::Force;
+    }
+
     IAsyncQueryResultPtr PrepareDataQueryInternal(const TKqpQueryRef& query, const TPrepareSettings& settings,
         TExprContext& ctx)
     {
@@ -1660,7 +1669,7 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
             .SetFromConfig(SessionCtx->Config())
-            .SetYqlSelect(settings.YqlSelect);
+            .SetYqlSelect(GetYqlSelect(settings));
         auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
         if (!compileResult.QueryExpr) {
             return nullptr;
@@ -1749,7 +1758,7 @@ private:
             settingsBuilder.SetSqlAutoCommit(false)
                 .SetFromConfig(SessionCtx->Config())
                 .SetValidateViewStatement(!settings.IsInternalCall.GetOrElse(false))
-                .SetYqlSelect(settings.YqlSelect);
+                .SetYqlSelect(GetYqlSelect(settings));
             auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
 
             if (compileResult.NeedToSplit) {
@@ -1828,7 +1837,7 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
             .SetFromConfig(SessionCtx->Config())
-            .SetYqlSelect(prepareSettings.YqlSelect);
+            .SetYqlSelect(GetYqlSelect(prepareSettings));
         auto compileResult = CompileYqlQuery(query, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
         if (!compileResult.QueryExpr) {

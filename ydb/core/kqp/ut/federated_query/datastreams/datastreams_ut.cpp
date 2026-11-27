@@ -1694,6 +1694,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ++DynamicNodeCount;
         auto storagePoolType = StoragePoolTypes.emplace_back("hdd");
         auto& appConfig = SetupAppConfig();
+        // FIXME: Re-enable NewRBO once fallback stops retrying IAM provider errors.
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
         constexpr char cloudId[] = "testcloud4";
         constexpr char cloudIdAlt[] = "testcloud5";

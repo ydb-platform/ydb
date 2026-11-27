@@ -177,7 +177,7 @@ void CheckTlsCertificateRejected(bool wrongHostname) {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(KqpYdbExternal) {
-    Y_UNIT_TEST_TWIN(PrepareWithMinimalFederatedSetup, Script) {
+    void PrepareWithMinimalFederatedSetup(bool script, bool newRbo) {
         TActorSystemStub actorSystem;
         UNIT_ASSERT(actorSystem.AppData.FeatureFlags.GetEnableExternalDataSources());
         const NKikimrConfig::TQueryServiceConfig queryServiceConfig;
@@ -188,6 +188,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         const TKqpSettings settings;
         auto config = MakeIntrusive<NYql::TKikimrConfiguration>();
         config->Init(settings.DefaultSettings.GetDefaultSettings(), cluster, settings.Settings, true);
+        config->SetEnableNewRBO(newRbo);
 
         NYql::TExprContext moduleCtx;
         NYql::IModuleResolver::TPtr moduleResolver;
@@ -198,7 +199,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         counters->Counters = new TKqpCounters(countersRoot);
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(countersRoot);
         auto gateway =
-            CreateKikimrIcGateway(cluster, Script ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY,
+            CreateKikimrIcGateway(cluster, script ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY,
                 database, database, std::make_shared<TKqpTableMetadataLoader>(cluster, actorSystem.System.Get(), config),
                 actorSystem.System.Get(), 0, counters, queryServiceConfig);
 
@@ -207,7 +208,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         auto host = CreateKqpHost(gateway, cluster, database, config, moduleResolver,
             TKqpFederatedQuerySetup{ .HttpGateway = NYql::IHTTPGateway::Make() }, nullptr, std::make_shared<TGUCSettings>(), queryServiceConfig);
         const TString query = "SELECT 1;";
-        auto preparing = Script ? host->PrepareGenericScript(query, {}) : host->PrepareGenericQuery(query, {});
+        auto preparing = script ? host->PrepareGenericScript(query, {}) : host->PrepareGenericQuery(query, {});
         while (!preparing->HasResult()) {
             preparing->Continue().GetValueSync();
         }
@@ -216,6 +217,15 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         UNIT_ASSERT(result.PreparingQuery);
         UNIT_ASSERT(result.PreparingQuery->HasPhysicalQuery());
         UNIT_ASSERT(!result.QueryPlan.empty());
+    }
+
+    Y_UNIT_TEST_TWIN(PrepareWithMinimalFederatedSetup, NewRbo) {
+        PrepareWithMinimalFederatedSetup(/* script */ false, NewRbo);
+    }
+
+    Y_UNIT_TEST(PrepareScriptWithMinimalFederatedSetup) {
+        // The direct host has no fallback retry, and NewRBO does not support generic scripts yet.
+        PrepareWithMinimalFederatedSetup(/* script */ true, /* newRbo */ false);
     }
 
     Y_UNIT_TEST(ReadWithoutConnector) {

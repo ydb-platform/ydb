@@ -194,6 +194,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     Y_UNIT_TEST_TWIN(DisableBlockEngineInAggregationWithSpilling, AllowSpilling) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
+        // Check legacy block aggregation rewrites; ut/rbo/olap covers NewRBO hash aggregation.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE);
         if (AllowSpilling) {
             settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("Aggregation");
@@ -239,6 +241,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     Y_UNIT_TEST(BlockAggregationIsChosenByDefaultForSimpleQueries) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
+        // Check legacy block aggregation rewrites; ut/rbo/olap covers NewRBO hash aggregation.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
         TKikimrRunner kikimr(settings);
 
@@ -475,7 +479,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .SetExpectedReply("[[23000u;]]")
             .AddExpectedPlanOptions("Condense1");
 
-        TestOlapTable({ testCase });
+        // Condense1 is the legacy scalar aggregation; ut/rbo/olap covers the NewRBO plan.
+        TestOlapTable({ testCase }, /* enableNewRbo */ false);
     }
 
     Y_UNIT_TEST(Aggregation_Count_Null) {

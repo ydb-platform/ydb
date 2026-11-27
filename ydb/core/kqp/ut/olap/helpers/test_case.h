@@ -213,11 +213,11 @@ void CheckPlanForAggregatePushdown(
     }
 }
 
-void TestOlapTableBase(const std::vector<TOlapTestCase>& cases);
+void TestOlapTableBase(const std::vector<TOlapTestCase>& cases, std::optional<bool> enableNewRbo = std::nullopt);
 
-void TestOlapTableInternal(const std::vector<TOlapTestCase>& cases);
+void TestOlapTableInternal(const std::vector<TOlapTestCase>& cases, std::optional<bool> enableNewRbo = std::nullopt);
 
-void TestOlapTable(const std::vector<TOlapTestCase>& cases);
+void TestOlapTable(const std::vector<TOlapTestCase>& cases, std::optional<bool> enableNewRbo = std::nullopt);
 
 template <typename TClient>
 auto StreamExecuteQuery(const TOlapTestCase& testCase, TClient& client) {

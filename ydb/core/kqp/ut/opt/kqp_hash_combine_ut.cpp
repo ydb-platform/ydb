@@ -10,6 +10,8 @@ namespace {
     TKikimrSettings CreateSettings()
     {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        // These tests exercise legacy hash-combine replacement pragmas and physical layouts.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
 
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         // Enable manual override of _KqpYqlCombinerMemoryLimit

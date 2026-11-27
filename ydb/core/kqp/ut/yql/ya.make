@@ -8,6 +8,7 @@ SIZE(MEDIUM)
 
 SRCS(
     kqp_pragma_ut.cpp
+    kqp_response_ut.cpp
     kqp_scripting_ut.cpp
     kqp_yql_ut.cpp
 )

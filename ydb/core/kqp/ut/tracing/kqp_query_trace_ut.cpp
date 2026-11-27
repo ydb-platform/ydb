@@ -319,8 +319,11 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }
     }
 
-    Y_UNIT_TEST(TableFreeCpuIsIncludedWithoutClientStats) {
-        auto [runtime, server, sender] = CreateServer();
+    Y_UNIT_TEST_TWIN(TableFreeCpuIsIncludedWithoutClientStats, NewRbo) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        config.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        auto [runtime, server, sender] = CreateServer(1, config);
         auto* uploader = RegisterUploader(runtime);
         for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
             ClearUploader(*uploader);
@@ -336,7 +339,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             });
             UNIT_ASSERT_C(execution != uploader->Spans.end(), uploader->PrintTraces());
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.actor.type")->value().string_value(),
-                type == NKikimrKqp::QUERY_TYPE_SQL_DML ? "TKqpLiteralExecuter" : "DataExecuter");
+                type == NKikimrKqp::QUERY_TYPE_SQL_DML && !NewRbo ? "TKqpLiteralExecuter" : "DataExecuter");
             const auto cpu = FindAttribute(*execution, "ydb.cpu_us")->value().int_value();
             UNIT_ASSERT_C(cpu > 0, execution->DebugString());
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.cpu_us")->value().int_value(), cpu);
@@ -724,7 +727,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
     }
 
     Y_UNIT_TEST(CompileTimeLiteralTracePropagation) {
-        NKqp::TKikimrRunner kikimr(ExternalTracingSettings());
+        auto settings = ExternalTracingSettings();
+        // Compile-time Execute plan spans belong to the legacy literal executer.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        NKqp::TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         RegisterUploader(runtime);
         auto client = kikimr.GetTableClient();
@@ -737,6 +743,26 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             {"GrpcRequestProxy", "Explain query", "Compile query", "Execute plan"});
         AssertDescendant(snapshot, "Compile query", "GrpcRequestProxy");
         AssertDescendant(snapshot, "Execute plan", "Compile query");
+    }
+
+    Y_UNIT_TEST(NewRboTableFreeExplainTracePropagation) {
+        auto settings = ExternalTracingSettings();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        NKqp::TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        RegisterUploader(runtime);
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const TString traceparent = "00-55555555555555555555555555555555-5555555555555555-01";
+        auto result = session.ExplainDataQuery("SELECT 42;",
+            NYdb::NTable::TExplainDataQuerySettings().TraceParent(traceparent)).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto snapshot = WaitForExternalTrace(runtime, traceparent,
+            {"GrpcRequestProxy", "Explain query", "Compile query"});
+        AssertDescendant(snapshot, "Compile query", "GrpcRequestProxy");
+        // NewRBO leaves this expression for runtime, so explaining it does not execute a plan.
+        UNIT_ASSERT_C(!FindSpan(snapshot, "Execute plan"), snapshot.PrintTraces());
     }
 
     Y_UNIT_TEST(ParseFailureTrace) {

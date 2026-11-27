@@ -848,8 +848,11 @@ Y_UNIT_TEST(DataQueryWithEffects) {
     UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
 }
 
-Y_UNIT_TEST(DataQueryMulti) {
-    auto kikimr = DefaultKikimrRunner();
+Y_UNIT_TEST_TWIN(DataQueryMulti, NewRbo) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+    app.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+    TKikimrRunner kikimr(TKikimrSettings(app).SetWithSampleTables(false));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -867,7 +870,13 @@ Y_UNIT_TEST(DataQueryMulti) {
 
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_EQUAL_C(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 0, result.GetQueryPlan());
+    // Legacy literal execution has no stages; NewRBO executes these expressions in stages.
+    const auto& phases = plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe();
+    UNIT_ASSERT_VALUES_EQUAL_C(phases.empty(), !NewRbo, result.GetQueryPlan());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 4);
+    for (ui32 i = 0; i < 4; ++i) {
+        CompareYson(FormatResultSetYson(result.GetResultSet(i)), TStringBuilder() << "[[" << i + 1 << "]]");
+    }
 }
 
 Y_UNIT_TEST(TxIdInFullStatsPlan) {
@@ -930,6 +939,8 @@ Y_UNIT_TEST(NoTxIdWhenFeatureFlagDisabled) {
 
 Y_UNIT_TEST(NoTxIdForLiteralOnlyQuery) {
     NKikimrConfig::TAppConfig app;
+    // Only the legacy literal executer guarantees execution without a transaction ID.
+    app.MutableTableServiceConfig()->SetEnableNewRBO(false);
     app.MutableFeatureFlags()->SetEnableTxIdInStats(true);
     TKikimrRunner kikimr(app);
     auto db = kikimr.GetTableClient();

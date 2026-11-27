@@ -110,6 +110,9 @@ public:
     // <| producer methods
     virtual EDqFillLevel GetFillLevel() const = 0;
     virtual EDqFillLevel UpdateFillLevel() = 0;
+    // Called once when a scheduled producer is about to stop. The channel
+    // implementation samples the level under the same lock as the drain signal.
+    virtual EDqFillLevel SubscribeFill() { return UpdateFillLevel(); }
     virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
     // can throw TDqChannelStorageException
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;

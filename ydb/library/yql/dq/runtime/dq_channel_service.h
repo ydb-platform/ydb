@@ -107,6 +107,9 @@ public:
 
     virtual TTaskChannelSnapshot GetTraceSnapshot() const { return {}; }
     virtual EDqFillLevel GetFillLevel() const = 0;
+    // Read the level and, when it is limited, arm the producer wait before
+    // releasing the lock that the drain holds across its signal.
+    virtual EDqFillLevel SubscribeOutputFill() { return GetFillLevel(); }
     virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
     virtual void Push(TDataChunk&& data) = 0;
     virtual bool IsFinished() = 0;

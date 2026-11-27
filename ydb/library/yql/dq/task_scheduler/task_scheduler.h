@@ -13,6 +13,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -260,6 +261,10 @@ private:
     TTaskWaitCondition Wait;
     TVector<TTaskDependencyVersion> ObservedWaits;
     TVector<TTaskWaitDescription> ExplicitWaits, LastWaits;
+    // Set when this run recorded a wait. BeginProbe is called once per fetched
+    // row and skips the lock while a scan is just emitting.
+    std::atomic<bool> ProbeDirty{false};
+    void TouchProbe();
     TTaskRunProgress LastProgress;
     ETaskStopReason LastStopReason = ETaskStopReason::None;
     TTaskExecutionClassification Classification;

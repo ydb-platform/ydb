@@ -285,12 +285,20 @@ ui64 TTaskSchedulingHandle::Observe(TTaskDependencyId dependency) {
     return Versions[dependency];
 }
 
+void TTaskSchedulingHandle::TouchProbe() {
+    ProbeDirty.store(true, std::memory_order_relaxed);
+}
+
 void TTaskSchedulingHandle::BeginProbe() {
+    if (!ProbeDirty.load(std::memory_order_relaxed)) {
+        return;
+    }
     std::lock_guard lock(Mutex);
     ObservedWaits.clear();
     ExplicitWaits.clear();
     ProbeCoverage = ETaskWaitCoverage::Unknown;
     ExplicitRunnable = false;
+    ProbeDirty.store(false, std::memory_order_relaxed);
 }
 
 std::pair<size_t, size_t> TTaskSchedulingHandle::BeginInputWait() const {
@@ -308,6 +316,7 @@ void TTaskSchedulingHandle::ReportInputWait(std::pair<size_t, size_t> scope, ui6
         for (size_t i = scope.second; i < ExplicitWaits.size(); ++i) {
             ExplicitWaits[i].InputPath.push_back({operatorId, side, TString(name)});
         }
+        TouchProbe();
         return;
     }
     TTaskWaitDescription description;
@@ -335,12 +344,14 @@ void TTaskSchedulingHandle::ReportInputWait(std::pair<size_t, size_t> scope, ui6
     }
     description.Condition = TTaskWaitCondition::Any(std::move(dependencies));
     ExplicitWaits.push_back(std::move(description));
+    TouchProbe();
 }
 
 void TTaskSchedulingHandle::ReportWait(TTaskWaitDescription description) {
     std::lock_guard lock(Mutex);
     if (State == EState::Running) {
         ExplicitWaits.push_back(std::move(description));
+        TouchProbe();
     }
 }
 
@@ -356,6 +367,7 @@ void TTaskSchedulingHandle::ReportCallbackWait(ui64 operatorId, ETaskWaitReason 
         description.Condition = TTaskWaitCondition::Any({spilling
             ? TTaskDependencyVersion{SpillingDependency, SpillingVersion} : TTaskDependencyVersion{0, CallbackVersion}});
         ExplicitWaits.push_back(std::move(description));
+        TouchProbe();
     }
 }
 
@@ -371,12 +383,14 @@ void TTaskSchedulingHandle::Await(TTaskDependencyId dependency, ui64 version) {
     std::lock_guard lock(Mutex);
     if (State == EState::Running) {
         ObservedWaits.push_back({dependency, version});
+        TouchProbe();
     }
 }
 
 void TTaskSchedulingHandle::MakeRunnable() {
     std::lock_guard lock(Mutex);
     ExplicitRunnable = true;
+    TouchProbe();
 }
 
 void TTaskSchedulingHandle::ReportWork(ETaskWorkKind work, ui64 operatorId, TStringBuf name, TStringBuf phase) {
@@ -393,6 +407,7 @@ void TTaskSchedulingHandle::SealWait(ETaskWaitCoverage coverage) {
     std::lock_guard lock(Mutex);
     if (State == EState::Running) {
         ProbeCoverage = coverage;
+        TouchProbe();
     }
 }
 
@@ -405,6 +420,7 @@ void TTaskSchedulingHandle::AwaitCallback() {
     std::lock_guard lock(Mutex);
     if (State == EState::Running) {
         ObservedWaits.push_back({0, CallbackVersion});
+        TouchProbe();
     }
 }
 

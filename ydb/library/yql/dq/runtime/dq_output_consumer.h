@@ -23,6 +23,11 @@ public:
     virtual ~IDqOutputConsumer() = default;
 
     virtual EDqFillLevel GetFillLevel() const = 0;
+    // Subscribe the task to the channels that are currently limited and return
+    // the level sampled together with that subscription. GetFillLevel stays a
+    // pure read: a scan calls it once per row, and registering a wait there
+    // takes the scheduler lock for every channel of a spilled output.
+    virtual EDqFillLevel ObserveFill() { return GetFillLevel(); }
     virtual void Consume(NKikimr::NUdf::TUnboxedValue&& value) = 0;
     virtual void WideConsume(NKikimr::NUdf::TUnboxedValue values[], ui32 count) = 0;
     virtual void Consume(NDqProto::TCheckpoint&& checkpoint) = 0;

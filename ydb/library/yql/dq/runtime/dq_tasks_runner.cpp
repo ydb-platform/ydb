@@ -1390,10 +1390,24 @@ private:
             // SoftLimit is unread spill with room left in storage. The actor path
             // resumes itself and keeps writing. Stopping here hands the worker to
             // another task and the scan pays the restart on every chunk.
-            const auto fillLevel = AllocatedHolder->Output->GetFillLevel();
-            const bool spillRoomLeft = Scheduling && !Scheduling->ObserveOnly && fillLevel == SoftLimit;
-            if (fillLevel != NoLimit && !spillRoomLeft) {
-                break;
+            auto fillLevel = AllocatedHolder->Output->GetFillLevel();
+            auto spillRoomLeft = [&] {
+                return Scheduling && !Scheduling->ObserveOnly && fillLevel == SoftLimit;
+            };
+            if (fillLevel != NoLimit && !spillRoomLeft()) {
+                // The cheap read can go stale while a consumer drains. Subscribe
+                // under the channel lock and stop only if that sample is still
+                // limited, so a drain that already happened cannot park the task.
+                if (Scheduling) {
+                    fillLevel = AllocatedHolder->Output->ObserveFill();
+                    if (fillLevel != NoLimit && !spillRoomLeft() && !Scheduling->ObserveOnly
+                        && !Scheduling->HasObservedWaits()) {
+                        Scheduling->MakeRunnable();
+                    }
+                }
+                if (fillLevel != NoLimit && !spillRoomLeft()) {
+                    break;
+                }
             }
             if (Scheduling) {
                 // A new Fetch may enter a different, unadapted subtree. Never

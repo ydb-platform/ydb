@@ -199,6 +199,7 @@ public:
 
     TTaskChannelSnapshot GetTraceSnapshot() const override;
     EDqFillLevel GetFillLevel() const override;
+    EDqFillLevel SubscribeOutputFill() override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override;
     void Push(TDataChunk&& data) override;
     bool IsFinished() override;
@@ -535,6 +536,7 @@ public:
     ~TOutputBuffer() override;
     TTaskChannelSnapshot GetTraceSnapshot() const override;
     EDqFillLevel GetFillLevel() const override;
+    EDqFillLevel SubscribeOutputFill() override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator>aggregator) override;
     void Push(TDataChunk&& data) override;
     bool IsFinished() override;
@@ -1126,13 +1128,17 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        const auto dependency = OutputDependency(GetChannelId());
-        const ui64 version = Scheduling ? Scheduling->Observe(dependency) : 0;
-        auto level = Serializer->Buffer->GetFillLevel();
-        if (Scheduling && level != NoLimit) {
-            Scheduling->Await(dependency, version);
+        return Serializer->Buffer->GetFillLevel();
+    }
+
+    EDqFillLevel SubscribeFill() override {
+        if (!Scheduling) {
+            return GetFillLevel();
         }
-        return level;
+        // The buffer holds its mutex across the drain signal. Sampling the
+        // version under that mutex cannot observe a Hard level whose drain
+        // has already been signaled.
+        return Serializer->Buffer->SubscribeOutputFill();
     }
 
     void BindTaskScheduling(std::shared_ptr<TTaskSchedulingHandle> task) override {

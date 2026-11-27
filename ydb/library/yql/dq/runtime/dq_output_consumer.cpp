@@ -36,6 +36,17 @@ using namespace NKikimr;
 using namespace NMiniKQL;
 using namespace NUdf;
 
+// Same rule as TDqFillAggregator: one Hard output blocks, one free output does not.
+EDqFillLevel MergeFillLevel(EDqFillLevel left, EDqFillLevel right) {
+    if (left == HardLimit || right == HardLimit) {
+        return HardLimit;
+    }
+    if (left == NoLimit || right == NoLimit) {
+        return NoLimit;
+    }
+    return SoftLimit;
+}
+
 ///////////////////////////////////
 // Hash Function implementations //
 ///////////////////////////////////
@@ -308,6 +319,17 @@ public:
         return result;
     }
 
+    EDqFillLevel ObserveFill() override {
+        EDqFillLevel result = NoLimit;
+        bool seen = false;
+        for (auto consumer : Consumers) {
+            const auto level = consumer->ObserveFill();
+            result = seen ? MergeFillLevel(result, level) : level;
+            seen = true;
+        }
+        return result;
+    }
+
     void WideConsume(TUnboxedValue* values, ui32 count) override {
         Y_UNUSED(values);
         Y_UNUSED(count);
@@ -391,6 +413,10 @@ public:
         return Output->UpdateFillLevel();
     }
 
+    EDqFillLevel ObserveFill() override {
+        return Output->SubscribeFill();
+    }
+
     void Consume(TUnboxedValue&& value) override {
         Output->Push(std::move(value));
     }
@@ -460,13 +486,16 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        auto result = Aggregator->GetFillLevel();
-        // A soft limit stops the run too: the channels must register the output wait.
-        if (result != NoLimit) {
-            for (auto output : Outputs) {
-                output->UpdateFillLevel();
-            }
-            result = Aggregator->GetFillLevel();
+        return Aggregator->GetFillLevel();
+    }
+
+    EDqFillLevel ObserveFill() override {
+        EDqFillLevel result = NoLimit;
+        bool seen = false;
+        for (auto output : Outputs) {
+            const auto level = output->SubscribeFill();
+            result = seen ? MergeFillLevel(result, level) : level;
+            seen = true;
         }
         return result;
     }
@@ -589,13 +618,16 @@ public:
     }
 private:
     EDqFillLevel GetFillLevel() const override {
-        auto result = Aggregator->GetFillLevel();
-        // A soft limit stops the run too: the channels must register the output wait.
-        if (result != NoLimit) {
-            for (auto output : Outputs_) {
-                output->UpdateFillLevel();
-            }
-            result = Aggregator->GetFillLevel();
+        return Aggregator->GetFillLevel();
+    }
+
+    EDqFillLevel ObserveFill() override {
+        EDqFillLevel result = NoLimit;
+        bool seen = false;
+        for (auto output : Outputs_) {
+            const auto level = output->SubscribeFill();
+            result = seen ? MergeFillLevel(result, level) : level;
+            seen = true;
         }
         return result;
     }
@@ -727,13 +759,16 @@ public:
 
 private:
     EDqFillLevel GetFillLevel() const override {
-        auto result = Aggregator->GetFillLevel();
-        // A soft limit stops the run too: the channels must register the output wait.
-        if (result != NoLimit) {
-            for (auto output : Outputs_) {
-                output->UpdateFillLevel();
-            }
-            result = Aggregator->GetFillLevel();
+        return Aggregator->GetFillLevel();
+    }
+
+    EDqFillLevel ObserveFill() override {
+        EDqFillLevel result = NoLimit;
+        bool seen = false;
+        for (auto output : Outputs_) {
+            const auto level = output->SubscribeFill();
+            result = seen ? MergeFillLevel(result, level) : level;
+            seen = true;
         }
         return result;
     }
@@ -932,13 +967,16 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        auto result = Aggregator->GetFillLevel();
-        // A soft limit stops the run too: the channels must register the output wait.
-        if (result != NoLimit) {
-            for (auto output : Outputs) {
-                output->UpdateFillLevel();
-            }
-            result = Aggregator->GetFillLevel();
+        return Aggregator->GetFillLevel();
+    }
+
+    EDqFillLevel ObserveFill() override {
+        EDqFillLevel result = NoLimit;
+        bool seen = false;
+        for (auto output : Outputs) {
+            const auto level = output->SubscribeFill();
+            result = seen ? MergeFillLevel(result, level) : level;
+            seen = true;
         }
         return result;
     }

@@ -109,6 +109,37 @@ Y_UNIT_TEST_SUITE(DqChannelTrace) {
         task->Cancel(true);
     }
 
+    Y_UNIT_TEST(SubscribeOutputFillWakesOnTheNextDrain) {
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto registry = std::make_shared<TLocalBufferRegistry>(nullptr, counters, 1024, 800, 128, false);
+        const TChannelFullInfo info(9, {}, {}, 1, 2, TCollectStatsLevel::None);
+        auto buffer = registry->GetOrCreateLocalBuffer(registry, info, nullptr);
+        ui32 enqueues = 0;
+        auto task = std::make_shared<TTaskSchedulingHandle>(NActors::TActorId{}, NActors::TActorId{},
+            [&enqueues](auto) { ++enqueues; }, [] {});
+        buffer->BindTaskScheduling(task, false);
+        task->RequestExecution();
+        const auto generation = task->TryDispatch();
+        UNIT_ASSERT(generation && task->Start(*generation));
+        {
+            std::lock_guard lock(buffer->Mutex);
+            buffer->FillLevel = HardLimit;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(buffer->SubscribeOutputFill(), HardLimit);
+        UNIT_ASSERT(task->HasObservedWaits());
+        task->Complete({.RunnerInvoked = true});
+        UNIT_ASSERT(task->GetSnapshot().State == ETaskSchedulingState::Blocked);
+        const ui32 before = enqueues;
+        {
+            std::lock_guard lock(buffer->Mutex);
+            buffer->FillLevel = SoftLimit;
+        }
+        buffer->NotifyOutput(true);
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, before + 1);
+        UNIT_ASSERT(task->GetSnapshot().State == ETaskSchedulingState::Ready);
+        task->Cancel(true);
+    }
+
     Y_UNIT_TEST(ScheduledConsumerWakesOnceWhenTheProducerRunFinishes) {
         auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto registry = std::make_shared<TLocalBufferRegistry>(nullptr, counters, 100000, 1000, 128, false);

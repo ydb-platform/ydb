@@ -159,6 +159,23 @@ EDqFillLevel TLocalBuffer::GetFillLevel() const {
     return FillLevel;
 }
 
+EDqFillLevel TLocalBuffer::SubscribeOutputFill() {
+    // Pop and the storage wakeup call Signal before they release Mutex.
+    // The version sampled here is therefore still ahead of the next drain.
+    std::lock_guard lock(Mutex);
+    if (FillLevel == EDqFillLevel::NoLimit) {
+        return FillLevel;
+    }
+    if (auto task = GetOutputTask()) {
+        const auto dependency = OutputDependency(Info.ChannelId);
+        const ui64 version = task->Observe(dependency);
+        if (FillLevel != EDqFillLevel::NoLimit) {
+            task->Await(dependency, version);
+        }
+    }
+    return FillLevel;
+}
+
 TLocalBuffer::~TLocalBuffer() {
     if (QuotaManager) {
         // InflightBytes are always allocated in the QuotaManager, release quota for the chunks which were never popped
@@ -1107,6 +1124,23 @@ TTaskChannelSnapshot TInputBuffer::GetTraceSnapshot() const {
 
 EDqFillLevel TOutputBuffer::GetFillLevel() const {
     std::lock_guard lock(Descriptor->FlowControlMutex);
+    return Descriptor->FillLevel;
+}
+
+EDqFillLevel TOutputBuffer::SubscribeOutputFill() {
+    // A remote drain updates FillLevel under FlowControlMutex and signals only
+    // after that update. Seeing HardLimit here means the signal is still in the future.
+    std::lock_guard lock(Descriptor->FlowControlMutex);
+    if (Descriptor->FillLevel == EDqFillLevel::NoLimit) {
+        return Descriptor->FillLevel;
+    }
+    if (auto task = GetOutputTask()) {
+        const auto dependency = OutputDependency(Info.ChannelId);
+        const ui64 version = task->Observe(dependency);
+        if (Descriptor->FillLevel != EDqFillLevel::NoLimit) {
+            task->Await(dependency, version);
+        }
+    }
     return Descriptor->FillLevel;
 }
 

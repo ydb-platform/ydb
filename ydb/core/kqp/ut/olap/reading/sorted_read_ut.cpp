@@ -22,6 +22,8 @@ void CheckSortedRead(bool newRbo, bool separated) {
     settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+    // Keep fixture INSERT/UPSERT statements on the selected optimizer when retries are disabled.
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
     settings.FeatureFlags.SetEnableSeparationComputeActorsFromRead(separated);
     auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
     controller->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);

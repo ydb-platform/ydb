@@ -121,6 +121,8 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
             auto* tableServiceConfig = appConfig.MutableTableServiceConfig();
             tableServiceConfig->SetEnableNewRBO(true);
             tableServiceConfig->SetEnableFallbackToYqlOptimizer(false);
+            // Exercise NewRBO's peephole setting on row tables.
+            tableServiceConfig->SetEnableFallbackOnRowTables(false);
             if (!serviceDefault) {
                 tableServiceConfig->SetEnableNewRBOPhysicalStagePeephole(false);
             }
@@ -160,6 +162,8 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        // Exercise NewRBO's peephole setting on row tables in both variants.
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto scheme = session.ExecuteSchemeQuery(R"(

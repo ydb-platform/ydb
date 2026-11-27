@@ -820,6 +820,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
     Y_UNIT_TEST_TWIN(ComputeNodeMemoryLimit, EnableComputeSchedulerMemory) {
         NKikimrConfig::TAppConfig appConfig;
+        // FIXME: Switch back to the new optimizer after the MiniKQL unpacking cleanup fix (PR #61010).
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         appConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000);
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();

@@ -862,7 +862,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
     }
 
     Y_UNIT_TEST(IndexMetadataDependencies) {
-        NKqp::TKikimrRunner kikimr(NewRboTracingSettings());
+        auto settings = NewRboTracingSettings();
+        // Index metadata dependencies must be traced through the NewRBO compilation path.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
+        NKqp::TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         RegisterUploader(runtime);
         auto client = kikimr.GetQueryClient();

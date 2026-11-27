@@ -56,6 +56,8 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     NKikimrKqp::TKqpDefaultSettings defaultSettings;
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
+    // This direct query processor cannot retry DML with the legacy optimizer.
+    kikimrConfig->SetEnableFallbackOnDML(false);
 
     auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>(TKqpFederatedQuerySetup{
         .HttpGateway = NYql::IHTTPGateway::Make(),

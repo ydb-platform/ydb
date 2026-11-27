@@ -234,6 +234,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
         auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(KeyDesc->TableId.PathId.LocalPathId);
+        ev->Record.SetSchemaVersion(KeyDesc->TableId.SchemaVersion);
         if (Request != nullptr && Request->GetInternalToken() != nullptr) {
             ev->Record.SetUserSID(Request->GetInternalToken()->GetUserSID());
         }
@@ -411,6 +412,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
         case NKikimrTxDataShard::TError::OK:
             return Reply(MakeOperation(StatusIds::SUCCESS));
         case NKikimrTxDataShard::TError::SCHEME_ERROR:
+        case NKikimrTxDataShard::TError::SCHEME_CHANGED:
             return Reply(StatusIds::SCHEME_ERROR, TIssuesIds::DEFAULT_ERROR, record.GetErrorDescription());
         case NKikimrTxDataShard::TError::BAD_ARGUMENT:
             return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, record.GetErrorDescription());

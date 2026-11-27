@@ -21,7 +21,7 @@ We use the following symbols as abbreviations:
     * ✅ basic unique indexes released
     * 🚧 online index building (by default starting from 26.4)
 1. ✅ ㉔ Apply **indexes automatically** to optimize data fetching (enabled by default in 24.4)
-1. ✅ ㉔ **Default values** for table columns (constant defaults released in 24.3; arbitrary default expressions remain a separate task)
+1. ✅ ㉔ **Default values** for row table columns (constant defaults released in 24.3; arbitrary default expressions remain a separate task)
 1. ✅ ㉔ **Asynchronous LLVM JIT** query compilation
 1. ✅ ㉔ **Parameters in DECLARE clause are becoming optional**, better SQL compatibility (25.1)
 1. 🚧 ㉔ **``INSERT INTO table FROM SELECT``** for large datasets (supported operations exist; removing large-write limits remains in progress)
@@ -37,6 +37,9 @@ We use the following symbols as abbreviations:
 1. ✅ ㉓ Switch to **New Engine** for OLTP queries (QueryService is enabled by default)
 1. ✅ ㉓ Support **`not null` for PK (primary key) table columns**
 1. ✅ ㉓ **Aggregates and predicates push down to column-oriented tables**
+    * ✅ ㉖ **LIMIT** pushdown (from 25.4)
+    * 🚧 ㉖ **DISTINCT** pushdown (from 26.3)
+    * 🚧 ㉖ **JSON_VALUE** pushdown (from 25.4)
 1. ✅ ㉓ **Optimize data formats** for data transition between query phases
 1. ✅ ㉓ **Index Rename/Rebuild**
 1. ✅ ㉓ **KQP Session Actor** as a replacement for KQP Worker Actor (optimize to reduce CPU usage)
@@ -55,6 +58,8 @@ We use the following symbols as abbreviations:
     * ㉖ 🚧 Universal **Cost based optimizer v2** for row and column tables
 1. 🚧 ㉖ **Read-committed transaction isolation level**
 1. 🚧 ㉕ **Workload Manager**
+    * ㉖ CPU limits for the **background compaction** of column tables
+    * 🚧 ㉖ CPU limits for **reading** from column tables (from 26.4)
 1. ✅ **Allow administrators to stop another user’s query**.
 1. ✅ ㉖ **TRUNCATE TABLE**
 1. ✅ ㉖ **`SET NOT NULL` for existing table columns**
@@ -162,7 +167,33 @@ storage
 1. ㉔ Column tables **autosharding**
 1. ㉓ 🚧 **Log Store** (log friendly column-oriented storage which allows to create 1+ million tables for logs storing)
 1. ✅ ㉓ **Column-oriented Tables** (basic analytical capabilities released in 25.2; further operational and scale improvements continue)
+    * ✅ ㉖ **Bool** type (from 25.4)
+    * ✅ ㉖ **Column compression** (from 26.2)
+    * ✅ ㉖ **Dictionary encoding** (from 26.3)
+    * 🚧 ㉖ **JSON subcolumns** (from 25.4)
+    * ✅ ㉖ **Type parity with row tables** (`Interval`, `Uuid`, `DyNumber`) (from 26.4)
+    * 🚧 ㉖ **NULL values in the primary key**
+    * 🚧 ㉖ **`NOT NULL` for existing columns**
+    * 🚧 ㉖ **Default values**
+1. ✅ ㉖ **Skip indexes** for column tables
+    * ✅ Bloom and Bloom n-gram (from 26.2)
+    * ✅ min_max (from 26.3)
+1. ✅ ㉖ **Faster reads of large column tables**
+    * ✅ Faster **primary-key filtering** on large data volumes (from 26.2)
+    * ✅ Faster **deduplication during reads** (from 26.3)
+1. ✅ ㉖ **Compaction** lays column-table data out so later scans read less (from 26.3)
+    * ✅ Overlapping fragments are deduplicated with less overhead (from 25.4)
+1. ✅ ㉖ **Small-blob quota** for column tables: a write is rejected when the database already holds too many tiny blobs (from 26.3)
+1. ㉖ Faster **column-tablet restart**: portion metadata is loaded lazily, so the tablet starts serving the table before the full metadata is in memory
+1. 🚧 ㉖ **Storage group decommission** for column tables: a column tablet moves its blobs off groups that are being removed and drops history that no longer references any data
+1. ㉖ Automatic **dictionary encoding** of low-cardinality data fragments, without setting `ENCODING(DICT)` on the column
+1. ㉖ **Snapshot isolation** for column tables (from 26.4)
+1. 🚧 ㉖ **`ALTER TABLE ... COMPACT`** for column tables (from 26.3)
+1. 🚧 ㉖ **Parquet export/import** for row and column tables (from 26.4)
 1. 🚧 ㉓ **Tiered Storage for Column-oriented Tables** in S3 (internal use exists; public API and broader product readiness remain in progress)
+    * 🚧 ㉖ **Index eviction** together with data portions (from 25.4)
+    * 🚧 ㉖ Eviction into a **specified S3 prefix** (from 26.4)
+    * ㉖ **HIndexes** for long ranges stored in S3
 
 ## Federated Query
 1. ✅ ㉓ **Deliver the first version**

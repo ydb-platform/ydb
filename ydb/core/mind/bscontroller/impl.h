@@ -46,6 +46,7 @@
 #include <util/generic/hash_multi_map.h>
 
 #include <array>
+#include <expected>
 #include <list>
 #include <unordered_map>
 
@@ -782,6 +783,17 @@ public:
         // be recalculated too
         bool CalculateGroupStatus();
 
+        TMirror3dcGroupConfiguration GetMirror3dcConfiguration() const {
+            using NKikimrBlobStorage::TDataCenterState;
+            using NKikimrBlobStorage::TGroupState;
+            constexpr TMirror3dcFailRealmStates allRealmsIncluded{
+                TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED};
+            return {
+                .State = Mirror3dcState.value_or(TGroupState::NORMAL),
+                .Realms = FailRealmStates.value_or(allRealmsIncluded),
+            };
+        }
+
         // group layout status: whether it is positioned correctly
         bool LayoutCorrect = false;
 
@@ -1422,6 +1434,7 @@ public:
         Table::DDisk::Type DDisk = false;
         Table::PersistentBufferAllocationMode::Type PersistentBufferAllocationMode = NKikimrBlobStorage::BALANCED;
         TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
+        TMaybe<Table::TargetInvariant::Type> TargetInvariant;
 
         void SetGroupGeometry(const NKikimrBlobStorage::TGroupGeometry& geometry) {
             RealmLevelBegin = geometry.GetRealmLevelBegin();
@@ -1543,6 +1556,7 @@ public:
                     Table::DDisk,
                     Table::VDiskHeapAllocatorNumLeadingDisks,
                     Table::PersistentBufferAllocationMode,
+                    Table::TargetInvariant,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>
                 > adapter(
                     &TStoragePoolInfo::Name,
@@ -1573,6 +1587,7 @@ public:
                     &TStoragePoolInfo::DDisk,
                     &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::PersistentBufferAllocationMode,
+                    &TStoragePoolInfo::TargetInvariant,
                     &TStoragePoolInfo::UserIds
                 );
             callback(&adapter);
@@ -2110,7 +2125,8 @@ public:
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
     TActorId GroupStateActorId;
-    std::optional<NGroupSyncer::TExcludedRealms> GetTargetExcludedRealms(const TGroupInfo& group) const;
+    using TGroupPolicyStepResult = std::expected<std::optional<TMirror3dcGroupConfiguration>, TString>;
+    TGroupPolicyStepResult GetGroupPolicyStep(const TGroupInfo& group, const TMirror3dcGroupConfiguration& current) const;
     void UpdateGroupStateActor(TGroupId groupId);
 
     TActorId ClusterBalanceActorId;

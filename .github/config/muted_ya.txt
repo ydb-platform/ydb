@@ -1,10 +1,21 @@
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepotMoveData.KeepDoesNotTouchMovingRecord
+ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepotMoveData.MoveDataCanceledByYellowStop
+ydb/core/blobstorage/ut_blobstorage/ut_blob_depot unittest.sole chunk
+ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.VCompactCutLogRecordMissingFromSyncLogAfterRestart
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/kqp/ut/rbo/statistics/join_order KqpJoinOrderAnalyzedStatistics.TPCDS+ColumnStore
 ydb/core/kqp/ut/rbo/statistics/join_order KqpJoinOrderAnalyzedStatistics.TPCDS-ColumnStore
+ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtMinMessages
+ydb/core/persqueue/ut TPartitionTests.ReplicationDataRewindsConsumerOffsetsAndClampsToStart
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
+ydb/public/sdk/cpp/src/client/topic/ut TxUsage.ReadRuleGeneration
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.ReadRuleGeneration
+ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadNotCached
+ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootBothTabletsCombinedStress
+ydb/services/persqueue_v1/ut/tablet_restart_session_ut unittest.sole chunk
 ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-3-1_to_stable-26-4-1]
 ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_prestable-27-1-1_to_prestable-27-1-1-column]
@@ -22,7 +33,6 @@ ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.
 ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.test_row_tables[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableMixedCluster.test_external_data_source[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_current_proxy_returns_overloaded[mixed_current_and_intermediate-limit_enabled]
-ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRestart.test_rename_table[restart_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/topics py3test.[test_topic.py */*] chunk
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/topics test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-4-1_to_prestable-27-1-1]
@@ -30,6 +40,9 @@ ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prest
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_one_dc_external_recovery
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
+ydb/tests/functional/restarts test_restarts.py.TestRestartSingleBlock42.test_restart_single_node_is_ok
+ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsOneHourRestart.test_case
+ydb/tests/functional/ydb_cli test_ydb_topic.py.TestTopicArchive.test_export_resumes_from_committed_offset
 ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_board_workload.py] chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_scheme_board_workload.py] chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_state_storage_workload.py] chunk

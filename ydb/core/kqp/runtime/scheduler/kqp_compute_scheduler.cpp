@@ -59,7 +59,7 @@ namespace NScheduler {
 TComputeScheduler::TComputeScheduler(const NMonitoring::TDynamicCounterPtr& counters, const TOptions& options)
     : Enabled(options.Enabled)
     , MemoryEnabled(options.Enabled && options.MemoryEnabled)
-    , Root(std::make_shared<TRoot>(counters))
+    , Root(std::make_shared<TRoot>(counters, options.TimeProvider))
     , DelayParams(options.DelayParams)
     , KqpCounters(counters)
 {

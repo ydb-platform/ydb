@@ -2572,6 +2572,34 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT_GE(query->CpuBurstThrottle.load(), kThrottleTime.MicroSeconds());
     }
 
+    Y_UNIT_TEST(CallbackWakeupDoesNotRequireAnActorContextOrVirtualClock) {
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
+        scheduler.SetTotalCpuLimit(1);
+        scheduler.AddOrUpdatePool("db", "pool", {});
+        auto query = scheduler.AddOrUpdateQuery("db", "pool", 1);
+
+        TSchedulableBase running({.Query = query, .IsSchedulable = true});
+        TSchedulableBase actor({.Query = query, .IsSchedulable = true});
+        TSchedulableBase callback({.Query = query, .IsSchedulable = true});
+        ui32 wakeups = 0;
+        actor.RegisterForResume(NActors::TActorId{});
+        callback.RegisterForResume([&] { ++wakeups; });
+        scheduler.UpdateFairShare();
+
+        const bool runningDelayed = running.TryStartExecution(TMonotonic::Now()).has_value();
+        const bool actorDelayed = actor.TryStartExecution(TMonotonic::Now()).has_value();
+        const bool callbackDelayed = callback.TryStartExecution(TMonotonic::Now()).has_value();
+        running.StopExecution();
+        actor.StopExecution();
+        callback.StopExecution();
+
+        UNIT_ASSERT(!runningDelayed);
+        UNIT_ASSERT(actorDelayed);
+        UNIT_ASSERT(callbackDelayed);
+        UNIT_ASSERT_VALUES_EQUAL(wakeups, 1);
+    }
+
     Y_UNIT_TEST(StressTest) {
         constexpr ui64 kCpuLimit = 100;
 

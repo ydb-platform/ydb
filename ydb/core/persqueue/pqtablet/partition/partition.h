@@ -147,7 +147,10 @@ struct TTransaction {
 };
 class TPartitionCompaction;
 
-#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
+#define PQ_ENSURE(condition, ...) YDB_LOG_ENSURE(condition, \
+    {"tabletId", TabletId},                                 \
+    {"partitionId", Partition},                             \
+    __VA_ARGS__)
 
 class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitializer;

@@ -1,6 +1,6 @@
 # Skipper source map
 
-Paths are relative to the YDB repository root; a basename following a full path in the same row uses that directory. Verify they still exist before citing. Controller rows were checked at `skipper_initial_wip` `c33440067d60ba18b814dd92df9f1be37ed50df4`; server rows originally at `87481912996dadc6aae8e904e0a07c767036cd11` and rechecked at the same worktree. Line-level controller facts are in `controller-facts.md`.
+Paths are relative to the YDB repository root; a basename following a full path in the same row uses that directory. Verify they still exist before citing. Line-level controller facts are in `controller-facts.md`.
 
 ## Controller (`ydb/apps/bridge_skipper/`)
 

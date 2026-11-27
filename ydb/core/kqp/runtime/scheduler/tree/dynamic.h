@@ -134,7 +134,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     class TRoot : public TPool, public TSnapshotSwitch<NSnapshot::TRootPtr> {
     public:
-        explicit TRoot(const NMonitoring::TDynamicCounterPtr& counters);
+        explicit TRoot(const NMonitoring::TDynamicCounterPtr& counters, TTimeProviderPtr timeProvider = {});
 
         void AddDatabase(const TDatabasePtr& database);
         void RemoveDatabase(const TDatabaseId& databaseId);
@@ -151,6 +151,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         }
 
     private:
+        const TTimeProviderPtr TimeProvider;
         NStatic::TRootPtr StaticTree = std::make_shared<const NStatic::TRoot>();
         struct {
             NMonitoring::TDynamicCounters::TCounterPtr TotalCpuLimit;

@@ -1,11 +1,21 @@
 #pragma once
 
 #include "log_iface.h"
-#include <util/generic/vector.h>
+
+#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
+
 #include <util/digest/murmur.h>
+#include <util/generic/vector.h>
 #include <util/random/easy.h>
 
+#include <map>
+#include <memory>
+
 namespace NActors {
+    namespace NStructuredLog {
+        class ILogSink;
+    }
+
     namespace NLog {
         inline const char* PriorityToString(EPrio priority) {
             switch (priority) {
@@ -173,6 +183,28 @@ namespace NActors {
             void SetThrottleDelay(TDuration value);
             void SetUseLocalTimestamps(bool value);
             void SetEnableStructuredLogInJson(bool value);
+
+            // In TLogSinkMap the key is a textual description of the sink.
+            // Typically, the key looks like "key=value key=value ... " and describes the sink’s type and parameters.
+            using TLogSinkMap = std::map<TString, std::shared_ptr<NStructuredLog::ILogSink>>;
+            using TLogSinkMapSPtr = TTrueAtomicSharedPtr<TLogSinkMap>;
+
+            // Optional extra log outputs registered on the logger actor.
+            // TLoggerActor invokes every sink synchronously on its executor thread while handling NLog::TEvLog
+            // (see HandleLogEvent and HandleLogEventDrop). Sinks therefore see the TEvLog mailbox path only:
+            // direct TLoggerActor::Log() writes and internal "Logger overflow!" records go to the backend
+            // and are not forwarded here.
+            //
+            // Dispatch happens before AllowDrop / TLogBuffer handling, so the sink stream is not identical to
+            // the backend stream (records may reach sinks even when buffered or later dropped from the file log).
+            // Publish a new map snapshot via atomic_store; do not mutate a map already loaded by the logger.
+            //
+            // Implementations must keep Write() fast and non-blocking. Offload slow work (disk, network) inside
+            // the sink (e.g. queue and flush on a dedicated thread). Sink failures are isolated from other sinks
+            // and from the backend; call ILogSink::Stop() from the code that owns the sink lifetime.
+            TLogSinkMapSPtr Sinks;
+
+            ~TSettings();
 
         private:
             int SetLevelImpl(

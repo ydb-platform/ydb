@@ -238,6 +238,17 @@ namespace NActors {
     void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
+
+        // Anyway, process record by sinks
+        const auto& eventData = *ev->Get();
+        OutputRecordToSinks(eventData.Stamp,
+            eventData.Level.ToPrio(),
+            eventData.Component,
+            eventData.FileName,
+            eventData.LineNumber,
+            eventData.Line,
+            eventData.StructuredMessage);
+
         if (Settings->AllowDrop) {
             if (PassedCount > 10 && delayMillisec > (i64)Settings->TimeThresholdMs || !LogBuffer.IsEmpty() || LogBuffer.CheckLogIgnoring()) {
                 if (LogBuffer.IsEmpty() && !LogBuffer.CheckLogIgnoring()) {
@@ -537,6 +548,39 @@ namespace NActors {
 
     constexpr size_t TimeBufSize = 512;
 
+    void TLoggerActor::OutputRecordToSinks(
+        TInstant time,
+        NLog::EPrio priority,
+        NLog::EComponent component,
+        const char* fileName,
+        ui64 lineNumber,
+        const TString& formatted,
+        const TMaybe<NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
+        try {
+            auto sinks = Settings->Sinks.atomic_load();
+            if (!sinks || sinks->empty()) {
+                return;
+            }
+
+            NStructuredLog::TLogMessage message {
+                .Time = time,
+                .Priority = priority,
+                .Component = component,
+                .NodeId = Settings->NodeId,
+                .FileName = fileName,
+                .LineNumber = lineNumber,
+                .TextMessage = formatted,
+                .StructuredMessage = structuredMessage.GetOrElse({})};
+
+            for (auto& sink : *sinks) {
+                try {
+                    sink.second->Write(message);
+                } catch (...) {
+                }
+            }
+        }  catch (...) {
+        }
+
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
         return OutputRecord(
             evLog->Stamp,
@@ -685,6 +729,16 @@ namespace NActors {
     void TLoggerActor::HandleLogEventDrop(const NLog::TEvLog::TPtr& ev) {
         WriteMessageStat(*ev->Get());
         Metrics->IncDroppedMsgs();
+
+        // Anyway, process record by sinks
+        const auto& eventData = *ev->Get();
+        OutputRecordToSinks(eventData.Stamp,
+            eventData.Level.ToPrio(),
+            eventData.Component,
+            eventData.FileName,
+            eventData.LineNumber,
+            eventData.Line,
+            eventData.StructuredMessage);
     }
 
     void TLoggerActor::HandleWakeup() {

@@ -507,4 +507,5 @@ message TFeatureFlags {
     optional bool EnableAsyncReplicationSnapshotProvenance = 404 [default = false];
     optional bool EnableConsistentVectorIndexBuild = 405 [default = true];
     optional bool EnableReadSecretRpcHandler = 406 [default = false];
+    optional bool EnableCdcKeyRangeHeartbeats = 407 [default = false];
 }

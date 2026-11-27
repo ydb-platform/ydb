@@ -7,7 +7,6 @@
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
-#include <ydb/core/util/stlog.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_BALANCING
 

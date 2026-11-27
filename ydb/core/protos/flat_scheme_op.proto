@@ -1223,6 +1223,7 @@ enum ECdcStreamCompression {
 enum ECdcStreamHeartbeatMode {
     ECdcStreamHeartbeatModeDirect = 0;
     ECdcStreamHeartbeatModeAggregated = 1;
+    ECdcStreamHeartbeatModeKeyRange = 2;
 }
 
 message TCdcStreamScanProgress {

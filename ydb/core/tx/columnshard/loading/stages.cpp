@@ -191,6 +191,7 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
 
     // a finished stage does not run again
     if (Self->ProcessingParams) {
+        Self->StartupTimeline.OnMediatorTimeRegistrationStarted();
         Self->MediatorTime.RegisterAndStartCatchUp(*Self->ProcessingParams, ctx);
     }
     return true;

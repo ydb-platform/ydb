@@ -45,7 +45,11 @@ bool TColumnShard::HoldUntilMediatorTimeReady(TAutoPtr<IEventHandle>& ev) {
 }
 
 void TColumnShard::TryMakeMediatorTimeReady(const TActorContext& ctx) {
-    if (MediatorTime.TryBecomeReady(ctx)) {
+    if (!MediatorTime.TryBecomeReady(ctx)) {
+        return;
+    }
+    StartupTimeline.OnMediatorTimeReady();
+    if (CurrentStateFunc() == &TThis::StateWork) {
         OnMediatorTimeReady();
     }
 }
@@ -53,9 +57,6 @@ void TColumnShard::TryMakeMediatorTimeReady(const TActorContext& ctx) {
 void TColumnShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx) {
     Y_ABORT_UNLESS(ev->Get()->TabletId == TabletID());
     MediatorTime.OnRegistered(ev->Get()->Entry);
-    if (CurrentStateFunc() != &TThis::StateWork) {
-        return;
-    }
     TryMakeMediatorTimeReady(ctx);
 }
 
@@ -63,14 +64,13 @@ void TColumnShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, cons
     Y_ABORT_UNLESS(ev->Get()->TabletId == TabletID());
     MediatorTime.OnNotifyPlanStep();
     TryMakeMediatorTimeReady(ctx);
-    RescheduleWaitingReads();
+    if (CurrentStateFunc() == &TThis::StateWork) {
+        RescheduleWaitingReads();
+    }
 }
 
 void TColumnShard::Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& ev, const TActorContext& ctx) {
     MediatorTime.OnNextReadStep(ev->Get()->CoordinatorId, ev->Get()->NextReadStep, ctx);
-    if (CurrentStateFunc() != &TThis::StateWork) {
-        return;
-    }
     TryMakeMediatorTimeReady(ctx);
 }
 

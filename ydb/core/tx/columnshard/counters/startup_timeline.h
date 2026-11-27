@@ -19,17 +19,26 @@ private:
     TMonotonic TxInitCreateInstant;
     TMonotonic TxInitFinishInstant;
     TMonotonic SwitchedToWorkInstant;
+    std::optional<TMonotonic> MediatorInitializationStartedAt;
     NLWTrace::TOrbit Orbit;
+    NLWTrace::TOrbit MediatorTimeOrbit;
+    bool StartupStagesFinished = false;
+    bool MediatorForkedFromStartup = false;
+
+    void FinishStartupStages();
 
     void TraceStageFinished(const TString& stage, const TDuration duration);
 
 public:
     TStartupTimeline(const ui64 tabletId, const TCSInitialization& counters);
+    ~TStartupTimeline();
 
     NLWTrace::TOrbit& MutableOrbit() {
         return Orbit;
     }
 
+    void OnMediatorTimeRegistrationStarted();
+    void OnMediatorTimeReady();
     void OnExecutorActivated();
     void OnTxInitSchemaFinished();
     void OnTxInitCreated();

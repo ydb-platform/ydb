@@ -472,6 +472,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
             HFunc(TEvMediatorTimecast::TEvSubscribeReadStepResult, Handle);
+            HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             default:
                 StateInitImpl(ev, SelfId());
         }

@@ -14,6 +14,46 @@ TStartupTimeline::TStartupTimeline(const ui64 tabletId, const TCSInitialization&
     TraceStartupStarted(Orbit, TabletId);
 }
 
+TStartupTimeline::~TStartupTimeline() {
+    if (MediatorForkedFromStartup) {
+        Orbit.Join(MediatorTimeOrbit);
+    }
+}
+
+void TStartupTimeline::OnMediatorTimeRegistrationStarted() {
+    YDB_LOG_VERIFY(!MediatorInitializationStartedAt);
+    MediatorInitializationStartedAt = TMonotonic::Now();
+    if (!StartupStagesFinished) {
+        Orbit.Fork(MediatorTimeOrbit);
+        MediatorForkedFromStartup = true;
+    }
+    TraceMediatorTimeRegistrationStarted(MediatorTimeOrbit, TabletId);
+}
+
+void TStartupTimeline::OnMediatorTimeReady() {
+    YDB_LOG_VERIFY(MediatorInitializationStartedAt);
+    const TDuration duration = TMonotonic::Now() - *MediatorInitializationStartedAt;
+    MediatorInitializationStartedAt.reset();
+    Counters.OnMediatorTimeReady(duration);
+    TraceStartupStageFinished(MediatorTimeOrbit, TabletId, "startup/mediator_time_initialization", duration);
+    if (MediatorForkedFromStartup) {
+        Orbit.Join(MediatorTimeOrbit);
+        MediatorForkedFromStartup = false;
+        if (StartupStagesFinished) {
+            Orbit.Reset();
+        }
+    }
+    MediatorTimeOrbit.Reset();
+}
+
+void TStartupTimeline::FinishStartupStages() {
+    YDB_LOG_VERIFY(!StartupStagesFinished);
+    StartupStagesFinished = true;
+    if (!MediatorForkedFromStartup) {
+        Orbit.Reset();
+    }
+}
+
 void TStartupTimeline::TraceStageFinished(const TString& stage, const TDuration duration) {
     TraceStartupStageFinished(Orbit, TabletId, "startup/" + stage, duration);
 }
@@ -55,9 +95,8 @@ void TStartupTimeline::OnSwitchedToWork(const ui64 portionsCount, const bool por
     const TDuration switchToWork = now - TxInitFinishInstant;
     TraceStageFinished("switch_to_work", switchToWork);
     TraceStartupStageFinished(Orbit, TabletId, "startup", now - CreateInstant);
-    // lwtrace publishes a track only when it ends; otherwise it ends in OnAllPortionsLoaded
     if (portionsLoaded) {
-        Orbit.Reset();
+        FinishStartupStages();
     }
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "startup_stage_finished"},
@@ -74,7 +113,7 @@ void TStartupTimeline::OnSwitchedToWork(const ui64 portionsCount, const bool por
 void TStartupTimeline::OnAllPortionsLoaded(const ui64 portionsCount, const ui32 batches) {
     const TMonotonic now = TMonotonic::Now();
     TraceStageFinished("deferred_portion_loading", now - SwitchedToWorkInstant);
-    Orbit.Reset();
+    FinishStartupStages();
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "all_portions_loaded"},
         {"duration_us", (now - CreateInstant).MicroSeconds()},

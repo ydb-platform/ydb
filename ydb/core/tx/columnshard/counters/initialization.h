@@ -9,6 +9,7 @@ class TCSInitialization: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
 
+    const NMonitoring::THistogramPtr HistogramMediatorTimeInitializationDurationMs;
     const NMonitoring::THistogramPtr HistogramTxInitDurationMs;
     const NMonitoring::THistogramPtr HistogramNormalizationDurationMs;
     const NMonitoring::THistogramPtr HistogramTxInitSchemaDurationMs;
@@ -17,6 +18,10 @@ private:
     const NMonitoring::THistogramPtr HistogramSwitchToWorkFromCreateDurationMs;
 
 public:
+    void OnMediatorTimeReady(const TDuration duration) const {
+        HistogramMediatorTimeInitializationDurationMs->Collect(duration.MilliSeconds());
+    }
+
     void OnTxInitFinished(const TDuration d) const {
         HistogramTxInitDurationMs->Collect(d.MilliSeconds());
     }
@@ -40,6 +45,8 @@ public:
 
     TCSInitialization(TCommonCountersOwner& owner)
         : TBase(owner, "stage", "initialization")
+        , HistogramMediatorTimeInitializationDurationMs(
+              TBase::GetHistogram("MediatorTimeInitializationDurationMs", NMonitoring::ExponentialHistogram(20, 2, 1)))
         , HistogramTxInitDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
         , HistogramNormalizationDurationMs(TBase::GetHistogram("NormalizationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
         , HistogramTxInitSchemaDurationMs(TBase::GetHistogram("TxInitSchemaDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))

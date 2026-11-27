@@ -194,14 +194,18 @@ public:
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TColumnShardDeferredPortionLoading) {
-    Y_UNIT_TEST(LoadsEveryPortionInBatches) {
+    Y_UNIT_TEST(LoadsEveryPortionWhileMediatorTimeIsUnavailable) {
         TShardWithPortions shard;
+        TBlockEvents<TEvMediatorTimecast::TEvSubscribeReadStepResult> coordinatorReplies(shard.Runtime);
         shard.Reboot();
         shard.WaitBatchesLoaded(3);
         UNIT_ASSERT(shard.Engine().AreAllPortionsLoaded(std::nullopt));
         UNIT_ASSERT_VALUES_EQUAL(shard.Engine().GetTables().begin()->second->GetPortions().size(), 3);
 
         auto reader = shard.StartScan({ 0, 499 });
+        UNIT_ASSERT(!reader->WaitScannerAnswer(NoAnswerWait));
+        UNIT_ASSERT(!coordinatorReplies.empty());
+        coordinatorReplies.Unblock();
         UNIT_ASSERT(reader->WaitScannerAnswer());
         UNIT_ASSERT_VALUES_EQUAL(shard.ReadRows(*reader), 300);
     }

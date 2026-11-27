@@ -99,7 +99,11 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         OnTieringModified();
     }
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
-    TryMakeMediatorTimeReady(ctx);
+    if (MediatorTime.Ready()) {
+        OnMediatorTimeReady();
+    } else {
+        TryMakeMediatorTimeReady(ctx);
+    }
     ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());

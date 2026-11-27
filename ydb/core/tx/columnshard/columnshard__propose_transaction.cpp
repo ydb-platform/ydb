@@ -98,6 +98,7 @@ public:
             {"opTx", TxOperator->GetTxInfo().DebugString()});
 
         if (ProcessingParamsSaved) {
+            Self->StartupTimeline.OnMediatorTimeRegistrationStarted();
             Self->MediatorTime.Register(*Self->ProcessingParams, ctx);
         }
 

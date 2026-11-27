@@ -10,6 +10,10 @@ void TraceStartupStarted(NLWTrace::TOrbit& orbit, const ui64 tabletId) {
     LWTRACK(StartupStarted, orbit, tabletId);
 }
 
+void TraceMediatorTimeRegistrationStarted(NLWTrace::TOrbit& orbit, const ui64 tabletId) {
+    LWTRACK(MediatorTimeRegistrationStarted, orbit, tabletId);
+}
+
 void TraceStartupStageFinished(NLWTrace::TOrbit& orbit, const ui64 tabletId, const TString& stage, const TDuration duration) {
     LWTRACK(StartupStageFinished, orbit, tabletId, stage, duration);
 }

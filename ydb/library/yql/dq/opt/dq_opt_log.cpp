@@ -155,6 +155,123 @@ TExprBase DqEnforceCompactPartition(TExprBase node, TExprList frames, TExprConte
     return node;
 }
 
+// Only inspect nodes created by this window expansion; its original input is a hard boundary.
+static TExprBase NarrowFullFrameAggregateInput(TExprBase window, TExprBase expanded, TExprContext& ctx) {
+    const auto calcs = ExtractCalcsOverWindow(window.Ptr(), ctx);
+    if (calcs.empty()) {
+        return expanded;
+    }
+    const TCoCalcOverWindowTuple calc(calcs.front());
+    if (!calc.SessionSpec().Maybe<TCoVoid>()) {
+        return expanded;
+    }
+
+    TSet<TStringBuf> fields;
+    bool hasAggregate = false;
+    for (const auto& frame : calc.Frames()) {
+        // Full-frame aggregates after a filter are not split into a join by the expander.
+        if (frame.Maybe<TCoWinFilter>()) {
+            break;
+        }
+        const auto settings = TWindowFrameSettings::Parse(frame.Ref(), ctx);
+        if (settings.IsCompact() || !settings.IsFullPartition()) {
+            continue;
+        }
+        for (ui32 i = 1; i < frame.Ref().ChildrenSize(); ++i) {
+            const auto* aggregate = frame.Ref().Child(i);
+            if (!aggregate->Child(1)->IsCallable("WindowTraits")) {
+                continue;
+            }
+            hasAggregate = true;
+            if (aggregate->ChildrenSize() == 3) {
+                // DISTINCT traits take the column value, whose type need not be a struct.
+                fields.insert(aggregate->Child(2)->Content());
+                continue;
+            }
+            const auto* argumentType = aggregate->Child(1)->Head().GetTypeAnn()
+                ->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            for (const auto* item : argumentType->GetItems()) {
+                fields.insert(item->GetName());
+            }
+        }
+    }
+    if (!hasAggregate) {
+        return expanded;
+    }
+
+    TVector<TCoPartitionsByKeys> partitions;
+    VisitExpr(expanded.Ptr(), [&](const TExprNode::TPtr& node) {
+        if (node.Get() == window.Cast<TCoInputBase>().Input().Raw()) {
+            return false;
+        }
+        if (TCoPartitionsByKeys::Match(node.Get())) {
+            partitions.emplace_back(node);
+            return false;
+        }
+        return true;
+    });
+    // A non-session full-frame expansion creates exactly one aggregate partition.
+    if (partitions.size() != 1) {
+        return expanded;
+    }
+    const auto partition = partitions.front();
+    const auto* keyArg = partition.KeySelectorLambda().Args().Arg(0).Raw();
+    bool opaqueKey = false;
+    VisitExpr(partition.KeySelectorLambda().Body().Ref(), [&](const TExprNode& node) {
+        if (node.IsCallable("Member") && &node.Head() == keyArg) {
+            fields.insert(node.Tail().Content());
+            return false;
+        }
+        opaqueKey |= &node == keyArg;
+        return true;
+    });
+    if (opaqueKey) {
+        return expanded;
+    }
+
+    auto sortKey = partition.SortKeySelectorLambda().Ptr();
+    if (const auto maybeSort = calc.SortSpec().Maybe<TCoSortTraits>()) {
+        const auto traits = maybeSort.Cast();
+        const auto lambda = traits.SortKeySelectorLambda();
+        TParentsMap parents;
+        GatherParents(lambda.Ref(), parents);
+        TSet<TStringBuf> sortFields;
+        if (HaveFieldsSubset(lambda.Body().Ptr(), lambda.Args().Arg(0).Ref(), sortFields, parents)) {
+            fields.insert(sortFields.begin(), sortFields.end());
+            // The original selector reads only these fields; no wide CastStruct is needed.
+            sortKey = ctx.DeepCopyLambda(lambda.Ref());
+        } else {
+            const auto* sortRowType = traits.ListType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
+                ->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            for (const auto* item : sortRowType->GetItems()) {
+                fields.insert(item->GetName());
+            }
+        }
+    }
+
+    const auto* rowType = GetSeqItemType(window.Cast<TCoInputBase>().Input().Ref().GetTypeAnn())->Cast<TStructExprType>();
+    bool dropsColumn = false;
+    for (const auto* item : rowType->GetItems()) {
+        dropsColumn |= !fields.contains(item->GetName());
+    }
+    if (!dropsColumn || fields.empty()) {
+        return expanded;
+    }
+    TExprNodeList members;
+    for (auto name : fields) {
+        members.push_back(ctx.NewAtom(partition.Pos(), name));
+    }
+    const auto narrowed = Build<TCoPartitionsByKeys>(ctx, partition.Pos())
+        .InitFrom(partition)
+        .Input<TCoExtractMembers>()
+            .Input(partition.Input())
+            .Members(ctx.NewList(partition.Pos(), std::move(members)))
+            .Build()
+        .SortKeySelectorLambda(TExprBase(sortKey))
+        .Done();
+    return TExprBase(ctx.ReplaceNode(expanded.Ptr(), partition.Ref(), narrowed.Ptr()));
+}
+
 TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool enforceCompact,
     bool narrowFullFrameAggregateInput)
 {
@@ -174,7 +291,8 @@ TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, TTypeAnnota
             }
         }
 
-        return TExprBase(ExpandCalcOverWindow(node.Ptr(), ctx, typesCtx, narrowFullFrameAggregateInput));
+        const auto expanded = TExprBase(ExpandCalcOverWindow(node.Ptr(), ctx, typesCtx));
+        return narrowFullFrameAggregateInput ? NarrowFullFrameAggregateInput(node, expanded, ctx) : expanded;
     } else {
         return node;
     }

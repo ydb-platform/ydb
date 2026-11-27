@@ -200,6 +200,14 @@ Y_UNIT_TEST_SUITE(DqNarrowWindowAggregateInput) {
         CheckInputFields(FindPartition(fixture.Expand(window)), {"key", "value", "unused_fat_col"});
     }
 
+    Y_UNIT_TEST(MixedFramesNarrowOnlyFullFrameAggregate) {
+        TWindowFixture fixture;
+        const auto window = fixture.Parse(R"((CalcOverWindow data '('key) sortTraits '(
+            (WinOnRows orderedFullFrame '('total sumTraits))
+            (WinOnRows runningFrame '('running_total sumTraits)))))");
+        CheckInputFields(FindPartition(fixture.Expand(window)), {"key", "value"});
+    }
+
     Y_UNIT_TEST(SessionWindowKeepsAllFields) {
         TWindowFixture fixture;
         const auto window = fixture.Parse(R"((CalcOverSessionWindow data '('key) sortTraits

@@ -443,29 +443,31 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         UNIT_ASSERT_EQUAL(count->Val(), 1);
     }
 
-    Y_UNIT_TEST(LightDoesNotAccountTimeBeforeInitialEvent) {
+    Y_UNIT_TEST(LightIsOffBeforeInitialEvent) {
         TLight l;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
         l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
         const TDuration sleep = TDuration::MilliSeconds(200); // Above the 100ms update threshold
 
-        // The state is unknown until the initial event, so the time before it is neither red nor green.
+        // The light is OFF until the initial event arrives, and the time is accounted as green.
         Sleep(sleep);
         l.Update();
         UNIT_ASSERT_VALUES_EQUAL(l.GetRedMs(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(l.GetGreenMs(), 0);
-
-        // The time before the initial event is not charged to its state either.
-        Sleep(sleep);
-        l.Set(true, 1);
-        l.Set(false, 2);
-        l.Update();
-        UNIT_ASSERT_LT(l.GetRedMs() + l.GetGreenMs(), sleep.MilliSeconds());
-
-        // The accounting starts with the initial event.
-        Sleep(sleep);
-        l.Update();
         UNIT_ASSERT_GE(l.GetGreenMs(), sleep.MilliSeconds() / 2);
+
+        // An event that waits for the initial one changes nothing.
+        l.Set(true, 2);
+        Sleep(sleep);
+        l.Update();
+        UNIT_ASSERT_VALUES_EQUAL(l.GetRedMs(), 0);
+        UNIT_ASSERT_GE(l.GetGreenMs(), sleep.MilliSeconds());
+
+        // The time before the initial event stays green, the accounting follows the events after it.
+        l.Set(false, 1);
+        UNIT_ASSERT_VALUES_EQUAL(l.GetRedMs(), 0);
+        Sleep(sleep);
+        l.Update();
+        UNIT_ASSERT_GE(l.GetRedMs(), sleep.MilliSeconds() / 2);
     }
 
     Y_UNIT_TEST(LightDelayedProducer) {
@@ -509,8 +511,9 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
 
     Y_UNIT_TEST(LightProducerDelayedBeyondSeqnoDistance) {
         // The number of events published while the producer is delayed: the delayed event is either still known to be
-        // behind the current state, or mistaken for a fresh one, or has the seqno of the current state.
-        for (const ui32 published : {ui32(TLight::MaxSeqnoDistance) + 1, 40000u, 1u << 16, (1u << 16) + 5000, 100000u}) {
+        // behind the current state, or mistaken for a fresh one (far ahead or pending), or has the seqno of the
+        // current state.
+        for (const ui32 published : {ui32(TLight::MaxSeqnoDistance) + 1, 40000u, 60000u, 1u << 16, (1u << 16) + 5000, 100000u}) {
             TLight l;
             TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
             l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));

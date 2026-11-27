@@ -124,11 +124,6 @@ protected:
         AdvancedTill = now;
     }
 
-    // Discards the time elapsed since the last Advance(): the state during it is unknown.
-    void Discard(NHPTimer::STime now) {
-        AdvancedTill = now;
-    }
-
     NHPTimer::STime Now() {
         // Avoid time going backwards
         NHPTimer::STime now = HPNow();
@@ -203,10 +198,7 @@ public:
 
     void Update() {
         TGuard<TSpinLock> g(Lock);
-        const TItem& head = Data[HeadIdx];
-        if (head.Filled) { // The state is unknown until the initial event arrives
-            Advance(head.State, Now());
-        }
+        Advance(Data[HeadIdx].State, Now()); // The light is OFF until the initial event arrives
     }
 
 private:
@@ -249,8 +241,8 @@ private:
         item.Filled = true;
         item.State = state;
         ++FilledCount;
-        if (diff == 0) { // The initial expected event has arrived, the state before it was unknown.
-            Discard(now);
+        if (diff == 0) { // The initial expected event has arrived, the light was OFF before it
+            Advance(false, now);
             if (state) {
                 Modify(true, false);
             }

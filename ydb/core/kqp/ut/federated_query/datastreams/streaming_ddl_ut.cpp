@@ -4902,7 +4902,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryDdlRetriesUnderSchemeShardRestarts, TStreamingWithSchemaSecretsTestFixture) {
         NodeCount = 5;
         LogSettings.Freeze = true;
-        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQuerySchemeOperations(true);
+        auto& appConfig = SetupAppConfig();
+        // NewRBO falls back when type-checking the topic INSERT ... SELECT * body.
+        // Avoid the extra compilation overhead in this DDL retry stress test.
+        // FIXME: Re-enable NewRBO once this body compiles without fallback.
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        appConfig.MutableFeatureFlags()->SetEnableStreamingQuerySchemeOperations(true);
 
         constexpr char inputTopicName[] = "streamingQueryDdlRetriesInputTopic";
         constexpr char outputTopicName[] = "streamingQueryDdlRetriesOutputTopic";

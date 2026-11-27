@@ -169,7 +169,7 @@ Y_UNIT_TEST(AbsoluteModuleFlag) {
 }
 
 Y_UNIT_TEST(AnsiModuleComponents) {
-    const TString sql = "IMPORT foo.bar SYMBOLS $x; IMPORT \"foo\".\"bar\" SYMBOLS $x; IMPORT \"foo.bar\" SYMBOLS $x;";
+    const TString sql = R"(IMPORT foo.bar SYMBOLS $x; IMPORT "foo"."bar" SYMBOLS $x; IMPORT "foo.bar" SYMBOLS $x;)";
     for (const bool explicitAnsi : {false, true}) {
         const auto symbols = Inspect(explicitAnsi ? sql : "--!ansi_lexer\n" + sql, {.Ansi = explicitAnsi});
         UNIT_ASSERT_VALUES_EQUAL(symbols.Imports.size(), 2);
@@ -179,7 +179,7 @@ Y_UNIT_TEST(AnsiModuleComponents) {
 }
 
 Y_UNIT_TEST(AnsiFlagAndInference) {
-    const TString sql = "IMPORT \"my\"\"module\" SYMBOLS $\"na\"\"me\" AS $alias; EXPORT $\"out\";";
+    const TString sql = R"(IMPORT "my""module" SYMBOLS $"na""me" AS $alias; EXPORT $"out";)";
     for (const bool explicitAnsi : {false, true}) {
         const auto symbols = Inspect(explicitAnsi ? sql : "--!ansi_lexer\n" + sql, {.Ansi = explicitAnsi});
         UNIT_ASSERT_VALUES_EQUAL(symbols.Imports.size(), 1);

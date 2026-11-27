@@ -345,8 +345,8 @@ public:
                     alterConfig.SetReplicationSourceConsumer(consumer);
                 }
 
-                alterConfig.MutableCdcReplication()->CopyFrom(tabletConfig->GetCdcReplication());
-            } else if (alterConfig.HasCdcReplication()) {
+                alterConfig.SetCdcReplication(true);
+            } else if (alterConfig.GetCdcReplication()) {
                 errStr = "CDC replication settings require a managed changefeed";
                 return nullptr;
             }
@@ -717,7 +717,7 @@ public:
 
         const auto streamPath = path.Parent();
         const bool cdcTopic = streamPath.IsCdcStream();
-        const bool managedCdcTopic = cdcTopic && tabletConfig.HasCdcReplication()
+        const bool managedCdcTopic = cdcTopic && tabletConfig.GetCdcReplication()
             && !tabletConfig.GetReplicationSourceConsumer().empty();
         const bool attachCdcTopic = cdcTopic && !managedCdcTopic
             && !alter.GetPQTabletConfig().GetReplicationSourceConsumer().empty();

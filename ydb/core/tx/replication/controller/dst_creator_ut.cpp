@@ -914,7 +914,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         const auto& partition = setup.GetAlterPersQueueGroup().GetPQTabletConfig().GetPartitionConfig();
         UNIT_ASSERT_VALUES_EQUAL(partition.GetStorageLimitBytes(), storageLimitBytes);
         config.SetReplicationSourceConsumer(creation.Settings.Consumer);
-        config.MutableCdcReplication();
+        config.SetCdcReplication(true);
         config.AddConsumers()->SetName("new-reader");
 
         TString error;
@@ -924,6 +924,9 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         config.MutablePartitionConfig()->SetStorageLimitBytes(partition.GetStorageLimitBytes());
         UNIT_ASSERT_C(creation.CheckTopic(record, self.GetSchemeshardId(), self.GetOwner(), error), error);
         UNIT_ASSERT(!creation.NeedsTopicSetup);
+
+        config.SetCdcReplication(false);
+        UNIT_ASSERT(!creation.CheckTopic(record, self.GetSchemeshardId(), self.GetOwner(), error));
     }
 
     Y_UNIT_TEST(RecoverAttachment) {

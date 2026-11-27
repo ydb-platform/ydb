@@ -166,7 +166,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             const auto& self = desc.GetSelf();
             const auto& config = desc.GetPersQueueGroup().GetPQTabletConfig();
             if (TPathId(self.GetSchemeshardId(), self.GetPathId()) != DstPathId
-                || !config.HasCdcReplication() || config.GetReplicationSourceConsumer().empty())
+                || !config.GetCdcReplication() || config.GetReplicationSourceConsumer().empty())
             {
                 return Error(NKikimrScheme::StatusPreconditionFailed, "Managed CDC topic identity changed");
             }

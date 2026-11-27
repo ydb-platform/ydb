@@ -220,7 +220,7 @@ bool TCdcCreation::CheckTopic(const NKikimrScheme::TEvDescribeSchemeResult& reco
     }
     NeedsTopicSetup = config.GetReplicationSourceConsumer().empty();
     if (NeedsTopicSetup) {
-        if (config.HasCdcReplication() || self.GetVersion().GetPQVersion() != 1 || config.ConsumersSize()) {
+        if (config.GetCdcReplication() || self.GetVersion().GetPQVersion() != 1 || config.ConsumersSize()) {
             error = "CDC destination changed before initial topic setup";
             return false;
         }
@@ -228,7 +228,7 @@ bool TCdcCreation::CheckTopic(const NKikimrScheme::TEvDescribeSchemeResult& reco
     }
 
     // The first ALTER attaches the topic. Later consumer changes can advance its version.
-    if (config.GetReplicationSourceConsumer() != Settings.Consumer || !config.HasCdcReplication()
+    if (config.GetReplicationSourceConsumer() != Settings.Consumer || !config.GetCdcReplication()
         || self.GetVersion().GetPQVersion() < 2)
     {
         error = "CDC destination registration changed or was not applied";

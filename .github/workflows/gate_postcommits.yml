@@ -42,7 +42,7 @@ jobs:
                 id,
                 title: (.display_title // .head_branch // ("run #" + (.id|tostring))),
                 html_url,
-                branch: (.pull_requests[0].base.ref // .head_branch // "?"),
+                branch: (.pull_requests[0].base.ref // "?"),
                 waiting: (.waiting_seconds | fmt_duration),
                 waiting_seconds,
                 ignored: (.age_seconds > $max_age)

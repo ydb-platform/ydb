@@ -3,7 +3,7 @@
   "args":
     [
       {
-        "op_name":"InnerJoin (BlockHash)",
+        "op_name":"InnerJoin (ScalarHash)",
         "args":
           [
             {
@@ -21,7 +21,7 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (BlockHash)",
+                    "op_name":"InnerJoin (ScalarHash)",
                     "args":
                       [
                         {
@@ -35,7 +35,7 @@
                             ]
                         },
                         {
-                          "op_name":"InnerJoin (Map)",
+                          "op_name":"InnerJoin (ScalarHash)",
                           "args":
                             [
                               {

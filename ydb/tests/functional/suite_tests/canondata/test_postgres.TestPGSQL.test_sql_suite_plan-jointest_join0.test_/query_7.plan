@@ -47,7 +47,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-LeftJoin (Map)",
+                                        "Node Type": "Aggregate-LeftJoin (ScalarHash)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -65,10 +65,19 @@
                                                         "ExternalPlanNodeId": 11
                                                     },
                                                     {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (ScalarHash)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
                                                         "ExternalPlanNodeId": 8
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (Map)"
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.t2.hundred) AND Exist(item.t3.ten)"
                                             }
                                         ],
                                         "PlanNodeId": 12,
@@ -116,7 +125,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "InnerJoin (Map)-Filter",
+                                                        "Node Type": "InnerJoin (ScalarHash)-Filter-Filter",
                                                         "Operators": [
                                                             {
                                                                 "Condition": "t2.thousand = t3.unique2",
@@ -125,10 +134,10 @@
                                                                         "InternalOperatorId": 1
                                                                     },
                                                                     {
-                                                                        "ExternalPlanNodeId": 3
+                                                                        "InternalOperatorId": 2
                                                                     }
                                                                 ],
-                                                                "Name": "InnerJoin (Map)"
+                                                                "Name": "InnerJoin (ScalarHash)"
                                                             },
                                                             {
                                                                 "Inputs": [
@@ -138,6 +147,15 @@
                                                                 ],
                                                                 "Name": "Filter",
                                                                 "Predicate": "Exist(item.thousand)"
+                                                            },
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 3
+                                                                    }
+                                                                ],
+                                                                "Name": "Filter",
+                                                                "Predicate": "Exist(item.unique2)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 7,

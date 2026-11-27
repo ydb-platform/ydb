@@ -76,7 +76,8 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2, bo
         UNIT_ASSERT_C(!ast.Contains("SqueezeToList"), ast);
         UNIT_ASSERT_C(ast.Contains("WideCondense1") || ast.Contains("Condense1"), ast);
         UNIT_ASSERT_C(ast.Contains("MapJoin") || ast.Contains("EquiJoin")
-            || ast.Contains("GraceJoin") || ast.Contains("BlockHashJoin"), ast);
+            || ast.Contains("GraceJoin") || ast.Contains("BlockHashJoin")
+            || ast.Contains("ScalarHashJoin"), ast);
         if (fromJoin) {
             UNIT_ASSERT_C(ast.Contains("DqReplicate") || ast.Contains("Switch") || ast.Contains("MultiMap"), ast);
             ui32 streamLookups = 0;

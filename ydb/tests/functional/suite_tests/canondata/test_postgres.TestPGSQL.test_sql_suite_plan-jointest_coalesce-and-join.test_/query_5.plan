@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (Map)",
+                                        "Node Type": "TopSort-LeftJoin (ScalarHash)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -51,7 +51,7 @@
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (Map)"
+                                                "Name": "LeftJoin (ScalarHash)"
                                             }
                                         ],
                                         "PlanNodeId": 5,

@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (Map)",
+                                        "Node Type": "TopSort-LeftJoin (ScalarHash)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -48,7 +48,7 @@
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (Map)"
+                                                "Name": "LeftJoin (ScalarHash)"
                                             }
                                         ],
                                         "PlanNodeId": 4,
@@ -59,19 +59,16 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "LeftJoin (Map)",
+                                                        "Node Type": "LeftJoin (ScalarHash)",
                                                         "Operators": [
                                                             {
                                                                 "Condition": "int8_tbl.q2 = innertab.id",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 1
-                                                                    },
-                                                                    {
-                                                                        "Other": "ConstantExpression"
                                                                     }
                                                                 ],
-                                                                "Name": "LeftJoin (Map)"
+                                                                "Name": "LeftJoin (ScalarHash)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 2,

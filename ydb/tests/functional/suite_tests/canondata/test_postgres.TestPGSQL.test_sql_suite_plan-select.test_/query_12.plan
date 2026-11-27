@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-InnerJoin (Map)-Filter",
+                                        "Node Type": "Limit-InnerJoin (ScalarHash)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -45,12 +45,9 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
-                                                    },
-                                                    {
-                                                        "Other": "ConstantExpression"
                                                     }
                                                 ],
-                                                "Name": "InnerJoin (Map)"
+                                                "Name": "InnerJoin (ScalarHash)"
                                             },
                                             {
                                                 "Inputs": [

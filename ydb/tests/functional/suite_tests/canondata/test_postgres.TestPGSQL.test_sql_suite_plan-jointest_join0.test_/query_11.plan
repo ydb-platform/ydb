@@ -29,25 +29,10 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (Map)",
+                                        "Node Type": "Limit-LeftJoin (ScalarHash)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     }
@@ -62,10 +47,19 @@
                                                         "ExternalPlanNodeId": 4
                                                     },
                                                     {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (ScalarHash)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (Map)"
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.unique2)"
                                             }
                                         ],
                                         "PlanNodeId": 5,

@@ -27,6 +27,7 @@
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/utf8.h>
@@ -51,6 +52,36 @@ using namespace NYql::NDq;
 using namespace NClient;
 
 namespace {
+
+// Same rule as DqPeepholeChooseHashJoin: a shuffle hash join stays block only when both inputs are block channels.
+bool IsBlockChannelInput(const TExprBase& input) {
+    const TExprNode* current = input.Raw();
+    while (current) {
+        if (const auto type = current->GetTypeAnn(); type && IsWideSequenceBlockType(*type)) {
+            return true;
+        }
+        if (!current->IsCallable() || !current->ChildrenSize()) {
+            break;
+        }
+        const auto callableName = current->Content();
+        if (callableName == "WideFromBlocks"sv) {
+            return true;
+        }
+        if (callableName == "WideToBlocks"sv) {
+            return false;
+        }
+        if (callableName != "ToFlow"sv
+            && callableName != "FromFlow"sv
+            && callableName != "NarrowMap"sv
+            && callableName != "ExpandMap"sv
+            && callableName != "WideMap"sv)
+        {
+            break;
+        }
+        current = current->Child(0);
+    }
+    return false;
+}
 
 TString GetNameByReadType(EPlanTableReadType readType) {
     switch (readType) {
@@ -1536,6 +1567,18 @@ private:
             return {CurrentArgContext.AddArg(node.Get())};
         } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
+        } else if (auto maybePhyBlockHashJoin = TMaybeNode<TDqPhyBlockHashJoin>(node)) {
+            operatorId = Visit(maybePhyBlockHashJoin.Cast(), planNode, "BlockHash"sv);
+        } else if (auto maybePhyScalarHashJoin = TMaybeNode<TDqPhyScalarHashJoin>(node)) {
+            operatorId = Visit(maybePhyScalarHashJoin.Cast(), planNode, "ScalarHash"sv);
+        } else if (auto maybePhyHashJoin = TMaybeNode<TDqPhyHashJoin>(node)) {
+            const auto& join = maybePhyHashJoin.Cast();
+            const auto algo = IsBlockChannelInput(join.LeftInput()) && IsBlockChannelInput(join.RightInput())
+                ? "BlockHash"sv
+                : "ScalarHash"sv;
+            operatorId = Visit(join, planNode, algo);
+        } else if (auto maybePhyMapJoin = TMaybeNode<TDqPhyMapJoin>(node)) {
+            operatorId = Visit(maybePhyMapJoin.Cast(), planNode, "Map"sv);
         } else if (auto maybeBlockHashJoin = TMaybeNode<TDqBlockHashJoinCore>(node)) {
             operatorId = Visit(maybeBlockHashJoin.Cast(), planNode);
         } else if (auto maybeScalarHashJoin = TMaybeNode<TDqScalarHashJoinCore>(node)) {
@@ -2021,6 +2064,18 @@ private:
         Visit(flatMap, planNode);
 
         return operatorId;
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TDqJoinBase& join, TQueryPlanNode& planNode, TStringBuf algo) {
+        const auto name = TStringBuilder() << join.JoinType().Value() << "Join (" << algo << ")";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftJoinKeyNames(), join.RightJoinKeyNames());
+
+        AddOptimizerEstimates(op, join);
+
+        return AddOperator(planNode, name, std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TDqPhyCrossJoin&, TQueryPlanNode& planNode) {

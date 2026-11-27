@@ -1,5 +1,5 @@
 {
-  "op_name":"InnerJoin (BlockHash)",
+  "op_name":"InnerJoin (ScalarHash)",
   "args":
     [
       {
@@ -11,7 +11,7 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (BlockHash)",
+                    "op_name":"InnerJoin (ScalarHash)",
                     "args":
                       [
                         {
@@ -19,11 +19,11 @@
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Map)",
+                                "op_name":"InnerJoin (ScalarHash)",
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (BlockHash)",
+                                      "op_name":"InnerJoin (ScalarHash)",
                                       "args":
                                         [
                                           {
@@ -31,11 +31,11 @@
                                             "args":
                                               [
                                                 {
-                                                  "op_name":"InnerJoin (Map)",
+                                                  "op_name":"InnerJoin (ScalarHash)",
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (BlockHash)",
+                                                        "op_name":"InnerJoin (ScalarHash)",
                                                         "args":
                                                           [
                                                             {
@@ -43,7 +43,7 @@
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (BlockHash)",
+                                                                    "op_name":"InnerJoin (ScalarHash)",
                                                                     "args":
                                                                       [
                                                                         {
@@ -51,7 +51,7 @@
                                                                           "args":
                                                                             [
                                                                               {
-                                                                                "op_name":"InnerJoin (BlockHash)",
+                                                                                "op_name":"InnerJoin (ScalarHash)",
                                                                                 "args":
                                                                                   [
                                                                                     {
@@ -59,19 +59,19 @@
                                                                                       "args":
                                                                                         [
                                                                                           {
-                                                                                            "op_name":"InnerJoin (Map)",
+                                                                                            "op_name":"InnerJoin (ScalarHash)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"InnerJoin (Map)",
+                                                                                                  "op_name":"InnerJoin (ScalarHash)",
                                                                                                   "args":
                                                                                                     [
                                                                                                       {
-                                                                                                        "op_name":"InnerJoin (Map)",
+                                                                                                        "op_name":"InnerJoin (ScalarHash)",
                                                                                                         "args":
                                                                                                           [
                                                                                                             {
-                                                                                                              "op_name":"InnerJoin (Map)",
+                                                                                                              "op_name":"InnerJoin (ScalarHash)",
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
@@ -85,7 +85,7 @@
                                                                                                                 ]
                                                                                                             },
                                                                                                             {
-                                                                                                              "op_name":"InnerJoin (Map)",
+                                                                                                              "op_name":"InnerJoin (ScalarHash)",
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
@@ -107,7 +107,7 @@
                                                                                                     ]
                                                                                                 },
                                                                                                 {
-                                                                                                  "op_name":"InnerJoin (Map)",
+                                                                                                  "op_name":"InnerJoin (ScalarHash)",
                                                                                                   "args":
                                                                                                     [
                                                                                                       {
@@ -115,15 +115,15 @@
                                                                                                         "table":"customer_address"
                                                                                                       },
                                                                                                       {
-                                                                                                        "op_name":"InnerJoin (Map)",
+                                                                                                        "op_name":"InnerJoin (ScalarHash)",
                                                                                                         "args":
                                                                                                           [
                                                                                                             {
-                                                                                                              "op_name":"InnerJoin (Map)",
+                                                                                                              "op_name":"InnerJoin (ScalarHash)",
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
-                                                                                                                    "op_name":"InnerJoin (Map)",
+                                                                                                                    "op_name":"InnerJoin (ScalarHash)",
                                                                                                                     "args":
                                                                                                                       [
                                                                                                                         {
@@ -131,7 +131,7 @@
                                                                                                                           "table":"customer"
                                                                                                                         },
                                                                                                                         {
-                                                                                                                          "op_name":"InnerJoin (Map)",
+                                                                                                                          "op_name":"InnerJoin (ScalarHash)",
                                                                                                                           "args":
                                                                                                                             [
                                                                                                                               {
@@ -235,7 +235,7 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (BlockHash)",
+                                      "op_name":"InnerJoin (ScalarHash)",
                                       "args":
                                         [
                                           {
@@ -273,7 +273,7 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (BlockHash)",
+                    "op_name":"InnerJoin (ScalarHash)",
                     "args":
                       [
                         {
@@ -281,11 +281,11 @@
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Map)",
+                                "op_name":"InnerJoin (ScalarHash)",
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (BlockHash)",
+                                      "op_name":"InnerJoin (ScalarHash)",
                                       "args":
                                         [
                                           {
@@ -293,11 +293,11 @@
                                             "args":
                                               [
                                                 {
-                                                  "op_name":"InnerJoin (Map)",
+                                                  "op_name":"InnerJoin (ScalarHash)",
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (BlockHash)",
+                                                        "op_name":"InnerJoin (ScalarHash)",
                                                         "args":
                                                           [
                                                             {
@@ -305,7 +305,7 @@
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (BlockHash)",
+                                                                    "op_name":"InnerJoin (ScalarHash)",
                                                                     "args":
                                                                       [
                                                                         {
@@ -313,7 +313,7 @@
                                                                           "args":
                                                                             [
                                                                               {
-                                                                                "op_name":"InnerJoin (BlockHash)",
+                                                                                "op_name":"InnerJoin (ScalarHash)",
                                                                                 "args":
                                                                                   [
                                                                                     {
@@ -321,19 +321,19 @@
                                                                                       "args":
                                                                                         [
                                                                                           {
-                                                                                            "op_name":"InnerJoin (Map)",
+                                                                                            "op_name":"InnerJoin (ScalarHash)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"InnerJoin (Map)",
+                                                                                                  "op_name":"InnerJoin (ScalarHash)",
                                                                                                   "args":
                                                                                                     [
                                                                                                       {
-                                                                                                        "op_name":"InnerJoin (Map)",
+                                                                                                        "op_name":"InnerJoin (ScalarHash)",
                                                                                                         "args":
                                                                                                           [
                                                                                                             {
-                                                                                                              "op_name":"InnerJoin (Map)",
+                                                                                                              "op_name":"InnerJoin (ScalarHash)",
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
@@ -347,7 +347,7 @@
                                                                                                                 ]
                                                                                                             },
                                                                                                             {
-                                                                                                              "op_name":"InnerJoin (Map)",
+                                                                                                              "op_name":"InnerJoin (ScalarHash)",
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
@@ -369,7 +369,7 @@
                                                                                                     ]
                                                                                                 },
                                                                                                 {
-                                                                                                  "op_name":"InnerJoin (Map)",
+                                                                                                  "op_name":"InnerJoin (ScalarHash)",
                                                                                                   "args":
                                                                                                     [
                                                                                                       {
@@ -377,15 +377,15 @@
                                                                                                         "table":"customer_address"
                                                                                                       },
                                                                                                       {
-                                                                                                        "op_name":"InnerJoin (Map)",
+                                                                                                        "op_name":"InnerJoin (ScalarHash)",
                                                                                                         "args":
                                                                                                           [
                                                                                                             {
-                                                                                                              "op_name":"InnerJoin (Map)",
+                                                                                                              "op_name":"InnerJoin (ScalarHash)",
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
-                                                                                                                    "op_name":"InnerJoin (Map)",
+                                                                                                                    "op_name":"InnerJoin (ScalarHash)",
                                                                                                                     "args":
                                                                                                                       [
                                                                                                                         {
@@ -393,7 +393,7 @@
                                                                                                                           "table":"customer"
                                                                                                                         },
                                                                                                                         {
-                                                                                                                          "op_name":"InnerJoin (Map)",
+                                                                                                                          "op_name":"InnerJoin (ScalarHash)",
                                                                                                                           "args":
                                                                                                                             [
                                                                                                                               {
@@ -497,7 +497,7 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (BlockHash)",
+                                      "op_name":"InnerJoin (ScalarHash)",
                                       "args":
                                         [
                                           {

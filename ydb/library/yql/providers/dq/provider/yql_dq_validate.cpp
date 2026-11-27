@@ -50,6 +50,15 @@ std::shared_ptr<TIssue> TDqExecutionValidator::ValidateDqStage(const TExprNode& 
             [&stageInfo, &hasErrors, &hasJoin, &ctx, typeCtx = State_->TypeCtx](const TExprNode::TPtr& n) {
                 if (TDqPhyMapJoin::Match(n.Get()) || TDqPhyGraceJoin::Match(n.Get())) {
                     hasJoin = stageInfo.HasMapJoin = true;
+                } else if (TDqPhyScalarHashJoin::Match(n.Get())) {
+                    if (const auto settings = TDqPhyScalarHashJoin(n.Get()).Settings()) {
+                        for (const auto& setting : settings.Cast()) {
+                            if (setting.Name().Value() == "MapJoin") {
+                                hasJoin = stageInfo.HasMapJoin = true;
+                                break;
+                            }
+                        }
+                    }
                 } else if (TCoGraceJoinCore::Match(n.Get()) || TCoGraceSelfJoinCore::Match(n.Get())) {
                     hasJoin = true;
                 }

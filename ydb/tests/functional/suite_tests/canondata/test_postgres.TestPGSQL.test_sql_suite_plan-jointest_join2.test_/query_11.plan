@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Filter-LeftJoin (Map)",
+                                        "Node Type": "TopSort-Filter-LeftJoin (ScalarHash)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -78,10 +78,19 @@
                                                         "ExternalPlanNodeId": 10
                                                     },
                                                     {
+                                                        "InternalOperatorId": 3
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (ScalarHash)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (Map)"
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.x1)"
                                             }
                                         ],
                                         "PlanNodeId": 11,

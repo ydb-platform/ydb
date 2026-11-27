@@ -164,6 +164,34 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         return sessionId;
     }
 
+    Y_UNIT_TEST(SnapshotAcquisitionHasASeparateDetailedSpan) {
+        auto [runtime, server, sender] = CreateServer();
+        auto* uploader = RegisterUploader(runtime);
+        for (const ui8 level : {0, 9, 10}) {
+            ClearUploader(*uploader);
+            const auto manager = runtime.Register(NKqp::CreateKqpSnapshotManager("/Root", TDuration::Seconds(30)));
+            auto trace = level ? TTraceId::NewTraceId(level, 4095) : TTraceId();
+            runtime.Send(new IEventHandle(manager, sender,
+                new NKqp::TEvKqpSnapshot::TEvCreateSnapshotRequest(TVector<TTableId>{}, 17),
+                0, 0, nullptr, std::move(trace)));
+            const auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqpSnapshot::TEvCreateSnapshotResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 17u);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrIssues::TStatusIds::SUCCESS);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            const auto* span = FindSpan(*uploader, "Snapshot acquisition");
+            UNIT_ASSERT_VALUES_EQUAL(bool(span), level >= 10);
+            if (span) {
+                UNIT_ASSERT_VALUES_EQUAL(span->events_size(), 4);
+                UNIT_ASSERT_VALUES_EQUAL(span->events(0).name(), "request received");
+                UNIT_ASSERT_VALUES_EQUAL(span->events(1).name(), "acquire dispatched");
+                UNIT_ASSERT_VALUES_EQUAL(span->events(2).name(), "acquire result received");
+                UNIT_ASSERT_VALUES_EQUAL(span->events(3).name(), "response dispatched");
+                UNIT_ASSERT(FindAttribute(*span, "ydb.snapshot.step"));
+                UNIT_ASSERT(!FindAttribute(*span, "database"));
+            }
+        }
+    }
+
     Y_UNIT_TEST(CommonTreeIncludesKqpAndDatashard) {
         auto [runtime, server, sender] = CreateServer();
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);

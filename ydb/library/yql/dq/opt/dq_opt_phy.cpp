@@ -471,8 +471,8 @@ bool CollectSwitchUsedFields(const TCoLambda& lambda, TSet<TStringBuf>& usedFiel
     return CollectUsedFields(lambda, 0, usedFields);
 }
 
-} // namespace
-
+// PartitionsByKeys whose handler only folds the partition with Condense1 and reads rows by Member:
+// wraps the input into ExtractMembers of the read fields. Returns the node unchanged otherwise.
 TExprBase DqNarrowPartitionsByKeysInput(TExprBase node, TExprContext& ctx) {
     const auto maybePartition = node.Maybe<TCoPartitionsByKeys>();
     if (!maybePartition) {
@@ -557,6 +557,8 @@ TExprBase DqNarrowPartitionsByKeysInput(TExprBase node, TExprContext& ctx) {
             .Build()
         .Done();
 }
+
+} // namespace
 
 template <typename TPartition>
 TExprBase DqBuildPartitionsStageStub(

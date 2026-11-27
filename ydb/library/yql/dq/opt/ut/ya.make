@@ -7,7 +7,6 @@ SRCS(
     dq_hash_join_type_ut.cpp
     dq_opt_hypergraph_ut.cpp
     dq_opt_interesting_orderings_ut.cpp
-    dq_opt_partitions_by_keys_ut.cpp
 )
 
 PEERDIR(

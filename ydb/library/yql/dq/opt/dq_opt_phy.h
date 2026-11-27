@@ -77,10 +77,6 @@ NNodes::TExprBase DqBuildPartitionsStage(
     bool narrowInput = false
 );
 
-// PartitionsByKeys whose handler only folds the partition with Condense1 and reads rows by Member:
-// wraps the input into ExtractMembers of the read fields. Returns the node unchanged otherwise.
-NNodes::TExprBase DqNarrowPartitionsByKeysInput(NNodes::TExprBase node, TExprContext& ctx);
-
 NNodes::TExprBase DqBuildPartitionStage(
     NNodes::TExprBase node,
     TExprContext& ctx,

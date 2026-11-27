@@ -1,4 +1,9 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+
+#include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <util/folder/dirut.h>
 
@@ -119,25 +124,30 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2, bo
     ])", FormatResultSetYson(exec.GetResultSet(0)));
 }
 
-// Returns the first DqPhyStage of the AST that contains the marker.
-TString FindStage(const TString& ast, TStringBuf marker) {
-    for (size_t pos = 0; (pos = ast.find("(DqPhyStage", pos)) != TString::npos; ++pos) {
-        int depth = 0;
-        size_t end = pos;
-        for (; end < ast.size(); ++end) {
-            if (ast[end] == '(') {
-                ++depth;
-            } else if (ast[end] == ')' && --depth == 0) {
-                ++end;
-                break;
+// Compiles the explain AST and returns the program of the physical stage that contains the callable.
+NYql::TExprNode::TPtr FindStageProgram(const TString& ast, NYql::TExprContext& ctx, TStringBuf callable) {
+    auto parsed = NYql::ParseAst(ast);
+    UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
+    NYql::TExprNode::TPtr root;
+    UNIT_ASSERT_C(NYql::CompileExpr(*parsed.Root, root, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
+    NYql::TExprNode::TPtr program;
+    NYql::VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
+        if (!program && node->IsCallable("DqPhyStage")) {
+            const auto& stageProgram = node->ChildPtr(NYql::NNodes::TDqPhyStage::idx_Program);
+            if (NYql::FindNode(stageProgram, [&](const NYql::TExprNode::TPtr& child) { return child->IsCallable(callable); })) {
+                program = stageProgram;
             }
         }
-        const auto stage = ast.substr(pos, end - pos);
-        if (stage.Contains(marker)) {
-            return stage;
-        }
-    }
-    return {};
+        return !program;
+    });
+    UNIT_ASSERT_C(program, ast);
+    return program;
+}
+
+bool HasMember(const NYql::TExprNode::TPtr& program, TStringBuf name) {
+    return bool(NYql::FindNode(program, [&](const NYql::TExprNode::TPtr& node) {
+        return node->IsAtom() && node->Content() == name;
+    }));
 }
 
 // Runs the query with and without the narrowing and checks that the results are equal.
@@ -310,14 +320,14 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             )" << order << ");", [&](const TString& ast, bool narrow) {
                 // The join side keeps the wide row.
                 UNIT_ASSERT_C(ast.Contains("unused_fat_col"), ast);
-                const auto aggregateStage = FindStage(ast, "AggrAdd");
-                UNIT_ASSERT_C(!aggregateStage.empty(), ast);
-                UNIT_ASSERT_C(aggregateStage.Contains("\"Data\""), aggregateStage);
+                NYql::TExprContext ctx;
+                const auto aggregate = FindStageProgram(ast, ctx, "AggrAdd");
+                UNIT_ASSERT_C(HasMember(aggregate, "Data"), ast);
                 if (ordered) {
                     // The sort key stays in the aggregate input.
-                    UNIT_ASSERT_C(aggregateStage.Contains("\"Key\""), aggregateStage);
+                    UNIT_ASSERT_C(HasMember(aggregate, "Key"), ast);
                 }
-                UNIT_ASSERT_VALUES_EQUAL_C(aggregateStage.Contains("unused_fat_col"), !narrow, aggregateStage);
+                UNIT_ASSERT_VALUES_EQUAL_C(HasMember(aggregate, "unused_fat_col"), !narrow, ast);
             });
         }
     }

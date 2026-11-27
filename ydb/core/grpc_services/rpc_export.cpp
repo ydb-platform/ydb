@@ -675,14 +675,17 @@ public:
                 if (!AppData()->FeatureFlags.GetEnableDirectoryExport()) {
                     return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Directory export is disabled");
                 }
-                auto filters = settings.exclude_regexps();
+                const auto& filters = settings.exclude_regexps();
                 // An old node reached after capability discovery must reject
                 // the entire selection before it can recursively export it.
                 if (filters.empty() || filters.Get(0) != ".*") {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Missing directory export filter guard");
                 }
-                filters.DeleteSubrange(0, 1);
-                ExcludeRegexps = NBackup::CombineRegexps(filters);
+                // The CLI matches each pattern independently. Combining them
+                // would renumber capture groups used by PCRE backreferences.
+                for (int i = 1; i < filters.size(); ++i) {
+                    ExcludeRegexps.emplace_back(filters.Get(i));
+                }
             } else {
                 ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
             }

@@ -5,6 +5,7 @@
 #include <util/generic/algorithm.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/flat_tier_policy.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
@@ -47,7 +48,7 @@ TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& 
     : LocalTid(localTid)
     , ShadowTid(shadowTid)
 {
-    Y_PROTOBUF_SUPPRESS_NODISCARD descr.SerializeToString(&Schema);
+    SetSchema(descr);
     Name = ExtractBase(descr.GetPath());
     Path = descr.GetPath();
     ParseProto(descr);
@@ -303,22 +304,23 @@ bool TUserTable::IsIncrementalRestore() const {
 
 void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 {
-    // We expect schemeshard to send us full list of storage rooms
-    if (descr.GetPartitionConfig().StorageRoomsSize()) {
+    const auto& config = descr.GetPartitionConfig();
+    const bool hasFullRoomMap = config.StorageRoomsSize() != 0;
+    if (hasFullRoomMap) {
         Rooms.clear();
     }
 
-    for (const auto& roomDescr : descr.GetPartitionConfig().GetStorageRooms()) {
+    for (const auto& roomDescr : config.GetStorageRooms()) {
         TStorageRoom::TPtr room = new TStorageRoom(roomDescr);
         Rooms[room->GetId()] = room;
     }
 
-    for (const auto& family : descr.GetPartitionConfig().GetColumnFamilies()) {
+    for (const auto& family : config.GetColumnFamilies()) {
         auto it = Families.find(family.GetId());
         if (it == Families.end()) {
             it = Families.emplace(std::make_pair(family.GetId(), TUserFamily(family))).first;
         } else {
-            it->second.Update(family);
+            it->second.Update(family, hasFullRoomMap);
         }
     }
 
@@ -484,6 +486,8 @@ void TUserTable::AlterSchema() {
         }
         columnFamily->SetColumnCache(family.ColumnCache);
         columnFamily->SetColumnCacheMode(family.ColumnCacheMode);
+        columnFamily->SetKeyIndexInDescriptor(family.KeyIndexInDescriptor);
+        columnFamily->SetGroupIndexesInDescriptor(family.GroupIndexesInDescriptor);
         columnFamily->MutableStorageConfig()->CopyFrom(family.StorageConfig);
         columnFamily->SetRoom(family.GetRoomId());
     }
@@ -572,6 +576,7 @@ void TUserTable::DoApplyCreate(
         alter.SetFamilyCacheMode(tid, familyId, family.CacheMode);
         alter.SetFamilyCache(tid, familyId, family.Cache);
         alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
+        alter.SetFamilyIndexPlacement(tid, familyId, family.KeyIndexInDescriptor, family.GroupIndexesInDescriptor);
         if (appliedRooms.insert(family.GetRoomId()).second) {
             // Call SetRoom once per room
             alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannels(), family.OuterChannel());
@@ -596,6 +601,9 @@ void TUserTable::DoApplyCreate(
         alter.SetCompactionPolicy(tid, *policy);
     } else {
         alter.SetCompactionPolicy(tid, *NLocalDb::CreateDefaultUserTablePolicy());
+    }
+    if (partConfig.HasTieringPolicy()) {
+        alter.SetTieringPolicy(tid, NTable::TieringPolicyFromProto(partConfig.GetTieringPolicy()));
     }
 
     {
@@ -694,6 +702,7 @@ void TUserTable::ApplyAlter(
             alter.SetFamilyCacheMode(tid, familyId, family.CacheMode);
             alter.SetFamilyCache(tid, familyId, family.Cache);
             alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
+            alter.SetFamilyIndexPlacement(tid, familyId, family.KeyIndexInDescriptor, family.GroupIndexesInDescriptor);
         }
 
         if (appliedRooms.insert(family.GetRoomId()).second) {
@@ -721,24 +730,13 @@ void TUserTable::ApplyAlter(
         }
     }
 
-    for (const auto& col : delta.GetDropColumns()) {
-        ui32 colId = col.GetId();
-        const TUserTable::TUserColumn * oldCol = oldTable.Columns.FindPtr(colId);
-        Y_ENSURE(oldCol);
-        Y_ENSURE(oldCol->Name == col.GetName());
-        Y_ENSURE(!Columns.contains(colId));
-
-        for (ui32 tid : tids) {
-            alter.DropColumn(tid, colId);
-        }
-    }
-
     for (size_t i = 0; i < KeyColumnIds.size(); ++i) {
         for (ui32 tid : tids) {
             alter.AddColumnToKey(tid, KeyColumnIds[i]);
         }
     }
 
+    bool applyTieringPolicy = configDelta.HasTieringPolicy();
     if (configDelta.HasCompactionPolicy()) {
         TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> oldPolicy =
                 txc.DB.GetScheme().Tables.find(LocalTid)->second.CompactionPolicy;
@@ -752,6 +750,28 @@ void TUserTable::ApplyAlter(
             newPolicy.Serialize(*config.MutableCompactionPolicy());
         } else {
             strError = TString("cannot change compaction policy: ") + strError;
+            applyTieringPolicy = false;
+        }
+    }
+
+    if (applyTieringPolicy) {
+        const auto policy = NTable::TieringPolicyFromProto(configDelta.GetTieringPolicy());
+        for (ui32 tid : tids) {
+            alter.SetTieringPolicy(tid, policy);
+        }
+        config.MutableTieringPolicy()->CopyFrom(configDelta.GetTieringPolicy());
+    }
+
+    // A column used by the old tiering policy can be dropped after updating that policy.
+    for (const auto& col : delta.GetDropColumns()) {
+        ui32 colId = col.GetId();
+        const TUserTable::TUserColumn * oldCol = oldTable.Columns.FindPtr(colId);
+        Y_ENSURE(oldCol);
+        Y_ENSURE(oldCol->Name == col.GetName());
+        Y_ENSURE(!Columns.contains(colId));
+
+        for (ui32 tid : tids) {
+            alter.DropColumn(tid, colId);
         }
     }
 
@@ -888,6 +908,7 @@ void TUserTable::Fix_KIKIMR_17222(NTable::TDatabase& db, ui32 tid) const
         db.Alter().SetFamilyCacheMode(tid, familyId, family.CacheMode);
         db.Alter().SetFamilyCache(tid, familyId, family.Cache);
         db.Alter().SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
+        db.Alter().SetFamilyIndexPlacement(tid, familyId, family.KeyIndexInDescriptor, family.GroupIndexesInDescriptor);
     }
 }
 

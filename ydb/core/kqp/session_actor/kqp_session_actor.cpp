@@ -4,6 +4,7 @@
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
 
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
@@ -38,7 +39,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 #include <ydb/core/util/ulid.h>
-#include <ydb/core/util/stlog.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -46,6 +46,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -1636,6 +1637,21 @@ public:
         return true;
     }
 
+    void SetBackupReadHint() {
+        const auto& request = *QueryState->RequestEv;
+        auto& hints = QueryState->UserRequestContext->ReadHints;
+        const auto backupReadHint = NKikimrTxDataShard::TEvRead::HINT_READ_BACKUP_COPY;
+        hints &= ~backupReadHint;
+        const auto& user = request.GetUserToken();
+        if (QueryState->IsInternalCall()
+            && request.GetRequestType() == NRequestTypes::ChecksumTable
+            && user
+            && user->GetUserSID() == BUILTIN_ACL_METADATA
+            && !QueryState->ExternalMvccVersion) {
+            hints |= backupReadHint;
+        }
+    }
+
     bool PrepareQueryContext() {
         YQL_ENSURE(QueryState);
         if (!PrepareQueryTransaction()) {
@@ -1645,6 +1661,7 @@ public:
             return false;
         }
 
+        SetBackupReadHint();
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
 
         const bool allowModifications = QueryState->IsInternalCall() || QueryState->IsCreateTableAs()
@@ -2768,7 +2785,7 @@ public:
                 executionStats.Swap(&stats);
                 stats = QueryState->QueryStats.ToProto();
                 stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
-                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UsedNewRbo(), QueryState->UserRequestContext->PoolId));
+                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
                 stats.SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
 
                 if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
@@ -3355,7 +3372,7 @@ public:
         if (QueryState->ReportStats()) {
             auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-                response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UsedNewRbo(), QueryState->UserRequestContext->PoolId));
+                response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
                 if (const auto compileResult = QueryState->CompileResult) {
                     if (const auto preparedQuery = compileResult->PreparedQuery) {
                         if (const auto& queryAst = preparedQuery->GetPhysicalQuery().GetQueryAst()) {

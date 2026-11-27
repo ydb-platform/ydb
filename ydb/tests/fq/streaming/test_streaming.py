@@ -26,6 +26,89 @@ logger = logging.getLogger(__name__)
 
 class TestStreamingInYdb(StreamingTestBase):
 
+    @pytest.mark.parametrize("replace", [False, True], ids=["alter", "replace"])
+    @pytest.mark.parametrize(
+        "kikimr",
+        [{"enable_streaming_query_read_from": True, "enable_streaming_query_state_recompute": True}],
+        indirect=True,
+    )
+    def test_show_create_streaming_query_round_trip(
+        self, kikimr: Kikimr, entity_name: Callable[[str], str], replace: bool
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, name="show_create", local_topics=True, entity_name=entity_name)
+        name = f"{entity_name('folder')}/copy"
+        path = f"{kikimr.get_database_name()}/{name}"
+        query = kikimr.ydb_client.query
+        output_from = "Timestamp('2025-05-04T11:30:34.336938Z')"
+        query(f"""
+            CREATE STREAMING QUERY `{name}` WITH (
+                RUN = FALSE, READ_FROM = EARLIEST, OUTPUT_FROM = {output_from}
+            ) AS DO BEGIN
+                INSERT INTO {out} SELECT Data FROM {inp};
+            END DO
+        """)
+        try:
+            (initial,) = query(f"SHOW CREATE STREAMING QUERY `{name}`")[0].rows
+            assert "READ_FROM = EARLIEST" in initial.CreateQuery
+            assert f"OUTPUT_FROM = {output_from}" in initial.CreateQuery
+
+            if replace:
+                change = f"CREATE OR REPLACE STREAMING QUERY `{name}` WITH"
+            else:
+                change = f"ALTER STREAMING QUERY `{name}` SET"
+            query(f"""
+                {change} (RUN = TRUE, FORCE = TRUE) AS DO BEGIN
+                    INSERT INTO {out} SELECT "updated-" || Data AS Data FROM {inp};
+                END DO
+            """)
+            self.wait_completed_checkpoints(kikimr, query_name=name)
+
+            (row,) = query(f"SHOW CREATE STREAMING QUERY `{path}`")[0].rows
+            assert row.Path == name
+            assert row.PathType == "StreamingQuery"
+            assert "RUN = TRUE" in row.CreateQuery
+            assert "READ_FROM" not in row.CreateQuery
+            assert "OUTPUT_FROM" not in row.CreateQuery
+
+            query(f"DROP STREAMING QUERY `{name}`")
+            with pytest.raises((ydb.issues.Aborted, ydb.issues.SchemeError), match="Path not found"):
+                query(f"SHOW CREATE STREAMING QUERY `{path}`")
+
+            query(row.CreateQuery)
+            self.wait_completed_checkpoints(kikimr, query_name=name)
+            self.write_stream(data=["after-recreation"], endpoint=endpoint)
+            assert self.read_stream(messages_count=1, endpoint=endpoint) == ["updated-after-recreation"]
+        finally:
+            query(f"DROP STREAMING QUERY IF EXISTS `{name}`")
+
+    def test_show_create_streaming_query_permissions(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
+        inp, out, _ = self.get_io_names(kikimr, name="show_create_acl", local_topics=True, entity_name=entity_name)
+        name = entity_name("private_query")
+        viewer = f"{entity_name('viewer')}@builtin"
+        admin = kikimr.ydb_client
+        database = kikimr.get_database_name()
+        show = f"SHOW CREATE STREAMING QUERY `{name}`"
+        admin.query(f"""
+            CREATE STREAMING QUERY `{name}` WITH (RUN = FALSE) AS DO BEGIN
+                INSERT INTO {out} SELECT Data FROM {inp};
+            END DO
+        """)
+        try:
+            (owner_row,) = admin.query(show)[0].rows
+            admin.query(f"GRANT 'ydb.database.connect' ON `{database}` TO `{viewer}`")
+            client = YdbClient.from_driver_config(endpoint=kikimr.endpoint.endpoint, database=database, token=viewer)
+            try:
+                with pytest.raises(ydb.issues.Unauthorized, match="Access denied"):
+                    client.query(show)
+                admin.query(f"GRANT DESCRIBE SCHEMA ON `{name}` TO `{viewer}`")
+                (viewer_row,) = client.query(show)[0].rows
+                assert viewer_row.CreateQuery == owner_row.CreateQuery
+            finally:
+                client.stop()
+        finally:
+            admin.query(f"DROP STREAMING QUERY `{name}`")
+            admin.query(f"REVOKE 'ydb.database.connect' ON `{database}` FROM `{viewer}`")
+
     @pytest.mark.parametrize(
         "use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"]
     )

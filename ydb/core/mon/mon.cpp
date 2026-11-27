@@ -2,7 +2,6 @@
 #include "mon_impl.h"
 #include "mon_events.h"
 #include "counters_adapter_impl.h"
-#include "counters_memonly.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
@@ -1239,6 +1238,10 @@ public:
         InitMonHttpIncomingRequest(Event->Get());
         AuditCtx.InitAudit(Event);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
+        if (Fields.AuthMode == TMon::EAuthMode::Disabled && Fields.ExtractDatabaseUserToken && !Event->Get()->Database.empty() &&
+                (CredentialsProvided() || !AppData()->DefaultUserSIDs.empty())) {
+            Fields.AuthMode = TMon::EAuthMode::Relaxed;
+        }
         if (Fields.AuthMode != TMon::EAuthMode::Disabled && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get());
             if (handle) {
@@ -1368,6 +1371,10 @@ public:
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
             return Cancelled();
+        }
+        if (Fields.AuthMode == TMon::EAuthMode::Relaxed && ev->Get()->SourceType == NKikimr::NGRpcService::TEvHttpRequestAuthAndCheck::EventType) {
+            AuditCtx.LogOnReceived();
+            return SendRequest();
         }
         ReplyWith(Request->CreateResponseServiceUnavailable(
             TStringBuilder() << "Actor is not available"));
@@ -2098,7 +2105,7 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
 }
 
 NMonitoring::IMonPage* TMon::RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-    CountersMonPage = new NMemOnlyShim::TDynamicCountersPage(path, title, counters);
+    CountersMonPage = new TDynamicCountersPage(path, title, counters);
     CountersMonPage->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore);
     Register(CountersMonPage.Get());
     return CountersMonPage.Get();

@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <util/generic/hash_set.h>
 #include <util/string/strip.h>
 
 namespace NKikimr::NViewer {
@@ -30,6 +31,8 @@ struct TEvViewer {
         EvViewerResponse,
         EvUpdateSharedCacheTabletRequest,
         EvUpdateSharedCacheTabletResponse,
+        EvGetDatabaseBridgeMode,
+        EvDatabaseBridgeMode,
         EvEnd
     };
 
@@ -41,6 +44,23 @@ struct TEvViewer {
 
     struct TEvViewerResponse : TEventPB<TEvViewerResponse, NKikimrViewer::TEvViewerResponse, EvViewerResponse> {
         TEvViewerResponse() = default;
+    };
+
+    struct TEvGetDatabaseBridgeMode : TEventLocal<TEvGetDatabaseBridgeMode, EvGetDatabaseBridgeMode> {
+        THashSet<TString> PoolNames;
+        static constexpr TDuration MaxWait = TDuration::MilliSeconds(250);
+
+        explicit TEvGetDatabaseBridgeMode(THashSet<TString> poolNames)
+            : PoolNames(std::move(poolNames))
+        {}
+    };
+
+    struct TEvDatabaseBridgeMode : TEventLocal<TEvDatabaseBridgeMode, EvDatabaseBridgeMode> {
+        std::optional<bool> BridgeMode;
+
+        explicit TEvDatabaseBridgeMode(std::optional<bool> bridgeMode)
+            : BridgeMode(bridgeMode)
+        {}
     };
 
     struct TEvUpdateSharedCacheTabletRequest : TEventLocal<TEvUpdateSharedCacheTabletRequest, EvUpdateSharedCacheTabletRequest> {
@@ -336,6 +356,7 @@ public:
     virtual int GetCapabilityVersion(const TString& name) = 0;
 
     void UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> ev);
+    std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> GetCachedStoragePools(bool& needUpdate);
     void DeleteOldSharedCacheData();
     std::shared_ptr<TViewerSharedCacheState> CreateSharedCacheState();
     std::shared_ptr<TViewerSharedCacheState> SharedCacheState = CreateSharedCacheState();

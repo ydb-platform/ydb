@@ -1,5 +1,6 @@
 #include "formatters/create_external_data_source_formatter.h"
 #include "create_external_table_formatter.h"
+#include "formatters/create_streaming_query_formatter.h"
 #include "formatters/create_table_formatter.h"
 #include "formatters/create_view_formatter.h"
 #include "show_create.h"
@@ -8,7 +9,7 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/core/sys_view/scan/scan_actor_base_impl.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -39,6 +40,8 @@ TString ToString(NKikimrSchemeOp::EPathType pathType) {
             return "ExternalDataSource";
         case NKikimrSchemeOp::EPathTypeExternalTable:
             return "ExternalTable";
+        case NKikimrSchemeOp::EPathTypeStreamingQuery:
+            return "StreamingQuery";
         default:
             Y_ENSURE(false, "No user-friendly name for a path type: " << pathType);
             return "";
@@ -164,7 +167,7 @@ private:
         Path = cellsFrom[0].AsBuf();
         PathType = cellsFrom[1].AsBuf();
 
-        if (!IsIn({"Table", "View", "ExternalDataSource", "ExternalTable"}, PathType)) {
+        if (!IsIn({"Table", "View", "ExternalDataSource", "ExternalTable", "StreamingQuery"}, PathType)) {
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                 << "Unsupported path type: " << PathType
             );
@@ -273,6 +276,7 @@ private:
                     case NKikimrSchemeOp::EPathTypeView:
                     case NKikimrSchemeOp::EPathTypeExternalDataSource:
                     case NKikimrSchemeOp::EPathTypeExternalTable:
+                    case NKikimrSchemeOp::EPathTypeStreamingQuery:
                         break;
 
                     default: {
@@ -377,6 +381,11 @@ private:
                         } else {
                             return ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
                         }
+                        break;
+                    }
+                    case NKikimrSchemeOp::EPathTypeStreamingQuery: {
+                        path = pathPair.second;
+                        createQuery = FormatCreateStreamingQuery(*path, pathDescription.GetStreamingQueryDescription());
                         break;
                     }
                     case NKikimrSchemeOp::EPathTypeExternalTable: {

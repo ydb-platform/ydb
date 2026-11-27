@@ -1018,6 +1018,7 @@ constexpr auto ShowCreateSettingsMap = std::to_array<TShowCreateSettingMapping>(
     {"showCreateView", "View"},
     {"showCreateExternalDataSource", "ExternalDataSource"},
     {"showCreateExternalTable", "ExternalTable"},
+    {"showCreateStreamingQuery", "StreamingQuery"},
 });
 
 } // anonymous namespace
@@ -1047,6 +1048,25 @@ TStringBuf GetShowCreateSetting(const TExprNode& settings) {
         }
     }
     return {};
+}
+
+TExprNode::TPtr TryRewriteShowCreateAtIntent(const TExprNode& read, const TKikimrKey& key, bool sysViewRewritten,
+    const TKikimrSessionContext& sessionCtx, TExprContext& ctx) {
+    if (sysViewRewritten || read.ChildrenSize() <= TKiReadTable::idx_Settings ||
+        !HasSetting(*read.Child(TKiReadTable::idx_Settings), "showCreateStreamingQuery")) {
+        return {};
+    }
+
+    // Streaming queries have no table schema to load before the regular SHOW CREATE rewrite.
+    const auto pos = read.Pos();
+    const auto viewPath = NKikimr::CanonizePath(NKikimr::JoinPath({sessionCtx.GetDatabase(), ".sys/show_create"}));
+    auto path = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, viewPath)});
+    auto table = ctx.NewList(pos, {ctx.NewAtom(pos, "table"), path});
+    auto args = read.ChildrenList();
+    args.reserve(args.size() + 1);
+    args[TKiReadBase::idx_TableKey] = ctx.NewCallable(pos, "Key", {table});
+    args.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, "sysViewRewritten"), ctx.NewAtom(pos, key.GetTablePath())}));
+    return ctx.ChangeChildren(read, std::move(args));
 }
 
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos) {

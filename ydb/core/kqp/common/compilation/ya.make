@@ -7,8 +7,13 @@ SRCS(
 
 PEERDIR(
     library/cpp/json
-    ydb/core/kqp/query_data
+    library/cpp/lwtrace
     ydb/core/kqp/common/simple
+    ydb/core/protos
+    ydb/core/util
+    ydb/library/aclib
+    ydb/library/actors/core
+    yql/essentials/ast
     yql/essentials/public/issue
 )
 

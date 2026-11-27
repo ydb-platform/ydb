@@ -319,6 +319,13 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
     // Set initial chunk owners
     // Use actual format info to set busy chunks mask
     ui32 chunkCount = (ui32)(Format.DiskSize / (ui64)Format.ChunkSize);
+    if (SysLogRecord.LogHeadChunkIdx < Format.SystemChunkCount || SysLogRecord.LogHeadChunkIdx >= chunkCount) {
+        errorReason = TStringBuilder() << "Invalid LogHeadChunkIdx# " << SysLogRecord.LogHeadChunkIdx
+            << " SystemChunkCount# " << Format.SystemChunkCount << " chunkCount# " << chunkCount;
+        YDB_LOG_P_LOG(PRI_ERROR, errorReason,
+            {"marker", "BPD101"});
+        return false;
+    }
     Y_VERIFY_DEBUG_S(ChunkState.size() == 0, PCtx->PDiskLogPrefix);
     ChunkState = TVector<TChunkState>(chunkCount);
     Y_VERIFY_S(ChunkState.size() >= Format.SystemChunkCount, PCtx->PDiskLogPrefix);
@@ -502,6 +509,13 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
                 << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
         FirstLogChunkToParseCommits = ReadUnaligned<ui32>(firstChunk);
+        if (FirstLogChunkToParseCommits < Format.SystemChunkCount || FirstLogChunkToParseCommits >= chunkCount) {
+            errorReason = TStringBuilder() << "Invalid FirstLogChunkToParseCommits# " << FirstLogChunkToParseCommits
+                << " SystemChunkCount# " << Format.SystemChunkCount << " chunkCount# " << chunkCount;
+            YDB_LOG_P_LOG(PRI_ERROR, errorReason,
+                {"marker", "BPD102"});
+            return false;
+        }
     }
 
     bool suppressCompatibilityCheck = Cfg->FeatureFlags.GetSuppressCompatibilityCheck();
@@ -1228,6 +1242,14 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
             return NKikimrProto::ERROR;
         }
     }
+    if (TPDisk::IS_SHRED_ENABLED) {
+        for (ui32 chunkIdx : logWrite.CommitRecord.DirtyChunks) {
+            if (chunkIdx >= ChunkState.size()) {
+                outErrorReason << "Invalid DirtyChunks chunkIdx# " << chunkIdx << " total# " << ChunkState.size();
+                return NKikimrProto::ERROR;
+            }
+        }
+    }
 
     for (ui32 chunkIdx : logWrite.CommitRecord.CommitChunks) {
         if (ChunkState[chunkIdx].CommitState == TChunkState::DATA_RESERVED) {
@@ -1243,26 +1265,15 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
     }
     bool isDirtyMarked = false;
     if (TPDisk::IS_SHRED_ENABLED) {
-        bool isLogged = false;
         for (ui32 chunkIdx : logWrite.CommitRecord.DirtyChunks) {
-            if (chunkIdx >= ChunkState.size()) {
-                if (!isLogged) {
-                    isLogged = true;
-                    YDB_LOG_CRIT_CTX(*PCtx->ActorSystem, "Commit DirtyChunk contains invalid",
-                        {"PDiskLogPrefix", PCtx->PDiskLogPrefix},
-                        {"chunkIdx", chunkIdx},
-                        {"shredGeneration", ShredGeneration});
-                }
-            } else {
-                if (!ChunkState[chunkIdx].IsDirty) {
-                    ChunkState[chunkIdx].IsDirty = true;
-                    isDirtyMarked = true;
-                    YDB_LOG_DEBUG_CTX(*PCtx->ActorSystem, "Marked as dirty",
-                        {"PDiskLogPrefix", PCtx->PDiskLogPrefix},
-                        {"chunkIdx", chunkIdx},
-                        {"chunkShredGeneration", ChunkState[chunkIdx].ShredGeneration},
-                        {"shredGeneration", ShredGeneration});
-                }
+            if (!ChunkState[chunkIdx].IsDirty) {
+                ChunkState[chunkIdx].IsDirty = true;
+                isDirtyMarked = true;
+                YDB_LOG_DEBUG_CTX(*PCtx->ActorSystem, "Marked as dirty",
+                    {"PDiskLogPrefix", PCtx->PDiskLogPrefix},
+                    {"chunkIdx", chunkIdx},
+                    {"chunkShredGeneration", ChunkState[chunkIdx].ShredGeneration},
+                    {"shredGeneration", ShredGeneration});
             }
         }
     }

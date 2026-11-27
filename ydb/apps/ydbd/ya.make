@@ -43,6 +43,7 @@ PEERDIR(
     ydb/core/driver_lib/run
     ydb/core/protos
     ydb/core/security
+    ydb/core/sys_view
     ydb/core/tx/schemeshard
     ydb/core/ymq/actor
     ydb/core/ymq/base

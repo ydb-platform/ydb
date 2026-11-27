@@ -560,6 +560,25 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
             return false;
         }, "BSC report of the pile having nothing to sync", [&] { return config.GetClusterStateDetails().DebugString(); });
 
+        const auto repeat = [&] {
+            return InvokeDistconf(env, [&](auto& record) {
+                auto *cmd = record.MutableNotifyBridgeSyncFinished();
+                cmd->SetGeneration(config.GetClusterState().GetGeneration());
+                TBridgePileId::FromPileIndex(1).CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::SetBridgePileId);
+                cmd->SetBSC(true);
+            });
+        };
+        env.Runtime->FilterFunction = [](ui32, std::unique_ptr<IEventHandle>& ev) {
+            return ev->GetTypeRewrite() != NStorage::TEvNodeWardenReadMetadata::EventType;
+        };
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        auto result = repeat();
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::NO_QUORUM, result.DebugString());
+        env.Runtime->FilterFunction = {};
+        result = repeat();
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(QueryStorageConfig(env).GetGeneration(), config.GetGeneration());
+
         const ui32 groupId = CreatePoolAndGetGroup(env);
         const auto part = GetPart(env, groupId, 1);
         UNIT_ASSERT_UNEQUAL_C(part.GetStage(), NKikimrBridge::TGroupState::SYNCED, part.DebugString());
@@ -658,10 +677,15 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         // NOT_SYNCHRONIZED_2, like a write made while the nodes of the pile are down, so it skips the pile; the proxy
         // is the only bridge proxy of the node, as nothing else uses the bridged groups from it
         const TActorId putEdge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        std::unique_ptr<IEventHandle> gapWriteResult;
         bool gapWriteArmed = false;
         bool gapWriteIssued = false;
 
         env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == putEdge && ev->GetTypeRewrite() == TEvBlobStorage::TEvPutResult::EventType) {
+                gapWriteResult = std::move(ev);
+                return false;
+            }
             if (!staticHold.Filter(node, ev)) {
                 return false;
             } else if (gapWriteArmed && !gapWriteIssued && node == nodeId &&
@@ -687,8 +711,9 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         // data never reaches the part
         gapWriteArmed = true;
         SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1); // rejoin re-run
-        const auto put = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(putEdge, false);
-        UNIT_ASSERT_VALUES_EQUAL_C(put->Get()->Status, NKikimrProto::OK, put->Get()->ToString());
+        WaitUntil(env, [&] { return bool(gapWriteResult); }, "write issued during rejoin", TDuration::Seconds(1));
+        const auto *put = gapWriteResult->Get<TEvBlobStorage::TEvPutResult>();
+        UNIT_ASSERT_VALUES_EQUAL_C(put->Status, NKikimrProto::OK, put->ToString());
         UNIT_ASSERT(gapWriteIssued);
 
         // release the held commits of the static group sync: the one of the current generation finishes it, and the

@@ -222,6 +222,28 @@ TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
     return userPolicy;
 }
 
+TCompactionPolicyPtr TryParseCompactionPolicy(const NKikimrCompaction::TCompactionPolicy& policy, TString& err) {
+    for (size_t index = 0; index < policy.GenerationSize(); ++index) {
+        const auto& generation = policy.GetGeneration(index);
+        if (generation.GetGenerationId() != index) {
+            err = Sprintf("Compaction generation %zu: expected GenerationId %zu, got %u",
+                index, index, generation.GetGenerationId());
+            return nullptr;
+        }
+
+        // The runtime policy derives omitted sizes by dividing by CountToCompact.
+        if (generation.HasCountToCompact() && generation.GetCountToCompact() == 0 &&
+            (!generation.HasExtraCompactionExpMaxSize() || !generation.HasUpliftPartSize()))
+        {
+            err = Sprintf("Compaction generation %zu: CountToCompact must be nonzero when "
+                "ExtraCompactionExpMaxSize or UpliftPartSize is omitted", index);
+            return nullptr;
+        }
+    }
+
+    return new TCompactionPolicy(policy);
+}
+
 bool ValidateCompactionPolicy(const TCompactionPolicy& policy, TString& err) {
     THashSet<ui32> seenTiers;
     std::optional<ui32> previousTier;

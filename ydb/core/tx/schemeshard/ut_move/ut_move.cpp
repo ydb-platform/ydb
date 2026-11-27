@@ -1716,7 +1716,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index2", {"prefix", "embedding"});
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist, NLs::PathVersionEqual(9), NLs::IndexesCount(2)});
+        // Each consistent vector build bumps the path version once more in
+        // PrepareVectorIndex: 3 (create) + 2 * 4 (two builds) = 11.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist, NLs::PathVersionEqual(11), NLs::IndexesCount(2)});
 
         TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "index2", "index1", true);
         env.TestWaitNotification(runtime, txId);

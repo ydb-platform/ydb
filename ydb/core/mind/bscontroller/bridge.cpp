@@ -223,6 +223,7 @@ public:
     struct TChangeStage {
         NKikimrBridge::TGroupState::EStage NewStage = {};
         std::optional<ui64> EstimatedBytesToCopy; // kept for the new stage, see TBridgeSyncState
+        ui64 EstimateRound = 0;
     };
 
     struct TRegisterError {
@@ -263,20 +264,23 @@ public:
                         Self->BridgeSyncState[update.TargetGroupId] = {
                             .Stage = change.NewStage,
                             .EstimatedBytesToCopy = change.EstimatedBytesToCopy,
+                            .EstimateRound = change.EstimateRound,
                         };
                         row.Update(
                             NIceDb::TUpdate<Schema::BridgeSyncState::Stage>(change.NewStage),
-                            NIceDb::TUpdate<Schema::BridgeSyncState::EstimatedBytesToCopy>(*change.EstimatedBytesToCopy)
+                            NIceDb::TUpdate<Schema::BridgeSyncState::EstimatedBytesToCopy>(*change.EstimatedBytesToCopy),
+                            NIceDb::TUpdate<Schema::BridgeSyncState::EstimateRound>(change.EstimateRound)
                         );
                     }
                 },
                 [&](TRegisterError& error) {
                     auto& item = Self->BridgeSyncState[update.TargetGroupId];
 
-                    if (item.Stage != error.Stage && item.EstimatedBytesToCopy) {
-                        // the estimate is for another stage: the change to the stage it was made for didn't happen
+                    if (item.Stage != error.Stage) {
+                        // A legacy row may still hold an estimate that was ignored when loading it.
                         item.EstimatedBytesToCopy.reset();
-                        row.UpdateToNull<Schema::BridgeSyncState::EstimatedBytesToCopy>();
+                        item.EstimateRound = 0;
+                        row.UpdateToNull<Schema::BridgeSyncState::EstimatedBytesToCopy, Schema::BridgeSyncState::EstimateRound>();
                     }
                     item.Stage = error.Stage;
                     item.LastError = std::move(error.Error);
@@ -1103,7 +1107,7 @@ void TBlobStorageController::UpdateBridgeSyncCounters() {
                 }
             }
             if (pile.GetStage() != NKikimrBridge::TGroupState::SYNCED) {
-                const auto remaining = GetBridgeSyncRemaining(targetGroupId, pile.GetStage());
+                const auto remaining = GetBridgeSyncRemaining(pile);
                 value.BytesRemaining += remaining ? remaining->Bytes : 0;
                 value.GroupsNotEstimated += !remaining || !remaining->Complete;
             }
@@ -1125,25 +1129,39 @@ void TBlobStorageController::UpdateBridgeSyncCounters() {
 }
 
 std::optional<TBlobStorageController::TBridgeSyncRemaining> TBlobStorageController::GetBridgeSyncRemaining(
-        TGroupId targetGroupId, NKikimrBridge::TGroupState::EStage stage) const {
+        const NKikimrBridge::TGroupState::TPile& pile) const {
+    const auto targetGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+    const auto stage = pile.GetStage();
+    const ui64 round = pile.GetBecameUnsyncedGeneration();
     if (stage == NKikimrBridge::TGroupState::SYNCED) {
         return TBridgeSyncRemaining{.Bytes = 0, .Complete = true};
     }
 
     const TSyncerProgress *progress = nullptr;
     std::optional<ui64> base; // what was left after a scan over all the blobs, before the copying of the current syncer
-    if (const auto it = TargetGroupToSyncerState.find(targetGroupId); it != TargetGroupToSyncerState.end() &&
-            it->second.CopyStage == stage) {
-        progress = it->second.LastProgress ? &*it->second.LastProgress : nullptr;
-        base = it->second.KnownRemaining;
-    }
     auto left = [](ui64 x, ui64 y) { return x > y ? x - y : 0; };
-    if (progress && progress->ScanFinished) {
-        return TBridgeSyncRemaining{.Bytes = left(progress->BytesToCopy, progress->BytesCopied), .Complete = true};
+    if (const auto it = TargetGroupToSyncerState.find(targetGroupId); it != TargetGroupToSyncerState.end()) {
+        const auto& syncerState = it->second;
+        if (syncerState.StandbyScanCurrent == false) {
+            // Only the work observed by a current worker is a lower bound after a missed write.
+            for (const auto& [_, worker] : syncerState.NodeIds) {
+                if (worker.ProgressStage == stage && worker.ProgressRound == round) {
+                    return TBridgeSyncRemaining{.Bytes = left(worker.Progress.BytesToCopy, worker.Progress.BytesCopied), .Complete = false};
+                }
+            }
+            return std::nullopt;
+        }
+        if (syncerState.CopyStage == stage && syncerState.CopyRound == round) {
+            progress = syncerState.LastProgress ? &*syncerState.LastProgress : nullptr;
+            base = syncerState.KnownRemaining;
+        }
+    }
+    if (progress && (progress->ScanFinished || progress->BlobsTotal)) {
+        return TBridgeSyncRemaining{.Bytes = left(progress->BytesToCopy, progress->BytesCopied), .Complete = progress->ScanFinished};
     }
     if (!base) { // no scan of this stage has finished yet, the one of the previous stage is the best guess
         if (const auto it = BridgeSyncState.find(targetGroupId);
-                it != BridgeSyncState.end() && it->second.Stage == stage) {
+                it != BridgeSyncState.end() && it->second.Stage == stage && it->second.EstimateRound == round) {
             base = it->second.EstimatedBytesToCopy;
         }
     }
@@ -1198,13 +1216,6 @@ const NKikimrBridge::TGroupState::TPile* TBlobStorageController::FindBridgeSyncP
     return pile;
 }
 
-std::optional<NKikimrBridge::TGroupState::EStage> TBlobStorageController::GetBridgeSyncStage(TGroupId targetGroupId) {
-    if (const auto* pile = FindBridgeSyncPile(targetGroupId)) {
-        return pile->GetStage();
-    }
-    return std::nullopt;
-}
-
 std::optional<TInstant> TBlobStorageController::GetBridgeSyncLastProgressTimestamp(TGroupId targetGroupId) {
     const auto it = BridgeSyncProgress.find(targetGroupId);
     if (it == BridgeSyncProgress.end()) {
@@ -1241,28 +1252,20 @@ void TBlobStorageController::ForgetBridgeSyncProgress(TGroupId targetGroupId, ui
     }
 }
 
-ui64 TBlobStorageController::UpdateBridgeSyncCopyProgress(TSyncerState& syncerState,
-        NKikimrBridge::TGroupState::EStage stage, const TSyncerProgress& progress, bool comprehensive) {
-    if (syncerState.CopyStage != stage) {
-        syncerState.CopyStage = stage;
+void TBlobStorageController::UpdateBridgeSyncCopyProgress(TSyncerState& syncerState,
+        const NKikimrBridge::TGroupState::TPile& pile, const TSyncerProgress& progress) {
+    if (syncerState.CopyStage != pile.GetStage() || syncerState.CopyRound != pile.GetBecameUnsyncedGeneration()) {
+        syncerState.CopyStage = pile.GetStage();
+        syncerState.CopyRound = pile.GetBecameUnsyncedGeneration();
         syncerState.LastProgress.reset();
         syncerState.KnownRemaining.reset();
     }
-    const ui64 prevCopied = syncerState.LastProgress ? syncerState.LastProgress->BytesCopied : 0;
-    // Registration after a BSC restart establishes a baseline for cumulative counters.
-    ui64 copied = 0;
-    if (!comprehensive || syncerState.LastProgress) {
-        // A syncer started anew reports from zero.
-        copied = prevCopied <= progress.BytesCopied ? progress.BytesCopied - prevCopied : progress.BytesCopied;
-    }
-    syncerState.CopiedTotal += copied;
     syncerState.LastProgress = progress;
     if (progress.ScanFinished) {
         syncerState.KnownRemaining = progress.BytesToCopy > progress.BytesCopied
             ? progress.BytesToCopy - progress.BytesCopied
             : 0;
     }
-    return copied;
 }
 
 void TBlobStorageController::UpdateBridgeSyncCopyRates() {
@@ -1414,6 +1417,9 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             if (syncer.GetReconcile()) {
                 perNodeInfo.Mode = ESyncerMode::Reconcile;
                 perNodeInfo.Repairs = EStandbyDirty::Data;
+                syncerState.StandbyScanCurrent = false;
+            } else {
+                syncerState.StandbyScanCurrent.reset();
             }
         }
         if (NodeToSyncerState.emplace(nodeId, &syncerState).second) { // usually it's a report of a known syncer
@@ -1477,6 +1483,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
                 }
             };
             auto& baseline = perNodeInfo.ProgressBaseline;
+            const ui64 previousBytesCopied = baseline.BytesCopied;
             observe(syncer.HasBytesDone(), 1, baseline.BytesDone, progress.BytesDone);
             observe(syncer.HasBlobsDone(), 2, baseline.BlobsDone, progress.BlobsDone);
             observe(syncer.HasBytesCopied(), 4, baseline.BytesCopied, progress.BytesCopied);
@@ -1488,7 +1495,13 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             }
 
             if (targetPile) {
-                const ui64 copied = UpdateBridgeSyncCopyProgress(syncerState, targetPile->GetStage(), progress, comprehensive);
+                const ui64 copied = adopted ? 0 : baseline.BytesCopied - previousBytesCopied;
+                syncerState.CopiedTotal += copied;
+                UpdateBridgeSyncCopyProgress(syncerState, *targetPile, progress);
+                if (perNodeInfo.Repairs == EStandbyDirty::Data && progress.ScanFinished && syncerState.StandbyDirty != EStandbyDirty::Data) {
+                    // A miss reported during this pass still needs the next thorough scan.
+                    syncerState.StandbyScanCurrent = true;
+                }
                 const auto *bridgePile = BridgeInfo ? BridgeInfo->FindPile(targetPileId) : nullptr;
                 if (copied && bridgePile) {
                     BridgeSyncCounters->AddCopied({bridgePile->Name, pool}, copied);
@@ -1574,9 +1587,10 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
                         pile->SetStage(static_cast<NKikimrBridge::TGroupState::EStage>(finishedStage + 1));
                         changeStage.NewStage = pile->GetStage();
                         if (changeStage.NewStage != NKikimrBridge::TGroupState::SYNCED &&
-                                syncerState.CopyStage == finishedStage) {
+                                syncerState.CopyStage == finishedStage && syncerState.CopyRound == pile->GetBecameUnsyncedGeneration()) {
                             // the blob scan of the finished stage tells what the next one is going to copy
                             changeStage.EstimatedBytesToCopy = syncerState.KnownRemaining;
+                            changeStage.EstimateRound = syncerState.CopyRound;
                         }
                         break;
 
@@ -1956,7 +1970,12 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
                 if (mode != ESyncerMode::Sync) {
                     // what is missed from now on is repaired by the next pass
                     perNodeInfo.Repairs = std::exchange(syncerState.StandbyDirty, EStandbyDirty::None);
+                    if (perNodeInfo.Repairs == EStandbyDirty::Data) {
+                        syncerState.StandbyScanCurrent = false;
+                    }
                     numReconcilers() += mode == ESyncerMode::Reconcile;
+                } else {
+                    syncerState.StandbyScanCurrent.reset();
                 }
                 if (mode == ESyncerMode::Promote) {
                     syncerState.StandbySealId = 0; // the pass is followed by a seal of its own
@@ -2338,19 +2357,18 @@ void TBlobStorageController::RenderBridge(IOutputStream& out) {
                 static const char *bytesSuffixes[] = {"B", "KiB", "MiB", "GiB", "TiB", nullptr};
                 for (auto& [targetGroupId, syncerState] : TargetGroupToSyncerState) {
                     TString state;
-                    std::optional<NKikimrBridge::TGroupState::EStage> stage;
+                    std::optional<TBridgeSyncRemaining> remaining;
                     auto scanPiles = [&](auto& info) {
                         if (!info) {
                             return;
                         }
                         if (const auto *pile = NBridge::FindGroupPileByGroupId(info->GetBridgeGroupState(), targetGroupId)) {
-                            stage = pile->GetStage();
-                            state = NKikimrBridge::TGroupState::EStage_Name(*stage);
+                            remaining = GetBridgeSyncRemaining(*pile);
+                            state = NKikimrBridge::TGroupState::EStage_Name(pile->GetStage());
                         }
                     };
                     auto outCopy = [&] {
                         TABLED() {
-                            const auto remaining = stage ? GetBridgeSyncRemaining(targetGroupId, *stage) : std::nullopt;
                             if (remaining) {
                                 if (!remaining->Complete) {
                                     out << "&ge;";

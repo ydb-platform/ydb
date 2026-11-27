@@ -1084,7 +1084,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         {
             const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
-            if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
+            if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()
+                && !pqConfig.GetSplitByPartitionKey()) {
                 partitioning.reserve(pqDesc.GetPartitions().size());
                 for (const auto& partition : pqDesc.GetPartitions()) {
                     if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {
@@ -1108,6 +1109,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             partitioning.reserve(pqDesc.PartitionsSize());
             for (const auto& partition : pqDesc.GetPartitions()) {
+                if (NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
+                    continue;
+                }
+
                 auto keyRange = NPQ::TPartitionKeyRange::Parse(partition.GetKeyRange());
                 Y_ABORT_UNLESS(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == schema.size());
                 Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());

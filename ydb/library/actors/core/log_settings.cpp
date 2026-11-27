@@ -1,5 +1,7 @@
 #include "log_settings.h"
 
+#include <ydb/library/actors/struct_log/log_sink.h>
+
 #include <util/stream/str.h>
 
 namespace NActors {
@@ -234,6 +236,8 @@ namespace NActors {
 
             return InvalidComponent;
         }
+
+        TSettings::~TSettings() = default;
 
     }
 

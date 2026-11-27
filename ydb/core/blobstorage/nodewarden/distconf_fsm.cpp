@@ -1015,9 +1015,7 @@ namespace NKikimr::NStorage {
                 && (!LocalCommittedStorageConfig || !LocalCommittedStorageConfig->GetGeneration())
                 && !bootstrap && !task.TargetedPropositionAdmitted) {
                 const auto containsSelf = [this](const auto& node) { return node.GetNodeId() == SelfNode.NodeId(); };
-                // Full parent records allow an early membership check. For compact records the root checks its base.
                 if (!task.Request.HasCookie() || !task.Request.HasTaskId() || !proposed.HasPrevConfig()
-                    || std::ranges::any_of(proposed.GetPrevConfig().GetAllNodes(), containsSelf)
                     || !std::ranges::any_of(proposed.GetAllNodes(), containsSelf)) {
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                     SelfNode.Serialize(status->MutableNodeId());

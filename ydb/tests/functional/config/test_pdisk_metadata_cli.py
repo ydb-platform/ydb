@@ -240,6 +240,7 @@ class TestPDiskMetadata(object):
             assert_that(new_committed.get("PrevConfig") == {
                 "Generation": old_committed["Generation"],
                 "Fingerprint": old_committed["Fingerprint"],
+                "AllNodes": old_committed["AllNodes"],
             })
             for n in self.cluster.nodes.values():
                 n.start()

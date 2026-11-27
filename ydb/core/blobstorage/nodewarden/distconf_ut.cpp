@@ -3690,6 +3690,8 @@ selector_config: []
         auto updated = MakeNextConfig(fixture.Config);
         if constexpr (fullParent) {
             updated.MutablePrevConfig()->CopyFrom(fixture.Config);
+        } else {
+            updated.MutablePrevConfig()->ClearAllNodes();
         }
         updated.MutableSelfManagementConfig()->SetAutomaticBootstrap(true);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&updated);
@@ -5310,6 +5312,15 @@ selector_config: []
         UNIT_ASSERT(HasTestConfigQuorum(proposed, {1, 2}, nullptr, &base));
     }
 
+    void CheckOrdinaryProposalParent(const NKikimrBlobStorage::TStorageConfig& proposal,
+                                     const NKikimrBlobStorage::TStorageConfig& parent) {
+        NKikimrBlobStorage::TStorageConfig expected;
+        expected.SetGeneration(parent.GetGeneration());
+        expected.SetFingerprint(parent.GetFingerprint());
+        expected.MutableAllNodes()->CopyFrom(parent.GetAllNodes());
+        UNIT_ASSERT_VALUES_EQUAL(proposal.GetPrevConfig().SerializeAsString(), expected.SerializeAsString());
+    }
+
     void CheckChosenUpdateSurvivesQuorumTurnover(bool fragmentWithChild) {
         TCommitConfirmationFixture fixture(true);
         fixture.UseMirror3dcGroup();
@@ -5373,8 +5384,7 @@ selector_config: []
         }), "the chosen update did not reach its delayed commit publication");
         const auto accepted = fixture.Metadata(1).GetProposedStorageConfig();
         UNIT_ASSERT_VALUES_EQUAL(accepted.GetGeneration(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(accepted.GetPrevConfig().SerializeAsString(),
-            NStorage::TStorageConfigMeta(fixture.Config).SerializeAsString());
+        CheckOrdinaryProposalParent(accepted, fixture.Config);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetCommittedStorageConfig().GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetProposedStorageConfig().GetGeneration(), 2);
@@ -5699,6 +5709,7 @@ selector_config: []
         const auto committed = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(committed.GetGeneration(), 3);
         UNIT_ASSERT_VALUES_EQUAL(committed.AllNodesSize(), 6);
+        CheckOrdinaryProposalParent(committed, fixture.Config);
         UNIT_ASSERT_VALUES_EQUAL(committed.GetBlobStorageConfig().GetServiceSet().GetGroups(0).SerializeAsString(),
                                  fixture.Config.GetBlobStorageConfig().GetServiceSet().GetGroups(0).SerializeAsString());
         CheckDurableConfigConverges(fixture, committed);

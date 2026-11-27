@@ -152,10 +152,13 @@ namespace NKikimr::NStorage {
         prev.SetGeneration(parent.GetGeneration());
         prev.SetFingerprint(parent.GetFingerprint());
 
+        // Older roots use this list for new-node admission. Once all supported roots use their proposal base,
+        // move this copy into the bootstrap block below.
+        prev.MutableAllNodes()->CopyFrom(parent.GetAllNodes());
+
         // Bootstrap recovery checks that every drive in the original generation-zero base was read.
         const auto& bs = parent.GetBlobStorageConfig();
         if (config.GetGeneration() == 1 && !parent.GetGeneration() && bs.HasDefineBox()) {
-            prev.MutableAllNodes()->CopyFrom(parent.GetAllNodes());
             auto *drives = prev.MutableBlobStorageConfig();
             drives->MutableDefineBox()->CopyFrom(bs.GetDefineBox());
             drives->MutableDefineHostConfig()->CopyFrom(bs.GetDefineHostConfig());

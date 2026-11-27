@@ -325,7 +325,18 @@ namespace NActors {
                         TlsThreadContext->ActivityContext.ElapsingActorActivity.store(activityType, std::memory_order_release);
                     }
 
+                    std::unique_ptr<IActorTraceSpan> trace;
+                    if (ev->TraceId && ev->TraceId.GetVerbosity() >= 15) {
+                        auto* system = TlsActivationContext->ActorSystem();
+                        if (const auto* tracing = system->GetEventTracing()) {
+                            trace = tracing->BeginHandler(*ev, system, ThreadCtx.PoolId(), activityType);
+                        }
+                    }
                     actor->Receive(ev);
+                    // Receive may consume ev; the trace owns its saved state.
+                    if (trace) {
+                        trace->Finish(true);
+                    }
 
                     const ui64 systemFlags = actor->GetSystemFlags();
                     if (Y_UNLIKELY(systemFlags != 0)) {

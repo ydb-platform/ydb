@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    wilson_actor_tracing.cpp
     wilson_event.cpp
     wilson_span.cpp
     wilson_profile_span.cpp

@@ -20,6 +20,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -461,6 +462,7 @@ struct TBaseEventInfo {
     }
 
     template <class T>
+        requires std::is_constructible_v<TEvent, T&&>
     TBaseEventInfo(T&& event)
         : Event(std::forward<T>(event))
     {}

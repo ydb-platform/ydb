@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
 /* @return Size of the buffer required to decode Base64 encoded data of size `len`.
  */
@@ -22,7 +23,7 @@ constexpr size_t Base64DecodeBufSize(const size_t len) noexcept {
 size_t Base64Decode(void* dst, const char* b, const char* e);
 
 inline std::string_view Base64Decode(const std::string_view src, void* dst) {
-    return std::string_view(static_cast<const char*>(dst), Base64Decode(dst, src.begin(), src.end()));
+    return std::string_view(static_cast<const char*>(dst), Base64Decode(dst, src.data(), src.data() + src.size()));
 }
 
 inline void Base64Decode(const std::string_view src, std::string& dst) {
@@ -62,7 +63,7 @@ size_t Base64StrictDecode(void* dst, const char* b, const char* e);
 /// @return Returns dst wrapped into std::string_view.
 ///
 inline std::string_view Base64StrictDecode(const std::string_view src, void* dst) {
-    return std::string_view(static_cast<const char*>(dst), Base64StrictDecode(dst, src.begin(), src.end()));
+    return std::string_view(static_cast<const char*>(dst), Base64StrictDecode(dst, src.data(), src.data() + src.size()));
 }
 
 ///

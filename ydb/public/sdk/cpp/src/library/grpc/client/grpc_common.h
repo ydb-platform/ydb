@@ -1,5 +1,13 @@
 #pragma once
 
+#if defined(_WIN32)
+    #ifndef OPTIONAL
+        #define OPTIONAL
+    #endif
+    #include <grpc/event_engine/port.h>
+    #include <util/system/win_undef.h>
+#endif
+
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/resource_quota.h>
 

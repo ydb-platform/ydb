@@ -47,6 +47,7 @@ class Erasure(Enum):
     STRIPE_4_2 = _erasure_type(id_=6, min_fail_domains=8, min_alive_replicas=6)
     STRIPE_3_2 = _erasure_type(id_=7, min_fail_domains=7, min_alive_replicas=5)
     MIRROR_3_2 = _erasure_type(id_=8, min_fail_domains=5, min_alive_replicas=3)
+    BLOCK_8_2 = _erasure_type(id_=19, min_fail_domains=12, min_alive_replicas=10)
     MIRROR_3_DC = _erasure_type(id_=9, min_fail_domains=3, min_alive_replicas=3)
     MIRROR_3OF4 = _erasure_type(id_=18, min_fail_domains=8, min_alive_replicas=6)
 

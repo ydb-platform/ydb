@@ -4,18 +4,20 @@
 
 using namespace NKikimr;
 
-std::shared_ptr<TReplCtx> CreateReplCtx(TVector<TVDiskID>& vdisks, const TIntrusivePtr<TBlobStorageGroupInfo>& info) {
+std::shared_ptr<TReplCtx> CreateReplCtx(TVector<TVDiskID>& vdisks, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+        ui32 chunkSize) {
     for (const auto& vdisk : info->GetVDisks()) {
         vdisks.push_back(info->GetVDiskId(vdisk.OrderNumber));
     }
     auto baseInfo = TVDiskConfig::TBaseInfo::SampleForTests();
     baseInfo.VDiskIdShort = TVDiskIdShort(vdisks[0]);
     auto vdiskCfg = MakeIntrusive<TVDiskConfig>(baseInfo);
+    vdiskCfg->AddHeader = vdiskCfg->AddHeader && info->Type.TotalPartCount() <= 8;
     auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
     auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(0, 1, 0, 0, 0),
         nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
-    auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(nullptr, true);
-    auto dsk = MakeIntrusive<TPDiskParams>(ui8(1), 1u, 128u << 20, 4096u, 0u, 1000000000u, 1000000000u, 65536u, 65536u, 65536u,
+    auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(nullptr, vdiskCfg->AddHeader);
+    auto dsk = MakeIntrusive<TPDiskParams>(ui8(1), 1u, chunkSize, 4096u, 0u, 1000000000u, 1000000000u, 65536u, 65536u, 65536u,
             NPDisk::DEVICE_TYPE_UNKNOWN);
     auto pdiskCtx = std::make_shared<TPDiskCtx>(dsk, TActorId(), TString());
     auto replCtx = std::make_shared<TReplCtx>(
@@ -39,24 +41,28 @@ TVDiskContextPtr CreateVDiskContext(const TBlobStorageGroupInfo& info) {
 
 TIntrusivePtr<THullCtx> CreateHullCtx(const TBlobStorageGroupInfo& info, ui32 chunkSize, ui32 compWorthReadSize) {
     auto baseInfo = TVDiskConfig::TBaseInfo::SampleForTests();
-    return MakeIntrusive<THullCtx>(CreateVDiskContext(info), MakeIntrusive<TVDiskConfig>(baseInfo), chunkSize, compWorthReadSize, true, true, true, true, 1u,
+    auto vdiskCfg = MakeIntrusive<TVDiskConfig>(baseInfo);
+    vdiskCfg->AddHeader = vdiskCfg->AddHeader && info.Type.TotalPartCount() <= 8;
+    return MakeIntrusive<THullCtx>(CreateVDiskContext(info), vdiskCfg, chunkSize, compWorthReadSize, vdiskCfg->AddHeader, true, true, true, 1u,
         1u, 2.0, 0.5, TDuration::Minutes(5), TDuration::Seconds(1), true);
 }
 
-TIntrusivePtr<THullDs> CreateHullDs(const TBlobStorageGroupInfo& info) {
-    auto hullDs = MakeIntrusive<THullDs>(CreateHullCtx(info, 128 << 20, 256 * 1024));
+TIntrusivePtr<THullDs> CreateHullDs(const TBlobStorageGroupInfo& info, ui32 chunkSize) {
+    auto hullDs = MakeIntrusive<THullDs>(CreateHullCtx(info, chunkSize, 256 * 1024));
     hullDs->LogoBlobs = MakeIntrusive<TLogoBlobsDs>(TLevelIndexSettings(hullDs->HullCtx, 0, 0, 0, TDuration::Zero(),
         0, false, false), std::make_shared<TRopeArena>(TRopeArenaBackend::Allocate));
     return hullDs;
 }
 
 Y_UNIT_TEST_SUITE(HullReplWriteSst) {
-    Y_UNIT_TEST(Basic) {
+    void TestBasic(TBlobStorageGroupType::EErasureSpecies erasure, ui32 chunkSize,
+            TDuration duration = TDuration::Minutes(5)) {
         TVector<TVDiskID> vdisks;
-        auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3);
-        auto replCtx = CreateReplCtx(vdisks, groupInfo);
-        auto hullDs = CreateHullDs(*groupInfo);
+        auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(erasure);
+        auto replCtx = CreateReplCtx(vdisks, groupInfo, chunkSize);
+        auto hullDs = CreateHullDs(*groupInfo, chunkSize);
         TReplSstStreamWriter writer(replCtx, hullDs);
+        NMatrix::TVectorType persistedParts(0, groupInfo->Type.TotalPartCount());
         ui64 index = 1;
         ui32 chunkIdx = 1;
         std::deque<TLogoBlobID> checkQ;
@@ -88,7 +94,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
             const TString& s = it->second;
             return s.substr(p.Offset, p.Size);
         };
-        for (THPTimer timer; TDuration::Seconds(timer.Passed()) < TDuration::Minutes(5); ) {
+        for (THPTimer timer; TDuration::Seconds(timer.Passed()) < duration; ) {
             if (!writeMsgs.empty() && RandomNumber(1000u) == 999) {
                 const size_t index = RandomNumber(writeMsgs.size());
                 handleWrite(*writeMsgs[index]);
@@ -115,7 +121,11 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                         if (TIngress::CreateIngressWithLocal(&groupInfo->GetTopology(), replCtx->VCtx->ShortSelfVDisk,
                                 TLogoBlobID(id, partIdx + 1))) {
                             vec.Set(partIdx);
-                            rope = TDiskBlob::Create(size, partIdx + 1, vec.GetSize(), TRope(std::move(data)), arena, true);
+                            TDataPartSet parts;
+                            groupInfo->Type.SplitData(TErasureType::CrcModeNone, data, parts);
+                            rope = TDiskBlob::Create(size, partIdx + 1, vec.GetSize(),
+                                std::move(parts.Parts[partIdx].OwnedString), arena,
+                                replCtx->GetAddHeader());
                             break;
                         }
                     }
@@ -186,6 +196,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                             UNIT_ASSERT(ptr <= end);
                             UNIT_ASSERT(!checkQ.empty());
                             UNIT_ASSERT_VALUES_EQUAL(key->LogoBlobID(), checkQ.front());
+                            persistedParts |= memrec->GetIngress().LocalParts(groupInfo->Type);
                             checkQ.pop_front();
                             ++numItems;
                         }
@@ -206,5 +217,14 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                     Y_ABORT();
             }
         }
+        UNIT_ASSERT_VALUES_EQUAL(persistedParts.CountBits(), groupInfo->Type.TotalPartCount());
+    }
+
+    Y_UNIT_TEST(Basic) {
+        TestBasic(TBlobStorageGroupType::ErasureMirror3, 128 << 20);
+    }
+
+    Y_UNIT_TEST(BasicBlock82) {
+        TestBasic(TBlobStorageGroupType::Erasure8Plus2Block, 1 << 20, TDuration::Seconds(10));
     }
 }

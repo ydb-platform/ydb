@@ -10,6 +10,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include "health_check.cpp"
+#include <ydb/library/testlib/helpers.h>
 
 #include <functional>
 #include <util/stream/null.h>
@@ -173,7 +174,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     };
 
-    void AddGroupsToSysViewResponse(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr* ev, size_t groupCount = 1, bool addStatic = true) {
+    void AddGroupsToSysViewResponse(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr* ev, size_t groupCount = 1, bool addStatic = true,
+            const TString& erasure = NHealthCheck::TSelfCheckRequest::BLOCK_4_2) {
         auto& record = (*ev)->Get()->Record;
         auto entrySample = record.entries(0);
         record.clear_entries();
@@ -182,7 +184,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto* entry = record.add_entries();
             entry->CopyFrom(entrySample);
             entry->mutable_key()->set_groupid(groupId);
-            entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            entry->mutable_info()->set_erasurespeciesv2(erasure);
             entry->mutable_info()->set_storagepoolid(poolId);
             entry->mutable_info()->set_generation(DEFAULT_GROUP_GENERATION);
         };
@@ -267,7 +269,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     void AddGroupVSlotInControllerConfigResponseWithStaticGroup(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev,
-        const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vslots)
+        const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vslots,
+        const TString& erasure = NHealthCheck::TSelfCheckRequest::BLOCK_4_2)
     {
         auto& pbRecord = (*ev)->Get()->Record;
         auto pbConfig = pbRecord.mutable_response()->mutable_status(0)->mutable_baseconfig();
@@ -287,7 +290,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         staticGroup->set_groupid(0);
         staticGroup->set_storagepoolid(0);
         staticGroup->set_operatingstatus(groupStatus);
-        staticGroup->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+        staticGroup->set_erasurespecies(erasure);
         staticGroup->set_groupgeneration(DEFAULT_GROUP_GENERATION);
 
         auto group = pbConfig->add_group();
@@ -295,7 +298,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         group->set_groupid(GROUP_START_ID);
         group->set_storagepoolid(1);
         group->set_operatingstatus(groupStatus);
-        group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+        group->set_erasurespecies(erasure);
         group->set_groupgeneration(DEFAULT_GROUP_GENERATION);
 
         group->clear_vslotid();
@@ -359,9 +362,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
-    void ChangeGroupStateResponse(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev) {
+    void ChangeGroupStateResponse(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev,
+            const TString& erasure = NHealthCheck::TSelfCheckRequest::BLOCK_4_2) {
         for (auto& groupInfo : *(*ev)->Get()->Record.mutable_bsgroupstateinfo()) {
-            groupInfo.set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            groupInfo.set_erasurespecies(erasure);
         }
     }
 
@@ -490,7 +494,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vdisks,
                                                          bool forStaticGroup = false, double occupancy = 0, bool withPhantomOnly = true,
-                                                         bool returnHints = false) {
+                                                         bool returnHints = false, const TString& erasure = NHealthCheck::TSelfCheckRequest::BLOCK_4_2) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -520,7 +524,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
-                    AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, groupStatus, vdisks);
+                    AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, groupStatus, vdisks, erasure);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetVSlotsResponse: {
@@ -539,7 +543,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
-                    AddGroupsToSysViewResponse(x);
+                    AddGroupsToSysViewResponse(x, 1, true, erasure);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
@@ -558,7 +562,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case NNodeWhiteboard::TEvWhiteboard::EvBSGroupStateResponse: {
                     auto* x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
-                    ChangeGroupStateResponse(x);
+                    ChangeGroupStateResponse(x, erasure);
                 }
             }
 
@@ -721,13 +725,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         ListingTest(100, 100, true);
     }
 
-    Y_UNIT_TEST(YellowGroupIssueWhenPartialGroupStatus) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::ERROR});
+    Y_UNIT_TEST_TWIN(YellowGroupIssueWhenPartialGroupStatus, block82) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks(1, TTestVSlotInfo(NKikimrBlobStorage::ERROR)), false, 0, true, false, block82 ? "block-8-2" : "block-4-2");
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
 
-    Y_UNIT_TEST(BlueGroupIssueWhenPartialGroupStatusAndReplicationDisks) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::REPLICATING});
+    Y_UNIT_TEST_TWIN(BlueGroupIssueWhenPartialGroupStatusAndReplicationDisks, block82) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks(1, TTestVSlotInfo(NKikimrBlobStorage::REPLICATING)), false, 0, true, false, block82 ? "block-8-2" : "block-4-2");
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1);
     }
 
@@ -755,18 +759,18 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResultHasIssuesWithStatus(result, "HINT-PHANTOM-ONLY-VDISK", Ydb::Monitoring::StatusFlag::UNSPECIFIED, 0, TLocationFilter().Pool("/Root:test"));
     }
 
-    Y_UNIT_TEST(OrangeGroupIssueWhenDegradedGroupStatus) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DEGRADED, TVDisks{2, NKikimrBlobStorage::ERROR});
+    Y_UNIT_TEST_TWIN(OrangeGroupIssueWhenDegradedGroupStatus, block82) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DEGRADED, TVDisks{2, NKikimrBlobStorage::ERROR}, false, 0, true, false, block82 ? "block-8-2" : "block-4-2");
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
     }
 
-    Y_UNIT_TEST(RedGroupIssueWhenDisintegratedGroupStatus) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, TVDisks{3, NKikimrBlobStorage::ERROR});
+    Y_UNIT_TEST_TWIN(RedGroupIssueWhenDisintegratedGroupStatus, block82) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, TVDisks{3, NKikimrBlobStorage::ERROR}, false, 0, true, false, block82 ? "block-8-2" : "block-4-2");
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
     }
 
-    Y_UNIT_TEST(StaticGroupIssue) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::ERROR}, /*forStatic*/ true);
+    Y_UNIT_TEST_TWIN(StaticGroupIssue, block82) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks(1, TTestVSlotInfo(NKikimrBlobStorage::ERROR)), true, 0, true, false, block82 ? "block-8-2" : "block-4-2");
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1,
                                          TLocationFilter().Pool("static"));

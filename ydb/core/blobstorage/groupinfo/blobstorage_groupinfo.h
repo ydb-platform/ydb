@@ -34,9 +34,9 @@ namespace NBlobMapper {
     class TMirror3dcMapper;
 } // NBlobMapper
 
-static constexpr ui8 MaxHandoffNodes = 6;
-static constexpr ui8 MaxNodesPerBlob = 10;
-static constexpr ui8 MaxTotalPartCount = 7;
+static constexpr ui8 MaxHandoffNodes = TBlobStorageGroupType::MaxHandoffNodes;
+static constexpr ui8 MaxNodesPerBlob = TBlobStorageGroupType::MaxSubgroupSize;
+static constexpr ui8 MaxTotalPartCount = TErasureType::MaxTotalParts;
 static constexpr ui8 MaxVDisksInGroup = 32;
 
 // mapper interface forward declaration
@@ -202,7 +202,9 @@ public:
             TString DataInfo;
         };
 
-        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const = 0;
+        // maxRestores limits ErasureRestore calls; zero means unlimited.
+        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator,
+            ui32 maxRestores = 0) const = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

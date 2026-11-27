@@ -48,6 +48,7 @@ struct TTestArgs {
         }
         switch (GType.GetErasure()) {
         case TErasureType::Erasure4Plus2Block:
+        case TErasureType::Erasure8Plus2Block:
             for (ui64 idx = 0; idx < GType.TotalPartCount(); ++idx) {
                 PartPlacement[idx].push_back(idx + 1);
             }
@@ -682,6 +683,7 @@ void RunGeneralTest(void(*runner)(TTestBasicRuntime &runtime, const TTestArgs &a
 
     Y_UNIT_TEST_PATCH_PACK(ErasureNone)
     Y_UNIT_TEST_PATCH_PACK(Erasure4Plus2Block)
+    Y_UNIT_TEST_PATCH_PACK(Erasure8Plus2Block)
     Y_UNIT_TEST_PATCH_PACK(ErasureMirror3dc)
 
 }

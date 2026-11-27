@@ -238,18 +238,19 @@ public:
 };
 
 void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config,
-        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false, bool createDynamicGroups = false)
+        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false, bool createDynamicGroups = false,
+        TErasureType::EErasureSpecies blockErasure = TErasureType::Erasure4Plus2Block)
 {   
     constexpr ui32 MIRROR_3DC_VDISKS_COUNT = 9;
-    constexpr ui32 BLOCK_4_2_VDISKS_COUNT = 8;
+    const ui32 blockVDisksCount = TBlobStorageGroupType(blockErasure).BlobSubgroupSize();
 
     ui32 numNodes = runtime.GetNodeCount();
     ui32 vdisksPerNode = pdisks * vdiskPerPdisk;
     ui32 numGroups;
     if (useMirror3dcErasure)
         numGroups = numNodes * vdisksPerNode / MIRROR_3DC_VDISKS_COUNT;
-    else if (numNodes >= BLOCK_4_2_VDISKS_COUNT)
-        numGroups = numNodes * vdisksPerNode / BLOCK_4_2_VDISKS_COUNT;
+    else if (numNodes >= blockVDisksCount)
+        numGroups = numNodes * vdisksPerNode / blockVDisksCount;
     else
         numGroups = numNodes * vdisksPerNode;
     
@@ -276,8 +277,8 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         group.SetGroupGeneration(1);
         if (useMirror3dcErasure)
             group.SetErasureSpecies("mirror-3-dc");
-        else if (numNodes >= BLOCK_4_2_VDISKS_COUNT)
-            group.SetErasureSpecies("block-4-2");
+        else if (numNodes >= blockVDisksCount)
+            group.SetErasureSpecies(TErasureType::ErasureSpeciesName(blockErasure));
         else
             group.SetErasureSpecies("none");
     }
@@ -305,8 +306,8 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         if (useMirror3dcErasure) {
             ui32 groupNodesSize = MIRROR_3DC_VDISKS_COUNT / maxOneGroupVdisksPerNode;
             groupShift = (nodeIndex / groupNodesSize) * groupsPerNode;
-        } else if (numNodes >= BLOCK_4_2_VDISKS_COUNT) {
-            ui32 groupNodesSize = BLOCK_4_2_VDISKS_COUNT / maxOneGroupVdisksPerNode;
+        } else if (numNodes >= blockVDisksCount) {
+            ui32 groupNodesSize = blockVDisksCount / maxOneGroupVdisksPerNode;
             groupShift = (nodeIndex / groupNodesSize) * groupsPerNode;
         } else {
             groupShift = nodeIndex * groupsPerNode;
@@ -361,7 +362,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                     groupId,
                     1,
                     (ui8)failRealm,
-                    (ui8)(nodeIndex % BLOCK_4_2_VDISKS_COUNT),
+                    (ui8)(nodeIndex % blockVDisksCount),
                     (ui8)(vdiskId % maxOneGroupVdisksPerNode)
                 };
 
@@ -381,7 +382,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                 vdiskConfig.SetGroupId(groupId);
                 vdiskConfig.SetGroupGeneration(1);
                 vdiskConfig.SetFailRealmIdx(failRealm);
-                vdiskConfig.SetFailDomainIdx(nodeIndex % BLOCK_4_2_VDISKS_COUNT);
+                vdiskConfig.SetFailDomainIdx(nodeIndex % blockVDisksCount);
                 vdiskConfig.SetVDiskIdx(vdiskId % maxOneGroupVdisksPerNode);
 
                 config->MutableGroup(groupIdx)->AddVSlotId()
@@ -604,7 +605,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
 
     TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
     TFakeNodeWhiteboardService::Info.clear();
-    GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure, options.EnableDynamicGroups);
+    GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure, options.EnableDynamicGroups, options.BlockErasure);
 
     SetObserverFunc([](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
@@ -1273,7 +1274,7 @@ void TCmsTestEnv::EnableNoisyBSCPipe() {
 void TCmsTestEnv::RegenerateBSConfig(NKikimrBlobStorage::TBaseConfig *config, const TTestEnvOpts &opts) {
     TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
     config->Clear();
-    GenerateExtendedInfo(*this, config, opts.VDisks, 4, opts.Tenants, opts.UseMirror3dcErasure, opts.EnableDynamicGroups);
+    GenerateExtendedInfo(*this, config, opts.VDisks, 4, opts.Tenants, opts.UseMirror3dcErasure, opts.EnableDynamicGroups, opts.BlockErasure);
 }
 
 } // namespace NCmsTest

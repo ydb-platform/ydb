@@ -57,7 +57,7 @@ namespace NKikimr {
                     // here we filter out handoff disks containing at least one of required parts (which are indicated
                     // by bits in total); each row in 'handoffs' table contains bitmask of handoff disks containing
                     // specific part
-                    TStackVec<ui32, MaxTotalPartCount> handoffDiskByPart;
+                    TStackVec<ui32, MaxParts> handoffDiskByPart;
                     for (ui32 i = 0; i < totalPartCount; ++i) {
                         const ui32 value = GetDisksWithPart(i) >> totalPartCount;
                         if (~total & 1 << i && value) { // if there is no such part at main disk

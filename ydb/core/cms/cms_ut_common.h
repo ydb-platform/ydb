@@ -86,6 +86,7 @@ struct TTestEnvOpts {
     ui32 RingSize;
     ui32 DataCenterCount;
     TNodeTenantsMap Tenants;
+    TErasureType::EErasureSpecies BlockErasure = TErasureType::Erasure4Plus2Block;
     bool UseMirror3dcErasure;
     bool AdvanceCurrentTime;
     bool EnableSentinel;

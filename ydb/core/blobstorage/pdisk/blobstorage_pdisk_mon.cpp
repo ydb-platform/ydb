@@ -87,6 +87,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(StateGroup, PDiskState, false);
     COUNTER_INIT(StateGroup, PDiskBriefState, false);
     COUNTER_INIT(StateGroup, PDiskDetailedState, false);
+    COUNTER_INIT(StateGroup, SlowPDisk, false);
     COUNTER_INIT(StateGroup, AtLeastOneVDiskNotLogged, false);
     COUNTER_INIT(StateGroup, TooMuchLogChunks, false);
     COUNTER_INIT(StateGroup, SerialNumberMismatched, false);

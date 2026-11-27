@@ -295,6 +295,7 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr PDiskState;
     ::NMonitoring::TDynamicCounters::TCounterPtr PDiskBriefState;
     ::NMonitoring::TDynamicCounters::TCounterPtr PDiskDetailedState;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SlowPDisk;
     ::NMonitoring::TDynamicCounters::TCounterPtr AtLeastOneVDiskNotLogged;
     ::NMonitoring::TDynamicCounters::TCounterPtr TooMuchLogChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr SerialNumberMismatched;

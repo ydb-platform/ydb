@@ -79,10 +79,28 @@ class TestBridgePileOps(BridgeKiKiMRTest):
         for client in (self.bridge_client, self.config_client, self.kv_client):
             client.close()
 
+    def retry_config_rpc(self, rpc, retryable_issue):
+        response = None
+
+        def attempt():
+            nonlocal response
+            response = rpc()
+            if response.operation.status == StatusIds.SUCCESS:
+                return True
+            assert_that(
+                response.operation.status == StatusIds.INTERNAL_ERROR
+                and retryable_issue in str(response.operation.issues),
+                str(response),
+            )
+            logger.info("Retrying config RPC after response: %s", response)
+            return False
+
+        assert_that(wait_for(attempt, timeout_seconds=60), str(response))
+        return response
+
     def fetch_config(self):
         logger.info("Fetching config through node %d", self.node.node_id)
-        response = self.config_client.fetch_all_configs()
-        assert_that(response.operation.status, is_(StatusIds.SUCCESS), str(response))
+        response = self.retry_config_rpc(self.config_client.fetch_all_configs, "No scepter")
         result = config.FetchConfigResult()
         response.operation.result.Unpack(result)
         assert_that(len(result.config), is_(1))
@@ -92,9 +110,10 @@ class TestBridgePileOps(BridgeKiKiMRTest):
 
     def replace_config(self, cfg, node_ids):
         logger.info("Replacing config with version %d", cfg["metadata"]["version"])
-        response = self.config_client.replace_config(yaml.dump(cfg))
-        logger.debug("replace_config response: %s", response)
-        assert_that(response.operation.status, is_(StatusIds.SUCCESS), str(response))
+        self.retry_config_rpc(
+            lambda: self.config_client.replace_config(yaml.dump(cfg)),
+            "Some static nodes did not report their BridgeConfig",
+        )
 
         def applied():
             for node_id in node_ids:

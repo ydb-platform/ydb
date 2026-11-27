@@ -1,5 +1,6 @@
 #include "blob_depot_tablet.h"
 #include "schema.h"
+#include "s3.h"
 #include "blocks.h"
 #include "data.h"
 #include "garbage_collection.h"
@@ -38,6 +39,10 @@ namespace NKikimr::NBlobDepot {
                             Self->Configured = Self->Config.ParseFromString(table.GetValue<Schema::Config::ConfigProtobuf>());
                             Y_ABORT_UNLESS(Self->Configured);
                         }
+                        auto& s3 = *Self->S3Manager;
+                        s3.SetNumPutWatches(table.GetValueOrDefault<Schema::Config::NumPutWatches>());
+                        s3.NextOrphanScan = table.GetValueOrDefault<Schema::Config::NextOrphanScan>();
+                        s3.ScanMarker = table.GetValueOrDefault<Schema::Config::OrphanScanMarker>();
                         Self->DecommitState = table.GetValueOrDefault<Schema::Config::DecommitState>();
                         if (table.HaveValue<Schema::Config::AssimilatorState>()) {
                             Self->AssimilatorState.emplace(table.GetValue<Schema::Config::AssimilatorState>());

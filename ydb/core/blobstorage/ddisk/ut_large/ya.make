@@ -7,8 +7,6 @@ SPLIT_FACTOR(23)
 
 SIZE(LARGE)
 
-TAG(ya:fat)
-
 REQUIREMENTS(cpu:4 ram:8)
 
 PEERDIR(
@@ -24,5 +22,7 @@ SRCS(
     ddisk_actor_pdisk_large_ut.cpp
     ddisk_actor_pdisk_sync_ut.cpp
 )
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 END()

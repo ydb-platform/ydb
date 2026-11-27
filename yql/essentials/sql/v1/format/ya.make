@@ -17,6 +17,11 @@ PEERDIR(
     library/cpp/resource
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    extsearch/geo/tools/yql_formatter
+)
+
 END()
 
 RECURSE(

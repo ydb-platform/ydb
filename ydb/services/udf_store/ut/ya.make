@@ -3,21 +3,26 @@ UNITTEST()
 YQL_LAST_ABI_VERSION()
 
 PEERDIR(
+    library/cpp/digest/md5
     library/cpp/json
     library/cpp/resource
     library/cpp/testing/unittest
     ydb/core/protos
     ydb/library/wasm/api
     ydb/library/wasm/engine
+    ydb/public/lib/udf/manifest
     ydb/services/udf_store/wasm
     ydb/services/udf_store/wasm/object_framework
+    yql/essentials/ast
     yql/essentials/minikql
     yql/essentials/minikql/computation
+    yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )
 
 SRCS(
+    async_runtime_ut.cpp
     exact_bridge_runtime_ut.cpp
     manifest_ut.cpp
     blob_chunks_ut.cpp
@@ -39,6 +44,7 @@ SRCS(
 )
 
 RESOURCE(
+    ydb/services/udf_store/ut/data/async_coroutine.wasm /async_coroutine.wasm
     ydb/services/udf_store/ut/data/throw_with_dwarf.wasm /throw_with_dwarf.wasm
 )
 

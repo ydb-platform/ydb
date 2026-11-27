@@ -3,6 +3,7 @@ import os
 import pytest
 import yatest
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.stress.fixtures import StressFixture
 
 
@@ -27,7 +28,7 @@ class TestYdbVectorWorkload(StressFixture):
     def test(self):
         mode = yatest.common.get_param('vector_mode', default='standalone')
         data_dir = yatest.common.get_param('vector_data_dir', default=None)
-        targets = yatest.common.get_param('vector_targets', default='10000')
+        targets = yatest.common.get_param('vector_targets', default=plain_or_under_sanitizer('10000', '1000'))
         warmup = yatest.common.get_param('vector_warmup', default='0')
         rows = yatest.common.get_param('vector_rows', default='10000')
         threads = yatest.common.get_param('vector_threads', default='10')

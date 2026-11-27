@@ -8,6 +8,8 @@
 
 #include <util/string/builder.h>
 
+#include <optional>
+
 namespace NKikimr::NSysView {
 namespace {
 
@@ -32,6 +34,24 @@ TTableDescription MakeTableDescription() {
     cover->SetTypeId(NScheme::NTypeIds::Uint32);
     table.AddKeyColumnIds(1);
     table.AddKeyColumnNames("key");
+    return table;
+}
+
+TTableDescription MakeTableWithColumnFamilies(EColumnCodec codec, std::optional<i32> level = std::nullopt) {
+    auto table = MakeTableDescription();
+    table.MutableColumns(1)->SetFamily(1);
+    table.MutableColumns(1)->SetFamilyName("archive");
+    for (ui32 id : {0, 1}) {
+        auto* family = table.MutablePartitionConfig()->AddColumnFamilies();
+        family->SetId(id);
+        if (id) {
+            family->SetName("archive");
+        }
+        family->SetColumnCodec(codec);
+        if (level) {
+            family->SetColumnCodecLevel(*level);
+        }
+    }
     return table;
 }
 
@@ -94,6 +114,39 @@ void AssertQueryEqual(TFormatResult result, const TString& expected) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(CreateTableFormatter) {
+    Y_UNIT_TEST(ZstdColumnFamilyCompressionLevels) {
+        for (const i32 level : {0, 7, 22}) {
+            auto table = MakeTableWithColumnFamilies(ColumnCodecZSTD, level);
+
+            TCreateTableFormatter formatter;
+            AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}),
+                TStringBuilder() << "CREATE TABLE `table` ("
+                    << "`key` Uint64, `value` String FAMILY `archive`, `cover` Uint32, "
+                    << "FAMILY `default` (COMPRESSION = 'zstd', COMPRESSION_LEVEL = " << level << "), "
+                    << "FAMILY `archive` (COMPRESSION = 'zstd', COMPRESSION_LEVEL = " << level << "), "
+                    << "PRIMARY KEY (`key`));");
+        }
+    }
+
+    Y_UNIT_TEST(ColumnFamilyCompressionWithoutLevel) {
+        const std::pair<EColumnCodec, TString> cases[] = {
+            {ColumnCodecPlain, "off"},
+            {ColumnCodecLZ4, "lz4"},
+            {ColumnCodecZSTD, "zstd"},
+        };
+        for (const auto& [codec, compression] : cases) {
+            auto table = MakeTableWithColumnFamilies(codec);
+
+            TCreateTableFormatter formatter;
+            AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}),
+                TStringBuilder() << "CREATE TABLE `table` ("
+                    << "`key` Uint64, `value` String FAMILY `archive`, `cover` Uint32, "
+                    << "FAMILY `default` (COMPRESSION = '" << compression << "'), "
+                    << "FAMILY `archive` (COMPRESSION = '" << compression << "'), "
+                    << "PRIMARY KEY (`key`));");
+        }
+    }
+
     Y_UNIT_TEST(GlobalIndexTypes) {
         const std::pair<EIndexType, TString> cases[] = {
             {EIndexTypeGlobal, "GLOBAL SYNC"},
@@ -134,6 +187,95 @@ Y_UNIT_TEST_SUITE(CreateTableFormatter) {
             AssertQueryEqual(defaultFormatter.Format("table", "/Root/table", table, false, {}, {}), inlineQuery);
             AssertQueryEqual(disabledFormatter.Format("table", "/Root/table", table, false, {}, {}), inlineQuery);
             AssertQueryEqual(separateFormatter.Format("table", "/Root/table", table, false, {}, {}), separateQuery);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(InnerProductVectorIndex, Separate, Hnsw) {
+        auto table = MakeTableDescription();
+        auto& index = AddIndex(table, Hnsw ? EIndexTypeGlobalHnsw : EIndexTypeGlobalVectorKmeansTree);
+        index.AddDataColumnNames("cover");
+        auto* routing = Hnsw ? index.MutableHnswIndexDescription()->MutableSettings()
+                             : index.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
+        routing->set_levels(1);
+        routing->set_clusters(Hnsw ? 1 : 4);
+        auto* vector = routing->mutable_settings();
+        vector->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
+        vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        vector->set_vector_dimension(200);
+        if (Hnsw) {
+            vector->set_min_rows(0);
+            vector->set_m(24);
+            vector->set_ef_construction(64);
+            vector->set_delta_rows(100);
+        }
+        const TString declaration = TStringBuilder() << "INDEX `idx` GLOBAL USING "
+            << (Hnsw ? "hnsw" : "vector_kmeans_tree") << " ON (`value`) COVER (`cover`) "
+            << "WITH (similarity = inner_product, vector_type = 'float', vector_dimension = 200, "
+            << "clusters = " << (Hnsw ? 1 : 4) << ", levels = 1"
+            << (Hnsw ? ", min_rows = 0, M = 24, ef_construction = 64, delta_rows = 100" : "") << ")";
+        const TString columns = "`key` Uint64, `value` String, `cover` Uint32";
+        const TString expected = Separate
+            ? TStringBuilder() << "CREATE TABLE `table` (" << columns << ", PRIMARY KEY (`key`));"
+                << "ALTER TABLE `table` ADD " << declaration << ";"
+            : TStringBuilder() << "CREATE TABLE `table` (" << columns << ", " << declaration << ", PRIMARY KEY (`key`));";
+        TCreateTableFormatter formatter(Separate);
+        AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}), expected);
+    }
+
+    Y_UNIT_TEST_QUAD(VectorIndexAutoupdate, Hnsw, AutoUpdate) {
+        auto table = MakeTableDescription();
+        auto& index = AddIndex(table, Hnsw ? EIndexTypeGlobalHnsw : EIndexTypeGlobalVectorKmeansTree);
+        auto* settings = Hnsw ? index.MutableHnswIndexDescription()->MutableSettings()
+                              : index.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
+        settings->set_autoupdate(AutoUpdate);
+        settings->set_levels(1);
+        settings->set_clusters(Hnsw ? 1 : 4);
+        auto* vector = settings->mutable_settings();
+        vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
+        vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        vector->set_vector_dimension(2);
+        const TString declaration = TStringBuilder() << "INDEX `idx` GLOBAL USING "
+            << (Hnsw ? "hnsw" : "vector_kmeans_tree") << " ON (`value`) "
+            << "WITH (distance = euclidean, vector_type = 'float', vector_dimension = 2, clusters = "
+            << (Hnsw ? 1 : 4) << ", levels = 1, autoupdate = " << (AutoUpdate ? "true" : "false") << ")";
+        const TString columns = "`key` Uint64, `value` String, `cover` Uint32";
+        for (const bool separate : {false, true}) {
+            const TString expected = separate
+                ? TStringBuilder() << "CREATE TABLE `table` (" << columns << ", PRIMARY KEY (`key`));"
+                    << "ALTER TABLE `table` ADD " << declaration << ";"
+                : TStringBuilder() << "CREATE TABLE `table` (" << columns << ", " << declaration << ", PRIMARY KEY (`key`));";
+            TCreateTableFormatter formatter(separate);
+            AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}), expected);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(VectorIndexAdaptiveClusters, Hnsw, Adaptive) {
+        auto table = MakeTableDescription();
+        auto& index = AddIndex(table, Hnsw ? EIndexTypeGlobalHnsw : EIndexTypeGlobalVectorKmeansTree);
+        index.ClearKeyColumnNames();
+        index.AddKeyColumnNames("cover");
+        index.AddKeyColumnNames("value");
+        auto* settings = Hnsw ? index.MutableHnswIndexDescription()->MutableSettings()
+                              : index.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
+        settings->set_adaptive_clusters(Adaptive);
+        settings->set_levels(1);
+        settings->set_clusters(4);
+        auto* vector = settings->mutable_settings();
+        vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
+        vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        vector->set_vector_dimension(2);
+        const TString declaration = TStringBuilder() << "INDEX `idx` GLOBAL USING "
+            << (Hnsw ? "hnsw" : "vector_kmeans_tree") << " ON (`cover`, `value`) "
+            << "WITH (distance = euclidean, vector_type = 'float', vector_dimension = 2, "
+            << "clusters = 4, levels = 1, adaptive_clusters = " << (Adaptive ? "true" : "false") << ")";
+        const TString columns = "`key` Uint64, `value` String, `cover` Uint32";
+        for (const bool separate : {false, true}) {
+            const TString expected = separate
+                ? TStringBuilder() << "CREATE TABLE `table` (" << columns << ", PRIMARY KEY (`key`));"
+                    << "ALTER TABLE `table` ADD " << declaration << ";"
+                : TStringBuilder() << "CREATE TABLE `table` (" << columns << ", " << declaration << ", PRIMARY KEY (`key`));";
+            TCreateTableFormatter formatter(separate);
+            AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}), expected);
         }
     }
 

@@ -11,6 +11,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     datashard_ut_common.cpp
     datashard_ut_common.h
+    database_freeze.h
     datashard_ut_common_tx.cpp
     datashard_ut_common_tx.h
 )

@@ -2,7 +2,6 @@
 
 #include "blobstorage_hullwritesst.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_fullsyncsst_add.h>
-#include <ydb/core/util/stlog.h>
 
 namespace NKikimr {
 
@@ -94,7 +93,9 @@ protected:
             PDiskCtx->Dsk->AppendBlockSize,
             (ui32)PDiskCtx->Dsk->BulkWriteBlockSize,
             ChunkIdx,
-            MsgQueue);
+            MsgQueue,
+            0,
+            PDiskCtx.get());
     }
 
 public:

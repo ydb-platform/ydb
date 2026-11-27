@@ -73,6 +73,9 @@ struct TTransactionAttachOptions
     //! Throws if the transaction is not sticky actually.
     //! Only supported by RPC proxy client for now. Ignored by other clients.
     std::optional<std::string> StickyAddress;
+
+    //! Require a supplied sticky address to belong to this RPC proxy connection.
+    bool ValidateStickyAddress = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

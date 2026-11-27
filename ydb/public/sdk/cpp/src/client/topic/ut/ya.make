@@ -1,10 +1,13 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/coverage.inc)
+
 REQUIREMENTS(ram:32 cpu:1)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(cpu:4)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -33,6 +36,7 @@ SRCS(
     read_session_kafka_timestamps_ut.cpp
     reset_offset_ut.cpp
     topic_deferred_publish_ut.cpp
+    topic_path_ut.cpp
     topic_to_table_ut.cpp
     topic_tx_skip_conflict_ut.cpp
     write_session_connect_ut.cpp

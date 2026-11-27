@@ -27,7 +27,6 @@
 
 #include <ydb/public/api/grpc/draft/ydb_ymq_v1.pb.h>
 
-#include <ydb/core/client/server/grpc_base.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
@@ -137,6 +136,7 @@ namespace NKikimr::NSqsTopic::V1 {
                     .PeerName = this->Request_->GetPeerName(),
                     .Path = MutationPath_,
                     .UserToken = this->GetUserToken(),
+                    .EnableRelativePaths = true,
                 }));
             } else {
                 Ydb::Topic::AlterTopicRequest request;

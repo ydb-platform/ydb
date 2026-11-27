@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/datashard)
 
-FORK_SUBTESTS()
-
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -10,6 +8,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/core/tablet_flat/base
     ydb/core/tx/datashard/ut_common
     library/cpp/getopt
     library/cpp/regex/pcre

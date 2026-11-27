@@ -24,7 +24,7 @@ TSet<TString> ListChecks(const TMaybe<TVector<TCheckFilter>>& filters) {
     NAbi::NProto::TLinterRequest request;
     request.SetListOnly(true);
     NAbi::EncodeFilters(filters, request);
-    const auto result = Invoke(request, nullptr);
+    const auto result = Invoke(request, /*metadata=*/nullptr);
     return {result.GetCheckNames().begin(), result.GetCheckNames().end()};
 }
 

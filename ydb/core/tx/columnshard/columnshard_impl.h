@@ -1,7 +1,6 @@
 #pragma once
 #include "background_controller.h"
 #include "columnshard.h"
-#include "columnshard_find_empty_history_intervals.h"
 #include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
 #include "counters.h"
@@ -23,9 +22,13 @@
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
 #include "engines/reader/transaction/scan_gate.h"
+#include "loading/deferred_portion_loader.h"
+#include "local_db_backup/events.h"
+#include "maintenance/cut_history/find_empty_history_intervals.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
+#include "operations/write_gate.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
@@ -140,7 +143,6 @@ class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
 class TTxBlobsWritingFailed;
-class TWriteTasksQueue;
 class TWriteTask;
 class TCommitOperation;
 class IScanSnapshotGuard;
@@ -198,6 +200,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInit;
+    friend class TTxLoadPortionsBatch;
     friend class TTxCleanupSchemasWithnoData;
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;
@@ -218,7 +221,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
     friend class TTxSaveCutHistoryRequests;
-    friend class TFindEmptyHistoryIntervalsResultProcessor;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitOnProposeTxSubscriberBase;
@@ -278,7 +280,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NLoading::TSpecialValuesInitializer;
     friend class NLoading::TTablesManagerInitializer;
     friend class NLoading::TTiersManagerInitializer;
-    friend class TWriteTasksQueue;
     friend class TWriteTask;
 
     class TTxProgressTx;
@@ -305,6 +306,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::TEvPassWriteGate::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorContext& ctx);
@@ -314,7 +316,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& ev);
-    void Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
@@ -322,6 +323,15 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
+
+    // Manual backup of the local DB (tablet_flat) to S3, triggered from the App page. The logic lives in
+    // NLocalDbBackup::TLocalDbBackupActor; the tablet only forwards the page and serves the executor-bound requests.
+    bool HandleLocalDbBackupPage(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLocalDbBackup::TEvStartBackup::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLocalDbBackup::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
+    void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext& ctx) override;
+    void CancelLocalDbBackupScans();
+    void StopLocalDbBackup(const TActorContext& ctx);
 
     void Handle(TAutoPtr<NActors::TEventHandle<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>>& ev);
     void Handle(TAutoPtr<NActors::TEventHandle<NConsole::TEvConsole::TEvConfigNotificationRequest>>& ev);
@@ -384,6 +394,11 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void BecomeBroken(const TActorContext& ctx);
     void TrySwitchToWork(const TActorContext& ctx);
 
+    void StartDeferredPortionLoading(const TActorContext& ctx);
+    void ContinueDeferredPortionLoading(const TActorContext& ctx);
+    void OnPortionsBatchLoaded(TDeferredPortionLoader::TBatch&& batch, const TActorContext& ctx);
+    void OnAllPortionsLoaded(const TActorContext& ctx);
+
     bool IsAnyChannelYellowStop() const {
         return Executor()->GetStats().IsAnyChannelYellowStop;
     }
@@ -443,11 +458,11 @@ public:
     }
 
 private:
+    void DrainWriteQueue(const TActorContext& ctx, const bool isRetryWakeup = false);
+    void FailStartedWrite(const NOlap::TEvPassWriteGate& batch, const NKikimrDataEvents::TEvWriteResult::EStatus status, const TString& reason,
+        const TActorContext& ctx);
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
-    TOverloadStatus ResourcesStatusToOverloadStatus(const NOverload::EResourcesStatus status) const;
-    TOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
-    EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
 
 protected:
     STFUNC(StateInit) {
@@ -475,7 +490,6 @@ private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
     TStartupTimeline StartupTimeline;
-    std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;
 
     std::unique_ptr<TTxController> ProgressTxController;
     std::unique_ptr<TOperationsManager> OperationsManager;
@@ -483,6 +497,7 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
     std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
+    std::shared_ptr<TShardDataStats> DataStats;
 
     ui64 PrioritizationClientId = 0;
 
@@ -526,6 +541,8 @@ private:
     // Local CMS snapshot of ColumnShardConfig. Heap-allocated so this header
     // does not need a complete NKikimrConfig::TColumnShardConfig / config.pb.h.
     std::unique_ptr<NKikimrConfig::TColumnShardConfig> ColumnShardConfig;
+    TActorId LocalDbBackupActorId;   // created lazily on the first visit of the page
+    THashMap<NLocalDbBackup::TTableId, ui64> LocalDbBackupScans;   // tableId -> QueueScan taskId
     std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
@@ -536,7 +553,11 @@ private:
     bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     NOlap::NReader::TScanGate ScanGate;
+    std::optional<TWriteGate> WriteGate;
+    TDeferredPortionLoader DeferredPortionLoader;
     TBackgroundController BackgroundController;
+    std::unique_ptr<TFindEmptyHistoryIntervals> FindEmptyHistoryIntervals;
+    std::optional<ui32> FirstGCBarrierGeneration;
     TSettings Settings;
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
@@ -549,16 +570,22 @@ private:
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
 
-    // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
-    // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
-    // TEvCompactTable. Each waiter is answered with OK once the table has no intersecting portions.
+    // The held forced compaction request (ALTER TABLE ... COMPACT), at most one: the shard hosts a single standalone
+    // table and a repeated request supersedes the held one. In memory only, the schemeshard re-sends the request after
+    // a restart. Answered OK once nothing is left to compact and, for CASCADE, to rewrite.
     struct TForcedCompactionWaiter {
+        TInternalPathId InternalPathId;
         TActorId Sender;
         ui64 Cookie = 0;
         TPathId SchemePathId;
     };
 
-    THashMap<TInternalPathId, std::vector<TForcedCompactionWaiter>> ForcedCompactionWaiters;
+    std::optional<TForcedCompactionWaiter> ForcedCompactionWaiter;
+    // the forced compaction served (TEvCompactTable::TxId): the same id again is a retry, another one a new forced
+    // compaction; nullopt also for an operation started without an id
+    std::optional<ui64> ForcedCompactionTxId;
+    bool ForcedCompactionActualizeSchema = false;   // its Cascade: the reply also waits for the rewrite
+    void FinishForcedCompactionActualization();
     ui32 JitterIntervalMS = 200;
     ui32 BaseStatsEvInflight = 0;
     ui32 ExecutorStatsEvInflight = 0;
@@ -611,14 +638,7 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
-    std::optional<TEmptyHistoryIntervalsScan> EmptyHistoryIntervalsScan;
-    void InitFindEmptyHistoryIntervals();
-    void StartFindEmptyHistoryIntervals(const TActorContext& ctx);
-    void AbortFindEmptyHistoryIntervals();
-    void FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccessorsResult& result);
-    void TryCutHistory(const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvContinueFindEmptyHistoryIntervals::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx);
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
     bool SetupTtl();
@@ -638,12 +658,6 @@ private:
     void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
 
-    // We assume that all the blob storage groups for a database have the same layout (erasure, etc.)
-    std::optional<NKikimr::TBlobStorageGroupType> BlobStorageLayout;
-    const std::optional<NKikimr::TBlobStorageGroupType>& GetBlobStorageLayout();
-
-    ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
-
 public:
     ui64 TabletTxCounter = 0;
 
@@ -654,6 +668,9 @@ public:
     const TTablesManager& GetTablesManager() const {
         return TablesManager;
     }
+
+    void OnFirstGC(ui32 completedBarrierGeneration, const TActorContext& ctx);
+    void TryStartFindEmptyHistoryIntervals(const TActorContext& ctx);
 
     void EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId = 0);
 
@@ -695,7 +712,7 @@ public:
     }
 
     const NOlap::IColumnEngine& GetIndexVerified() const {
-        AFL_VERIFY(TablesManager.GetPrimaryIndex());
+        YDB_LOG_VERIFY(TablesManager.GetPrimaryIndex());
         return *TablesManager.GetPrimaryIndex();
     }
 
@@ -705,13 +722,18 @@ public:
     }
 
     TTxController& GetProgressTxController() const {
-        AFL_VERIFY(ProgressTxController);
+        YDB_LOG_VERIFY(ProgressTxController);
         return *ProgressTxController;
     }
 
     TOperationsManager& GetOperationsManager() const {
-        AFL_VERIFY(OperationsManager);
+        YDB_LOG_VERIFY(OperationsManager);
         return *OperationsManager;
+    }
+
+    TWriteGate& GetWriteGate() {
+        YDB_LOG_VERIFY(WriteGate);
+        return *WriteGate;
     }
 
     bool HasIndex() const {
@@ -731,12 +753,12 @@ public:
     }
 
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
         return StoragesManager;
     }
 
     const std::shared_ptr<NOlap::NDataLocks::TManager>& GetDataLocksManager() const {
-        AFL_VERIFY(DataLocksManager);
+        YDB_LOG_VERIFY(DataLocksManager);
         return DataLocksManager;
     }
 

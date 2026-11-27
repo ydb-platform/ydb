@@ -43,6 +43,7 @@ void ToOperation(const NKikimrAnalyzeOp::TAnalyzeOperation& op, Ydb::Operations:
 void ToOperation(const NKikimrSetColumnConstraint::TSetColumnConstraint& constraint, Ydb::Operations::Operation* operation);
 bool TryGetId(const NOperationId::TOperationId& operationId, ui64& id);
 bool TryGetUlidId(const NOperationId::TOperationId& operationId, TString& binaryId);
+bool TryGetReassignTabletsId(const NOperationId::TOperationId& operationId, ui64& hiveId, ui64& generation, ui64& reassignId);
 
 
 } // namespace NGRpcService

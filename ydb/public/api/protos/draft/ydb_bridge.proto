@@ -32,9 +32,12 @@ message SetDatabaseBridgeModeResult {}
 message GetClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
-    // Also query static-node connectivity, without requiring BSC or tablets.
+    // For a bridge state snapshot, also query static-node connectivity through distconf.
     // An older node in the forwarding path may reject this optional query.
     bool include_pile_connectivity = 2;
+
+    // If the cluster has no bridge state, collect the node configuration report. This requires administrator privileges.
+    bool include_unbridged_status = 3;
 }
 
 message GetClusterStateResponse {
@@ -49,10 +52,174 @@ message GetClusterStateResult {
     // Set after the cluster has been converted from a non-bridged one, until all its storage groups are converted
     // too; no piles can be added to the cluster meanwhile
     bool conversion_in_progress = 3;
-    // Operation changing the set of piles of the cluster that is not finished yet
+    // Pending pile operation or rollback to ordinary mode.
     optional PendingPileOperation pending_pile_operation = 4;
     optional PileConnectivityReport pile_connectivity = 5;
+    // A report-only response for a cluster without bridge state. Pile states and generation apply to bridge snapshots.
+    UnbridgedStatus unbridged_status = 6;
 }
+
+message UnbridgedStatus {
+    // Nodes that reported running with bridge config.
+    repeated uint32 bridge_config_node_ids = 1;
+    // Configured static nodes whose configuration was not observed.
+    repeated uint32 unreported_static_node_ids = 2;
+}
+
+// Administrator-only diagnostics; complete results or an error.
+message ListPileSynchronizationRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message ListPileSynchronizationResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListPileSynchronizationResult {
+    repeated PileSynchronization piles = 1;
+    uint64 cluster_state_generation = 2;
+    google.protobuf.Timestamp observed_at = 3;
+    // Pools whose database cannot be identified; excluded from totals.
+    uint64 unattributed_storage_pools = 4;
+}
+
+message ListDatabaseSynchronizationRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Absolute path; serverless selects shared storage.
+    optional string database_path = 2;
+    // Unset: all piles; empty: the pile named "".
+    optional string pile_name = 3;
+    // Skip synchronized databases and those with no required groups.
+    bool only_incomplete = 4;
+    // Filter by the aggregate mode of all database pools.
+    optional StorageMode storage_mode = 5;
+}
+
+message ListDatabaseSynchronizationResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListDatabaseSynchronizationResult {
+    // Storage-owning databases, not all logical serverless databases.
+    repeated DatabaseSynchronization databases = 1;
+    uint64 cluster_state_generation = 2;
+    google.protobuf.Timestamp observed_at = 3;
+    // Resolved owner, also returned for an empty selection.
+    optional string storage_owner_database_path = 4;
+}
+
+message ListGroupSynchronizationRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Unset: all groups. Paths/names must be nonempty; ambiguous pool names require IDs.
+    oneof scope {
+        string database_path = 2;
+        string storage_pool_name = 3;
+        StoragePoolId storage_pool_id = 4;
+    }
+    // Unset: all piles; empty: the pile named "".
+    optional string pile_name = 5;
+    // Empty: all statuses; otherwise OR. Unspecified is invalid.
+    repeated SynchronizationStatus statuses = 6;
+}
+
+message ListGroupSynchronizationResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListGroupSynchronizationResult {
+    repeated GroupSynchronization groups = 1;
+    uint64 cluster_state_generation = 2;
+    google.protobuf.Timestamp observed_at = 3;
+    optional string storage_owner_database_path = 4;
+}
+
+message StoragePoolId {
+    uint64 box_id = 1;
+    // Nonzero; box_id may be zero.
+    uint64 pool_id = 2;
+}
+
+message StoragePool {
+    StoragePoolId id = 1;
+    string name = 2;
+}
+
+enum StorageMode {
+    STORAGE_MODE_UNSPECIFIED = 0;
+    BRIDGED = 1;
+    ORDINARY = 2;
+    MIXED = 3;
+}
+
+enum SynchronizationStatus {
+    SYNCHRONIZATION_STATUS_UNSPECIFIED = 0;
+    SYNCED = 1;
+    SYNCING = 2;
+    PENDING = 3; // Required, but not running.
+    // No bridge synchronization required, including ordinary storage and inactive piles.
+    NOT_REQUIRED = 4;
+    UNKNOWN = 5; // Insufficient observations.
+}
+
+// Required groups only: required = synced + syncing + pending + unknown.
+message GroupSyncCounts {
+    uint64 required = 1;
+    uint64 synced = 2;
+    uint64 syncing = 3;
+    uint64 pending = 4;
+    uint64 unknown = 5;
+}
+
+// One known storage owner per pile; shared storage counts once.
+// total = synced + syncing + pending + unknown + not_required.
+message DatabaseSyncCounts {
+    uint64 total = 1;
+    uint64 synced = 2;
+    uint64 syncing = 3;
+    uint64 pending = 4;
+    uint64 unknown = 5;
+    uint64 not_required = 6;
+}
+
+message PileSynchronization {
+    // Unset: unknown placement; empty: the real pile named "".
+    optional string pile_name = 1;
+    DatabaseSyncCounts databases = 2;
+}
+
+// Last error; may remain while synchronization is running.
+message SynchronizationError {
+    string message = 1;
+    google.protobuf.Timestamp occurred_at = 2;
+}
+
+message DatabaseSynchronization {
+    // Storage owner path, if known.
+    optional string database_path = 1;
+    repeated StoragePool storage_pools = 2;
+    StorageMode storage_mode = 3;
+    // Unset if placement is unknown.
+    optional string pile_name = 4;
+    // Mixed mode counts only bridged pools.
+    GroupSyncCounts groups = 5;
+    SynchronizationError last_sync_error = 6;
+}
+
+message GroupSynchronization {
+    // ID used by tablets.
+    uint32 group_id = 1;
+    // Physical group ID, if known.
+    optional uint32 physical_group_id = 2;
+    // Unset for groups outside dynamic pools.
+    StoragePool storage_pool = 3;
+    // One row per pile; unset if placement is unknown.
+    optional string pile_name = 4;
+    SynchronizationStatus sync_status = 5;
+    // Diagnostic phase; use sync_status for programmatic checks.
+    string sync_phase = 6;
+    SynchronizationError last_sync_error = 7;
+}
+
 
 message PileConnectivity {
     string pile_name = 1;
@@ -93,6 +260,8 @@ message PendingPileOperation {
         ADD = 1;
         // The pile is being removed from the cluster: its storage groups are being deleted
         REMOVE = 2;
+        // The cluster is being rolled back to ordinary one: its storage groups are being made ordinary ones
+        ROLLBACK = 3;
     }
     string pile_name = 1;
     Kind kind = 2;
@@ -175,6 +344,54 @@ message RemovePileResponse {
 }
 
 message RemovePileResult {
+}
+
+// Report how far the rollback of a cluster prepared for bridge mode has gone. Such cluster (its nodes run with a
+// single-pile bridge config, but it has not been converted into a bridged one) gets back to ordinary mode when the bridge
+// config, along with the pile names of hosts, is removed from the cluster configuration in a single change, and every
+// node is restarted without them (dynamic nodes without their pile names too); Hive and NodeBroker drop the piles of
+// nodes by themselves then. Dynamic nodes not connected to the cluster are not reported. Administrator privileges are
+// required.
+message GetRollbackStatusRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message GetRollbackStatusResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetRollbackStatusResult {
+    // The cluster is a bridged one; see Rollback, the cluster state goes away when it finishes.
+    bool bridged = 1;
+    // Connected nodes still running with a bridge config; they have to be restarted without one.
+    repeated uint32 bridge_config_node_ids = 2;
+    // Static nodes that have not reported their config, as they are not running or not connected.
+    repeated uint32 unreported_static_node_ids = 3;
+    // The cluster is ordinary, and all static and connected dynamic nodes run without bridge config.
+    bool complete = 4;
+    // The rollback of the bridged cluster is in progress: storage groups are being made ordinary ones.
+    bool rollback_in_progress = 5;
+    // Why the last attempt to make storage groups ordinary ones has failed; it is retried meanwhile.
+    string error_reason = 6;
+}
+
+// Roll a converted cluster back to ordinary mode while the original pile is the only pile and every bridged storage
+// group is inline in it (has its own VDisks there and no parts elsewhere). Static storage groups become
+// ordinary ones by the call, the storage controller does the same to its groups afterwards, then the cluster state is
+// removed; see GetRollbackStatusResult. The cluster is prepared for bridge mode then, and gets back to ordinary mode
+// as GetRollbackStatusRequest describes.
+message RollbackRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Don't ask the storage controller whether it can make its groups ordinary ones before static groups are made such.
+    // This is for the case when it can't start, as it relies on static groups; it reports what blocks it then.
+    bool skip_bsc_validation = 2;
+}
+
+message RollbackResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message RollbackResult {
 }
 
 message BridgeHistoryEvent {

@@ -1,6 +1,7 @@
 #include "kqp_schedulable_task.h"
 
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -17,14 +18,27 @@ TSchedulableTask::~TSchedulableTask() {
     --Query->CpuMaxDemand;
 }
 
-void TSchedulableTask::RegisterForResume(const TActorId& actorId) {
+void TSchedulableTask::RegisterForResume(const NActors::TActorId& actorId) {
     Y_ENSURE(!Iterator);
-    Iterator = Query->AddTask(shared_from_this());
     ActorId = actorId;
+    Iterator = Query->AddTask(shared_from_this());
 }
 
-void TSchedulableTask::Resume() {
-    NActors::TActivationContext::Send(ActorId, GetResumeEvent());
+void TSchedulableTask::RegisterForResume(std::function<void()> resume) {
+    Y_ENSURE(!Iterator && resume);
+    ResumeCallback = std::move(resume);
+    Iterator = Query->AddTask(shared_from_this());
+}
+
+bool TSchedulableTask::TryResume() {
+    if (ResumeCallback) {
+        ResumeCallback();
+    } else if (NActors::TlsActivationContext) {
+        NActors::TActivationContext::Send(ActorId, GetResumeEvent());
+    } else {
+        return false;
+    }
+    return true;
 }
 
 bool TSchedulableTask::TryIncreaseUsage() {
@@ -40,11 +54,11 @@ bool TSchedulableTask::TryIncreaseUsage() {
         if (fairShare == 0 && snapshot->CpuMaxDemand == 0) {
             auto prevMaxDemand = snapshot->CpuMaxDemand.fetch_add(1);
             if (prevMaxDemand == 0) {
-                fairShare = Query->AllowMinFairShare;
+                fairShare = Query->GetAllowMinFairShare();
             }
         }
     } else { // The pool of the query is not in the snapshot yet - see TQuery::InitSnapshot().
-        fairShare = Query->AllowMinFairShare;
+        fairShare = Query->GetAllowMinFairShare();
         poolOrQuery = Query.get();
     }
 

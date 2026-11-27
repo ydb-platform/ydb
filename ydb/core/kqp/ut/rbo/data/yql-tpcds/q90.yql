@@ -10,13 +10,13 @@ FROM (
     SELECT
         Count(*) AS amc
     FROM
-        `/Root/test/ds/web_sales` as web_sales
+        `web_sales` as web_sales
     ,
-        `/Root/test/ds/household_demographics` as household_demographics
+        `household_demographics` as household_demographics
     ,
-        `/Root/test/ds/time_dim` as time_dim
+        `time_dim` as time_dim
     ,
-        `/Root/test/ds/web_page` as web_page
+        `web_page` as web_page
     WHERE
         ws_sold_time_sk == time_dim.t_time_sk
         AND ws_ship_hdemo_sk == household_demographics.hd_demo_sk
@@ -29,13 +29,13 @@ FROM (
     SELECT
         1 + Count(*) AS pmc
     FROM
-        `/Root/test/ds/web_sales` as web_sales
+        `web_sales` as web_sales
     ,
-        `/Root/test/ds/household_demographics` as household_demographics
+        `household_demographics` as household_demographics
     ,
-        `/Root/test/ds/time_dim` as time_dim
+        `time_dim` as time_dim
     ,
-        `/Root/test/ds/web_page` as web_page
+        `web_page` as web_page
     WHERE
         ws_sold_time_sk == time_dim.t_time_sk
         AND ws_ship_hdemo_sk == household_demographics.hd_demo_sk

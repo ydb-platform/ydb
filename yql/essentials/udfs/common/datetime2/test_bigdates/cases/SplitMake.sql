@@ -1,4 +1,15 @@
-/* syntax version 1 */
+-- Use casts throughout this boundary fixture to preserve NULL for out-of-range inputs.
+$rows = [
+    <|fdate32: CAST("-144169-01-01" AS Date32), fdatetime64: CAST("-144169-01-01T00:00:00Z" AS Datetime64), ftimestamp64: CAST("-144169-01-01T00:00:00.000000Z" AS Timestamp64), ftzpdate32: CAST("-144169-01-01,Europe/Moscow" AS TzDate32), ftzpdatetime64: CAST("-144169-01-01T00:00:00,Europe/Moscow" AS TzDatetime64), ftzptimestamp64: CAST("-144169-01-01T00:00:00.000000,Europe/Moscow" AS TzTimestamp64), ftzmdate32: CAST("-144169-01-01,America/Los_Angeles" AS TzDate32), ftzmdatetime64: CAST("-144169-01-01T00:00:00,America/Los_Angeles" AS TzDatetime64), ftzmtimestamp64: CAST("-144169-01-01T00:00:00.000000,America/Los_Angeles" AS TzTimestamp64)|>,
+    <|fdate32: CAST("-1-01-01" AS Date32), fdatetime64: CAST("-1-01-01T23:59:59Z" AS Datetime64), ftimestamp64: CAST("-1-01-01T23:59:59.999999Z" AS Timestamp64), ftzpdate32: CAST("-1-01-01,Europe/Moscow" AS TzDate32), ftzpdatetime64: CAST("-1-01-01T23:59:59,Europe/Moscow" AS TzDatetime64), ftzptimestamp64: CAST("-1-01-01T23:59:59.999999,Europe/Moscow" AS TzTimestamp64), ftzmdate32: CAST("-1-01-01,America/Los_Angeles" AS TzDate32), ftzmdatetime64: CAST("-1-01-01T23:59:59,America/Los_Angeles" AS TzDatetime64), ftzmtimestamp64: CAST("-1-01-01T23:59:59.999999,America/Los_Angeles" AS TzTimestamp64)|>,
+    <|fdate32: CAST("1-01-01" AS Date32), fdatetime64: CAST("1-01-01T00:00:00Z" AS Datetime64), ftimestamp64: CAST("1-01-01T00:00:00.000000Z" AS Timestamp64), ftzpdate32: CAST("1-01-01,Europe/Moscow" AS TzDate32), ftzpdatetime64: CAST("1-01-01T00:00:00,Europe/Moscow" AS TzDatetime64), ftzptimestamp64: CAST("1-01-01T00:00:00.000000,Europe/Moscow" AS TzTimestamp64), ftzmdate32: CAST("1-01-01,America/Los_Angeles" AS TzDate32), ftzmdatetime64: CAST("1-01-01T00:00:00,America/Los_Angeles" AS TzDatetime64), ftzmtimestamp64: CAST("1-01-01T00:00:00.000000,America/Los_Angeles" AS TzTimestamp64)|>,
+    <|fdate32: CAST("1969-12-31" AS Date32), fdatetime64: CAST("1969-12-31T23:59:59Z" AS Datetime64), ftimestamp64: CAST("1969-12-31T23:59:59.999999Z" AS Timestamp64), ftzpdate32: CAST("1969-12-31,Europe/Moscow" AS TzDate32), ftzpdatetime64: CAST("1969-12-31T23:59:59,Europe/Moscow" AS TzDatetime64), ftzptimestamp64: CAST("1969-12-31T23:59:59.999999,Europe/Moscow" AS TzTimestamp64), ftzmdate32: CAST("1969-12-31,America/Los_Angeles" AS TzDate32), ftzmdatetime64: CAST("1969-12-31T23:59:59,America/Los_Angeles" AS TzDatetime64), ftzmtimestamp64: CAST("1969-12-31T23:59:59.999999,America/Los_Angeles" AS TzTimestamp64)|>,
+    <|fdate32: CAST("1970-01-01" AS Date32), fdatetime64: CAST("1970-01-01T00:00:00Z" AS Datetime64), ftimestamp64: CAST("1970-01-01T00:00:00.000000Z" AS Timestamp64), ftzpdate32: CAST("1970-01-01,Europe/Moscow" AS TzDate32), ftzpdatetime64: CAST("1970-01-01T00:00:00,Europe/Moscow" AS TzDatetime64), ftzptimestamp64: CAST("1970-01-01T00:00:00.000000,Europe/Moscow" AS TzTimestamp64), ftzmdate32: CAST("1970-01-01,America/Los_Angeles" AS TzDate32), ftzmdatetime64: CAST("1970-01-01T00:00:00,America/Los_Angeles" AS TzDatetime64), ftzmtimestamp64: CAST("1970-01-01T00:00:00.000000,America/Los_Angeles" AS TzTimestamp64)|>,
+    <|fdate32: CAST("2025-01-01" AS Date32), fdatetime64: CAST("2025-01-01T00:00:00Z" AS Datetime64), ftimestamp64: CAST("2025-01-01T00:00:00.000000Z" AS Timestamp64), ftzpdate32: CAST("2025-01-01,Europe/Moscow" AS TzDate32), ftzpdatetime64: CAST("2025-01-01T00:00:00,Europe/Moscow" AS TzDatetime64), ftzptimestamp64: CAST("2025-01-01T00:00:00.000000,Europe/Moscow" AS TzTimestamp64), ftzmdate32: CAST("2025-01-01,America/Los_Angeles" AS TzDate32), ftzmdatetime64: CAST("2025-01-01T00:00:00,America/Los_Angeles" AS TzDatetime64), ftzmtimestamp64: CAST("2025-01-01T00:00:00.000000,America/Los_Angeles" AS TzTimestamp64)|>,
+    <|fdate32: CAST("2106-01-01" AS Date32), fdatetime64: CAST("2106-01-01T00:00:00Z" AS Datetime64), ftimestamp64: CAST("2106-01-01T00:00:00.000000Z" AS Timestamp64), ftzpdate32: CAST("2106-01-01,Europe/Moscow" AS TzDate32), ftzpdatetime64: CAST("2106-01-01T00:00:00,Europe/Moscow" AS TzDatetime64), ftzptimestamp64: CAST("2106-01-01T00:00:00.000000,Europe/Moscow" AS TzTimestamp64), ftzmdate32: CAST("2106-01-01,America/Los_Angeles" AS TzDate32), ftzmdatetime64: CAST("2106-01-01T00:00:00,America/Los_Angeles" AS TzDatetime64), ftzmtimestamp64: CAST("2106-01-01T00:00:00.000000,America/Los_Angeles" AS TzTimestamp64)|>,
+    <|fdate32: CAST("148107-12-31" AS Date32), fdatetime64: CAST("148107-12-31T23:59:59Z" AS Datetime64), ftimestamp64: CAST("148107-12-31T23:59:59.999999Z" AS Timestamp64), ftzpdate32: CAST("148107-12-31,Europe/Moscow" AS TzDate32), ftzpdatetime64: CAST("148107-12-31T23:59:59,Europe/Moscow" AS TzDatetime64), ftzptimestamp64: CAST("148107-12-31T23:59:59.999999,Europe/Moscow" AS TzTimestamp64), ftzmdate32: CAST("148107-12-31,America/Los_Angeles" AS TzDate32), ftzmdatetime64: CAST("148107-12-31T23:59:59,America/Los_Angeles" AS TzDatetime64), ftzmtimestamp64: CAST("148107-12-31T23:59:59.999999,America/Los_Angeles" AS TzTimestamp64)|>,
+];
+
 SELECT
     DateTime::MakeDate32(DateTime::Split(fdate32)) AS rdate32,
     DateTime::MakeDatetime64(DateTime::Split(fdatetime64)) AS rdatetime64,
@@ -9,16 +20,4 @@ SELECT
     DateTime::MakeTzDate32(DateTime::Split(ftzmdate32)) AS rtzmdate32,
     DateTime::MakeTzDatetime64(DateTime::Split(ftzmdatetime64)) AS rtzmdatetime64,
     DateTime::MakeTzTimestamp64(DateTime::Split(ftzmtimestamp64)) AS rtzmtimestamp64,
-FROM (
-    SELECT
-        CAST(fdate32 AS Date32) AS fdate32,
-        CAST(fdatetime64 AS Datetime64) AS fdatetime64,
-        CAST(ftimestamp64 AS Timestamp64) AS ftimestamp64,
-        CAST(ftzpdate32 AS TzDate32) AS ftzpdate32,
-        CAST(ftzpdatetime64 AS TzDatetime64) AS ftzpdatetime64,
-        CAST(ftzptimestamp64 AS TzTimestamp64) AS ftzptimestamp64,
-        CAST(ftzmdate32 AS TzDate32) AS ftzmdate32,
-        CAST(ftzmdatetime64 AS TzDatetime64) AS ftzmdatetime64,
-        CAST(ftzmtimestamp64 AS TzTimestamp64) AS ftzmtimestamp64,
-    FROM Input
-);
+FROM AS_TABLE($rows);

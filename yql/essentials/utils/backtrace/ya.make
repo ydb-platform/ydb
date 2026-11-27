@@ -4,6 +4,7 @@ SRCS(
     backtrace.cpp
     backtrace_lib.cpp
     symbolize.cpp
+    symbolizer.cpp
 )
 
 PEERDIR(
@@ -28,6 +29,15 @@ ELSE()
         backtrace_dummy.cpp
     )
 ENDIF()
+
+PEERDIR_FROM_POLICY(
+    ALLOW
+    ads/core/tools/unified_agent
+    logbroker/unified_agent
+    sdg/infra/sdc-unified-agent
+    alice/rtlog/agent
+    robot/rthub
+)
 
 END()
 

@@ -169,7 +169,9 @@ class PackageJson(object):
 
     def validate_prebuilds(self, common_overrides=None):
         pnpm_overrides = dict(common_overrides or {})
-        pnpm_overrides.update(self.data.get("pnpm", {}).get("overrides", {}))
+        from .common_config import load_local_config
+
+        pnpm_overrides.update(load_local_config(self).get("overrides", {}))
         use_prebuild_flags = self.data.get("@yatool/prebuilder", {}).get("usePrebuild", {})
         missing_overrides = [
             key for key, enabled in use_prebuild_flags.items() if enabled and key not in pnpm_overrides
@@ -181,4 +183,6 @@ class PackageJson(object):
         return (not messages, messages)
 
     def get_pnpm_patched_dependencies(self) -> dict[str, str]:
-        return self.data.get("pnpm", {}).get("patchedDependencies", {})
+        from .common_config import load_local_config
+
+        return load_local_config(self).get("patchedDependencies", {})

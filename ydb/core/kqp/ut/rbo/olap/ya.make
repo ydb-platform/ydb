@@ -9,6 +9,7 @@ REQUIREMENTS(cpu:2)
 SRCS(
     kqp_rbo_olap_distinct_ut.cpp
     kqp_rbo_olap_ut.cpp
+    olap_json_ilike_ut.cpp
 )
 
 PEERDIR(

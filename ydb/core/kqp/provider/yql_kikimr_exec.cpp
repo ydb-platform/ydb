@@ -551,6 +551,8 @@ namespace {
 
             if (name == "important") {
                 protoConsumer->set_important(GetBoolValue(setting));
+            } else if (name == "replicate_offsets") {
+                protoConsumer->set_replicate_offsets(GetBoolValue(setting));
             } else if (name == "setAvailabilityPeriod"sv) {
                 auto period = GetIntervalValue(setting);
                 protoConsumer->mutable_availability_period()->set_seconds(period.Seconds());
@@ -679,6 +681,8 @@ namespace {
             auto name = setting.Name().Value();
             if (name == "important") {
                 protoConsumer->set_set_important(GetBoolValue(setting));
+            } else if (name == "replicate_offsets") {
+                protoConsumer->set_set_replicate_offsets(GetBoolValue(setting));
             } else if (name == "setAvailabilityPeriod"sv) {
                 auto period = GetIntervalValue(setting);
                 protoConsumer->mutable_set_availability_period()->set_seconds(period.Seconds());
@@ -1232,6 +1236,15 @@ namespace {
             } else if (name == "initial_scan") {
                 YQL_ENSURE(setting.Value().Maybe<TCoBool>());
                 dstSettings.InitialScan = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
+            } else if (name == "bootstrap") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                const auto mode = to_lower(value);
+                if (mode != "scan" && mode != "import" && mode != "switchover") {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown bootstrap mode: " << value));
+                    return false;
+                }
+                dstSettings.Bootstrap = mode;
             }
         }
 
@@ -2144,6 +2157,10 @@ public:
                                         "Column addition with a GENERATED ALWAYS AS expression is not supported"));
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
+                                    if (IsYqlNullExprNode(constraint.Value().Cast())) {
+                                        continue;
+                                    }
+
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
                                         ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                             "Default values are not supported in column tables"));
@@ -2203,6 +2220,12 @@ public:
                                 YqlIssue(ctx.GetPosition(columnTuple.Pos()),
                                     TIssuesIds::KIKIMR_BAD_REQUEST,
                                     "Cannot add not null column without default value"));
+                            return SyncError();
+                        }
+
+                        if (hasNotNull && hasDefaultValue && columnBuild->default_from_literal().value().has_null_flag_value()) {
+                            ctx.AddError(YqlIssue(ctx.GetPosition(columnTuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                                "Cannot add not null column with NULL default value"));
                             return SyncError();
                         }
 
@@ -2391,16 +2414,16 @@ public:
 
                             auto defaultExpr = TExprBase(alterColumnList.Item(1));
 
-                            if (auto maybeJust = defaultExpr.Maybe<TCoJust>()) {
-                                defaultExpr = maybeJust.Cast().Input();
-                            }
-
-                            bool isNull = defaultExpr.Maybe<TCoNull>().IsValid() || IsPgNullExprNode(defaultExpr);
-                            if (isNull) {
+                            if (IsYqlNullExprNode(defaultExpr)) {
                                 alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
+                                alter_columns->ClearDefaultFromLiteral();
                             } else {
+                                if (auto maybeJust = defaultExpr.Maybe<TCoJust>()) {
+                                    defaultExpr = maybeJust.Cast().Input();
+                                }
+
                                 alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
-                                auto err = FillLiteralProto(defaultExpr, nullptr, *alter_columns->MutableDefaultFromLiteral());
+                                auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
                                 if (err) {
                                     ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
                                     return SyncError();
@@ -2607,6 +2630,18 @@ public:
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {
                                 add_index->mutable_global_vector_kmeans_tree_index();
+                            } else if (type == "globalHnsw") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableHnswIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        "HNSW index support is disabled (EnableHnswIndex)"));
+                                    return SyncError();
+                                }
+                                if (table.Metadata->StoreType == EStoreType::Column) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        "HNSW indexes require STORE = ROW"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_global_hnsw_index();
                             } else if (type == "globalFulltextPlain") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2727,6 +2762,12 @@ public:
                                                 name, value.StringValue(), error);
                                             break;
                                         }
+                                        case Ydb::Table::TableIndex::kGlobalHnswIndex: {
+                                            NKikimr::NKMeans::FillHnswSetting(
+                                                *add_index->mutable_global_hnsw_index()->mutable_vector_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
                                         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
                                             NKikimr::NFulltext::FillSetting(
                                                 *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
@@ -2795,9 +2836,6 @@ public:
                     }
 
                     switch (add_index->type_case()) {
-                        case Ydb::Table::TableIndex::kGlobalHnswIndex:
-                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "HNSW index implementation is not available yet"));
-                            return SyncError();
                         case Ydb::Table::TableIndex::kGlobalIndex:
                         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
@@ -2807,6 +2845,14 @@ public:
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
                             TString error;
                             if (!NKikimr::NKMeans::ValidateSettingsPartial(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kGlobalHnswIndex: {
+                            TString error;
+                            if (!NKikimr::NKMeans::ValidateHnswSettingsPartial(add_index->global_hnsw_index().vector_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
                                 return SyncError();
                             }
@@ -3376,15 +3422,23 @@ public:
                         return SyncError();
                     }
 
-                    // Only vector_kmeans_tree is supported for rebuild
-                    if (existingIndex->Type != NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                    if (!NYql::TIndexDescription::IsVectorIndex(existingIndex->Type)) {
                         ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
-                            TStringBuilder() << "REBUILD INDEX is only supported for vector_kmeans_tree indexes"));
+                            TStringBuilder() << "REBUILD INDEX is only supported for vector indexes"));
                         return SyncError();
                     }
 
-                    // Set the index type
-                    add_index->mutable_global_vector_kmeans_tree_index();
+                    Ydb::Table::GlobalVectorKMeansTreeIndex* vectorIndex = nullptr;
+                    if (existingIndex->Type == NYql::TIndexDescription::EType::GlobalSyncHnsw) {
+                        if (!SessionCtx->Config().FeatureFlags.GetEnableHnswIndex()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                "HNSW index support is disabled (EnableHnswIndex)"));
+                            return SyncError();
+                        }
+                        vectorIndex = add_index->mutable_global_hnsw_index();
+                    } else {
+                        vectorIndex = add_index->mutable_global_vector_kmeans_tree_index();
+                    }
 
                     // If user didn't provide ON columns, inherit from existing index
                     if (!hasUserColumns) {
@@ -3401,7 +3455,7 @@ public:
 
                     // Parse user-provided index settings (don't pre-populate with existing;
                     // schemeshard will merge with existing settings in Prepare)
-                    auto* vectorSettings = add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+                    auto* vectorSettings = vectorIndex->mutable_vector_settings();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
@@ -3431,9 +3485,9 @@ public:
                                         error = TStringBuilder() << "Invalid " << settingName << ": " << value.StringValue();
                                     }
                                 } else {
-                                    NKikimr::NKMeans::FillSetting(
-                                        *vectorSettings,
-                                        settingName, value.StringValue(), error);
+                                    const auto fillSetting = add_index->type_case() == Ydb::Table::TableIndex::kGlobalHnswIndex
+                                        ? NKikimr::NKMeans::FillHnswSetting : NKikimr::NKMeans::FillSetting;
+                                    fillSetting(*vectorSettings, settingName, value.StringValue(), error);
                                 }
                                 if (error) {
                                     ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
@@ -3506,7 +3560,7 @@ public:
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
 
             if (isTableStore) {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
                         TStringBuilder() << "TABLESTORE with not COLUMN store"));

@@ -9,12 +9,14 @@ SRCS(
     kqp_compute_actor_creation_ut.cpp
     kqp_executer_stats_ut.cpp
     kqp_executer_ut.cpp
+    kqp_planner_ut.cpp
     kqp_tasks_graph_ut.cpp
     max_tasks_graph_ut.cpp
 )
 
 PEERDIR(
     ydb/core/kqp/common
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
 )

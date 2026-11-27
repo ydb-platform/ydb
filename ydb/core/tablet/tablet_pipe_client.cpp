@@ -11,6 +11,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/util/queue_inplace.h>
 #include <library/cpp/random_provider/random_provider.h>
+#include <utility>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PIPE_CLIENT
 
@@ -53,6 +54,7 @@ namespace NTabletPipe {
     private:
         void StateLookup(STFUNC_SIG) {
             switch (ev->GetTypeRewrite()) {
+                HFunc(TEvTabletPipe::TEvClientUpdateGeneration, Handle);
                 FFunc(TEvTabletPipe::EvSend, HandleSendQueued);
                 FFunc(TEvTabletPipe::EvMessage, HandleSendQueued);
                 HFunc(TEvTabletPipe::TEvShutdown, HandleConnect);
@@ -65,6 +67,7 @@ namespace NTabletPipe {
 
         void StateConnectNode(STFUNC_SIG) {
             switch (ev->GetTypeRewrite()) {
+                HFunc(TEvTabletPipe::TEvClientUpdateGeneration, Handle);
                 FFunc(TEvTabletPipe::EvSend, HandleSendQueued);
                 FFunc(TEvTabletPipe::EvMessage, HandleSendQueued);
                 HFunc(TEvTabletPipe::TEvShutdown, HandleConnect);
@@ -77,6 +80,7 @@ namespace NTabletPipe {
 
         void StateConnect(STFUNC_SIG) {
             switch (ev->GetTypeRewrite()) {
+                HFunc(TEvTabletPipe::TEvClientUpdateGeneration, Handle);
                 FFunc(TEvTabletPipe::EvSend, HandleSendQueued);
                 FFunc(TEvTabletPipe::EvMessage, HandleSendQueued);
                 HFunc(TEvTabletPipe::TEvShutdown, HandleConnect);
@@ -90,6 +94,7 @@ namespace NTabletPipe {
 
         void StateWait(STFUNC_SIG) {
             switch (ev->GetTypeRewrite()) {
+                HFunc(TEvTabletPipe::TEvClientUpdateGeneration, Handle);
                 FFunc(TEvTabletPipe::EvSend, HandleSendQueued);
                 FFunc(TEvTabletPipe::EvMessage, HandleSendQueued);
                 HFunc(TEvTabletPipe::TEvShutdown, HandleConnect);
@@ -115,6 +120,7 @@ namespace NTabletPipe {
 
         void StateWork(STFUNC_SIG) {
             switch (ev->GetTypeRewrite()) {
+                HFunc(TEvTabletPipe::TEvClientUpdateGeneration, Handle);
                 FFunc(TEvTabletPipe::EvSend, HandleSend);
                 FFunc(TEvTabletPipe::EvMessage, HandleSend);
                 HFunc(TEvTabletPipe::TEvShutdown, Handle);
@@ -161,6 +167,7 @@ namespace NTabletPipe {
 
         void HandleLookup(TEvTabletResolver::TEvForwardResult::TPtr& ev, const TActorContext &ctx) {
             Y_ABORT_UNLESS(ev->Get()->TabletID == TabletId);
+            const auto hintedActor = std::exchange(PendingGenerationHintActor, TActorId{});
 
             if (ev->Get()->Status != NKikimrProto::OK) {
                 YDB_LOG_DEBUG_CTX(ctx, "Forward result error, check reconnect",
@@ -172,6 +179,13 @@ namespace NTabletPipe {
             LastKnownLeaderTablet = ev->Get()->TabletActor;
             LastKnownLeader = ev->Get()->Tablet;
             LastCacheEpoch = ev->Get()->CacheEpoch;
+
+            if (hintedActor && LastKnownLeaderTablet && LastKnownLeaderTablet != hintedActor) {
+                // Discard one lookup that was already in flight when the owner
+                // learned of another incarnation. Do not pin subsequent lookups:
+                // an even newer generation may already have replaced that actor.
+                return TryToReconnect(ctx);
+            }
 
             if (!GetTabletLeader()) {
                 YDB_LOG_DEBUG_CTX(ctx, "Tablet actor unavailable, check reconnect",
@@ -347,6 +361,14 @@ namespace NTabletPipe {
                 return TryToReconnect(ctx);
             }
 
+            if (Generation < MinGeneration) {
+                // A connection that predates the owner's hint cannot receive
+                // queued messages or a successful connection notification.
+                ctx.Send(ServerId, new TEvTabletPipe::TEvPeerClosed(TabletId, SelfId(), ServerId));
+                ServerId = {};
+                return TryToReconnect(ctx);
+            }
+
             Become(&TThis::StateWork);
 
             TString versionInfo;
@@ -492,7 +514,9 @@ namespace NTabletPipe {
         }
 
         void HandleWait(TEvTabletPipe::TEvClientRetry::TPtr& ev, const TActorContext& ctx) {
-            Y_UNUSED(ev);
+            if (ev->Get()->Cookie != RetryCookie) {
+                return;
+            }
             YDB_LOG_DEBUG_CTX(ctx, "Client retry",
                 {"tabletId", TabletId},
                 {"selfId", ctx.SelfID});
@@ -501,6 +525,35 @@ namespace NTabletPipe {
             LastKnownLeader = TActorId();
 
             Lookup(ctx);
+        }
+
+        void Handle(TEvTabletPipe::TEvClientUpdateGeneration::TPtr& ev, const TActorContext& ctx) {
+            const ui64 generation = ev->Get()->Generation;
+            if (ev->Sender != Owner || !ev->Get()->TabletActor || generation <= MinGeneration) {
+                return;
+            }
+            MinGeneration = generation;
+            PendingGenerationHintActor = {};
+            RetryState = {};
+            const auto state = CurrentStateFunc();
+            if (state == &TThis::StateLookup) {
+                PendingGenerationHintActor = ev->Get()->TabletActor;
+            } else if (state == &TThis::StateWait) {
+                // The scheduled timer remains in the queue. It must not wake
+                // a later retry after this lookup has already failed again.
+                ++RetryCookie;
+                Lookup(ctx);
+            } else if ((state == &TThis::StateConnect || state == &TThis::StateConnectNode)
+                    && LastKnownLeaderTablet && LastKnownLeaderTablet != ev->Get()->TabletActor) {
+                // Resolve the new incarnation without waiting for an old
+                // handshake or interconnect connection to fail.
+                UnsubscribeNetworkSession(ctx);
+                TryToReconnect(ctx);
+            } else if (state == &TThis::StateWork && Generation < MinGeneration) {
+                ctx.Send(ServerId, new TEvTabletPipe::TEvPeerClosed(TabletId, SelfId(), ServerId));
+                NotifyTabletProblem(ctx);
+                NotifyDisconnect(ctx);
+            }
         }
 
         void RequestHiveInfo(ui64 hiveTabletId) {
@@ -664,7 +717,7 @@ namespace NTabletPipe {
                     YDB_LOG_DEBUG_CTX(ctx, "Schedule retry",
                         {"tabletId", TabletId},
                         {"selfId", ctx.SelfID});
-                    ctx.Schedule(waitDuration, new TEvTabletPipe::TEvClientRetry);
+                    ctx.Schedule(waitDuration, new TEvTabletPipe::TEvClientRetry(++RetryCookie));
                     Become(&TThis::StateWait);
                 }
             } else {
@@ -821,6 +874,9 @@ namespace NTabletPipe {
         TActorId ServerId;
         TQueueInplace<TAutoPtr<IEventHandle>, 32> PayloadQueue;
         TClientRetryState RetryState;
+        ui64 RetryCookie = 0;
+        ui64 MinGeneration = 0;
+        TActorId PendingGenerationHintActor;
         bool Leader;
         ui64 Generation = 0;
         TActorId HiveClient;

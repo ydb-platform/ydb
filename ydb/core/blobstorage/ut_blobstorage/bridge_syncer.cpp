@@ -1,8 +1,9 @@
 #include "bridge_common.h"
 #include "bridge_pile_ops.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
-#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/library/testlib/helpers.h>
@@ -16,6 +17,18 @@
 using NBridgeTest::GetBridgedLocation;
 
 namespace {
+
+::NMonitoring::TDynamicCounterPtr GetSyncNodeCounters(TEnvironmentSetup& env, ui32 nodeId) {
+    return GetServiceCounters(env.Runtime->GetNode(nodeId)->AppData->Counters, "bridge|nodewarden");
+}
+
+i64 ReadWorkerGauge(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& mode, const TString& name) {
+    const auto group = counters->FindSubgroup("mode", mode);
+    UNIT_ASSERT_C(group, mode);
+    const auto gauge = group->FindCounter(name);
+    UNIT_ASSERT_C(gauge, mode << "/" << name);
+    return gauge->Val();
+}
 
 enum class ECompletionRace {
     NewGeneration,
@@ -114,19 +127,26 @@ void TestLateSyncerCompletion(ECompletionRace race) {
         }
         return true;
     };
-    auto assign = [&](ui32 nextGeneration, bool withConfig, bool enabled = true) {
+    enum class EWorkers { None, Sync, SyncAndReconcile };
+    auto assign = [&](ui32 nextGeneration, bool withConfig, EWorkers workers = EWorkers::Sync) {
         auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
         auto& record = update->Record;
         if (withConfig) {
             record.MutableServiceSet()->CopyFrom(serviceSet);
         }
         record.SetUpdateSyncers(true);
-        if (enabled) {
+        if (workers != EWorkers::None) {
             auto *syncer = record.AddSyncers();
             syncer->SetBridgeProxyGroupId(groupId);
             syncer->SetBridgeProxyGroupGeneration(nextGeneration);
             syncer->SetSourceGroupId(sourceGroupId);
             syncer->SetTargetGroupId(targetGroupId);
+            if (workers == EWorkers::SyncAndReconcile) {
+                auto *reconciler = record.AddSyncers();
+                reconciler->CopyFrom(*syncer);
+                reconciler->SetTargetGroupId(piles[2].GetGroupId());
+                reconciler->SetReconcile(true);
+            }
         }
         runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), sender, update.release()), 1);
         // A reply from this mailbox fences processing of the assignment above.
@@ -152,15 +172,26 @@ void TestLateSyncerCompletion(ECompletionRace race) {
         UNIT_ASSERT(!replayEvent);
     };
 
+    const auto counters = GetSyncNodeCounters(env, 1);
+    auto checkWorkers = [&](ui32 running, ui32 waiting, ui32 reconciling = 0) {
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "sync", "RunningSyncers"), running);
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "sync", "SyncersWaitingForConfig"), waiting);
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "sync", "SyncNodeActive"), running != 0);
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "reconcile", "RunningSyncers"), reconciling);
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "reconcile", "SyncNodeActive"), reconciling != 0);
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "any", "SyncNodeActive"), running || reconciling);
+    };
     // A SYNCED target completes immediately; delay its notification to NodeWarden.
     assign(generation, true);
     auto oldCompletion = waitCompletion();
+    checkWorkers(1, 0);
     if (race == ECompletionRace::ReregisterAfterCompletion) {
         deliver(std::move(oldCompletion));
         UNIT_ASSERT_VALUES_EQUAL(reports.size(), 1);
         UNIT_ASSERT(reports.front().GetSyncers(0).GetFinished());
         UNIT_ASSERT_VALUES_EQUAL(reports.front().GetSyncers(0).GetBridgeProxyGroupGeneration(), generation);
         assign(generation + 1, false);
+        checkWorkers(0, 1);
         // Ignore background registrations captured before the reconnect being tested.
         registrations.clear();
         // Reconnect before the new group configuration arrives. Registration includes syncer state.
@@ -191,10 +222,11 @@ void TestLateSyncerCompletion(ECompletionRace race) {
         assign(nextGeneration, false);
     } else {
         // Reassignment at the same generation still creates a different actor incarnation.
-        assign(generation, false, false);
+        assign(generation, false, EWorkers::None);
         assign(generation, false);
     }
     deliver(std::move(oldCompletion));
+    checkWorkers(!changeGeneration, changeGeneration);
     for (const auto& report : reports) {
         for (const auto& syncer : report.GetSyncers()) {
             UNIT_ASSERT_C(!syncer.GetFinished(), "Obsolete actor completed a new assignment: " << report.DebugString());
@@ -211,10 +243,19 @@ void TestLateSyncerCompletion(ECompletionRace race) {
     const auto& finished = reports.front().GetSyncers(0);
     UNIT_ASSERT(finished.GetFinished());
     UNIT_ASSERT_VALUES_EQUAL(finished.GetBridgeProxyGroupGeneration(), nextGeneration);
+    checkWorkers(0, 0);
+    if (race == ECompletionRace::ReplacedActor) {
+        assign(nextGeneration, false, EWorkers::SyncAndReconcile);
+        checkWorkers(1, 0, 1);
+        assign(nextGeneration, false, EWorkers::None);
+        checkWorkers(0, 0);
+    }
     runtime->FilterFunction = nullptr;
 }
 
-void TestSyncerQuotaDelay(bool cancel) {
+enum class EDelayedCopy { Copy, Stop, SourceGone };
+
+void TestSyncerQuotaDelay(EDelayedCopy outcome) {
     using namespace NBridgeTest;
     TEnvironmentSetup env{{
         .NodeCount = 16,
@@ -247,12 +288,23 @@ void TestSyncerQuotaDelay(bool cancel) {
     bool targetChecked = false;
     ui32 sourceReads = 0;
     std::unique_ptr<IEventHandle> completion;
+    const auto payload = GetSyncNodeCounters(env, 1)->GetSubgroup("mode", "sync")->GetCounter("SyncPayloadBytesWritten", true);
+    const auto before = payload->Val();
     env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
         if (ev->Sender == syncer && ev->GetTypeRewrite() == TEvBlobStorage::EvGet) {
             if (ev->Get<TEvBlobStorage::TEvGet>()->IsIndexOnly) {
                 targetChecked = true;
             } else {
                 ++sourceReads;
+            }
+        }
+        if (outcome == EDelayedCopy::SourceGone && ev->GetRecipientRewrite() == syncer &&
+                ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
+            auto& result = *ev->Get<TEvBlobStorage::TEvGetResult>();
+            if (result.GroupId == source->GroupID.GetRawId()) {
+                UNIT_ASSERT_VALUES_EQUAL(result.ResponseSz, 1);
+                result.Responses[0].Status = NKikimrProto::NODATA;
+                result.Responses[0].Buffer = TRope();
             }
         }
         if (ev->Sender == syncer && ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
@@ -262,13 +314,13 @@ void TestSyncerQuotaDelay(bool cancel) {
         }
         return true;
     };
-    syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
-        std::make_shared<NBridge::TSyncerDataStats>(), quoter), 1);
+    auto stats = std::make_shared<NGroupSyncer::TSyncerDataStats>();
+    syncer = env.Runtime->Register(NGroupSyncer::CreateSyncerActor(info, source->GroupID, target->GroupID, stats, quoter), 1);
     WaitUntil(env, [&] { return targetChecked; }, "target index query before throttled read");
     env.Sim(TDuration::Minutes(6));
     UNIT_ASSERT(!completion);
     UNIT_ASSERT_VALUES_EQUAL_C(sourceReads, 0, "the read must wait for its quota");
-    if (cancel) {
+    if (outcome == EDelayedCopy::Stop) {
         env.Runtime->Send(new IEventHandle(syncer, edge, new TEvents::TEvPoison), 1);
         env.Sim(TDuration::Minutes(5));
         UNIT_ASSERT_VALUES_EQUAL_C(sourceReads, 0, "a stopped syncer must not dispatch its delayed request");
@@ -277,8 +329,11 @@ void TestSyncerQuotaDelay(bool cancel) {
         WaitUntil(env, [&] { return bool(completion); }, "quota-delayed sync completion", TDuration::Seconds(1), 300);
         UNIT_ASSERT_VALUES_EQUAL(sourceReads, 1);
         UNIT_ASSERT(!completion->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->ErrorReason);
-        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, target->GroupID.GetRawId(), 9, id, data), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(stats->BytesCopied.load(), data.size());
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, target->GroupID.GetRawId(), 9, id, data),
+            outcome == EDelayedCopy::Copy ? NKikimrProto::OK : NKikimrProto::NODATA);
     }
+    UNIT_ASSERT_VALUES_EQUAL(payload->Val() - before, outcome == EDelayedCopy::Copy ? data.size() : 0);
     env.Runtime->FilterFunction = {};
 }
 
@@ -360,6 +415,9 @@ void TestSyncRate(ui64 nodeLimit, ui64 totalRate, double minRate, double maxRate
         config["blob_storage_config"]["bridge_sync_rate_bytes_per_second"] = nodeLimit;
     });
     UNIT_ASSERT_EQUAL_C(replace.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, replace.GetErrorReason());
+    const auto limit = GetSyncNodeCounters(env, 1)->FindCounter("SyncRateLimitBytesPerSecond");
+    UNIT_ASSERT(limit);
+    WaitUntil(env, [&] { return limit->Val() == static_cast<i64>(nodeLimit); }, "updated node quota");
     SetBridgeSyncTotalRate(env, totalRate);
 
     constexpr ui32 numBlobs = 20;
@@ -514,11 +572,15 @@ struct THeldSyncersEnv {
 
 Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
     Y_UNIT_TEST(QuotaDelayedRequestCompletes) {
-        TestSyncerQuotaDelay(false);
+        TestSyncerQuotaDelay(EDelayedCopy::Copy);
     }
 
     Y_UNIT_TEST(StoppingSyncerCancelsQuotaDelayedRequest) {
-        TestSyncerQuotaDelay(true);
+        TestSyncerQuotaDelay(EDelayedCopy::Stop);
+    }
+
+    Y_UNIT_TEST(DisappearedSourceAdvancesProgressWithoutWritingPayload) {
+        TestSyncerQuotaDelay(EDelayedCopy::SourceGone);
     }
 
     // Reads are charged by the size of the blob when they are sent, so the ones still waiting for an in-flight slot get
@@ -566,8 +628,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
             }
             return true;
         };
-        syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
-            std::make_shared<NBridge::TSyncerDataStats>(), quoter), 1);
+        syncer = env.Runtime->Register(NGroupSyncer::CreateSyncerActor(info, source->GroupID, target->GroupID,
+            std::make_shared<NGroupSyncer::TSyncerDataStats>(), quoter), 1);
 
         // the first read goes at once and the second one waits for the time it has been charged; others hold no quota yet
         WaitUntil(env, [&] { return !reads.empty(); }, "first read", TDuration::Seconds(1), 60);
@@ -623,8 +685,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
                 !ev->Get<TEvBlobStorage::TEvGet>()->IsIndexOnly;
             return true;
         };
-        syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
-            std::make_shared<NBridge::TSyncerDataStats>(), quoter), 1);
+        syncer = env.Runtime->Register(NGroupSyncer::CreateSyncerActor(info, source->GroupID, target->GroupID,
+            std::make_shared<NGroupSyncer::TSyncerDataStats>(), quoter), 1);
         WaitUntil(env, [&] { return numReads != 0; }, "first read", TDuration::Seconds(1), 60);
         const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         env.Runtime->Send(new IEventHandle(syncer, edge, new TEvents::TEvPoison), 1);
@@ -705,8 +767,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
             }
             return true;
         };
-        syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
-            std::make_shared<NBridge::TSyncerDataStats>(), quoter), 1);
+        syncer = env.Runtime->Register(NGroupSyncer::CreateSyncerActor(info, source->GroupID, target->GroupID,
+            std::make_shared<NGroupSyncer::TSyncerDataStats>(), quoter), 1);
         WaitUntil(env, [&] { return bool(completion); }, "sync completion", TDuration::MilliSeconds(100), 3000);
         env.Runtime->FilterFunction = {};
         UNIT_ASSERT(!completion->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->ErrorReason);
@@ -825,6 +887,13 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         setTotalRate(total / 2);
         UNIT_ASSERT_GT(numRateOnlyUpdates, 0);
         test.CheckRates(total / 2);
+        for (const auto& [nodeId, numSyncers] : test.NumNodeSyncers) {
+            if (numSyncers) {
+                const auto limit = GetSyncNodeCounters(env, nodeId)->FindCounter("SyncRateLimitBytesPerSecond");
+                UNIT_ASSERT(limit);
+                UNIT_ASSERT_VALUES_EQUAL(limit->Val(), test.Rates.at(nodeId));
+            }
+        }
 
         setTotalRate(0);
         test.CheckRates(0);
@@ -1161,6 +1230,16 @@ Y_UNIT_TEST_SUITE(BridgeSyncerPlacement) {
     // fit 8 nodes with no more than 2 syncers on a node. Random placement would hardly ever do this.
     Y_UNIT_TEST(SyncersSpreadOverNodes) {
         THeldSyncersEnv test;
+        size_t participating = 0;
+        for (ui32 nodeId : test.Env.Runtime->GetNodes()) {
+            const auto counters = GetSyncNodeCounters(test.Env, nodeId);
+            const auto active = ReadWorkerGauge(counters, "any", "SyncNodeActive");
+            const auto running = ReadWorkerGauge(counters, "sync", "RunningSyncers");
+            UNIT_ASSERT_VALUES_EQUAL_C(running, test.NumNodeSyncers[nodeId], nodeId);
+            UNIT_ASSERT_VALUES_EQUAL_C(active, running != 0, nodeId);
+            participating += active;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(participating, test.GetNumHostingNodes());
         std::map<ui32, ui32> numSyncers;
         for (const auto& [nodeId, syncers] : test.NumNodeSyncers) {
             if (syncers) {
@@ -1472,8 +1551,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
             }
             return true;
         };
-        syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source, target,
-            std::make_shared<NBridge::TSyncerDataStats>(), nullptr), 1);
+        syncer = env.Runtime->Register(NGroupSyncer::CreateSyncerActor(info, source, target,
+            std::make_shared<NGroupSyncer::TSyncerDataStats>(), nullptr), 1);
         WaitUntil(env, [&] { return bool(completion); }, "invalid assignment completion");
         env.Runtime->FilterFunction = {};
         const auto& error = completion->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->ErrorReason;
@@ -1491,6 +1570,140 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
 
     Y_UNIT_TEST(RegistrationPreservesCompletedGeneration) {
         TestLateSyncerCompletion(ECompletionRace::ReregisterAfterCompletion);
+    }
+
+    Y_UNIT_TEST(ProgressAfterGroupGenerationChange) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 18,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = [](ui32 nodeId) { return GetConvertedClusterLocation(nodeId, true); },
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto initial = GetGroupInfo(env, groupId);
+        const ui32 sourceGroupId = initial.GetBridgeGroupState().GetPile(0).GetGroupId();
+        const ui32 targetGroupId = initial.GetBridgeGroupState().GetPile(1).GetGroupId();
+        auto& runtime = env.Runtime;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldFinishes;
+        THashSet<const IEventHandle*> released;
+        bool controlProgress = false;
+        const IEventHandle *injected = nullptr;
+        TActorId progressSender;
+        TActorId progressRecipient;
+        runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (released.erase(ev.get()) || ev.get() == injected) {
+                injected = nullptr;
+                return true;
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType &&
+                    ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->TargetGroupId.GetRawId() == targetGroupId) {
+                heldFinishes.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateSyncerState::EventType) {
+                for (const auto& syncer : ev->Get<TEvBlobStorage::TEvControllerUpdateSyncerState>()->Record.GetSyncers()) {
+                    if (syncer.GetTargetGroupId() == targetGroupId) {
+                        progressSender = ev->Sender;
+                        progressRecipient = ev->GetRecipientRewrite();
+                        return !controlProgress;
+                    }
+                }
+            }
+            return true;
+        };
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        for (;;) {
+            WaitUntil(env, [&] { return !heldFinishes.empty(); }, "target syncer completion");
+            if (GetGroupInfo(env, groupId).GetBridgeGroupState().GetPile(1).GetStage() ==
+                    NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA) {
+                break;
+            }
+            for (auto& [nodeId, ev] : std::exchange(heldFinishes, {})) {
+                released.insert(ev.get());
+                runtime->Send(ev.release(), nodeId);
+            }
+        }
+        env.Sim(TDuration::Seconds(11));
+        UNIT_ASSERT(progressSender);
+        const ui32 assignedNodeId = progressSender.NodeId();
+        controlProgress = true;
+        const auto before = GetGroupInfo(env, groupId);
+        auto report = NKikimrBlobStorage::TEvControllerUpdateSyncerState::TSyncer();
+        report.SetBridgeProxyGroupId(groupId);
+        report.SetBridgeProxyGroupGeneration(before.GetGroupGeneration());
+        report.SetSourceGroupId(sourceGroupId);
+        report.SetTargetGroupId(targetGroupId);
+        auto sendProgress = [&](bool withCounters, ui64 copiedMiB = 0) {
+            auto update = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
+            auto *item = update->Record.AddSyncers();
+            item->CopyFrom(report);
+            if (withCounters) {
+                item->SetBytesDone(copiedMiB << 20);
+                item->SetBytesCopied(copiedMiB << 20);
+                item->SetBlobsDone(copiedMiB);
+                item->SetScannedItems(copiedMiB);
+            }
+            auto ev = std::make_unique<IEventHandle>(progressRecipient, progressSender, update.release());
+            injected = ev.get();
+            runtime->Send(ev.release(), env.Settings.ControllerNodeId);
+        };
+        auto lastProgress = [&] {
+            const auto info = QueryGroupSystemView(env, targetGroupId, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(info.GetBridgeSyncStage(), "WRITE_KEEP_BARRIER_DONOTKEEP_DATA");
+            UNIT_ASSERT(info.HasBridgeSyncLastProgressTimestamp());
+            return info.GetBridgeSyncLastProgressTimestamp();
+        };
+        sendProgress(true);
+        const ui64 baselineProgress = lastProgress();
+        sendProgress(true, 4);
+        const ui64 oldProgress = lastProgress();
+        UNIT_ASSERT_GT(oldProgress, baselineProgress);
+        const auto bytesCopied = GetServiceCounters(runtime->GetNode(env.Settings.ControllerNodeId)->AppData->Counters, "bridge")
+            ->GetSubgroup("subsystem", "bsc")->GetSubgroup("pile", "pile_2")->GetSubgroup("database", env.StoragePoolName)
+            ->GetSubgroup("storagePool", env.StoragePoolName)->GetCounter("SyncBytesCopied", true);
+        const auto beforeRestart = bytesCopied->Val();
+
+        ReassignOneDisk(env, targetGroupId);
+        const auto after = GetGroupInfo(env, groupId);
+        UNIT_ASSERT_GT(after.GetGroupGeneration(), before.GetGroupGeneration());
+        const auto& oldPile = before.GetBridgeGroupState().GetPile(1);
+        const auto& newPile = after.GetBridgeGroupState().GetPile(1);
+        UNIT_ASSERT_VALUES_EQUAL(newPile.GetGroupId(), oldPile.GetGroupId());
+        UNIT_ASSERT(newPile.GetStage() == oldPile.GetStage());
+        UNIT_ASSERT_VALUES_EQUAL(newPile.GetBecameUnsyncedGeneration(), oldPile.GetBecameUnsyncedGeneration());
+        WaitUntil(env, [&] {
+            for (const auto& [nodeId, ev] : heldFinishes) {
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                if (msg->BridgeProxyGroupGeneration == after.GetGroupGeneration()) {
+                    UNIT_ASSERT_VALUES_EQUAL(nodeId, assignedNodeId);
+                    UNIT_ASSERT_VALUES_EQUAL(msg->SourceGroupId.GetRawId(), sourceGroupId);
+                    return true;
+                }
+            }
+            return false;
+        }, "replacement syncer completion");
+        report.SetBridgeProxyGroupGeneration(after.GetGroupGeneration());
+        sendProgress(false);
+        UNIT_ASSERT_VALUES_EQUAL(lastProgress(), oldProgress);
+        sendProgress(true, 6);
+        UNIT_ASSERT_VALUES_EQUAL(lastProgress(), oldProgress);
+        UNIT_ASSERT_VALUES_EQUAL(bytesCopied->Val(), beforeRestart + (6u << 20));
+        sendProgress(true, 50);
+        const ui64 newProgress = lastProgress();
+        UNIT_ASSERT_GT(newProgress, oldProgress);
+        for (ui64 copiedMiB : {50, 25, 50}) {
+            sendProgress(true, copiedMiB);
+            UNIT_ASSERT_VALUES_EQUAL(lastProgress(), newProgress);
+        }
+        sendProgress(true, 100);
+        UNIT_ASSERT_GT(lastProgress(), newProgress);
+        UNIT_ASSERT_VALUES_EQUAL(bytesCopied->Val(), beforeRestart + (100u << 20));
+        runtime->FilterFunction = {};
     }
 
     // A stage change of one part bumps the generation of the whole group, and a syncer of another part can do nothing with

@@ -250,13 +250,21 @@ TIntrusivePtr<TOpRead> TOpRead::FromExpr(TExprNode::TPtr node, TInfoUnitRegistry
     TUnorderedIUs columns;
     columns.Assign(ids);
     const auto storageType = opSource.SourceType().StringValue() == "Row" ? NYql::EStorageType::RowStorage : NYql::EStorageType::ColumnStorage;
-    return MakeIntrusive<TOpRead>(alias, std::move(columns), storageType, opSource.Table().Ptr(),
+    auto read = MakeIntrusive<TOpRead>(alias, std::move(columns), storageType, opSource.Table().Ptr(),
         nullptr, nullptr, std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, node->Pos());
+    if (const auto settings = opSource.Settings()) {
+        read->ForcePrimary = TKqpReadTableSettings::Parse(settings.Cast()).ForcePrimary;
+    }
+    if (const auto index = opSource.Index()) {
+        read->ForceIndex = index.Cast().StringValue();
+    }
+    return read;
 }
 
 TOpRead::TOpRead(const TString& alias, TUnorderedIUs columns, const NYql::EStorageType storageType,
                  const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, std::optional<TRangeInfo> ranges,
-                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
+                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos,
+                 bool requireSortedRead)
     : IOperator(EOperator::Source, pos, props)
     , Alias(alias)
     , StorageType(storageType)
@@ -265,6 +273,7 @@ TOpRead::TOpRead(const TString& alias, TUnorderedIUs columns, const NYql::EStora
     , Limit(limit)
     , OriginalPredicate(originalPredicate)
     , SortDir(sortDir)
+    , RequireSortedRead(requireSortedRead)
     , RangeInfo(std::move(ranges))
     , Columns_(std::move(columns)) {
 }

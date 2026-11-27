@@ -1,7 +1,5 @@
 UNITTEST()
 
-FORK_SUBTESTS()
-
 SRCS(
     hnsw_settings_ut.cpp
 )

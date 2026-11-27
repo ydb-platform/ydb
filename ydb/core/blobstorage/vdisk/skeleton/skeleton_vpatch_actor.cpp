@@ -1,7 +1,6 @@
 #include "skeleton_vpatch_actor.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
-#include <ydb/core/util/stlog.h>
 
 #include <util/generic/serialized_enum.h>
 
@@ -191,6 +190,14 @@ namespace NKikimr::NPrivate {
                 {"originalBlobId", OriginalBlobId},
                 {"deadline", Deadline});
             AddMark("TSkeletonVPatchActor bootstrapped");
+
+            if (GType.GetErasure() == TErasureType::Erasure8Plus2Block) {
+                ErrorReason = "Distributed VPatch is not supported for block-8-2";
+                SendVPatchFoundParts(NKikimrProto::ERROR);
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
+                return;
+            }
 
             TInstant now = TActivationContext::Now();
             if (Deadline != TInstant::Zero() && Deadline < now) {

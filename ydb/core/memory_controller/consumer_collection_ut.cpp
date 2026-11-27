@@ -168,6 +168,37 @@ Y_UNIT_TEST(LimitShareColdRegistrantGrowsOutOfZero) {
     UNIT_ASSERT_LE(previous, Limit * 55 / 100);
 }
 
+Y_UNIT_TEST(IdleDemandOnlyRegistrantsDoNotShrinkPageCache) {
+    TConsumerCollection collection;
+    auto pageCache = collection.Register(Registrant(1));
+    pageCache->SetConsumption(1000);
+    for (ui64 i = 2; i <= 100; ++i) { collection.Register(Registrant(i), true); }
+    const auto shares = AsMap(collection.ComputeLimitShares(1000));
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 1000);
+    for (ui64 i = 2; i <= 100; ++i) { UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(i)), 0); }
+}
+
+Y_UNIT_TEST(DemandOnlySharesAreBoundedByDemandAndRetireAfterLastRelease) {
+    TConsumerCollection collection;
+    auto pageCache = collection.Register(Registrant(1));
+    auto graph = collection.Register(Registrant(2), true);
+    graph->SetReport({.Used = 100, .Demand = 200});
+    auto shares = AsMap(collection.ComputeLimitShares(1000));
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 800);
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 200);
+    // A dead actor can still have reservations owned by a background build.
+    UNIT_ASSERT(collection.Unregister(Registrant(2)));
+    collection.CollectRetired();
+    UNIT_ASSERT_VALUES_EQUAL(collection.GetRegistrantsCount(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(collection.GetTotal().Used, 100);
+    UNIT_ASSERT(!AsMap(collection.ComputeLimitShares(1000)).contains(Registrant(2)));
+    graph->SetReport({});
+    collection.CollectRetired();
+    UNIT_ASSERT_VALUES_EQUAL(collection.GetRegistrantsCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(collection.GetTotal().Used, 0);
+    UNIT_ASSERT_VALUES_EQUAL(AsMap(collection.ComputeLimitShares(1000)).at(Registrant(1)), 1000);
+}
+
 Y_UNIT_TEST(ReleaseRequests) {
     TConsumerCollection collection;
     auto c1 = collection.Register(Registrant(1));

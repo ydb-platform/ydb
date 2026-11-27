@@ -4,6 +4,7 @@
 #include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/datashard/scan_common.h>
 #include <ydb/core/tx/datashard/upload_stats.h>
+#include <ydb/core/tx/tx_proxy/erase_rows.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NDataShard {
@@ -11,9 +12,69 @@ using namespace NTableIndex;
 
 class TBatchRowsUploader
 {
+public:
+    enum class EDestinationKind {
+        Upload,
+        Erase,
+    };
+
+    // Accumulates keys to erase from a single table, mirroring TBufferData.
+    class TEraseBuffer
+    {
+    public:
+        void AddKey(TSerializedCellVec key) {
+            BufferBytes += key.GetBuffer().size();
+            Keys->push_back(std::move(key));
+        }
+
+        void AddKey(TConstArrayRef<TCell> rowKey) {
+            AddKey(TSerializedCellVec{rowKey});
+        }
+
+        bool IsEmpty() const {
+            return Keys->empty();
+        }
+
+        ui64 GetKeys() const {
+            return Keys->size();
+        }
+
+        ui64 GetBufferBytes() const {
+            return BufferBytes;
+        }
+
+        std::shared_ptr<NTxProxy::TEraseKeys> GetKeysData() const {
+            return Keys;
+        }
+
+        void FlushTo(TEraseBuffer& other) {
+            Y_ENSURE(this != &other);
+            Y_ENSURE(other.IsEmpty());
+            other.Keys.swap(Keys);
+            other.BufferBytes = std::exchange(BufferBytes, 0);
+        }
+
+        void Clear() {
+            Keys->clear();
+            BufferBytes = 0;
+        }
+
+        bool HasReachedLimits(const TIndexBuildScanSettings& scanSettings) const {
+            return Keys->size() > scanSettings.GetMaxBatchRows()
+                || BufferBytes > scanSettings.GetMaxBatchBytes();
+        }
+
+    private:
+        std::shared_ptr<NTxProxy::TEraseKeys> Keys = std::make_shared<NTxProxy::TEraseKeys>();
+        ui64 BufferBytes = 0;
+    };
+
+private:
     struct TDestination {
         TBufferData Buffer;
+        TEraseBuffer EraseBuffer;
         TString Table;
+        EDestinationKind Kind = EDestinationKind::Upload;
         std::shared_ptr<NTxProxy::TUploadTypes> Types;
         // Last source-table key whose entries for this destination have been
         // durably uploaded. Updated when an upload of this destination acks
@@ -35,7 +96,15 @@ class TBatchRowsUploader
         bool HasFlushedOnce = false;
 
         operator bool() const {
-            return !Buffer.IsEmpty();
+            return Kind == EDestinationKind::Erase
+                ? !EraseBuffer.IsEmpty()
+                : !Buffer.IsEmpty();
+        }
+
+        bool HasReachedLimits(const TIndexBuildScanSettings& scanSettings) const {
+            return Kind == EDestinationKind::Erase
+                ? EraseBuffer.HasReachedLimits(scanSettings)
+                : Buffer.HasReachedLimits(scanSettings);
         }
     };
 
@@ -46,51 +115,34 @@ public:
     {}
 
     TBufferData* AddDestination(TString table, std::shared_ptr<NTxProxy::TUploadTypes> types) {
-        auto& dst = Destinations[table];
+        auto& dst = Destinations[std::make_pair(table, EDestinationKind::Upload)];
         dst.Table = std::move(table);
         dst.Types = std::move(types);
         return &dst.Buffer;
     }
 
+    // Destinations of different kinds are stored separately, so the same table
+    // may be used both for uploading rows and for erasing keys.
+    TEraseBuffer* AddEraseDestination(TString table) {
+        auto& dst = Destinations[std::make_pair(table, EDestinationKind::Erase)];
+        dst.Table = std::move(table);
+        dst.Kind = EDestinationKind::Erase;
+        return &dst.EraseBuffer;
+    }
+
     bool Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
-        Y_ENSURE(UploaderId == ev->Sender, "Mismatch"
-            << " Uploader: " << UploaderId.ToString()
-            << " Sender: " << ev->Sender.ToString());
-        Y_ENSURE(Uploading);
+        return HandleResponse(EDestinationKind::Upload, ev->Sender, ev->Get()->Status, ev->Get()->Issues);
+    }
 
-        UploaderId = {};
-
-        UploadStatus.StatusCode = ev->Get()->Status;
-        UploadStatus.Issues = ev->Get()->Issues;
-        if (!UploadStatus.IsSuccess()) {
-            return false;
-        }
-
-        UploadRows += Uploading.Buffer.GetRows();
-        UploadBytes += Uploading.Buffer.GetRowCellBytes();
-        Uploading.Buffer.Clear();
-        RetryCount = 0;
-
-        if (auto it = Destinations.find(Uploading.Table); it != Destinations.end()) {
-            it->second.FlushedKey = it->second.PendingFlushKey;
-            it->second.FlushedSeqNo = it->second.PendingFlushSeqNo;
-            it->second.HasFlushedOnce = true;
-        }
-
-        for (auto& [_, dst] : Destinations) {
-            if (TryUpload(dst, true /* by limit */)) {
-                break;
-            }
-        }
-
-        return true;
+    bool Handle(TEvTxUserProxy::TEvEraseRowsResponse::TPtr& ev) {
+        return HandleResponse(EDestinationKind::Erase, ev->Sender, ev->Get()->Status, ev->Get()->Issues);
     }
 
     bool ShouldWaitUpload()
     {
         bool hasReachedLimit = false;
         for (auto& [_, dst] : Destinations) {
-            if (dst.Buffer.HasReachedLimits(ScanSettings)) {
+            if (dst.HasReachedLimits(ScanSettings)) {
                 hasReachedLimit = true;
                 break;
             }
@@ -110,7 +162,7 @@ public:
 
         hasReachedLimit = false;
         for (auto& [_, dst] : Destinations) {
-            if (dst.Buffer.HasReachedLimits(ScanSettings)) {
+            if (dst.HasReachedLimits(ScanSettings)) {
                 hasReachedLimit = true;
                 break;
             }
@@ -132,7 +184,7 @@ public:
         }
 
         ++RetryCount;
-        StartUploadRowsInternal();
+        StartUploadInternal();
     }
 
     bool CanFinish() {
@@ -154,7 +206,7 @@ public:
             return false;
         }
         for (const auto& [_, dst] : Destinations) {
-            if (!dst.Buffer.IsEmpty()) {
+            if (dst) {
                 return false;
             }
         }
@@ -220,7 +272,7 @@ public:
     // Returns the latest source-table key K such that, for every destination
     // buffer, all entries this destination would produce for source rows
     // <= K are durably persisted via the upload pipeline. Returns nullopt
-    // while any destination has not yet completed a successful upload — in
+    // while any destination has not yet completed a pending upload — in
     // that case there is no cross-destination safe checkpoint and the caller
     // must NOT advance LastKeyAck on the scan-level response.
     //
@@ -235,64 +287,142 @@ public:
         const TDestination* minDst = nullptr;
         for (const auto& [_, dst] : Destinations) {
             if (!dst.HasFlushedOnce) {
-                return std::nullopt;
+                // Nothing to upload == everything is uploaded, too.
+                const bool inFlight = bool(Uploading)
+                    && Uploading.Table == dst.Table
+                    && Uploading.Kind == dst.Kind;
+                if (dst || inFlight) {
+                    return std::nullopt;
+                }
+                continue;
             }
             if (!minDst || dst.FlushedSeqNo < minDst->FlushedSeqNo) {
                 minDst = &dst;
             }
         }
-        return minDst->FlushedKey;
+        return minDst
+            ? std::optional<TSerializedCellVec>(minDst->FlushedKey)
+            : std::nullopt;
     }
 
     TString Debug() const {
         TStringBuilder result;
 
         if (Uploading) {
-            result << "UploadTable: " << Uploading.Table << " UploadBuf size: " << Uploading.Buffer.GetBufferBytes() << " RetryCount: " << RetryCount;
+            result << "UploadTable: " << Uploading.Table;
+            if (Uploading.Kind == EDestinationKind::Erase) {
+                result << " EraseBuf size: " << Uploading.EraseBuffer.GetBufferBytes()
+                    << " Keys: " << Uploading.EraseBuffer.GetKeys();
+            } else {
+                result << " UploadBuf size: " << Uploading.Buffer.GetBufferBytes();
+            }
+            result << " RetryCount: " << RetryCount;
         }
 
         return result;
     }
 
 private:
+    bool HandleResponse(EDestinationKind kind, const TActorId& sender,
+        Ydb::StatusIds::StatusCode statusCode, const NYql::TIssues& issues)
+    {
+        Y_ENSURE(UploaderId == sender, "Mismatch"
+            << " Uploader: " << UploaderId.ToString()
+            << " Sender: " << sender.ToString());
+        Y_ENSURE(Uploading);
+        Y_ENSURE(Uploading.Kind == kind, "Mismatch"
+            << " Uploading kind: " << static_cast<int>(Uploading.Kind)
+            << " Response kind: " << static_cast<int>(kind));
+
+        UploaderId = {};
+
+        UploadStatus.StatusCode = statusCode;
+        UploadStatus.Issues = issues;
+        if (!UploadStatus.IsSuccess()) {
+            return false;
+        }
+
+        if (kind == EDestinationKind::Erase) {
+            UploadBytes += Uploading.EraseBuffer.GetBufferBytes();
+            Uploading.EraseBuffer.Clear();
+        } else {
+            UploadRows += Uploading.Buffer.GetRows();
+            UploadBytes += Uploading.Buffer.GetRowCellBytes();
+            Uploading.Buffer.Clear();
+        }
+        RetryCount = 0;
+
+        if (auto it = Destinations.find(std::make_pair(Uploading.Table, Uploading.Kind)); it != Destinations.end()) {
+            it->second.FlushedKey = it->second.PendingFlushKey;
+            it->second.FlushedSeqNo = it->second.PendingFlushSeqNo;
+            it->second.HasFlushedOnce = true;
+        }
+
+        for (auto& [_, dst] : Destinations) {
+            if (TryUpload(dst, true /* by limit */)) {
+                break;
+            }
+        }
+
+        return true;
+    }
+
     bool TryUpload(TDestination& destination, bool byLimit) {
         if (Y_UNLIKELY(Uploading)) {
             // already uploading something
             return true;
         }
 
-        if (!destination.Buffer.IsEmpty() && (!byLimit || destination.Buffer.HasReachedLimits(ScanSettings))) {
+        if (destination && (!byLimit || destination.HasReachedLimits(ScanSettings))) {
             Uploading.Table = destination.Table;
+            Uploading.Kind = destination.Kind;
             Uploading.Types = destination.Types;
-            destination.Buffer.FlushTo(Uploading.Buffer);
+            if (destination.Kind == EDestinationKind::Erase) {
+                destination.EraseBuffer.FlushTo(Uploading.EraseBuffer);
+            } else {
+                destination.Buffer.FlushTo(Uploading.Buffer);
+            }
             // Capture the scan's current source key as the boundary that the
             // upload of this destination's batch covers — i.e. all entries
             // for source rows <= CurrentSourceKey produced by this scan and
             // belonging to this destination are now committed to the upload.
             destination.PendingFlushKey = CurrentSourceKey;
             destination.PendingFlushSeqNo = ++CurrentSourceSeqNo;
-            StartUploadRowsInternal();
+            StartUploadInternal();
             return true;
         }
 
         return false;
     }
 
-    void StartUploadRowsInternal() {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Starting batch row upload",
-            {"debug", Debug()});
-
+    void StartUploadInternal() {
         Y_ENSURE(Uploading);
-        Y_ENSURE(!Uploading.Buffer.IsEmpty());
         Y_ENSURE(!UploaderId);
         Y_ENSURE(Owner);
-        auto actor = NTxProxy::CreateUploadRowsInternal(
-            Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
-            NTxProxy::EUploadRowsMode::WriteToTableShadow,
-            true /*writeToPrivateTable*/,
-            true /*writeToIndexImplTable*/);
 
-        UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
+        if (Uploading.Kind == EDestinationKind::Erase) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Starting batch row erase",
+                {"debug", Debug()});
+
+            Y_ENSURE(!Uploading.EraseBuffer.IsEmpty());
+            auto actor = NTxProxy::CreateEraseRowsInternal(
+                Owner, Database, Uploading.Table, Uploading.EraseBuffer.GetKeysData(),
+                true /*writeToTableShadow*/,
+                true /*writeToPrivateTable*/,
+                true /*writeToIndexImplTable*/);
+            UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
+        } else {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Starting batch row upload",
+                {"debug", Debug()});
+
+            Y_ENSURE(!Uploading.Buffer.IsEmpty());
+            auto actor = NTxProxy::CreateUploadRowsInternal(
+                Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
+                NTxProxy::EUploadRowsMode::WriteToTableShadow,
+                true /*writeToPrivateTable*/,
+                true /*writeToIndexImplTable*/);
+            UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
+        }
     }
 
 private:
@@ -300,7 +430,7 @@ private:
     const TIndexBuildScanSettings ScanSettings;
     TActorId Owner;
 
-    TMap<TString, TDestination> Destinations;
+    TMap<std::pair<TString, EDestinationKind>, TDestination> Destinations;
     TActorId UploaderId = {};
     TDestination Uploading;
     TUploadStatus UploadStatus = {};

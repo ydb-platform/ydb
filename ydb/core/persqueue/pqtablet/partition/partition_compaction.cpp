@@ -1,6 +1,7 @@
 #include "partition.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/public/config.h>
 #include "partition_util.h"
 #include <util/string/escape.h>
 #include <ydb/library/actors/core/log.h>
@@ -631,7 +632,10 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                     "Can't append blob for key",
                     {"key", k.Key}
                 );
-                PQ_ENSURE(false)("reason", "Something went wrong")("topic", TopicName())("key", k.Key.ToString());
+                PQ_ENSURE(false,
+                    {"reason", "Something went wrong"},
+                    {"topic", TopicName()},
+                    {"key", k.Key});
                 return;
             }
 
@@ -797,14 +801,8 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(const bool headCl
                                 CompactionBlobEncoder.Head.PartNo,
                                 CompactionBlobEncoder.NewHead.GetCount() + CompactionBlobEncoder.Head.GetCount(),
                                 CompactionBlobEncoder.Head.GetInternalPartsCount() +  CompactionBlobEncoder.NewHead.GetInternalPartsCount());
-            if (HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()) {
-                ui64 offsetDelta = 0;
-                if (!CompactionBlobEncoder.Head.GetBatches().empty()) {
-                    offsetDelta += CompactionBlobEncoder.Head.GetOffsetDelta();
-                }
-                if (!CompactionBlobEncoder.NewHead.GetBatches().empty()) {
-                    offsetDelta += CompactionBlobEncoder.NewHead.GetOffsetDelta();
-                }
+            if (CanWriteOffsetDeltaInKeys()) {
+                ui64 offsetDelta = CompactionBlobEncoder.NewHead.Offset - CompactionBlobEncoder.Head.Offset + CompactionBlobEncoder.NewHead.GetOffsetDelta();
                 if (offsetDelta > 0) {
                     key.SetOffsetDelta(offsetDelta);
                 }
@@ -927,15 +925,15 @@ void TPartition::CheckTimestampsOrderInZones(TStringBuf validateReason) const {
         for (const TDataKey& k : seq) {
             const auto curr = k.Timestamp;
             const bool disorder = (curr < prev);
-            PQ_ENSURE(!disorder)
-                ("prev_tmestamp", prev.MicroSeconds())
-                ("curr_timestamp", curr.MicroSeconds())
-                ("zone", zoneName)
-                ("offset", k.Key.GetOffset())
-                ("part_no", k.Key.GetPartNo())
-                ("pos", pos)
-                ("in_zone_pos", in_zone_pos)
-                ("validate_reason", validateReason);
+            PQ_ENSURE(!disorder,
+                {"prevTmestamp", prev.MicroSeconds()},
+                {"currTimestamp", curr.MicroSeconds()},
+                {"zone", zoneName},
+                {"offset", k.Key.GetOffset()},
+                {"partNo", k.Key.GetPartNo()},
+                {"pos", pos},
+                {"inZonePos", in_zone_pos},
+                {"validateReason", validateReason});
            prev = curr;
             ++pos;
             ++in_zone_pos;
@@ -944,16 +942,6 @@ void TPartition::CheckTimestampsOrderInZones(TStringBuf validateReason) const {
     check(CompactionBlobEncoder.DataKeysBody, "compacted_body");
     check(CompactionBlobEncoder.HeadKeys, "compacted_head");
     check(BlobEncoder.DataKeysBody, "fastwrite_body");
-}
-
-void TPartition::InitFirstCompactionPart()
-{
-    if (CompactionBlobEncoder.HeadKeys.empty()) {
-        return;
-    }
-    TBatch batch = CompactionBlobEncoder.Head.GetLastBatch();
-    batch.Unpack();
-    FirstCompactionPart = std::make_pair(batch.GetOffset(), batch.Blobs.back().GetPartNo());
 }
 
 }

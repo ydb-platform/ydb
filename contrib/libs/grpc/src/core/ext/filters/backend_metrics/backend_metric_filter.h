@@ -32,18 +32,6 @@
 
 namespace grpc_core {
 
-class LegacyBackendMetricFilter : public ChannelFilter {
- public:
-  static const grpc_channel_filter kFilter;
-
-  static y_absl::StatusOr<LegacyBackendMetricFilter> Create(
-      const ChannelArgs& args, ChannelFilter::Args);
-
-  // Construct a promise for one call.
-  ArenaPromise<ServerMetadataHandle> MakeCallPromise(
-      CallArgs call_args, NextPromiseFactory next_promise_factory) override;
-};
-
 class BackendMetricFilter : public ImplementChannelFilter<BackendMetricFilter> {
  public:
   static const grpc_channel_filter kFilter;

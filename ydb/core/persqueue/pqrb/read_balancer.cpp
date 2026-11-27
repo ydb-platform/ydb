@@ -22,7 +22,11 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
-#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletID())("path", Path)("topic", Topic)
+#define PQ_ENSURE(condition, ...) YDB_LOG_ENSURE(condition, \
+    {"tabletId", TabletID()},                               \
+    {"path", Path},                                         \
+    {"topic", Topic},                                       \
+    __VA_ARGS__)
 
 namespace NKikimr {
 namespace NPQ {
@@ -121,7 +125,8 @@ void TPersQueueReadBalancer::OnActivateExecutor(const TActorContext &ctx) {
     ResourceMetrics = Executor()->GetResourceMetrics();
     Become(&TThis::StateWork);
     if (Executor()->GetStats().IsFollower())
-        PQ_ENSURE(false)("reason", "is follower works well with Balancer?");
+        PQ_ENSURE(false,
+            {"reason", "is follower works well with Balancer?"});
     else
         Execute(new TTxPreInit(this), ctx);
 }
@@ -319,9 +324,11 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
     if (SplitMergeEnabled(TabletConfig) && MirroringEnabled(TabletConfig) && AppData(ctx)->FeatureFlags.GetEnableMirroredTopicSplitMerge()) {
         if (MirrorTopicDescriberActorId) {
-            ctx.Send(MirrorTopicDescriberActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, TabletConfig));
+            auto tabletConfig = TabletConfig;
+            tabletConfig.SetTopicPath(Path);
+            ctx.Send(MirrorTopicDescriberActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, tabletConfig));
         } else {
-            MirrorTopicDescriberActorId = ctx.Register(CreateMirrorDescriber(TabletID(), SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
+            MirrorTopicDescriberActorId = ctx.Register(CreateMirrorDescriber(TabletID(), SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom(), TabletConfig.GetYdbDatabasePath(), Path));
         }
     } else {
         if (MirrorTopicDescriberActorId) {
@@ -394,7 +401,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     std::vector<ui32> deletedPartitions;
     for (auto& p : PartitionsInfo) {
         if (partitionsInfo.find(p.first) == partitionsInfo.end()) {
-            PQ_ENSURE(false)("reason", "deleting of partitions is not fully supported yet")("partition_id", p.first);
+            PQ_ENSURE(false,
+                {"reason", "deleting of partitions is not fully supported yet"},
+                {"partitionId", p.first});
             deletedPartitions.push_back(p.first);
         }
     }

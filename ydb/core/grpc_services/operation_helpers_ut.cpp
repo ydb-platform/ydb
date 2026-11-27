@@ -1,4 +1,6 @@
 #include "operation_helpers.h"
+#include "rpc_export_base.h"
+#include "rpc_import_base.h"
 
 #include <google/protobuf/text_format.h>
 
@@ -12,6 +14,42 @@
 
 
 namespace NKikimr {
+
+namespace {
+
+template <typename TSettings>
+void SetEncryptionKey(TSettings& settings) {
+    auto& encryption = *settings.mutable_encryption_settings();
+    encryption.set_encryption_algorithm("AES-128-GCM");
+    encryption.mutable_symmetric_key()->set_key("0123456789abcdef");
+}
+
+template <typename TMetadata>
+void CheckEncryptionKeyCleared(const Ydb::Operations::Operation& operation) {
+    TMetadata metadata;
+    UNIT_ASSERT(operation.metadata().UnpackTo(&metadata));
+    const auto& encryption = metadata.settings().encryption_settings();
+    UNIT_ASSERT(!encryption.has_symmetric_key());
+    UNIT_ASSERT_VALUES_EQUAL(encryption.encryption_algorithm(), "AES-128-GCM");
+}
+
+NKikimrExport::TExport MakeExport() {
+    NKikimrExport::TExport exprt;
+    // Metadata is filled only for SUCCESS or CANCELLED operations
+    exprt.SetStatus(Ydb::StatusIds::SUCCESS);
+    exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
+    return exprt;
+}
+
+NKikimrImport::TImport MakeImport() {
+    NKikimrImport::TImport importInfo;
+    // Metadata is filled only for SUCCESS or CANCELLED operations
+    importInfo.SetStatus(Ydb::StatusIds::SUCCESS);
+    importInfo.SetProgress(Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
+    return importInfo;
+}
+
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(OperationMapping) {
     Y_UNIT_TEST(IndexBuildCanceled) {
@@ -187,6 +225,30 @@ Y_UNIT_TEST_SUITE(OperationMapping) {
         UNIT_ASSERT_DOUBLES_EQUAL(metadata.progress(), 100., 1e-5);
         UNIT_ASSERT_VALUES_EQUAL(metadata.shards_total(), 10);
         UNIT_ASSERT_VALUES_EQUAL(metadata.shards_done(), 10);
+    }
+
+    Y_UNIT_TEST(ExportToS3ClearsEncryptionKey) {
+        auto exprt = MakeExport();
+        SetEncryptionKey(*exprt.MutableExportToS3Settings());
+        CheckEncryptionKeyCleared<Ydb::Export::ExportToS3Metadata>(NGRpcService::TExportConv::ToOperation(exprt));
+    }
+
+    Y_UNIT_TEST(ExportToFsClearsEncryptionKey) {
+        auto exprt = MakeExport();
+        SetEncryptionKey(*exprt.MutableExportToFsSettings());
+        CheckEncryptionKeyCleared<Ydb::Export::ExportToFsMetadata>(NGRpcService::TExportConv::ToOperation(exprt));
+    }
+
+    Y_UNIT_TEST(ImportFromS3ClearsEncryptionKey) {
+        auto importInfo = MakeImport();
+        SetEncryptionKey(*importInfo.MutableImportFromS3Settings());
+        CheckEncryptionKeyCleared<Ydb::Import::ImportFromS3Metadata>(NGRpcService::TImportConv::ToOperation(importInfo));
+    }
+
+    Y_UNIT_TEST(ImportFromFsClearsEncryptionKey) {
+        auto importInfo = MakeImport();
+        SetEncryptionKey(*importInfo.MutableImportFromFsSettings());
+        CheckEncryptionKeyCleared<Ydb::Import::ImportFromFsMetadata>(NGRpcService::TImportConv::ToOperation(importInfo));
     }
 }
 

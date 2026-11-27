@@ -6,19 +6,17 @@ SRCS(
     keys.h
     path.h
     query_metrics_limits.h
-    scan_actor_base_impl.h
     registry.cpp
     resolver.cpp
     utils.h
-    processor_scan.h
 )
 
 PEERDIR(
-    ydb/library/actors/core
+    library/cpp/deprecated/atomic
     ydb/core/base
     ydb/core/protos
     ydb/core/tablet_flat
-    library/cpp/deprecated/atomic
+    ydb/library/actors/core
 )
 
 END()

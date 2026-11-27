@@ -6,8 +6,14 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/kqp/query_data
+    library/cpp/json
+    library/cpp/lwtrace
     ydb/core/kqp/common/simple
+    ydb/core/protos
+    ydb/core/util
+    ydb/library/aclib
+    ydb/library/actors/core
+    yql/essentials/ast
     yql/essentials/public/issue
 )
 

@@ -27,6 +27,8 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/util.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
 #include <util/string/join.h>
@@ -1601,7 +1603,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
         if (!subscription->UpdateInProcess) {
             subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
             NKikimrConfig::TAppConfig trunc;
-            if (YamlConfigEnabled) {
+            if (subscription->Yaml && YamlConfigEnabled) {
                 ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(kinds), BaseConfig);
             } else {
                 ReplaceConfigItems(CurrentConfig, trunc, FilterKinds(kinds), BaseConfig);

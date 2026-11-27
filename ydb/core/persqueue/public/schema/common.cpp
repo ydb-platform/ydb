@@ -146,7 +146,10 @@ TResult ProcessTopicAttributes(
     auto partConfig = tabletConfig->MutablePartitionConfig();
 
     for (const auto& [attrName, attrValue] : attributes) {
-        if (attrName == "_partitions_per_tablet") {
+        if (attrName == "_ydb_replication_consumer") {
+            // Applied after consumers have been created or altered.
+            continue;
+        } else if (attrName == "_partitions_per_tablet") {
             try {
                 if (operation == EOperation::Create) {
                     config->SetPartitionPerTablet(FromString<ui32>(attrValue));
@@ -176,6 +179,17 @@ TResult ProcessTopicAttributes(
                 } catch(...) {
                     return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Attribute allow_unauthenticated_write is " << attrValue << ", which is not bool"};
                 }
+            }
+        } else if (attrName == "_write_mode") {
+            if (attrValue == "available") {
+                tabletConfig->SetWriteMode(NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);
+            } else if (attrValue == "unavailable") {
+                tabletConfig->SetWriteMode(NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE);
+            } else if (attrValue == "prohibited") {
+                tabletConfig->SetWriteMode(NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED);
+            } else {
+                return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid _write_mode: '" << attrValue
+                    << "', expected available, unavailable or prohibited"};
             }
         } else if (attrName == "_abc_slug") {
             tabletConfig->SetAbcSlug(attrValue);
@@ -317,6 +331,38 @@ TResult ProcessTopicAttributes(
     return TResult();
 }
 
+TResult ApplyReplicationConsumerAttribute(
+    const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& attributes,
+    NKikimrPQ::TPQTabletConfig& config
+) {
+    const auto it = attributes.find("_ydb_replication_consumer");
+    if (it == attributes.end()) {
+        return {};
+    }
+
+    NKikimrPQ::TPQTabletConfig::TConsumer* replicationConsumer = nullptr;
+    if (!it->second.empty()) {
+        const auto name = NPersQueue::ConvertNewConsumerName(it->second, AppData()->PQConfig);
+        replicationConsumer = NPQ::GetConsumer(config, name);
+        if (!replicationConsumer) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown _ydb_replication_consumer: " << it->second};
+        }
+        if (replicationConsumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            return {Ydb::StatusIds::BAD_REQUEST, "_ydb_replication_consumer cannot be a shared consumer"};
+        }
+    }
+
+    for (auto& consumer : *config.MutableConsumers()) {
+        if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            consumer.SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+        }
+    }
+    if (replicationConsumer) {
+        replicationConsumer->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    }
+    return {};
+}
+
 TClientServiceTypes GetSupportedClientServiceTypes() {
     const auto& pqConfig = AppData()->PQConfig;
 
@@ -371,6 +417,9 @@ TResult AddConsumer(
     ::NKikimrPQ::TPQTabletConfig_TConsumer* consumer = config->AddConsumers();
 
     consumer->SetName(consumerName);
+    if (consumerConfig.has_replicate_offsets()) {
+        consumer->SetReplicateOffsets(consumerConfig.replicate_offsets());
+    }
 
     if (auto r = ProcessConsumerType(consumer, consumerConfig); !r) {
         return r;

@@ -3,12 +3,16 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_blocks.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_llvm_base.h> // Y_IGNORE
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 #include <ydb/library/yql/dq/comp_nodes/dq_join_common.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_join_filters.h>
+
+#include <algorithm>
 
 namespace NKikimr::NMiniKQL {
 
@@ -28,6 +32,7 @@ struct TDqScalarJoinMetadata {
     TBlockHashJoinSettings Settings;
     TSides<TVector<TType*>> UserTypes;
     TSides<TVector<int>> ColumnPermutation;
+    TType* MarkType = nullptr;
 };
 
 class TScalarPackedTupleSource : public NNonCopyable::TMoveOnly {
@@ -131,10 +136,16 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
 
     TRenamesScalarOutput(const TDqScalarJoinMetadata* meta, TSides<IScalarLayoutConverter*> converters)
         : TBase(&meta->Renames, converters)
-        , Widths_({.Build = static_cast<int>(std::ssize(meta->InputTypes.Build)),
+        , Widths_({.Build = Join.Mark ? 1 : static_cast<int>(std::ssize(meta->InputTypes.Build)),
                    .Probe = static_cast<int>(std::ssize(meta->InputTypes.Probe))})
     {
-        if constexpr (LeftSemiOrOnly(Join.Kind)) {
+        if constexpr (Join.Mark) {
+            const TMKQLVector<NUdf::TUnboxedValue> marks = {NUdf::TUnboxedValuePod(true),
+                                                            NUdf::TUnboxedValuePod(false), NUdf::TUnboxedValuePod()};
+            this->Converters_.Build->PackBatch(marks.data(), MarkValuesCount, this->Marks_);
+        }
+
+        if constexpr (Join.OutputsPreservedSideOnly()) {
             for (auto rename : *this->Renames_) {
                 MKQL_ENSURE(rename.Side == Join.Preserved,
                             "renames in Semi or Only Left Join shouldn't contain columns from the non-preserved side");
@@ -145,8 +156,8 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
             const auto& nullTypes = meta->UserTypes.SelectSide(Join.NullSupplying());
             for (int i = 0; i < std::ssize(nullTypes); ++i) {
                 auto* type = nullTypes[i];
-                MKQL_ENSURE(type->IsOptional(),
-                            Sprintf("expected every type of the null-supplying side to be optional when join type is Left, got type #%i: %s",
+                MKQL_ENSURE(type->IsOptional() || type->IsNull(),
+                            Sprintf("expected every type of the null-supplying side to be optional or null when join type is Left, got type #%i: %s",
                                     i + 1, type->GetKindAsStr().data()));
             }
             TMKQLVector<NUdf::TUnboxedValue> nulls(std::ssize(nullTypes));
@@ -162,7 +173,7 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
 
         res.Buffer.reserve(nItems * this->Columns());
 
-        if constexpr (LeftSemiOrOnly(Join.Kind)) {
+        if constexpr (Join.OutputsPreservedSideOnly()) {
             const int preservedWidth = Widths_.SelectSide(Join.Preserved);
             auto& preservedValues = Values_.SelectSide(Join.Preserved);
             preservedValues.resize(nItems * preservedWidth);
@@ -196,9 +207,9 @@ private:
 };
 
 template <TPhysicalJoin Join>
-class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHashJoinWrapper<Join>> {
+class TScalarHashJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TScalarHashJoinWrapper<Join>> {
 private:
-    using TBaseComputation = TStatefulWideFlowComputationNode<TScalarHashJoinWrapper>;
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TScalarHashJoinWrapper>;
 
 public:
     TScalarHashJoinWrapper(TComputationMutables& mutables, TDqScalarJoinMetadata meta,
@@ -207,7 +218,12 @@ public:
         , Meta_(std::make_unique<TDqScalarJoinMetadata>(std::move(meta)))
         , Flows_(flows)
         , Filters_(std::move(filters))
-    {}
+    {
+        OutputRepresentations_.reserve(Meta_->ResultItemTypes.size());
+        for (const auto* type : Meta_->ResultItemTypes) {
+            OutputRepresentations_.push_back(GetValueRepresentation(type));
+        }
+    }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx,
                              NUdf::TUnboxedValue* const* output) const {
@@ -224,11 +240,13 @@ private:
 
     public:
         TStreamState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationWideFlowNode*> flows,
-                     TSides<std::unique_ptr<IScalarLayoutConverter>> converters, const TDqScalarJoinMetadata* meta,
-                     std::optional<TPackedTuplePairFilter> pairFilter)
+                     TSides<std::unique_ptr<IScalarLayoutConverter>> converters,
+                     std::unique_ptr<IScalarLayoutConverter> markConverter, std::optional<TMarkJoinKeys> markKeys,
+                     const TDqScalarJoinMetadata* meta, std::optional<TPackedTuplePairFilter> pairFilter)
             : TBase(memInfo)
             , Meta_(meta)
             , Converters_(std::move(converters))
+            , MarkConverter_(std::move(markConverter))
             , JoinCtx_(&ctx)
             , Join_(TSides<TScalarPackedTupleSource>{
                         .Build = {ctx, flows.Build, Converters_.Build.get(),
@@ -239,8 +257,10 @@ private:
                                   Meta_->ColumnPermutation.Probe}},
                     ctx, "ScalarHashJoinPacked",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
-                                                              .Probe = Converters_.Probe->GetTupleLayout()})
-            , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
+                                                              .Probe = Converters_.Probe->GetTupleLayout()},
+                    std::move(markKeys))
+            , Output_(meta, {.Build = MarkConverter_ ? MarkConverter_.get() : Converters_.Build.get(),
+                             .Probe = Converters_.Probe.get()})
             , PairFilter_(std::move(pairFilter))
             , OutputRows_(MakeJoinOutputRowsCounter(ctx))
         {}
@@ -289,6 +309,7 @@ private:
     private:
         const TDqScalarJoinMetadata* Meta_;
         TSides<std::unique_ptr<IScalarLayoutConverter>> Converters_;
+        std::unique_ptr<IScalarLayoutConverter> MarkConverter_;
         TComputationContext* JoinCtx_;
         JoinType Join_;
         TRenamesScalarOutput<Join> Output_;
@@ -297,6 +318,86 @@ private:
         size_t BufferPos_ = 0;
         NYql::NUdf::TCounter OutputRows_;
     };
+
+#ifndef MKQL_DISABLE_CODEGEN
+    // Interpreter call, same shape as grace join. Parents can be compiled;
+    // this node itself stays in C++.
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
+        auto& context = ctx.Codegen.GetContext();
+
+        const auto valueType = Type::getInt128Ty(context);
+        const auto indexType = Type::getInt32Ty(context);
+        const ui32 outWidth = OutputRepresentations_.size();
+        // LLVM rejects a zero-length array. A join with no output columns still needs a pointer.
+        const ui32 allocWidth = std::max(outWidth, 1u);
+
+        const auto arrayType = ArrayType::get(valueType, allocWidth);
+        const auto fieldsType = ArrayType::get(PointerType::getUnqual(valueType), allocWidth);
+
+        const auto atTop = &ctx.Func->getEntryBlock().back();
+
+        const auto values = new AllocaInst(arrayType, 0U, "values", atTop);
+        const auto fields = new AllocaInst(fieldsType, 0U, "fields", atTop);
+
+        ICodegeneratorInlineWideNode::TGettersList getters(outWidth);
+
+        Value* initV = UndefValue::get(arrayType);
+        Value* initF = UndefValue::get(fieldsType);
+        std::vector<Value*> pointers;
+        pointers.reserve(allocWidth);
+        for (auto i = 0U; i < allocWidth; ++i) {
+            pointers.emplace_back(GetElementPtrInst::CreateInBounds(arrayType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), atTop));
+            initV = InsertValueInst::Create(initV, ConstantInt::get(valueType, 0), {i}, (TString("zero_") += ToString(i)).c_str(), atTop);
+            initF = InsertValueInst::Create(initF, pointers.back(), {i}, (TString("insert_") += ToString(i)).c_str(), atTop);
+
+            if (i < outWidth) {
+                getters[i] = [i, values, indexType, arrayType, valueType](const TCodegenContext& ctx, BasicBlock*& block) {
+                    Y_UNUSED(ctx);
+                    const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
+                    return new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block);
+                };
+            }
+        }
+
+        new StoreInst(initV, values, atTop);
+        new StoreInst(initF, fields, atTop);
+
+        TLLVMFieldsStructure<TComputationValue<TNull>> fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
+        const auto statePtrType = PointerType::getUnqual(stateType);
+
+        const auto make = BasicBlock::Create(context, "make", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
+        block = make;
+
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        EmitFunctionCall<&TScalarHashJoinWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
+        BranchInst::Create(main, block);
+
+        block = main;
+
+        for (ui32 i = 0U; i < outWidth; ++i) {
+            ValueCleanup(OutputRepresentations_[i], pointers[i], ctx, block);
+        }
+
+        new StoreInst(initV, values, block);
+
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
+        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
+        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
+
+        const auto result = EmitFunctionCall<&TStreamState::FetchValues>(Type::getInt32Ty(context), {stateArg, fields}, ctx, block);
+
+        for (ui32 i = 0U; i < outWidth; ++i) {
+            ValueRelease(OutputRepresentations_[i], pointers[i], ctx, block);
+        }
+
+        return {result, std::move(getters)};
+    }
+#endif
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         TSides<std::unique_ptr<IScalarLayoutConverter>> converters;
@@ -307,11 +408,22 @@ private:
             converters.SelectSide(side) =
                 MakeScalarLayoutConverter(helper, Meta_->UserTypes.SelectSide(side), roles, ctx.HolderFactory);
             converters.SelectSide(side)->ApplyEqualNulls(
-                EqualNullsInputColumns(Meta_->Settings.EqualNullsKeys, keyColumns));
+                EqualNullsInputColumns(HashJoinEqualNullsKeys(Meta_->Settings), keyColumns));
+        }
+
+        std::unique_ptr<IScalarLayoutConverter> markConverter;
+        std::optional<TMarkJoinKeys> markKeys;
+        if constexpr (Join.Mark) {
+            markConverter = MakeScalarLayoutConverter(helper, {Meta_->MarkType}, {NPackedTuple::EColumnRole::Payload},
+                                                      ctx.HolderFactory);
+            markKeys = MakeMarkJoinKeys(
+                Meta_->Settings,
+                TSides<IScalarLayoutConverter*>{.Build = converters.Build.get(), .Probe = converters.Probe.get()},
+                Meta_->UserTypes);
         }
 
         state = ctx.HolderFactory.Create<TStreamState>(
-            ctx, Flows_, std::move(converters), Meta_.get(),
+            ctx, Flows_, std::move(converters), std::move(markConverter), std::move(markKeys), Meta_.get(),
             TPackedTuplePairFilter::TryCreate(ctx, Filters_, Meta_->UserTypes, Meta_->KeyColumns,
                                               Meta_->ColumnPermutation));
     }
@@ -326,6 +438,7 @@ private:
     std::unique_ptr<const TDqScalarJoinMetadata> Meta_;
     TSides<IComputationWideFlowNode*> Flows_;
     TJoinFilters Filters_;
+    std::vector<EValueRepresentation> OutputRepresentations_;
 };
 
 } // namespace
@@ -383,17 +496,22 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     MKQL_ENSURE(leftFlow, "Expected WideFlow as a left input");
     MKQL_ENSURE(rightFlow, "Expected WideFlow as a right input");
 
-    ValidateRenames(parsed.UserRenames, joinKind, std::ssize(meta.InputTypes.Probe), std::ssize(meta.InputTypes.Build));
-    meta.Renames = BuildImplRenames(parsed.UserRenames);
-
     if (hasSettings) {
         meta.Settings = ParseHashJoinSettingsTuple(callable.GetInput(InputsWithoutSettings));
     }
+    ValidateRenames(parsed.UserRenames, joinKind, std::ssize(meta.InputTypes.Probe), std::ssize(meta.InputTypes.Build),
+                    meta.Settings.Mark);
+    meta.Renames = BuildImplRenames(parsed.UserRenames);
+
     const bool leftIsBuild = meta.Settings.LeftIsBuild();
     ApplyLeftBuildSwap(leftIsBuild, meta.InputTypes, meta.KeyColumns, meta.Renames);
 
     ApplyKeyColumnPermutation(meta.KeyColumns, meta.InputTypes, /* trailingColumns */ 0, meta.Renames,
                               meta.ColumnPermutation);
+    if (meta.Settings.Mark) {
+        ResetMarkRenames(meta.Renames);
+        meta.MarkType = TOptionalType::Create(TDataType::Create(NUdf::TDataType<bool>::Id, ctx.Env), ctx.Env);
+    }
     const ESide preservedSide = PreservedSideForLeftBuild(leftIsBuild);
     meta.UserTypes = ForceOptionalOnNullableSide(meta.InputTypes, joinKind, OtherSide(preservedSide), ctx.Env);
     for (ESide side : EachSide) {
@@ -402,6 +520,12 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto flows = SidesForLeftBuild(leftIsBuild, leftFlow, rightFlow);
     TJoinFilters filters = ParseJoinFiltersForBuildSide(ctx, callable, filterStart, leftIsBuild);
+
+    if (meta.Settings.Mark) {
+        ValidateMarkJoin(meta.Settings, joinKind, meta.KeyColumns.Build.size(), filters);
+        return DispatchMarkHashJoin<TScalarHashJoinWrapper, IComputationWideFlowNode>(ctx.Mutables, std::move(meta),
+                                                                                     flows, std::move(filters));
+    }
 
     return DispatchHashJoinByKind<TScalarHashJoinWrapper, IComputationWideFlowNode>(
         joinKind, preservedSide, isGrid,

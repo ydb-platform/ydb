@@ -1,0 +1,9 @@
+PRAGMA yt.UseQLFilter;
+
+SELECT
+    a
+FROM
+    plato.Input
+WHERE
+    a IS NOT NULL OR b IS NULL
+;

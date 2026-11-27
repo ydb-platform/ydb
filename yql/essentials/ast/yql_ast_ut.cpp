@@ -1,51 +1,19 @@
 #include "yql_ast.h"
 #include "yql_ast_annotation.h"
+#include "test_support/yql_ast_test_program.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/util.h>
-#include <util/system/sanitizers.h>
 
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(TParseYqlAst) {
-constexpr TStringBuf TEST_PROGRAM =
-    "(\n"
-    "#comment\n"
-    "(let mr_source (DataSource 'yamr 'cedar))\n"
-    "(let x (Read! world mr_source (Key '('table (KeyString 'Input))) '('key 'value) '()))\n"
-    "(let world (Left! x))\n"
-    "(let table1 (Right! x))\n"
-    "(let tresh (Int32 '100))\n"
-    "(let table1low (Filter table1 (lambda '(item) (< (member item 'key) tresh))))\n"
-    "(let mr_sink (DataSink 'yamr (quote cedar)))\n"
-    "(let world (Write! world mr_sink (Key '('table (KeyString 'Output))) table1low '('('mode 'append))))\n"
-    "(let world (Commit! world mr_sink))\n"
-    "(return world)\n"
-    ")";
-
 Y_UNIT_TEST(ParseAstTest) {
     TAstParseResult res = ParseAst(TEST_PROGRAM);
     UNIT_ASSERT(res.IsOk());
     UNIT_ASSERT(res.Root->IsList());
     UNIT_ASSERT(res.Issues.Empty());
-}
-
-Y_UNIT_TEST(ParseAstTestPerf) {
-#ifdef WITH_VALGRIND
-    const ui32 n = 1000;
-#else
-    const ui32 n = NSan::PlainOrUnderSanitizer(100000, 1000);
-#endif
-    auto t1 = TInstant::Now();
-    for (ui32 i = 0; i < n; ++i) {
-        TAstParseResult res = ParseAst(TEST_PROGRAM);
-        UNIT_ASSERT(res.IsOk());
-        UNIT_ASSERT(res.Root->IsList());
-        UNIT_ASSERT(res.Issues.Empty());
-    }
-    auto t2 = TInstant::Now();
-    Cout << t2 - t1 << Endl;
 }
 
 Y_UNIT_TEST(PrintAstTest) {

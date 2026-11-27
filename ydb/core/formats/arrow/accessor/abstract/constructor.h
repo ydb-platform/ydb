@@ -67,7 +67,7 @@ public:
 
     TConclusion<std::shared_ptr<IChunkedArray>> Construct(
         const std::shared_ptr<IChunkedArray>& originalArray, const TChunkConstructionData& externalInfo) const {
-        AFL_VERIFY(originalArray);
+        YDB_LOG_VERIFY(originalArray);
         if (originalArray->GetType() == GetType()) {
             return originalArray;
         } else {
@@ -75,8 +75,9 @@ public:
             if (result.IsFail()) {
                 return result;
             }
-            AFL_VERIFY(result.GetResult()->GetRecordsCount() == originalArray->GetRecordsCount())("result", result.GetResult()->GetRecordsCount())(
-                                                      "original", originalArray->GetRecordsCount());
+            YDB_LOG_VERIFY(result.GetResult()->GetRecordsCount() == originalArray->GetRecordsCount(),
+                {"result", result.GetResult()->GetRecordsCount()},
+                {"original", originalArray->GetRecordsCount()});
             return result;
         }
     }
@@ -118,13 +119,13 @@ public:
 
     TBlobWithAdditionalAccessorData SerializeToBlobAndMeta(
         const std::shared_ptr<IChunkedArray>& batch, const TChunkConstructionData& externalInfo) const {
-        AFL_VERIFY(!!GetObjectPtr());
+        YDB_LOG_VERIFY(!!GetObjectPtr());
         return GetObjectPtr()->SerializeToBlobAndMeta(batch, externalInfo);
     }
 
     TConclusion<std::shared_ptr<IChunkedArray>> DeserializeFromString(
         const TString& originalData, const TChunkConstructionData& externalInfo) const {
-        AFL_VERIFY(!!GetObjectPtr());
+        YDB_LOG_VERIFY(!!GetObjectPtr());
         return GetObjectPtr()->DeserializeFromString(originalData, externalInfo);
     }
 

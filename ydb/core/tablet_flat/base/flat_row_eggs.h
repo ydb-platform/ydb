@@ -1,0 +1,249 @@
+#pragma once
+
+#include <ydb/core/base/row_version.h>
+
+#include <util/system/types.h>
+#include <util/generic/ylimits.h>
+#include <util/generic/array_ref.h>
+
+#include <variant>
+
+namespace NKikimr {
+namespace NTable {
+
+    class TMemTable;
+    class TPart;
+
+    using TRowId = ui64;
+    using TTag  = ui32;
+    using TPos  = ui32;  /* Column logical position      */
+    using TTagsRef = TArrayRef<const TTag>;
+    using TGroup = ui32; /* Column logical group         */
+
+    enum class ESeek {
+        Exact = 1,
+        Lower = 2,      /* lower_bound, { } -> begin()  */
+        Upper = 3,      /* upper_bound, { } -> end()    */
+    };
+
+    enum class EReady {
+        Page    = 0,    /* Need some pages to be loaded */
+        Data    = 1,
+        Gone    = 2,    /* Iterator finally invalidated */
+    };
+
+    enum class EDirection {
+        Forward,
+        Reverse,
+    };
+
+    enum class ERowOp : ui8 { /* row operation code */
+        Absent  = 0,
+        Upsert  = 1,    /* Set value or update row      */
+        Erase   = 2,    /* Explicit null or row drop    */
+        Reset   = 3,    /* Reset cell or row to default */
+    };
+
+    /**
+     * Lock modes with higher strength have higher numerical values
+     *
+     * Bit mask values also have some assigned meaning:
+     *
+     * 001 = indicates key (unique index) columns cannot be modified by transactions
+     * 010 = indicates non-key columns cannot be modified by other transactions
+     * 100 = indicates row may be modified by the lock owner
+     */
+    enum class ELockMode : ui8 {
+        None = 0,
+        KeyShared = 1,      /* 001 = conflicts with Exclusive */
+        Shared = 3,         /* 011 = conflicts with Exclusive, NoKeyExclusive */
+        NoKeyExclusive = 5, /* 101 = conflicts with Exclusive, NoKeyExclusive, Shared */
+        Exclusive = 6,      /* 110 = conflicts with Exclusive, NoKeyExclusive, Shared, KeyShared */
+        Multi = 7,          /* 111 = multiple transactions with lock modes stored elsewhere */
+    };
+
+    enum class ECellOp : ui8 { /* cell operation code */
+        Empty   = 0,    /* Cell has no any valid state  */
+        Set     = 1,    /* Set cell to exact value      */
+        Null    = 2,    /* Explicit cell null value     */
+        Reset   = 3,    /* Reset cell value to default  */
+    };
+
+    enum class ELargeObj : ui8 {
+        Inline  = 0,    /* Data stored within storage   */
+        Extern  = 1,    /* Data placed in external blob */
+        GlobId  = 2,    /* Explicit TGlobId reference   */
+        Outer   = 3,    /* ~ is packed out of rows page */
+    };
+
+    enum EHint : ui64 {
+        NoByKey = 0x1,
+    };
+
+    struct TLargeObj {
+        TLargeObj() = default;
+
+        TLargeObj(ELargeObj lob, ui64 ref) : Lob(lob), Ref(ref) { }
+
+        explicit operator bool() const noexcept
+        {
+            return Lob != ELargeObj::Inline && Ref != Max<ui64>();
+        }
+
+        ELargeObj Lob = ELargeObj::Inline;
+        ui64 Ref = Max<ui64>();
+    };
+
+    struct TSkipToCommittedResult {
+        TRowVersion RowVersion = TRowVersion::Min();
+        ui64 RowTxId = 0;
+        ERowOp RowOp = ERowOp::Absent;
+        bool Valid = false;
+
+        TSkipToCommittedResult() = default;
+
+        TSkipToCommittedResult(const TRowVersion& rowVersion, ui64 rowTxId, ERowOp rowOp)
+            : RowVersion(rowVersion)
+            , RowTxId(rowTxId)
+            , RowOp(rowOp)
+            , Valid(true)
+        {}
+
+        explicit operator bool() const {
+            return Valid;
+        }
+    };
+
+    using TRowSource = std::variant<const TMemTable*, const TPart*>;
+
+    struct TSelectRowVersionResult {
+        EReady Ready;
+        TRowVersion RowVersion = TRowVersion::Min();
+        ui64 RowTxId = 0;
+        ERowOp RowOp = ERowOp::Absent;
+        ELockMode LockMode = ELockMode::None;
+        ui64 LockTxId = 0;
+
+        explicit TSelectRowVersionResult(EReady ready)
+            : Ready(ready)
+        { }
+
+        explicit TSelectRowVersionResult(const TSkipToCommittedResult& result)
+            : Ready(result ? EReady::Data : EReady::Gone)
+            , RowVersion(result.RowVersion)
+            , RowTxId(result.RowTxId)
+            , RowOp(result.RowOp)
+        { }
+
+        explicit operator bool() const {
+            return Ready == EReady::Data;
+        }
+    };
+
+    /**
+     * The container for the results of the precharge operation.
+     */
+    struct TPrechargeResult {
+        /**
+         * If true, all the necessary pages are already in the cache.
+         */
+        bool Ready;
+
+        /**
+         * The total number of rows precharged.
+         *
+         * @warning The value in this field will be set to an accurate value
+         *          only if the Ready field is set to true.
+         *
+         * @warning The value in this field is meant to be used as an approximation
+         *          of the total size of all items placed into the cache.
+         *          It may not be very accurate in some cases.
+         */
+        ui64 ItemsPrecharged;
+
+        /**
+         * The total number of bytes precharged.
+         *
+         * @warning The value in this field will be set to an accurate value
+         *          only if the Ready field is set to true.
+         *
+         * @warning The value in this field is meant to be used as an approximation
+         *          of the total size of all items placed into the cache.
+         *          It may not be very accurate in some cases.
+         */
+        ui64 BytesPrecharged;
+    };
+
+#pragma pack(push, 1)
+
+    struct TCellOp {
+        constexpr TCellOp() = default;
+
+        static constexpr TCellOp Decode(ui8 raw) noexcept
+        {
+            return { ECellOp(raw & 0x3f), ELargeObj(raw >> 6) };
+        }
+
+        constexpr TCellOp(ECellOp op, ELargeObj lob = ELargeObj::Inline) noexcept
+            : Value(ui8(op) | (ui8(lob) << 6))
+        {
+
+        }
+
+        constexpr ui8 Raw() const noexcept
+        {
+            return Value;
+        }
+
+        constexpr operator ECellOp() const noexcept
+        {
+            return ECellOp(Value & 0x3f);
+        }
+
+        constexpr operator ELargeObj() const noexcept
+        {
+            return ELargeObj(Value >> 6);
+        }
+
+        constexpr ui8 operator*() const noexcept
+        {
+            return Value;
+        }
+
+        TCellOp& operator=(ECellOp op) noexcept
+        {
+            Value = (Value & ~0x3f) | ui8(op);
+
+            return *this;
+        }
+
+        TCellOp& operator=(ELargeObj lob) noexcept
+        {
+            Value = TCellOp(ECellOp(*this), lob).Raw();
+
+            return  *this;
+        }
+
+        constexpr static bool HaveNoPayload(ECellOp cellOp) noexcept
+        {
+            return
+                cellOp == ECellOp::Null
+                || cellOp == ECellOp::Reset
+                || cellOp == ECellOp::Empty;
+        }
+
+        constexpr static bool HaveNoOps(ERowOp rop) noexcept
+        {
+            return rop == ERowOp::Erase;
+        }
+
+    private:
+        ui8 Value = 0;
+    } Y_PACKED;
+
+#pragma pack(pop)
+
+    static_assert(sizeof(TCellOp) == 1, "Unexpected TCellOp unit size");
+
+}
+}

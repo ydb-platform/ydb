@@ -1,14 +1,18 @@
 #pragma once
 
+#include <yql/essentials/core/project_settings/yql_project_settings.h>
+
 #include <yql/essentials/sql/settings/flags/flags.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/public/sql_meta/statement_kind.h>
 #include <yql/essentials/public/udf_meta/udf_meta.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
+#include <util/generic/set.h>
 #include <util/generic/vector.h>
 
 namespace google::protobuf { // NOLINT(readability-identifier-naming)
@@ -21,6 +25,10 @@ class IAutoParamBuilderFactory;
 } // namespace NYql
 
 namespace NSQLTranslation {
+
+// Provider pragmas have a provider or cluster prefix. SQL pragmas have no prefix,
+// except for the case-insensitive "yson." prefix.
+bool IsTranslatorLevelPragma(TStringBuf name);
 
 constexpr const size_t SQL_MAX_PARSER_ERRORS = 100;
 constexpr const size_t SQL_MAX_PARSE_TREE_DEPTH = 4096;
@@ -147,6 +155,8 @@ struct TTranslationSettings {
     NYql::IAutoParamBuilderFactory* AutoParamBuilderFactory = nullptr;
     bool EmitReadsForExists = true;
     bool AlwaysAllowExports = false;
+    // Unset allows all kinds; an empty set allows only unclassified statements (queries, pragmas, etc.).
+    TMaybe<TSet<NYql::EStatementKind>> AllowedStatementKinds;
     bool IsReplay = false;
     bool AllowTablesFunction = false;
 
@@ -155,6 +165,7 @@ struct TTranslationSettings {
     TVector<TString> ExtraSystemColumnPrefixes;
 
     bool StrictConfigValidation = false;
+    NYql::TProjectSettings ProjectSettings;
 };
 
 struct TParsedSettings {

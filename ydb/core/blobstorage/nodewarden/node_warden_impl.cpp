@@ -15,6 +15,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
+#include <ydb/core/blobstorage/syncer/group_state_barrier.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactbroker.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
@@ -33,6 +34,16 @@
 
 using namespace NKikimr;
 using namespace NStorage;
+
+namespace {
+
+    constexpr ui64 DefaultReplTotalRequestBytesPerSecond = 500'000'000;
+    constexpr ui64 DefaultReplTotalResponseBytesPerSecond = 500'000'000;
+    constexpr ui64 DefaultReplPDiskBytesPerSecondHDD = 100'000'000;
+    constexpr ui64 DefaultReplPDiskBytesPerSecondSSD = 200'000'000;
+    constexpr ui64 DefaultReplPDiskBytesPerSecondNVME = 300'000'000;
+
+} // anonymous namespace
 
 TNodeWardenConfig::TNodeWardenConfig()
     : BlobStorageConfig(std::make_unique<NKikimrConfig::TBlobStorageConfig>())
@@ -95,6 +106,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , VolatilePhantomFlagStorageBlobSizeLimitBytes(1'000'000, 1, 10'000'000)
     , EnableChecksumReadValidationOnVDisk(0, 0, 1)
     , EnableChecksumWriteValidationOnVDisk(0, 0, 1)
+    , EnableVDiskSectorPreparation(0, 0, 1)
     , EnableChunkKeeper(0, 0, 1)
     , SpaceReportPeriodSeconds(0, 0, 86400)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
@@ -246,6 +258,11 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
         hFunc(TEvNodeWardenNotifySyncerFinished, Handle);
+        hFunc(NGroupSyncer::TEvRunMirror3dcRepair, Handle);
+        hFunc(NGroupSyncer::TEvMirror3dcRepairScanResult, Handle);
+        hFunc(TEvNodeWardenStandbyDirty, Handle);
+        hFunc(TEvNodeWardenRegisterBridgeProxy, Handle);
+        hFunc(TEvNodeWardenStandbySealed, Handle);
 
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);
@@ -421,16 +438,78 @@ void TNodeWarden::PassAway() {
         new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(SelfId()));
 
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
+    WorkingSyncers.clear();
+    UpdateSyncerCounters();
+    if (BridgeSyncNodeCounters) {
+        BridgeSyncNodeCounters->RateLimit->Set(0);
+    }
     StopInvalidGroupProxy();
     TerminateBlobDepotS3Routers();
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
     return TActorBootstrapped::PassAway();
 }
 
+void TNodeWarden::ApplyReplBrokerConfig(
+        const NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig& config) {
+    ReplTotalRequestBytesPerSecond = DefaultReplTotalRequestBytesPerSecond;
+    if (config.HasTotalRequestBytesPerSecond()) {
+        ReplTotalRequestBytesPerSecond = config.GetTotalRequestBytesPerSecond();
+    } else if (config.HasRateBytesPerSecond()) {
+        ReplTotalRequestBytesPerSecond = config.GetRateBytesPerSecond();
+    }
+
+    ReplTotalResponseBytesPerSecond = config.HasTotalResponseBytesPerSecond()
+        ? config.GetTotalResponseBytesPerSecond()
+        : DefaultReplTotalResponseBytesPerSecond;
+
+    ReplPDiskRates.clear();
+    ReplPDiskRates.emplace(NPDisk::DEVICE_TYPE_ROT,
+        TReplPDiskRate{DefaultReplPDiskBytesPerSecondHDD, DefaultReplPDiskBytesPerSecondHDD});
+    ReplPDiskRates.emplace(NPDisk::DEVICE_TYPE_SSD,
+        TReplPDiskRate{DefaultReplPDiskBytesPerSecondSSD, DefaultReplPDiskBytesPerSecondSSD});
+    ReplPDiskRates.emplace(NPDisk::DEVICE_TYPE_NVME,
+        TReplPDiskRate{DefaultReplPDiskBytesPerSecondNVME, DefaultReplPDiskBytesPerSecondNVME});
+
+    for (const auto& item : config.GetMediaTypeQuota()) {
+        const auto it = ReplPDiskRates.find(PDiskTypeToPDiskType(item.GetType()));
+        if (it == ReplPDiskRates.end()) {
+            continue;
+        }
+        if (item.HasReadBytesPerSecond()) {
+            it->second.ReadBytesPerSecond = item.GetReadBytesPerSecond();
+        }
+        if (item.HasWriteBytesPerSecond()) {
+            it->second.WriteBytesPerSecond = item.GetWriteBytesPerSecond();
+        }
+    }
+
+    if (ReplNodeRequestQuoter) {
+        ReplNodeRequestQuoter->UpdateBytesPerSecond(ReplTotalRequestBytesPerSecond);
+    }
+    if (ReplNodeResponseQuoter) {
+        ReplNodeResponseQuoter->UpdateBytesPerSecond(ReplTotalResponseBytesPerSecond);
+    }
+
+    for (auto& [_, pdisk] : LocalPDisks) {
+        const TPDiskCategory category(pdisk.Record.GetPDiskCategory());
+        const auto it = ReplPDiskRates.find(category.Type());
+        if (it == ReplPDiskRates.end()) {
+            continue;
+        }
+        if (pdisk.ReplPDiskReadQuoter) {
+            pdisk.ReplPDiskReadQuoter->UpdateBytesPerSecond(it->second.ReadBytesPerSecond);
+        }
+        if (pdisk.ReplPDiskWriteQuoter) {
+            pdisk.ReplPDiskWriteQuoter->UpdateBytesPerSecond(it->second.WriteBytesPerSecond);
+        }
+    }
+}
+
 void TNodeWarden::Bootstrap() {
     YDB_LOG_DEBUG_COMP(BS_NODE, "Bootstrap",
         {"marker", "NW26"});
 
+    NGroupSyncer::RegisterGroupStateBarrierControls();
     LocalNodeId = SelfId().NodeId();
     WhiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(LocalNodeId);
 
@@ -463,6 +542,9 @@ void TNodeWarden::Bootstrap() {
     CacheFileWriteError->Set(0);
 
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats);
+
+    const auto& replBrokerConfig = Cfg->BlobStorageConfig->GetServiceSet().GetReplBrokerConfig();
+    ApplyReplBrokerConfig(replBrokerConfig);
 
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
@@ -512,6 +594,7 @@ void TNodeWarden::Bootstrap() {
                 icb->VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes);
         TControlBoard::RegisterSharedControl(EnableChecksumReadValidationOnVDisk, icb->VDiskControls.EnableChecksumReadValidationOnVDisk);
         TControlBoard::RegisterSharedControl(EnableChecksumWriteValidationOnVDisk, icb->VDiskControls.EnableChecksumWriteValidationOnVDisk);
+        TControlBoard::RegisterSharedControl(EnableVDiskSectorPreparation, icb->VDiskControls.EnableVDiskSectorPreparation);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
         TControlBoard::RegisterSharedControl(SpaceReportPeriodSeconds, icb->VDiskControls.SpaceReportPeriodSeconds);
 
@@ -571,21 +654,8 @@ void TNodeWarden::Bootstrap() {
     }
 
     // start replication broker
-    const auto& replBrokerConfig = Cfg->BlobStorageConfig->GetServiceSet().GetReplBrokerConfig();
-
-    ui64 requestBytesPerSecond = 500000000; // 500 MB/s by default
-    if (replBrokerConfig.HasTotalRequestBytesPerSecond()) {
-        requestBytesPerSecond = replBrokerConfig.GetTotalRequestBytesPerSecond();
-    } else if (replBrokerConfig.HasRateBytesPerSecond()) { // compatibility option
-        requestBytesPerSecond = replBrokerConfig.GetRateBytesPerSecond();
-    }
-    ReplNodeRequestQuoter = std::make_shared<TReplQuoter>(requestBytesPerSecond);
-
-    ui64 responseBytesPerSecond = 500000000; // the same as for request
-    if (replBrokerConfig.HasTotalResponseBytesPerSecond()) {
-        responseBytesPerSecond = replBrokerConfig.GetTotalResponseBytesPerSecond();
-    }
-    ReplNodeResponseQuoter = std::make_shared<TReplQuoter>(responseBytesPerSecond);
+    ReplNodeRequestQuoter = std::make_shared<TReplQuoter>(ReplTotalRequestBytesPerSecond);
+    ReplNodeResponseQuoter = std::make_shared<TReplQuoter>(ReplTotalResponseBytesPerSecond);
 
     const ui64 maxBytes = replBrokerConfig.GetMaxInFlightReadBytes();
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));
@@ -602,6 +672,7 @@ void TNodeWarden::Bootstrap() {
     // create bridge syncer rate quoter
     SyncRateConfigLimit = Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond();
     SyncRateQuoter = std::make_shared<TReplQuoter>(SyncRateConfigLimit);
+    UpdateSyncerCounters();
 
     // start compaction broker
     actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(
@@ -1071,12 +1142,16 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         ApplyControllerServiceSet(record.GetServiceSet(), comprehensive);
     }
 
+    bool syncersChanged = false;
     for (const auto& item : record.GetGroupMetadata()) {
         const ui32 groupId = item.GetGroupId();
         const ui32 generation = item.GetCurrentGeneration();
         if (const auto it = Groups.find(groupId); it != Groups.end() && it->second.MaxKnownGeneration < generation) {
-            ApplyGroupInfo(groupId, generation, nullptr, false, false);
+            syncersChanged |= ApplyGroupInfo(groupId, generation, nullptr, false, false);
         }
+    }
+    if (syncersChanged) {
+        UpdateSyncerCounters();
     }
 
     if (record.HasShredRequest()) {
@@ -1175,6 +1250,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
     if (record.GetUpdateSyncers()) {
         ApplyWorkingSyncers(record);
     }
+    ApplyStandbySeals(record);
 }
 
 void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, TDuration backoff) {
@@ -1469,6 +1545,7 @@ void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
 }
 
 void TNodeWarden::Handle(TEvPrivate::TEvUpdateStats::TPtr&) {
+    ExpireS3EndpointHandoffs();
     const bool useFixedVDiskSlotSize = UseFixedVDiskSlotSize;
     if (useFixedVDiskSlotSize != UseFixedVDiskSlotSizeCached) {
         UseFixedVDiskSlotSizeCached = useFixedVDiskSlotSize;
@@ -1589,6 +1666,7 @@ void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPt
     auto& record = ev->Get()->Record;
     if (record.HasConfig() && record.GetConfig().HasBlobStorageConfig()) {
         const auto& bsConfig = record.GetConfig().GetBlobStorageConfig();
+        ApplyReplBrokerConfig(bsConfig.GetServiceSet().GetReplBrokerConfig());
         VDiskHeapAllocatorNumLeadingDisks = bsConfig.GetVDiskHeapAllocatorNumLeadingDisks();
         const auto& inferSettings = bsConfig.GetInferPDiskSlotCountSettings();
         auto equals = ::google::protobuf::util::MessageDifferencer::Equals;

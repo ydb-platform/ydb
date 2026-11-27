@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
 
 namespace NKikimr::NOlap {
@@ -18,6 +19,19 @@ ui64 TPortionInfo::GetColumnRawBytes() const {
 
 ui64 TPortionInfo::GetColumnBlobBytes() const {
     return GetMeta().GetColumnBlobBytes();
+}
+
+bool TPortionInfo::HasBlobsInBlobStorage(const TIndexInfo& indexInfo) const {
+    using NBlobOperations::TGlobal;
+    if (IsDefaultTier(TGlobal::DefaultStorageId)) {
+        return true;
+    }
+    if (const auto& bsIndexBlobBytes = Meta.GetBsIndexBlobBytes(); bsIndexBlobBytes.has_value()) {
+        return *bsIndexBlobBytes != 0;
+    }
+    return AnyOf(indexInfo.GetEntityIds(), [&](const auto entityId) {
+        return GetEntityStorageId(entityId, indexInfo) == TGlobal::DefaultStorageId;
+    });
 }
 
 ui64 TPortionInfo::GetSmallBlobBytesInBlobStorage(const ui64 smallBlobThresholdBytes) const {
@@ -107,10 +121,20 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
 }
 
 ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
-    AFL_VERIFY(SchemaVersion);
+    YDB_LOG_VERIFY(SchemaVersion);
     auto schema = index.GetSchemaVerified(SchemaVersion);
-    AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion);
+    YDB_LOG_VERIFY(!!schema,
+        {"details", TStringBuilder() << "cannot find schema for version " << SchemaVersion});
     return schema;
+}
+
+bool TPortionInfo::NeedSchemeActualization(const TVersionedIndex& index) const {
+    const auto& threshold = index.GetSchemeActualizationThreshold();
+    return threshold && GetSchemaVersionVerified() < *threshold;
+}
+
+ISnapshotSchema::TPtr TPortionInfo::GetRewriteSchema(const TVersionedIndex& index) const {
+    return NeedSchemeActualization(index) ? index.GetLastSchema() : GetSchema(index);
 }
 
 bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const {

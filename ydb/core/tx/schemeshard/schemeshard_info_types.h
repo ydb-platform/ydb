@@ -1213,6 +1213,7 @@ public:
 
     struct TCreateAlterDataFeatureFlags {
         bool EnableTablePgTypes;
+        bool DisablePgCompatibility;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
         bool EnableDetailedMetrics;
@@ -1919,6 +1920,10 @@ struct TShardInfo {
     static TShardInfo TestShardSetInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::TestShard);
     }
+
+    static TShardInfo CdcAggregatorInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::CdcAggregator);
+    }
 };
 
 /**
@@ -1962,7 +1967,6 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     ui32 MaxPartsPerTablet = 0;
     ui64 AlterVersion = 0;
     TString TabletConfig;
-    TString BootstrapConfig;
     THashMap<TShardIdx, TTopicTabletInfo::TPtr> Shards; // key - shardIdx
     TKeySchema KeySchema;
     TTopicInfo::TPtr AlterData; // changes to be applied
@@ -2239,6 +2243,30 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
         explicit operator bool() const {
             return HardQuota || SoftQuota || AnyOf(StoragePoolsQuotas, [](const auto& storagePoolQuota) {
+                    return storagePoolQuota.second.HardQuota || storagePoolQuota.second.SoftQuota;
+                }
+            );
+        }
+    };
+
+    // The effective disk space quotas together with the usage they are compared against.
+    // The single source of data for both enforcing the quotas and describing them to clients.
+    struct TDiskSpaceQuotaView {
+        enum class EMode {
+            // the overall quota is checked against the total usage, the storage pool kind quotas are ignored
+            Overall,
+            // each storage pool kind quota is checked against the usage of that pool kind, the overall quota is ignored
+            StoragePoolKinds,
+        };
+
+        EMode Mode = EMode::Overall;
+        TDiskSpaceQuotas::TQuotasPair OverallQuotas{.HardQuota = 0, .SoftQuota = 0};
+        ui64 OverallUsage = 0;
+        THashMap<TString, TDiskSpaceQuotas::TQuotasPair> StoragePoolsQuotas; // by pool kind
+        THashMap<TString, ui64> StoragePoolsUsage; // by pool kind
+
+        explicit operator bool() const {
+            return OverallQuotas.HardQuota || OverallQuotas.SoftQuota || AnyOf(StoragePoolsQuotas, [](const auto& storagePoolQuota) {
                     return storagePoolQuota.second.HardQuota || storagePoolQuota.second.SoftQuota;
                 }
             );
@@ -2644,6 +2672,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     }
 
     TDiskSpaceQuotas GetDiskSpaceQuotas() const;
+    TDiskSpaceQuotaView GetDiskSpaceQuotaView() const;
 
     TSmallBlobsQuotas GetSmallBlobsQuotas() const;
 
@@ -2652,6 +2681,11 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     Returns true when DiskQuotaExceeded value has changed and needs to be persisted and pushed to scheme board.
     */
     bool CheckDiskSpaceQuotas(IQuotaCounters* counters);
+
+    /*
+    Describes the disk space quotas and usage that CheckDiskSpaceQuotas() compares: both use GetDiskSpaceQuotaView().
+    */
+    void FillDiskSpaceQuotaUsage(NKikimrSubDomains::TDiskSpaceQuotaUsage& out) const;
 
     /*
     Checks current small-blobs usage against small-blobs quotas.
@@ -2665,7 +2699,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     */
     bool CheckQuotas(IQuotaCounters* counters);
 
-    ui64 TotalDiskSpaceUsage() {
+    ui64 TotalDiskSpaceUsage() const {
         return DiskSpaceUsage.Tables.TotalSize + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
     }
 
@@ -3609,6 +3643,8 @@ struct TCdcStreamSettings {
     using EMode = NKikimrSchemeOp::ECdcStreamMode;
     using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
     using EState = NKikimrSchemeOp::ECdcStreamState;
+    using ECompression = NKikimrSchemeOp::ECdcStreamCompression;
+    using EHeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatMode;
 
     #define OPTION(type, name) \
         TSelf&& With##name(type value) && { \
@@ -3626,6 +3662,9 @@ struct TCdcStreamSettings {
     OPTION(EState, State);
     OPTION(bool, UserSIDs);
     OPTION(bool, TraceIds);
+    OPTION(ECompression, Compression);
+    OPTION(i32, CompressionLevel);
+    OPTION(EHeartbeatMode, HeartbeatMode);
 
     #undef OPTION
 };
@@ -3675,6 +3714,11 @@ struct TCdcStreamInfo
             .WithAwsRegion(desc.GetAwsRegion())
             .WithUserSIDs(desc.GetUserSIDs())
             .WithTraceIds(desc.GetTraceIds())
+            .WithCompression(desc.GetCompression())
+            .WithCompressionLevel(desc.HasCompressionLevel()
+                ? desc.GetCompressionLevel()
+                : (desc.GetCompression() == NKikimrSchemeOp::ECdcStreamCompressionZstd ? 3 : 0))
+            .WithHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect)
         );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
@@ -3701,6 +3745,11 @@ struct TCdcStreamInfo
         }
         desc.SetUserSIDs(UserSIDs);
         desc.SetTraceIds(TraceIds);
+        desc.SetCompression(Compression);
+        if (CompressionLevel) {
+            desc.SetCompressionLevel(CompressionLevel);
+        }
+        desc.SetHeartbeatMode(HeartbeatMode);
     }
 
     void FinishAlter() {
@@ -3708,12 +3757,14 @@ struct TCdcStreamInfo
 
         AlterVersion = AlterData->AlterVersion;
         static_cast<TCdcStreamSettings&>(*this) = static_cast<TCdcStreamSettings&>(*AlterData);
+        AggregatorShardIdx = AlterData->AggregatorShardIdx;
 
         AlterData.Reset();
     }
 
     ui64 AlterVersion = 1;
     TCdcStreamInfo::TPtr AlterData = nullptr;
+    TShardIdx AggregatorShardIdx = InvalidShardIdx;
 
     TMap<TShardIdx, TShardStatus> ScanShards;
     THashSet<TShardIdx> PendingShards;
@@ -3916,6 +3967,8 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    TMaybe<TString> CancelRequestedBy;
+
     bool EnableChecksums = false;
     bool EnablePermissions = false;
     bool IncludeIndexData = false;
@@ -4042,6 +4095,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybe<Ydb::Table::CreateTableRequest> Table;
         TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
         TMaybe<Ydb::Table::DescribeSystemViewResult> SysView;
+        TMaybe<NKikimrSchemeOp::TImportKesus> Kesus;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
@@ -4056,6 +4110,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
+        TActorId KesusRestorer;
         int NextIndexIdx = 0;
         int NextChangefeedIdx = 0;
         TString Issue;
@@ -4096,6 +4151,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TMaybe<NBackup::TEncryptionIV> ExportIV;
     TMaybe<NBackup::TSchemaMapping> SchemaMapping;
     TActorId SchemaMappingGetter;
+    bool CanRestoreRateLimiterMetering = false;
 
     EState State = EState::Invalid;
     TString Issue;
@@ -4391,8 +4447,16 @@ struct TIncrementalRestoreState {
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
 
         bool AllShardsComplete() const {
-            return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() &&
-                    !ExpectedShards.empty();
+            if (ExpectedShards.empty()) {
+                return false;
+            }
+            // Unexpected or overlapping replies cannot replace a missing expected shard.
+            for (const auto& shard : ExpectedShards) {
+                if (!CompletedShards.contains(shard) && !FailedShards.contains(shard)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         bool HasFailures() const {
@@ -4823,7 +4887,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const TMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
-    const TSubDomainInfo& subDomain, TString& errStr);
+    const TSubDomainInfo& subDomain, bool disablePgCompatibility, TString& errStr);
 
 /**
  * Check if the given detailed metrics settings (for a table) are valid.

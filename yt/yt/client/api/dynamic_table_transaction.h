@@ -91,6 +91,9 @@ struct TModifyRowsOptions
     //! For writes to replicas, this is the id of the replica at the upstream cluster.
     NTabletClient::TTableReplicaId UpstreamReplicaId;
 
+    //! Identifier used to serialize replication writes from the same source.
+    NTabletClient::TReplicationStreamId ReplicationStreamId;
+
     //! Modifications are sent asynchronously. Sequential numbering is
     //! required to restore their order.
     //!

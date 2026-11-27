@@ -5,12 +5,12 @@
 namespace NKikimr::NConveyorComposite {
 
 TDuration TWorker::GetWakeupDuration() const {
-    AFL_VERIFY(ExecutionDuration);
+    YDB_LOG_VERIFY(ExecutionDuration);
     return (*ExecutionDuration) * (1 - CPULimit) / CPULimit;
 }
 
 void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks, TSchedulerLease schedulerLease) {
-    AFL_VERIFY(!ExecutionDuration && Results.empty());
+    YDB_LOG_VERIFY(!ExecutionDuration && Results.empty());
     std::vector<TWorkerTaskResult> results;
     results.reserve(workerTasks.size());
     const TMonotonic startGlobal = TMonotonic::Now();
@@ -33,7 +33,7 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks, TSchedulerLeas
         Schedule(GetWakeupDuration(), new NActors::TEvents::TEvWakeup());
         WaitWakeUp = true;
     } else {
-        AFL_VERIFY(!!ForwardDuration);
+        YDB_LOG_VERIFY(!!ForwardDuration);
         YDB_LOG_DEBUG("",
             {"action", "to_result"},
             {"id", SelfId()},
@@ -49,9 +49,9 @@ void TWorker::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
 }
 
 void TWorker::OnWakeup() {
-    AFL_VERIFY(ExecutionDuration);
-    AFL_VERIFY(Results.size());
-    AFL_VERIFY(!!ForwardDuration);
+    YDB_LOG_VERIFY(ExecutionDuration);
+    YDB_LOG_VERIFY(Results.size());
+    YDB_LOG_VERIFY(!!ForwardDuration);
     YDB_LOG_DEBUG("",
         {"action", "wake_up"},
         {"id", SelfId()},
@@ -65,7 +65,7 @@ void TWorker::OnWakeup() {
 }
 
 void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
-    AFL_VERIFY(!WaitWakeUp);
+    YDB_LOG_VERIFY(!WaitWakeUp);
     const double newLimit = ev->Get()->GetCPULimit();
     Y_ENSURE(std::isfinite(newLimit) && 0 < newLimit && newLimit <= 1, "invalid worker CPU limit: " << newLimit);
     CPULimit = newLimit;

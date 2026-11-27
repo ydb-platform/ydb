@@ -20,12 +20,12 @@ groups:
           summary: "Skipper controller loop has stopped progressing"
           description: "Inspect service logs and /api/state before relying on its plan."
       - alert: SkipperClusterStateStale
-        expr: skipper_cluster_state_age_seconds{job="bridge_skipper"} > 15
+        expr: skipper_cluster_state_age_seconds{job="bridge_skipper"} > 4
         labels:
           severity: warning
         annotations:
           summary: "Skipper cluster-state view is stale"
-          description: "Warn before the default 30s TTL removes the selected-view series. Tune the threshold and scrape/evaluation intervals together; inspect endpoint errors and view selection."
+          description: "Warn before the default 8s TTL removes the selected-view series. Use 1s scrape/evaluation intervals for this rule, or retune the threshold and TTL together; inspect endpoint errors and view selection."
       - alert: SkipperPileDown
         expr: skipper_pile_verdict{job="bridge_skipper", verdict=~"FAILED|LOST"} == 1
         for: 30s

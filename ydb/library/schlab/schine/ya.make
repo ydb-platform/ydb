@@ -31,3 +31,7 @@ SRCS(
 )
 
 END()
+
+RECURSE(
+    benchmark
+)

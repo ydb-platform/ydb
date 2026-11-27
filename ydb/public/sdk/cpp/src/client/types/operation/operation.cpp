@@ -86,6 +86,10 @@ const TStatus& TOperation::Status() const {
     return Impl_->Status();
 }
 
+bool TOperation::HasMetadata() const {
+    return GetProto().has_metadata();
+}
+
 TInstant TOperation::CreateTime() const {
     return Impl_->CreateTime();
 }

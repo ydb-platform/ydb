@@ -204,12 +204,25 @@ TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options
     }
 
     if (Config_->ProxyAddresses) {
-        ChannelPool_->SetPeers(*Config_->ProxyAddresses);
+        SetProxyAddresses(*Config_->ProxyAddresses);
     }
 
     if (Config_->ProxyUnixDomainSocket) {
-        ChannelPool_->SetPeers({*Config_->ProxyUnixDomainSocket});
+        SetProxyAddresses({*Config_->ProxyUnixDomainSocket});
     }
+}
+
+void TConnection::SetProxyAddresses(const std::vector<std::string>& addresses)
+{
+    ProxyAddresses_.Store(THashSet<std::string>(addresses.begin(), addresses.end()));
+    ChannelPool_->SetPeers(addresses);
+}
+
+bool TConnection::IsKnownProxyAddress(TStringBuf address) const
+{
+    return ProxyAddresses_.Read([&] (const auto& addresses) {
+        return addresses.contains(address);
+    });
 }
 
 TConnection::~TConnection()
@@ -460,7 +473,7 @@ void TConnection::OnProxyListUpdate()
             THROW_ERROR_EXCEPTION("Proxy list is empty");
         }
 
-        ChannelPool_->SetPeers(proxies);
+        SetProxyAddresses(proxies);
 
         UpdateProxyListBackoffStrategy_.Restart();
 

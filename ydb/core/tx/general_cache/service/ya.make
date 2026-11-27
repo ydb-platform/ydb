@@ -4,6 +4,7 @@ SRCS(
     manager.cpp
     counters.cpp
     service.cpp
+    request_queues.cpp
 )
 
 PEERDIR(

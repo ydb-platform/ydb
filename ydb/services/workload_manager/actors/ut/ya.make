@@ -7,8 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/services/workload_manager/service
-
+    ydb/services/workload_manager/common
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )

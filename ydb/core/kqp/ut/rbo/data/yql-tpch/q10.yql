@@ -12,13 +12,13 @@ SELECT
     c_phone,
     c_comment
 FROM
-    `/Root/customer` as customer
+    `customer` as customer
 ,
-    `/Root/orders` as orders
+    `orders` as orders
 ,
-    `/Root/lineitem` as lineitem
+    `lineitem` as lineitem
 ,
-    `/Root/nation` as nation
+    `nation` as nation
 WHERE
     c_custkey == o_custkey
     AND l_orderkey == o_orderkey

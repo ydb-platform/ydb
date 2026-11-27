@@ -1,10 +1,238 @@
 #include "distconf_invoke.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
+#include <ydb/core/blobstorage/syncer/group_state.h>
+
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
+
+    static bool IsOrdinaryMirror3dcGroup(const NKikimrBlobStorage::TGroupInfo& group) {
+        return group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc
+            && !group.HasBridgeGroupState() && !group.HasBridgeProxyGroupId();
+    }
+
+    static TMirror3dcGroupConfiguration ReadMirror3dcConfiguration(const NKikimrBlobStorage::TGroupInfo& group) {
+        TMirror3dcGroupConfiguration config{group.GetMirror3dcState(), {}};
+        for (ui32 realm = 0; realm < config.Realms.size(); ++realm) {
+            config.Realms[realm] = group.GetRings(realm).GetState();
+        }
+        return config;
+    }
+
+    static void AdvanceStaticGroup(NKikimrBlobStorage::TGroupInfo *group, const TMirror3dcGroupConfiguration& next) {
+        group->SetGroupGeneration(group->GetGroupGeneration() + 1);
+        group->SetMirror3dcState(next.State);
+        for (ui32 realm = 0; realm < next.Realms.size(); ++realm) {
+            group->MutableRings(realm)->SetState(next.Realms[realm]);
+        }
+    }
+
+    static std::optional<TMirror3dcGroupConfiguration> NextStaticRepairState(const NKikimrBlobStorage::TGroupInfo& group) {
+        if (!IsOrdinaryMirror3dcGroup(group) || group.RingsSize() != 3) {
+            return std::nullopt;
+        }
+        return RecoveringComplete(ReadMirror3dcConfiguration(group));
+    }
+
+    void TInvokeRequestHandlerActor::CheckStaticGroupStateUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) const {
+        THashMap<ui32, const NKikimrBlobStorage::TGroupInfo*> managedGroups;
+        for (const auto& group : Self->StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            if (IsOrdinaryMirror3dcGroup(group)) {
+                managedGroups.emplace(group.GetGroupID(), &group);
+            }
+        }
+        const auto role = &NKikimrBlobStorage::TGroupInfo::TFailRealm::GetState;
+        for (const auto& group : proposed.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            if (const auto it = managedGroups.find(group.GetGroupID()); it != managedGroups.end()) {
+                const auto& existing = *it->second;
+                bool sameRoles = std::ranges::equal(group.GetRings(), existing.GetRings(), std::ranges::equal_to{}, role, role);
+                if (group.GetMirror3dcState() != existing.GetMirror3dcState() || !sameRoles) {
+                    throw TExError() << "UpdateConfig cannot change mirror-3-dc state or realm roles for static group "
+                        << group.GetGroupID();
+                }
+            }
+        }
+    }
+
+    static std::optional<NGroupSyncer::TGroupReplicationInfo> GetStaticGroupReplicationInfo(const NKikimrBlobStorage::TGroupInfo& group) {
+        if (!NextStaticRepairState(group)) {
+            return std::nullopt;
+        }
+        TIntrusivePtr<TBlobStorageGroupInfo> info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        const TMirror3dcGroupState& state = info->GetMirror3dcState();
+        NGroupSyncer::TGroupReplicationInfo result;
+        result.Generation = info->GroupGeneration;
+        result.Topology = info->PickTopology();
+        result.GroupState = state.State;
+        result.States = state.FailRealmStates;
+        for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+            result.VDisks.push_back({info->GetVDiskId(i), info->GetActorId(i)});
+        }
+        return result;
+    }
+
+    bool ApplyStaticDataCenterStates(NKikimrBlobStorage::TStorageConfig *config,
+            const NKikimrBlobStorage::TDataCenterStates& command) {
+        auto states = ParseDataCenterStates(command);
+        Y_ENSURE(states, states.error());
+        THashMap<ui32, TString> dataCenters;
+        for (const auto& node : config->GetAllNodes()) {
+            dataCenters.emplace(node.GetNodeId(), node.GetLocation().GetDataCenter());
+        }
+        auto *serviceSet = config->MutableBlobStorageConfig()->MutableServiceSet();
+        THashMap<TGroupId, ui32> generations;
+        for (auto& group : *serviceSet->MutableGroups()) {
+            if (!IsOrdinaryMirror3dcGroup(group)) {
+                continue;
+            }
+            Y_ENSURE(group.RingsSize() == 3, "Static mirror-3-dc group must have three realms");
+            TMirror3dcGroupConfiguration current = ReadMirror3dcConfiguration(group);
+            std::array<bool, 3> excluded{};
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                const auto& ring = group.GetRings(realm);
+                std::optional<TString> realmDataCenter;
+                for (const auto& domain : ring.GetFailDomains()) {
+                    for (const auto& disk : domain.GetVDiskLocations()) {
+                        auto it = dataCenters.find(disk.GetNodeID());
+                        Y_ENSURE(it != dataCenters.end(), "Unknown static VDisk node");
+                        Y_ENSURE(!realmDataCenter || *realmDataCenter == it->second,
+                            "Static fail realm spans different data centers");
+                        realmDataCenter = it->second;
+                    }
+                }
+                Y_ENSURE(realmDataCenter, "Empty static fail realm");
+                auto it = states->find(*realmDataCenter);
+                excluded[realm] = it != states->end() && it->second == NKikimrBlobStorage::TDataCenterState::EXCLUDED;
+            }
+            Y_ENSURE(IsValidMirror3dcGroupConfiguration(current), "Invalid static mirror-3-dc configuration");
+            ui32 changes = 0;
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                if (IsDown(current.Realms[realm]) == excluded[realm]) {
+                    continue;
+                }
+                Y_ENSURE(++changes == 1, "Only one static fail realm may change availability at a time");
+                auto next = excluded[realm] ? TakeDownFailRealm(current, realm) : ReturnFailRealm(current, realm);
+                Y_ENSURE(next, "Invalid static mirror-3-dc transition");
+                current = *next;
+            }
+            if (changes) {
+                Y_ENSURE(group.GetGroupGeneration() != Max<ui32>(), "Static group generation overflow");
+                AdvanceStaticGroup(&group, current);
+                generations.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
+                    group.GetGroupGeneration());
+            }
+        }
+        UpdateStaticVDiskGenerations(serviceSet, generations);
+        auto previous = ParseDataCenterStates(config->GetDataCenterStates());
+        Y_ENSURE(previous, previous.error());
+        bool changed = !generations.empty() || !config->HasDataCenterStates() || *previous != *states;
+        if (changed) {
+            *config->MutableDataCenterStates() = SerializeDataCenterStates(*states);
+        }
+        return changed;
+    }
+
+    void TInvokeRequestHandlerActor::ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command) {
+        RunCommonChecks();
+        auto config = *Self->StorageConfig;
+        try {
+            if (!ApplyStaticDataCenterStates(&config, command)) {
+                return StartDataCenterReconciliation(*Self->StorageConfig);
+            }
+        } catch (const yexception& error) {
+            throw TExError() << error.what();
+        }
+        if (Self->StorageConfig->HasDataCenterStates()) {
+            ProposedStorageConfig = std::move(config);
+            DataCenterPreflight = true;
+            return StartDataCenterReconciliation(*Self->StorageConfig);
+        }
+        StartProposition(&config);
+    }
+
+    void TDistributedConfigKeeper::RefreshStaticGroupRepairs() {
+        if (!Scepter || !SelfManagementEnabled || !StorageConfig || !StorageConfig->GetGeneration()) {
+            return StopStaticGroupRepairs();
+        }
+
+        THashMap<ui32, ui32> generations;
+        for (const auto& group : StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            ui32 id = group.GetGroupID();
+            ui32 generation = group.GetGroupGeneration();
+            if (auto it = StaticGroupRepairGenerations.find(id); it != StaticGroupRepairGenerations.end() && it->second == generation) {
+                generations.emplace(id, generation);
+                continue;
+            }
+            auto info = GetStaticGroupReplicationInfo(group);
+            if (!info) {
+                continue;
+            }
+            if (!StaticGroupStateActor) {
+                StaticGroupStateActor = Register(NGroupSyncer::CreateGroupStateActor(SelfId()));
+            }
+            auto update = std::make_unique<NGroupSyncer::TEvGroupState::TEvUpdate>(id);
+            update->Info = std::move(info);
+            Send(StaticGroupStateActor, update.release());
+            generations.emplace(id, generation);
+        }
+        if (generations.empty()) {
+            return StopStaticGroupRepairs();
+        }
+        for (const auto& [id, generation] : StaticGroupRepairGenerations) {
+            if (!generations.contains(id)) {
+                Send(StaticGroupStateActor, new NGroupSyncer::TEvGroupState::TEvUpdate(id));
+            }
+        }
+        StaticGroupRepairGenerations = std::move(generations);
+    }
+
+    void TDistributedConfigKeeper::StopStaticGroupRepairs() {
+        if (StaticGroupStateActor) {
+            Send(std::exchange(StaticGroupStateActor, {}), new TEvents::TEvPoisonPill);
+        }
+        StaticGroupRepairGenerations.clear();
+    }
+
+    void TDistributedConfigKeeper::Handle(NGroupSyncer::TEvGroupState::TEvPropose::TPtr ev) {
+        if (!StaticGroupStateActor || ev->Sender != StaticGroupStateActor) {
+            return;
+        }
+        const auto& msg = *ev->Get();
+        Invoke(TPromoteStaticGroup{ev->Sender, ev->Cookie, msg.GroupId, msg.Generation, msg.Next});
+    }
+
+    void TInvokeRequestHandlerActor::PromoteStaticGroup(const TPromoteStaticGroup& op) {
+        RunCommonChecks();
+        if (Self->StaticGroupStateActor != op.Sender) {
+            throw TExRace() << "Static group repair coordinator changed";
+        }
+        auto config = *Self->StorageConfig;
+        auto *ss = config.MutableBlobStorageConfig()->MutableServiceSet();
+        for (auto& group : *ss->MutableGroups()) {
+            if (group.GetGroupID() != op.GroupId) {
+                continue;
+            }
+            if (group.GetGroupGeneration() != op.Generation) {
+                throw TExRace() << "Static group generation changed";
+            }
+            if (NextStaticRepairState(group) != op.Next) {
+                throw TExRace() << "Static group recovery target changed";
+            }
+            if (op.Generation == Max<ui32>()) {
+                throw TExError() << "Static group generation overflow";
+            }
+            AdvanceStaticGroup(&group, op.Next);
+            UpdateStaticVDiskGenerations(ss, {{TGroupId::FromValue(op.GroupId), group.GetGroupGeneration()}});
+            return StartProposition(&config);
+        }
+        throw TExRace() << "Static group removed";
+    }
 
     namespace {
 
@@ -157,35 +385,34 @@ namespace NKikimr::NStorage {
         }
         SuccessfulVDisks.emplace(&GroupInfo->GetTopology());
 
-        TVector<ui32> nodesToConnect;
-        for (ui32 i = 0, num = GroupInfo->GetTotalVDisksNum(); i < num; ++i) {
-            const TVDiskID vdiskId = GroupInfo->GetVDiskId(i);
-            const TActorId actorId = GroupInfo->GetActorId(i);
-            const ui32 nodeId = actorId.NodeId();
-            if (nodeId == SelfId().NodeId()) {
-                SendVStatusQuery(actorId, vdiskId);
+        for (ui32 i = 0; i < GroupInfo->GetTotalVDisksNum(); ++i) {
+            IssueVStatusQuery(GroupInfo->GetActorId(i), GroupInfo->GetVDiskId(i));
+        }
+    }
+
+    void TInvokeRequestHandlerActor::IssueVStatusQuery(TActorId actorId, TVDiskID vdiskId) {
+        if (PendingVDiskIds.empty()) {
+            TActivationContext::Schedule(TDuration::Seconds(30), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+                SelfId(), {}, nullptr, VStatusTimeoutCookie));
+        }
+        ActorToVDisk.emplace(actorId, vdiskId);
+        PendingVDiskIds.emplace(vdiskId);
+
+        const ui32 nodeId = actorId.NodeId();
+        if (nodeId == SelfId().NodeId()) {
+            SendVStatusQuery(actorId, vdiskId);
+        } else {
+            NodeToVDisk.emplace(nodeId, vdiskId);
+            const auto [it, inserted] = Subscriptions.try_emplace(nodeId);
+            if (it->second) {
+                SendVStatusQuery(actorId, vdiskId, it->second);
             } else {
-                NodeToVDisk.emplace(nodeId, vdiskId);
-                const auto [it, inserted] = Subscriptions.try_emplace(nodeId);
-                if (it->second) {
-                    SendVStatusQuery(actorId, vdiskId, it->second);
-                } else {
-                    VStatusQueriesAwaitingConnection[nodeId].emplace_back(actorId, vdiskId);
-                }
-                if (inserted) {
-                    nodesToConnect.push_back(nodeId);
-                }
+                VStatusQueriesAwaitingConnection[nodeId].emplace_back(actorId, vdiskId);
             }
-            ActorToVDisk.emplace(actorId, vdiskId);
-            PendingVDiskIds.emplace(vdiskId);
+            if (inserted) {
+                Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvConnectNode);
+            }
         }
-
-        for (const ui32 nodeId : nodesToConnect) {
-            Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvConnectNode);
-        }
-
-        TActivationContext::Schedule(TDuration::Seconds(30), new IEventHandle(TEvents::TSystem::Wakeup, 0,
-            SelfId(), {}, nullptr, VStatusTimeoutCookie));
     }
 
     void TInvokeRequestHandlerActor::SendVStatusQuery(TActorId actorId, TVDiskID vdiskId, TActorId sessionId) {
@@ -220,6 +447,20 @@ namespace NKikimr::NStorage {
             {"selfId", SelfId()},
             {"record", record},
             {"VDiskId", vdiskId});
+        if (DropAllDonorsBase) {
+            const auto& slot = std::get<TInvokeExternalOperation>(Query).Command.GetDropDonor().GetVSlotId();
+            if (PendingVDiskIds.empty() || ev->Sender.NodeId() != slot.GetNodeId()) {
+                return;
+            }
+            if (!PendingVDiskIds.erase(vdiskId) || Self->StorageConfig != DropAllDonorsBase) {
+                throw TExRace() << "Donor recipient changed while checking its status";
+            }
+            if (record.GetStatus() != NKikimrProto::OK || record.GetIsReadOnly()
+                    || !record.GetJoinedGroup() || !record.GetDurabilityReplicated()) {
+                throw TExRace() << "The donor recipient has not confirmed durable replication";
+            }
+            return StartProposition(&ProposedStorageConfig);
+        }
         if (!PendingVDiskIds.erase(vdiskId)) {
             return;
         }
@@ -239,6 +480,9 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::OnVStatusError(TVDiskID vdiskId) {
         if (!PendingVDiskIds.erase(vdiskId)) {
             return;
+        }
+        if (DropAllDonorsBase) {
+            throw TExRace() << "Could not obtain the donor recipient status";
         }
         CheckReassignGroupDisk();
     }
@@ -450,7 +694,12 @@ namespace NKikimr::NStorage {
         }
         auto *ss = bsConfig->MutableServiceSet();
 
+        auto matchesSlot = [&](const auto& loc) {
+            return loc.GetNodeID() == vslotId.GetNodeId() && loc.GetPDiskID() == vslotId.GetPDiskId()
+                && loc.GetVDiskSlotID() == vslotId.GetVSlotId();
+        };
         bool changes = false;
+        bool slotReused = false;
 
         ui32 actualGroupGeneration = 0;
         for (const auto& group : ss->GetGroups()) {
@@ -471,10 +720,49 @@ namespace NKikimr::NStorage {
                 << " ActualGroupGeneration# " << actualGroupGeneration;
         }
 
+        if (isDropDonor && !vdiskId.GroupGeneration) {
+            const TVDiskID activeId(vdiskId.GroupID, actualGroupGeneration, vdiskId);
+            auto& disks = *ss->MutableVDisks();
+            auto active = std::ranges::find_if(disks, [&](const auto& disk) {
+                return !disk.HasDonorMode() && disk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY
+                    && VDiskIDFromVDiskID(disk.GetVDiskID()) == activeId;
+            });
+            if (active == disks.end() || !matchesSlot(active->GetVDiskLocation())) {
+                if (Self->ConfigRecoveryScheduled) {
+                    throw TExRace() << "Cannot verify donor recipient slot until configuration recovery completes";
+                }
+                return Finish(TResult::OK, std::nullopt);
+            }
+            if (!active->DonorsSize()) {
+                if (!config.GetGeneration()) {
+                    return Finish(TResult::OK, std::nullopt);
+                }
+                return StartCommitConfirmation();
+            }
+
+            THashSet<TVDiskID> donors;
+            for (const auto& donor : active->GetDonors()) {
+                donors.insert(VDiskIDFromVDiskID(donor.GetVDiskId()));
+            }
+            active->ClearDonors();
+            for (auto& disk : disks) {
+                if (disk.HasDonorMode() && disk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY
+                        && donors.contains(VDiskIDFromVDiskID(disk.GetVDiskID()))) {
+                    disk.ClearDonorMode();
+                    disk.SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+                }
+            }
+            DropAllDonorsBase = Self->StorageConfig;
+            ProposedStorageConfig.Swap(&config);
+            return IssueVStatusQuery(MakeBlobStorageVDiskID(vslotId.GetNodeId(), vslotId.GetPDiskId(), vslotId.GetVSlotId()), activeId);
+        }
+
         for (size_t i = 0; i < ss->VDisksSize(); ++i) {
             if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {
                 const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-                if (!currentVDiskId.SameExceptGeneration(vdiskId)) {
+                const bool samePosition = currentVDiskId.SameExceptGeneration(vdiskId);
+                slotReused |= currentVDiskId != vdiskId && matchesSlot(vdisk.GetVDiskLocation());
+                if (!samePosition) {
                     continue; // definitely incorrect group or position in group
                 }
                 if (!isDropDonor && currentVDiskId != vdiskId) {
@@ -488,27 +776,18 @@ namespace NKikimr::NStorage {
                     // this is the active disk and we want to drop its donor
                     Y_ABORT_UNLESS(currentVDiskId.GroupGeneration == actualGroupGeneration);
                     auto *m = ss->MutableVDisks(i);
-                    if (vdiskId.GroupGeneration) { // drop specific donor
-                        for (size_t k = 0; k < m->DonorsSize(); ++k) {
-                            const auto& donor = m->GetDonors(k);
-                            const auto& loc = donor.GetVDiskLocation();
-                            if (VDiskIDFromVDiskID(donor.GetVDiskId()) == vdiskId && loc.GetNodeID() == vslotId.GetNodeId() &&
-                                    loc.GetPDiskID() == vslotId.GetPDiskId() && loc.GetVDiskSlotID() == vslotId.GetVSlotId()) {
-                                m->MutableDonors()->DeleteSubrange(k, 1);
-                                changes = true;
-                                break;
-                            }
+                    for (size_t k = 0; k < m->DonorsSize(); ++k) {
+                        const auto& donor = m->GetDonors(k);
+                        if (VDiskIDFromVDiskID(donor.GetVDiskId()) == vdiskId && matchesSlot(donor.GetVDiskLocation())) {
+                            m->MutableDonors()->DeleteSubrange(k, 1);
+                            changes = true;
+                            break;
                         }
-                    } else { // drop all of them
-                        m->ClearDonors();
-                        changes = true;
                     }
                     continue;
                 }
 
-                const auto& loc = vdisk.GetVDiskLocation();
-                if (loc.GetNodeID() != vslotId.GetNodeId() || loc.GetPDiskID() != vslotId.GetPDiskId() ||
-                        loc.GetVDiskSlotID() != vslotId.GetVSlotId()) {
+                if (!matchesSlot(vdisk.GetVDiskLocation())) {
                     continue; // doesn't match our pdisk
                 }
 
@@ -525,7 +804,7 @@ namespace NKikimr::NStorage {
                     changes = true;
                 } else {
                     Y_ABORT_UNLESS(vdisk.HasDonorMode()); // we have already checked this case by now
-                    if (vdiskId.GroupGeneration == 0 || vdiskId.GroupGeneration == currentVDiskId.GroupGeneration) {
+                    if (vdiskId == currentVDiskId) {
                         // sign up this entity for destruction
                         auto *m = ss->MutableVDisks(i);
                         m->ClearDonorMode();
@@ -537,6 +816,9 @@ namespace NKikimr::NStorage {
         }
 
         if (!changes) {
+            if (!slotReused && config.GetGeneration()) {
+                return StartCommitConfirmation();
+            }
             return Finish(TResult::OK, std::nullopt);
         }
 

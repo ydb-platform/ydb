@@ -90,8 +90,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         return EExecutionStatus::Executed;
     }
 
+    // Legacy MVCC reads use the watermark even when a read iterator can use a retained snapshot.
     if (tx->IsMvccSnapshotRead()) {
-        auto snapshot = tx->GetMvccSnapshot();
+        const auto snapshot = tx->GetMvccSnapshot();
         if (DataShard.IsFollower()) {
             TString err = TStringBuilder()
                 << "Operation " << *op << " cannot read from snapshot " << snapshot
@@ -241,13 +242,18 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         if (auto it = userTables.find(record.GetTableId().GetTableId()); it != userTables.end()) {
             const auto& tableInfo = *it->second;
             for (const auto& columnRecord : record.GetColumns()) {
-                if (tableInfo.Columns.FindPtr(columnRecord.GetId())) {
-                    // TODO: column types don't change when bound by id, but we may want to check anyway
-                } else {
+                const auto* column = tableInfo.Columns.FindPtr(columnRecord.GetId());
+                if (!column) {
                     schemaChangedError = TStringBuilder() << "ReadTable cannot find column "
                         << columnRecord.GetName() << " (" << columnRecord.GetId() << ")";
                     break;
                 }
+                if (column->IsBuildInProgress) {
+                    schemaChangedError = TStringBuilder() << "ReadTable cannot read column '"
+                        << column->Name << "' (" << columnRecord.GetId() << "): column build is in progress";
+                    break;
+                }
+                // TODO: column types don't change when bound by id, but we may want to check anyway
             }
             // TODO: validate key ranges?
         } else {

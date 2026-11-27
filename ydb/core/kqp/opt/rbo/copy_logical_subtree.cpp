@@ -269,8 +269,11 @@ TIntrusivePtr<IOperator> TOpRead::CopyImpl(TInfoUnitRegistry& registry, TSubstit
     if (!CanCopyRead(*this)) {
         return nullptr;
     }
-    return MakeIntrusive<TOpRead>(Alias, CopyColumns(Columns_, registry, renames), StorageType,
-        TableCallable, nullptr, Limit, RangeInfo, std::nullopt, SortDir, TPhysicalOpProps{}, Pos);
+    auto read = MakeIntrusive<TOpRead>(Alias, CopyColumns(Columns_, registry, renames), StorageType,
+        TableCallable, nullptr, Limit, RangeInfo, std::nullopt, SortDir, TPhysicalOpProps{}, Pos, RequireSortedRead);
+    read->ForcePrimary = ForcePrimary;
+    read->ForceIndex = ForceIndex;
+    return read;
 }
 
 TIntrusivePtr<IOperator> TOpMap::CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const {
@@ -319,7 +322,9 @@ TIntrusivePtr<IOperator> TOpSort::CopyImpl(TInfoUnitRegistry&, TSubstitutions&) 
 }
 
 TIntrusivePtr<IOperator> TOpLimit::CopyImpl(TInfoUnitRegistry&, TSubstitutions&) const {
-    return MakeIntrusive<TOpLimit>(GetInput(), Pos, TPhysicalOpProps{}, LimitCond, OffsetCond, LimitPhase);
+    auto copy = MakeIntrusive<TOpLimit>(GetInput(), Pos, TPhysicalOpProps{}, LimitCond, OffsetCond, LimitPhase);
+    copy->OrderedInput = OrderedInput;
+    return copy;
 }
 
 TIntrusivePtr<IOperator> TOpTableEffect::CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const {

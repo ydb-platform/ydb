@@ -6,6 +6,10 @@ namespace NKikimrClient {
     class TPersQueuePartitionRequest_TCmdWrite;
 }
 
+namespace NKikimr::NChangeExchange {
+    class IChangeRecord;
+}
+
 namespace NKikimr::NDataShard {
 
 class TChangeRecord;
@@ -18,6 +22,8 @@ public:
     virtual ~IChangeRecordSerializer() = default;
     virtual void Serialize(TCmdWrite& cmd, const TChangeRecord& record) = 0;
     virtual TString DebugString(const TChangeRecord& record) = 0;
+
+    void Serialize(TCmdWrite& cmd, const NChangeExchange::IChangeRecord& record);
 };
 
 struct TChangeRecordSerializerOpts {
@@ -29,6 +35,8 @@ struct TChangeRecordSerializerOpts {
     bool Debug = false;
     bool UserSIDs = false;
     bool TraceIds = false;
+    TUserTable::TCdcStream::ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
+    i32 CompressionLevel = 0;
 
     static TChangeRecordSerializerOpts DebugOpts();
 };

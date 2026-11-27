@@ -161,6 +161,9 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
         }
     } else if (request.Offset < GetEndOffset()) {
         sendResponse(GetSizeLag(request.Offset), false);
+    } else if (request.Deadline <= ctx.Now()) {
+        sendResponse(0, false);
+        return true;
     } else {
         return false;
     }
@@ -266,10 +269,11 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     }
 
     THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
-        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
+        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp,
+        TInstant::MilliSeconds(record.GetDeadline())};
 
     if (!InitDone || !ProcessHasDataRequest(req, ctx)) {
-        THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
+        THasDataDeadline dl{req.Deadline, req};
         auto res = HasDataRequests.insert(std::move(req));
         HasDataDeadlines.insert(dl);
         PQ_ENSURE(res.second);
@@ -364,7 +368,8 @@ std::pair<TInstant, TInstant> TPartition::GetTime(const TUserInfo& userInfo, ui6
 
 void TPartition::Handle(TEvPQ::TEvGetClientOffset::TPtr& ev, const TActorContext& ctx) {
     auto& userInfo = UsersInfoStorage->GetOrCreate(ev->Get()->ClientId, ctx);
-    PQ_ENSURE(userInfo.Offset >= -1)("Unexpected Offset", userInfo.Offset);
+    PQ_ENSURE(userInfo.Offset >= -1,
+        {"unexpectedOffset", userInfo.Offset});
     ui64 offset = Max<i64>(userInfo.Offset, 0);
     auto ts = GetTime(userInfo, offset);
     TabletCounters.Cumulative()[COUNTER_PQ_GET_CLIENT_OFFSET_OK].Increment(1);
@@ -373,14 +378,15 @@ void TPartition::Handle(TEvPQ::TEvGetClientOffset::TPtr& ev, const TActorContext
 
 void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx) {
     if (size_t count = GetUserActCount(ev->Get()->ClientId); count > MAX_USER_ACTS) {
-        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+        TabletCounters.Cumulative()[UserActCounter(ev->Get()->Type, false)].Increment(1);
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::OVERLOAD,
             TStringBuilder() << "too big inflight: " << count, ev->Get()->IsInternal ? SelfId() : TActorId{});
         return;
     }
 
     const ui64& offset = ev->Get()->Offset;
-    PQ_ENSURE(offset <= (ui64)Max<i64>())("Unexpected Offset", offset);
+    PQ_ENSURE(offset <= (ui64)Max<i64>(),
+        {"unexpectedOffset", offset});
 
     AddUserAct(ev->Release());
 
@@ -711,23 +717,27 @@ TReadAnswer TReadInfo::FormAnswer(
 
             readResult->SetBlobsCachedSize(readResult->GetBlobsCachedSize() + writeBlob.GetSerializedSize());
 
-            const ui64 resultOffset = writeBlob.IsLastPart()
-                && cachedBlobOffset <= Offset
-                && Offset < cachedBlobOffset + writeBlob.LogicalMessageCount
-                    ? cachedBlobOffset
-                    : Offset;
+            // Example: a client batch covers [100, 105) and has two parts.
+            // A read at (103, 0) must return (100, 0), then (100, 1), not (103, 0).
+            // Both parts belong to the same batch and must carry its base offset.
+            // Normalize the cursor before emitting either part: if the response
+            // ends after part 0, the next cursor is (100, 1); after part 1 it is (105, 0).
+            // The response's RealReadOffset retains the original request offset, 103.
+            if (cachedBlobOffset <= Offset && Offset < cachedBlobOffset + writeBlob.LogicalMessageCount) {
+                Offset = cachedBlobOffset;
+            }
 
             if (userInfo) {
                 userInfo->AddTimestampToCache(
-                    resultOffset, writeBlob.WriteTimestamp, writeBlob.CreateTimestamp,
+                    Offset, writeBlob.WriteTimestamp, writeBlob.CreateTimestamp,
                     Destination != 0, ctx.Now()
                 );
             }
 
-            AddResultBlob(readResult, writeBlob, resultOffset);
+            AddResultBlob(readResult, writeBlob, Offset);
             if (writeBlob.IsLastPart()) {
                 PartNo = 0;
-                Offset = resultOffset + writeBlob.LogicalMessageCount;
+                Offset += writeBlob.LogicalMessageCount;
                 cachedBlobOffset += writeBlob.LogicalMessageCount;
             } else {
                 ++PartNo;

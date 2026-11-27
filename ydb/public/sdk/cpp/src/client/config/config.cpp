@@ -67,7 +67,7 @@ public:
     }
 
     TAsyncFetchConfigResult FetchAllConfigs(const std::vector<std::string>& requestor_host_options,
-            std::int32_t requestor_port, const TFetchAllConfigsSettings& settings = {}) {
+            std::int32_t requestor_port, bool seed_node_fetch, const TFetchAllConfigsSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::Config::FetchConfigRequest>(settings);
         auto *all = request.mutable_all();
         switch (settings.Transform_) {
@@ -92,7 +92,7 @@ public:
                 break;
         }
 
-        if (!requestor_host_options.empty()) {
+        if (seed_node_fetch) {
             auto *requestor = request.mutable_seed_node_fetch_requestor();
             for (const std::string& host : requestor_host_options) {
                 requestor->add_host(host);
@@ -211,13 +211,13 @@ TAsyncStatus TConfigClient::ReplaceConfigEnableDedicatedStorageSection(
 }
 
 TAsyncFetchConfigResult TConfigClient::FetchAllConfigs(const TFetchAllConfigsSettings& settings) {
-    return Impl_->FetchAllConfigs({}, 0, settings);
+    return Impl_->FetchAllConfigs({}, 0, /*seed_node_fetch=*/false, settings);
 }
 
 TAsyncFetchConfigResult TConfigClient::FetchAllConfigs(const std::vector<std::string>& requestor_host_options,
         int requestor_port,
         const TFetchAllConfigsSettings& settings) {
-    return Impl_->FetchAllConfigs(requestor_host_options, requestor_port, settings);
+    return Impl_->FetchAllConfigs(requestor_host_options, requestor_port, /*seed_node_fetch=*/true, settings);
 }
 
 TAsyncStatus TConfigClient::BootstrapCluster(

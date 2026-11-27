@@ -1,0 +1,5 @@
+RECURSE(
+    public
+    service
+    tablet
+)

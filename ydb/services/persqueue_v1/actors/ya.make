@@ -1,40 +1,57 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/core/kqp/common/events
-    ydb/core/kqp/common/simple
-    ydb/library/actors/core
-    ydb/library/wilson_ids
+    contrib/libs/fmt
+    library/cpp/containers/absl
     library/cpp/containers/disjoint_interval_tree
+    library/cpp/json
+    library/cpp/protobuf/util
+    library/cpp/random_provider
     library/cpp/string_utils/base64
-    ydb/core/util
     ydb/core/base
     ydb/core/grpc_services
+    ydb/core/grpc_services/base
+    ydb/core/jaeger_tracing
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/persqueue/common
     ydb/core/persqueue/deferred_publish
     ydb/core/persqueue/events
     ydb/core/persqueue/public
+    ydb/core/persqueue/public/codecs
     ydb/core/persqueue/public/counters
-    ydb/core/persqueue/public/metrics
-    ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/dataplane
+    ydb/core/persqueue/public/describer
+    ydb/core/persqueue/public/metrics
     ydb/core/persqueue/public/reset_offset
+    ydb/core/persqueue/public/write_sessions_quoter
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/tx/scheme_board
     ydb/core/tx/scheme_cache
+    ydb/core/util
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/cloud_permissions
     ydb/library/persqueue
     ydb/library/persqueue/topic_parser
-    ydb/public/sdk/cpp/src/library/kafka
-    ydb/library/cloud_permissions
+    ydb/library/services
+    ydb/library/wilson_ids
     ydb/public/api/protos
     ydb/public/lib/base
+    ydb/public/lib/deprecated/kicli
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/library/kafka
+    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/metadata
+    ydb/services/metadata/manager
     ydb/services/persqueue_v1/actors/schema
+    ydb/services/persqueue_v1/actors/schema/common
+    yql/essentials/public/issue/protos
 )
 
 SRCS(

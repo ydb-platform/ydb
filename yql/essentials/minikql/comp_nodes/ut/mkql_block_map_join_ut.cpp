@@ -1,6 +1,6 @@
-#include "mkql_block_test_helper.h"
 #include "mkql_computation_node_ut.h"
 
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_block_test_helper.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr::NMiniKQL {

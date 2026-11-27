@@ -70,7 +70,7 @@ protected:
     virtual void DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& counters) const = 0;
 
     void StartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const {
-        AFL_VERIFY(IsReady());
+        YDB_LOG_VERIFY(IsReady());
         return DoStartGCAction(action);
     }
 
@@ -122,12 +122,12 @@ public:
     }
 
     void OnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
-        AFL_VERIFY(tiers);
+        YDB_LOG_VERIFY(tiers);
         return DoOnTieringModified(tiers);
     }
 
     std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction(const NBlobOperations::EConsumer consumerId) {
-        AFL_VERIFY(IsReady());
+        YDB_LOG_VERIFY(IsReady());
         return DoStartDeclareRemovingAction(Counters->GetConsumerCounter(consumerId)->GetRemoveDeclareCounters());
     }
 
@@ -135,14 +135,14 @@ public:
     }
 
     std::shared_ptr<IBlobsWritingAction> StartWritingAction(const NBlobOperations::EConsumer consumerId) {
-        AFL_VERIFY(IsReady());
+        YDB_LOG_VERIFY(IsReady());
         auto result = DoStartWritingAction();
         result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetWriteCounters());
         return result;
     }
 
     std::shared_ptr<IBlobsReadingAction> StartReadingAction(const NBlobOperations::EConsumer consumerId) {
-        AFL_VERIFY(IsReady());
+        YDB_LOG_VERIFY(IsReady());
         auto result = DoStartReadingAction();
         result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetReadCounters());
         if (consumerId == NBlobOperations::EConsumer::GENERAL_COMPACTION) {
@@ -152,8 +152,8 @@ public:
     }
 
     void StartGC(const std::shared_ptr<IBlobsGCAction>& action) {
-        AFL_VERIFY(CurrentGCAction == action);
-        AFL_VERIFY(!!action && action->IsInProgress());
+        YDB_LOG_VERIFY(CurrentGCAction == action);
+        YDB_LOG_VERIFY(!!action && action->IsInProgress());
         StartGCAction(action);
     }
 

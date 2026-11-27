@@ -59,13 +59,13 @@ public:
       std::unique_ptr<instrumentationscope::ScopeConfigurator<MeterConfig>> meter_configurator =
           std::make_unique<instrumentationscope::ScopeConfigurator<MeterConfig>>(
               instrumentationscope::ScopeConfigurator<MeterConfig>::Builder(MeterConfig::Default())
-                  .Build())) noexcept;
+                  .Build()));
 
   /**
    * Initialize a new meter provider with a specified context
    * @param context The owned meter configuration/pipeline for this provider.
    */
-  explicit MeterProvider(std::unique_ptr<MeterContext> context) noexcept;
+  explicit MeterProvider(std::unique_ptr<MeterContext> context);
 
   MeterProvider(const MeterProvider &)            = delete;
   MeterProvider(MeterProvider &&)                 = delete;
@@ -130,6 +130,19 @@ public:
                std::unique_ptr<MeterSelector> meter_selector,
                std::unique_ptr<View> view) noexcept;
 
+  /**
+   * Update the MeterConfigurator for this provider, recreate and propagate the resulting
+   * MeterConfig to all existing Meters while new Meters will use the updated configuration.
+   *
+   * @param meter_configurator The new configurator.
+   *
+   * @note Calling MeterProvider::GetMeter from within the
+   * ScopeConfigurator<MeterConfig>::ComputeConfig function (as a scope_matcher callback set with
+   * ScopeConfigurator<MeterConfig>::AddCondition) is not supported and will result in a deadlock.
+   */
+  void UpdateMeterConfigurator(std::unique_ptr<instrumentationscope::ScopeConfigurator<MeterConfig>>
+                                   meter_configurator) noexcept;
+
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
 
   void SetExemplarFilter(metrics::ExemplarFilterType exemplar_filter_type =
@@ -152,6 +165,11 @@ public:
 private:
   std::shared_ptr<MeterContext> context_;
   std::mutex lock_;
+  // Allocated during provider construction so GetMeter can return it without allocating.
+  nostd::shared_ptr<opentelemetry::metrics::Meter> noop_meter_;
+  // Cleared on the first GetMeter construction failure. Later uncached GetMeter
+  // calls return the preallocated noop without retrying construction.
+  bool initialized_{false};
 
 #if defined(__cpp_lib_atomic_value_initialization) && \
     __cpp_lib_atomic_value_initialization >= 201911L

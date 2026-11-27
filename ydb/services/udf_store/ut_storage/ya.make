@@ -1,7 +1,6 @@
 UNITTEST()
 
 SIZE(MEDIUM)
-FORK_SUBTESTS()
 YQL_LAST_ABI_VERSION()
 
 SRCS(
@@ -13,6 +12,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/public/sdk/cpp/src/client/proto
     ydb/services/udf_store
+    ydb/services/udf_store/metadata_subscription
     yql/essentials/sql/pg_dummy
 )
 

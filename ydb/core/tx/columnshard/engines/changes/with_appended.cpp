@@ -16,7 +16,7 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
     THashSet<ui64> usedPortionIds = PortionsToRemove.GetPortionIds();
     auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
     if (PortionsToRemove.GetSize() || PortionsToMove.GetSize()) {
-        AFL_VERIFY(FetchedDataAccessors);
+        YDB_LOG_VERIFY(FetchedDataAccessors);
         PortionsToRemove.ApplyOnExecute(self, context, *FetchedDataAccessors);
         PortionsToMove.ApplyOnExecute(self, context, *FetchedDataAccessors);
     }
@@ -35,7 +35,8 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
     AppendedPortions.erase(std::remove_if(AppendedPortions.begin(), AppendedPortions.end(), predRemoveDroppedTable), AppendedPortions.end());
     for (auto& portionInfoWithBlobs : AppendedPortions) {
         const auto& portionInfo = portionInfoWithBlobs.GetPortionResult().GetPortionInfoPtr();
-        AFL_VERIFY(usedPortionIds.emplace(portionInfo->GetPortionId()).second)("portion_info", portionInfo->DebugString(true));
+        YDB_LOG_VERIFY(usedPortionIds.emplace(portionInfo->GetPortionId()).second,
+            {"portionInfo", portionInfo->DebugString(true)});
         portionInfoWithBlobs.GetPortionResult().SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
     }
 }
@@ -71,7 +72,6 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
             {"taskId", GetTaskIdentifier()});
     }
 
-    auto g = context.EngineLogs.GranulesStorage->GetStats()->StartPackModification();
     if (PortionsToRemove.GetSize() || PortionsToMove.GetSize()) {
         PortionsToRemove.ApplyOnComplete(self, context, *FetchedDataAccessors);
         PortionsToMove.ApplyOnComplete(self, context, *FetchedDataAccessors);
@@ -82,7 +82,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
 }
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
-    AFL_VERIFY(PortionsToRemove.GetSize() + PortionsToMove.GetSize() + AppendedPortions.size() || NoAppendIsCorrect);
+    YDB_LOG_VERIFY(PortionsToRemove.GetSize() + PortionsToMove.GetSize() + AppendedPortions.size() || NoAppendIsCorrect);
     for (auto&& i : AppendedPortions) {
         auto& constructor = i.GetPortionConstructor().MutablePortionConstructor();
         constructor.SetPortionId(context.NextPortionId());

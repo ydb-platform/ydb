@@ -71,10 +71,14 @@ static bool IsSkiffSpecialColumn(
 
 TStripOptionalResult StripOptional(TSkiffSchemaPtr skiffSchema)
 {
-    if (skiffSchema->GetWireType() == EWireType::Variant8) {
+    auto wireType = skiffSchema->GetWireType();
+    if (wireType == EWireType::Variant8 || wireType == EWireType::VariantVar) {
         const auto& children = skiffSchema->GetChildren();
         if (children.size() == 2 && children[0]->GetWireType() == EWireType::Nothing) {
-            return {.StrippedSchema = children[1], .OptionalKind = EOptionalKind::Variant8};
+            return {
+                .StrippedSchema = children[1],
+                .OptionalKind = wireType == EWireType::Variant8 ? EOptionalKind::Variant8 : EOptionalKind::VariantVar,
+            };
         }
     }
     return {.StrippedSchema = skiffSchema, .OptionalKind = EOptionalKind::None};

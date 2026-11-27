@@ -256,6 +256,33 @@ bool TConstraintSet::FilterConstraints(const TPredicate& predicate) {
 
 namespace {
 
+ui64 AddPathToHash(ui64 hash, const TPartOfConstraintBase::TPathType& path) {
+    for (const auto& part : path) {
+        hash = MurmurHash(part.data(), part.size(), hash);
+    }
+    const ui64 separator = path.size();
+    return MurmurHash(&separator, sizeof(separator), hash);
+}
+
+ui64 AddPathSetToHash(ui64 hash, const TPartOfConstraintBase::TSetType& paths) {
+    const auto size = paths.size();
+    hash = MurmurHash<ui64>(&size, sizeof(size), hash);
+    for (const auto& path : paths) {
+        hash = AddPathToHash(hash, path);
+    }
+    return hash;
+}
+
+ui64 AddSetOfSetsToHash(ui64 hash, const TPartOfConstraintBase::TSetOfSetsType& sets) {
+    const auto size = sets.size();
+    hash = MurmurHash<ui64>(&size, sizeof(size), hash);
+    for (const auto& set : sets) {
+        YQL_ENSURE(!set.empty());
+        hash = AddPathSetToHash(hash, set);
+    }
+    return hash;
+}
+
 size_t GetElementsCount(const TTypeAnnotationNode* type) {
     if (type) {
         switch (type->GetKind()) {
@@ -321,11 +348,12 @@ TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&&
     , Content_(content)
 {
     YQL_ENSURE(!Content_.empty());
+    const auto size = Content_.size();
+    Hash_ = MurmurHash<ui64>(&size, sizeof(size), Hash_);
     for (const auto& c : Content_) {
         YQL_ENSURE(!c.first.empty());
-        for (const auto& path : c.first) {
-            Hash_ = std::accumulate(path.cbegin(), path.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-        }
+        Hash_ = MurmurHash<ui64>(&c.second, sizeof(c.second), Hash_);
+        Hash_ = AddPathSetToHash(Hash_, c.first);
     }
 }
 
@@ -721,14 +749,7 @@ TChoppedConstraintNode::TChoppedConstraintNode(TExprContext& ctx, TSetOfSetsType
 {
     YQL_ENSURE(!Sets_.empty());
     YQL_ENSURE(!HasDuplicates(Sets_));
-    const auto size = Sets_.size();
-    Hash_ = MurmurHash<ui64>(&size, sizeof(size), Hash_);
-    for (const auto& set : Sets_) {
-        YQL_ENSURE(!set.empty());
-        for (const auto& path : set) {
-            Hash_ = std::accumulate(path.cbegin(), path.cend(), Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-        }
-    }
+    Hash_ = AddSetOfSetsToHash(Hash_, Sets_);
 }
 
 TChoppedConstraintNode::TChoppedConstraintNode(TExprContext& ctx, const TSetType& keys)
@@ -1115,12 +1136,7 @@ TUniqueConstraintNodeBase<Distinct>::TUniqueConstraintNodeBase(TExprContext& ctx
     for (const auto& sets : Content_) {
         YQL_ENSURE(!sets.empty());
         YQL_ENSURE(!TConstraintWithFieldsNode::HasDuplicates(sets));
-        for (const auto& set : sets) {
-            YQL_ENSURE(!set.empty());
-            for (const auto& path : set) {
-                TBase::Hash_ = std::accumulate(path.cbegin(), path.cend(), TBase::Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-            }
-        }
+        TBase::Hash_ = AddSetOfSetsToHash(TBase::Hash_, sets);
     }
 }
 
@@ -1542,13 +1558,17 @@ TPartOfConstraintNode<TOriginalConstraintNode>::TPartOfConstraintNode(TExprConte
     , Mapping_(std::move(mapping))
 {
     YQL_ENSURE(!Mapping_.empty());
+    const auto size = Mapping_.size();
+    TBase::Hash_ = MurmurHash<ui64>(&size, sizeof(size), TBase::Hash_);
     for (const auto& part : Mapping_) {
         YQL_ENSURE(!part.second.empty());
         const auto hash = part.first->GetHash();
         TBase::Hash_ = MurmurHash<ui64>(&hash, sizeof(hash), TBase::Hash_);
+        const auto partSize = part.second.size();
+        TBase::Hash_ = MurmurHash<ui64>(&partSize, sizeof(partSize), TBase::Hash_);
         for (const auto& item : part.second) {
-            TBase::Hash_ = std::accumulate(item.first.cbegin(), item.first.cend(), TBase::Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-            TBase::Hash_ = std::accumulate(item.second.cbegin(), item.second.cend(), TBase::Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
+            TBase::Hash_ = AddPathToHash(TBase::Hash_, item.first);
+            TBase::Hash_ = AddPathToHash(TBase::Hash_, item.second);
         }
     }
 }
@@ -2011,19 +2031,6 @@ const TEmptyConstraintNode* TEmptyConstraintNode::MakeCommon(const std::vector<c
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-ui64 AddPathToHash(ui64 hash, const TPartOfConstraintBase::TPathType& path) {
-    for (const auto& part : path) {
-        hash = MurmurHash(part.data(), part.size(), hash);
-    }
-    const ui64 separator = path.size();
-    hash = MurmurHash(&separator, sizeof(separator), hash);
-    return hash;
-}
-
-} // anonymous namespace
-
 TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx)
     : TConstraintWithFieldsT(ctx, Name())
 {
@@ -2237,7 +2244,9 @@ const TConstraintWithFieldsNode* TStreamingConstraintNode::DoRenameFields(TExprC
     TPathType canonical;
     if (paths.contains(*EventTime_)) {
         canonical = *EventTime_;
-    } else if (canonicalPaths.size() == 1U) {
+    } else if (!canonicalPaths.empty()) {
+        // Multiple destinations of the canonical event-time path are proven
+        // aliases of the same value. Preserve all of them and select a representative.
         canonical = canonicalPaths.front();
     } else if (paths.size() == 1U) {
         canonical = paths.front();

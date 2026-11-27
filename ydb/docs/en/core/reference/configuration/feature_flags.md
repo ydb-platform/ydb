@@ -69,12 +69,16 @@ feature_flags:
 | `enable_json_index` | [JSON indexes](../../dev/json-indexes.md) to speed up search in JSON fields |
 | `enable_json_index_auto_select` | Automatic selection of [JSON indexes](../../dev/json-indexes.md) when executing queries |
 | `enable_fulltext_index` | [Full-text index](../../dev/fulltext-indexes.md) for full-text search |
+| `enable_fulltext_index_row_id` | [Full-text indexes](../../dev/fulltext-indexes.md#primary-key) on tables with a non-integer or composite primary key via `__ydb_row_id` |
 | `enable_local_bloom_filter_index` | [Local Bloom index](../../dev/bloom-skip-indexes.md#types) of type `bloom_filter` |
 | `enable_local_bloom_ngram_filter_index` | [Local Bloom index](../../dev/bloom-skip-indexes.md#types) of type `bloom_ngram_filter` |
 | `enable_local_min_max_index` | [Local min_max index](../../dev/min_max-skip-index.md) |
 | `enable_topic_autopartitioning_for_cdc` | [Auto-partitioning of topics](../../concepts/cdc.md#topic-partitions) in CDC for row tables |
+| `enable_online_add_unique_index` | [Building a unique secondary index](../../concepts/query_execution/secondary_indexes.md#index-add) on an existing table without blocking writes during the build |
 | `enable_access_to_index_impl_tables` | Ability to [specify the number of replicas](../../yql/reference/syntax/alter_table/indexes.md) for a secondary index |
+| `enable_backup_service` | [Backup collections](../../concepts/datamodel/backup-collection.md): full and incremental backups for row tables |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Support for change feeds (changefeed) in backup and restore operations |
+| `enable_column_statistics` | Collecting [column statistics](../../yql/reference/syntax/analyze.md) with `ANALYZE` and using them in the [cost-based optimizer](../../concepts/query_execution/optimizer.md#statistics) to choose query plans |
 | `enable_view_export` | Support for views (`VIEW`) in backup and restore operations |
 | `enable_export_auto_dropping` | Automatic deletion of temporary directories and tables when exporting to S3 |
 | `enable_followers_stats` | System views with information about the [history of overloaded partitions](../../dev/system-views.md#top-overload-partitions) |
@@ -90,5 +94,6 @@ feature_flags:
 | `enable_fs_backups` | Enabling [backup and restore operations to a network file system](../../concepts/backup.md#nfs) |
 | `switch_to_config_v2` | Switching from configuration V1 to [configuration V2](../../devops/configuration-management/migration/migration-to-v2.md) |
 | `enable_streaming_queries` | Enabling [streaming queries](../../concepts/streaming-query/streaming-query.md) |
+| `enable_user_attributes_in_topic_query` | [User-defined message attributes](../../concepts/query_execution/topics.md#system-metadata) in topic queries via `__ydb_user_attributes` |
 | `enable_stable_node_names` | Enabling [stable names for dynamic nodes](node_broker_config.md) |
 | `enable_alter_database_create_hive_first` | Creating a dedicated Hive for a database's system tablets when the database is created |

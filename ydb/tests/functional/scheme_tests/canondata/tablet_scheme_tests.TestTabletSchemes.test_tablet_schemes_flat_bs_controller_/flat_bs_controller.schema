@@ -165,6 +165,11 @@
                 "ColumnId": 34,
                 "ColumnName": "BridgeSyncMaxSyncers",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "AppliedPileOverrides",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -202,7 +207,8 @@
                     31,
                     32,
                     33,
-                    34
+                    34,
+                    35
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -783,6 +789,11 @@
                 "ColumnId": 30,
                 "ColumnName": "PersistentBufferAllocationMode",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 31,
+                "ColumnName": "TargetInvariant",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -818,7 +829,8 @@
                     27,
                     28,
                     29,
-                    30
+                    30,
+                    31
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1927,6 +1939,16 @@
                 "ColumnId": 6,
                 "ColumnName": "ErrorCount",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "EstimatedBytesToCopy",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "EstimateRound",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -1938,7 +1960,9 @@
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/operations/events.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_writer.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
@@ -161,6 +162,15 @@ Y_UNIT_TEST_SUITE(TColumnShardNotProposedTransactions) {
         UNIT_ASSERT_VALUES_EQUAL(shard.CountInsertedPortions(), 0);
     }
 
+    Y_UNIT_TEST(AbortCountedAsAbortLock) {
+        TShardFixture shard;
+        Y_UNUSED(shard.WriteUnderLock());
+        shard.NotifyTransactionGone();
+        shard.WaitTransactionsAborted();
+
+        UNIT_ASSERT_GT(GetTabletTxCompleted(shard.Runtime, TTestTxConfig::TxTablet0, "ColumnShard/TxAbortLock"), 0);
+    }
+
     Y_UNIT_TEST(RollbackAfterRestartIsAccepted) {
         TShardFixture shard;
         Y_UNUSED(shard.WriteUnderLock());
@@ -256,6 +266,32 @@ Y_UNIT_TEST_SUITE(TColumnShardNotProposedTransactions) {
         shard.PassReadWindow();
         shard.TryCleanupTables(pathId, 60);
         UNIT_ASSERT(!shard.HasTable(pathId));
+    }
+
+    Y_UNIT_TEST(QueuedWriteOfAbortedLockFails) {
+        TShardFixture shard;
+        Y_UNUSED(shard.WriteUnderLock());
+        PlanCommit(shard.Runtime, shard.Sender, shard.Writer.StartCommit(TxId), TxId);
+        // a write of the lock in progress keeps the lock registered
+        TBlockEvents<NPrivateEvents::NWrite::TEvWritePortionResult> blockedWrittenPortions(shard.Runtime);
+        shard.SendWriteUnderLock();
+        shard.Runtime.WaitFor("portion written", [&] {
+            return !blockedWrittenPortions.empty();
+        }, TDuration::Seconds(30));
+        // any loaded portion is over a zero metadata limit, so the queue holds the next write
+        shard.Runtime.GetAppData().ColumnShardConfig.MutableIndexMetadataMemoryLimit()->SetAbsoluteValue(0);
+        shard.SendWriteUnderLock();
+        // in the queue before the abort, not rejected on arrival
+        shard.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        // the abort answers the queued write itself: the queue is not drained again
+        shard.NotifyTransactionGone();
+
+        // a queue answer carries the request's tx id, not the lock id the writer checks
+        TAutoPtr<IEventHandle> handle;
+        const auto result = shard.Runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(handle, TDuration::Seconds(30));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
     }
 }
 

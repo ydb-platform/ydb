@@ -7,6 +7,8 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <optional>
+
 namespace NKikimr::NSchemeShard::NCdc {
 
 struct TStreamPaths {
@@ -42,10 +44,43 @@ void DoCreateStream(
     const bool initialScan,
     const bool internal = false);
 
+bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
+
+std::pair<std::optional<NKikimrSchemeOp::ECdcStreamHeartbeatMode>, TString> ChooseHeartbeatMode(
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TFeatureFlags& featureFlags);
+
+TMaybe<TChannelsBindings> CheckCdcAggregatorCanBeCreated(
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TPath& streamPath,
+    TOperationContext& context,
+    const THolder<TProposeResponse>& result);
+
+// Registers the stream's CdcAggregator shard, sets Aggregated mode and makes the stream creation begin with CreateParts.
+void PlanCdcAggregatorCreation(
+    const TOperationId& opId,
+    const TPath& streamPath,
+    const TChannelsBindings& channelsBindings,
+    TProposeContext& context);
+
+class TConfigureParts: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+
+    explicit TConfigureParts(TOperationId id);
+
+    bool ProgressState(TOperationContext& context) override;
+
+private:
+    const TOperationId OperationId;
+
+}; // TConfigureParts
+
 struct TCdcPqPartParams {
     ui32 TotalGroupCount = 0;
     ui32 PartitionPerTablet = 2;
     bool ReplicationAutoPartitioning = false;
+    bool KeyRangeAutoPartitioning = false;
     ui32 MinPartitionCount = 0;
     ui32 MaxPartitionCount = 0;
 };
@@ -53,7 +88,8 @@ struct TCdcPqPartParams {
 // Decides the changefeed topic shape from the source table size.
 // Replication autopartitioning caps max at maxShardsInPath and min at that limit / 4.
 // An explicit TopicPartitions stays the initial count and the strategy minimum, capped by that max.
-TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount, ui64 maxShardsInPath);
+TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount,
+    ui64 maxShardsInPath, const TFeatureFlags& featureFlags);
 
 void DoCreatePqPart(
     TVector<ISubOperation::TPtr>& result,

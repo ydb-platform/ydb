@@ -94,7 +94,7 @@ TOverloadControllerConfigPtr CreateConfig(const THashMap<std::string, TMethodInf
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TOverloadControllerTest, TestOverloadsRequests)
+TEST(TOverloadControllerTest, OverloadsRequests)
 {
     auto controller = CreateOverloadController(New<TOverloadControllerConfig>());
     auto mockInvoker = New<TMockInvoker>();
@@ -140,7 +140,7 @@ TEST(TOverloadControllerTest, TestOverloadsRequests)
     }
 }
 
-TEST(TOverloadControllerTest, TestNoOverloads)
+TEST(TOverloadControllerTest, NoOverloads)
 {
     auto controller = CreateOverloadController(New<TOverloadControllerConfig>());
     auto mockInvoker = New<TMockInvoker>();
@@ -168,7 +168,7 @@ TEST(TOverloadControllerTest, TestNoOverloads)
     }
 }
 
-TEST(TOverloadControllerTest, TestTwoInvokersSameMethod)
+TEST(TOverloadControllerTest, TwoInvokersSameMethod)
 {
     auto controller = CreateOverloadController(New<TOverloadControllerConfig>());
     auto mockInvoker1 = New<TMockInvoker>();
@@ -214,7 +214,7 @@ TEST(TOverloadControllerTest, TestTwoInvokersSameMethod)
     }
 }
 
-TEST(TOverloadControllerTest, TestCongestionWindow)
+TEST(TOverloadControllerTest, CongestionWindow)
 {
     auto controller = CreateOverloadController(New<TOverloadControllerConfig>());
     auto mockInvoker = New<TMockInvoker>();
@@ -269,7 +269,7 @@ TEST(TOverloadControllerTest, TestCongestionWindow)
     }
 }
 
-TEST(TOverloadControllerTest, TestCongestionWindowTwoTrackers)
+TEST(TOverloadControllerTest, CongestionWindowTwoTrackers)
 {
     auto controller = CreateOverloadController(New<TOverloadControllerConfig>());
     auto mockInvoker1 = New<TMockInvoker>();
@@ -308,7 +308,7 @@ TEST(TOverloadControllerTest, TestCongestionWindowTwoTrackers)
     }
 }
 
-TEST(TOverloadControllerTest, TestCongestionWindowTwoInstancies)
+TEST(TOverloadControllerTest, CongestionWindowTwoInstancies)
 {
     auto controller = CreateOverloadController(New<TOverloadControllerConfig>());
     auto observer1 = controller->CreateGenericWaitTimeObserver("Mock", "Mock.1");

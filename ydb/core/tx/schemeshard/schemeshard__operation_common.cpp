@@ -268,6 +268,9 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
         case ETabletType::TestShard:
             context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
             break;
+        case ETabletType::CdcAggregator:
+            context.SS->TabletCounters->Simple()[COUNTER_CDC_AGGREGATOR_COUNT].Add(1);
+            break;
         default:
             break;
         }
@@ -792,6 +795,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     } else if (txState.TxType == TTxState::TxFinalizeBuildIndex) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxPrepareIndexValidation) {
+        commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxPrepareVectorIndex) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
         commonShardOp = TTxState::ConfigureParts;

@@ -238,6 +238,17 @@ namespace NActors {
     void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
+
+        // Anyway, process record by sinks
+        const auto& eventData = *ev->Get();
+        OutputRecordToSinks(eventData.Stamp,
+            eventData.Level.ToPrio(),
+            eventData.Component,
+            eventData.FileName,
+            eventData.LineNumber,
+            eventData.Line,
+            eventData.StructuredMessage);
+
         if (Settings->AllowDrop) {
             if (PassedCount > 10 && delayMillisec > (i64)Settings->TimeThresholdMs || !LogBuffer.IsEmpty() || LogBuffer.CheckLogIgnoring()) {
                 if (LogBuffer.IsEmpty() && !LogBuffer.CheckLogIgnoring()) {
@@ -537,6 +548,39 @@ namespace NActors {
 
     constexpr size_t TimeBufSize = 512;
 
+    void TLoggerActor::OutputRecordToSinks(
+        TInstant time,
+        NLog::EPrio priority,
+        NLog::EComponent component,
+        const char* fileName,
+        ui64 lineNumber,
+        const TString& formatted,
+        const TMaybe<NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
+        try {
+            auto sinks = Settings->Sinks.atomic_load();
+            if (!sinks || sinks->empty()) {
+                return;
+            }
+
+            NStructuredLog::TLogMessage message {
+                .Time = time,
+                .Priority = priority,
+                .Component = component,
+                .NodeId = Settings->NodeId,
+                .FileName = fileName,
+                .LineNumber = lineNumber,
+                .TextMessage = formatted,
+                .StructuredMessage = structuredMessage.GetOrElse({})};
+
+            for (auto& sink : *sinks) {
+                try {
+                    sink.second->Write(message);
+                } catch (...) {
+                }
+            }
+        }  catch (...) {
+        }
+
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
         return OutputRecord(
             evLog->Stamp,
@@ -685,6 +729,16 @@ namespace NActors {
     void TLoggerActor::HandleLogEventDrop(const NLog::TEvLog::TPtr& ev) {
         WriteMessageStat(*ev->Get());
         Metrics->IncDroppedMsgs();
+
+        // Anyway, process record by sinks
+        const auto& eventData = *ev->Get();
+        OutputRecordToSinks(eventData.Stamp,
+            eventData.Level.ToPrio(),
+            eventData.Component,
+            eventData.FileName,
+            eventData.LineNumber,
+            eventData.Line,
+            eventData.StructuredMessage);
     }
 
     void TLoggerActor::HandleWakeup() {
@@ -945,4 +999,55 @@ namespace NActors {
         }
     }
 
+    [[noreturn]] void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui64 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage) {
+        NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();
+        YDB_LOG_UPDATE_MESSAGE(structuredMessage,
+            {"condition", condition},
+            {"file", filename},
+            {"line", lineNum},
+            addMessage);
+
+        TStringBuilder textMessage;
+        textMessage << "Verify failed ";
+        NStructuredLog::TTextWriter().Write(textMessage, structuredMessage);
+        Y_ABORT("%s", textMessage.data());
+    }
+
+    [[noreturn]] void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui64 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage) {
+        // Construct structured message
+        NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();
+        YDB_LOG_UPDATE_MESSAGE(structuredMessage,
+            {"condition", condition},
+            addMessage);
+
+        // Construct text message
+        TStringBuilder textMessage;
+        textMessage << "Ensure failed ";
+        NStructuredLog::TTextWriter().Write(textMessage, YDB_LOG_CREATE_MESSAGE(structuredMessage,
+            {"file", filename},
+            {"line", lineNum}));
+
+        // Log message
+        if (NActors::TlsActivationContext) {
+            ::NActors::MemStructLogAdapter(
+                NActors::TlsActivationContext->AsActorContext(),
+                NLog::EPriority::PRI_ERROR,
+                0,
+                filename.Data(),
+                lineNum,
+                "Ensure failed",
+                std::move(structuredMessage) );
+        } else {
+            Cerr << "FALLBACK_EXCEPTION_LOGGING;component=EXCEPTION;" << textMessage.data() << Endl;
+        }
+
+        // final action
+        if (!std::uncaught_exceptions()) {
+            Y_ENSURE(false, textMessage.data());
+        } else {
+            Y_ABORT("%s", textMessage.data());
+        }
+    }
 }

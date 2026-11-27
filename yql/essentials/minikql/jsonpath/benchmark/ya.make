@@ -1,4 +1,6 @@
-Y_BENCHMARK(jsonpath-benchmark)
+NO_BUILD_IF(SANITIZER_TYPE)
+
+G_BENCHMARK(jsonpath-benchmark)
 
 PEERDIR(
     library/cpp/json

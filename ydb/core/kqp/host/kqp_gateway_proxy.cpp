@@ -1,7 +1,7 @@
 #include "kqp_host_impl.h"
 
 #include <ydb/core/formats/arrow/accessor/common/const.h>
-#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
+#include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
@@ -439,10 +439,6 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
         if (!families.ApplyFamilySettings(familySettings, &code, &error)) {
             return false;
         }
-    }
-
-    if (families.Modified && !families.ValidateColumnFamilies(&code, &error)) {
-        return false;
     }
 
     if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) {
@@ -1203,6 +1199,9 @@ public:
                                 break;
                             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                                 *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                                break;
+                            case TIndexDescription::EType::GlobalSyncHnsw:
+                                *indexDesc->MutableHnswIndexDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                             case TIndexDescription::EType::GlobalFulltextPlain:
                             case TIndexDescription::EType::GlobalFulltextRelevance:
@@ -3195,6 +3194,15 @@ public:
             }
             if (const auto& consistency = settings.Settings.GlobalConsistency) {
                 consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
+            }
+            if (const auto& bootstrap = settings.Settings.Bootstrap) {
+                if (*bootstrap == "scan") {
+                    config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SCAN);
+                } else if (*bootstrap == "import") {
+                    config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_IMPORT);
+                } else {
+                    config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER);
+                }
             }
             if (const auto& initialScan = settings.Settings.InitialScan) {
                 config.SetInitialScan(*initialScan);

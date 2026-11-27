@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/common/proxy/mirror_credentials.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -13,7 +14,10 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
-#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
+#define PQ_ENSURE(condition, ...) YDB_LOG_ENSURE(condition, \
+    {"tabletId", TabletId},                                 \
+    {"partitionId", Partition},                             \
+    __VA_ARGS__)
 
 using namespace NPersQueue;
 
@@ -141,11 +145,19 @@ void TMirrorer::Bootstrap(const TActorContext& ctx) {
 void TMirrorer::StartInit(const TActorContext& ctx) {
     Become(&TThis::StateInitConsumer);
     LastInitStageTimestamp = ctx.Now();
-    ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials);
+    ++CredentialsGeneration;
+    CredentialsRequestInFlight = false;
+    if (auto initializer = std::exchange(CredentialsInitializer, {})) {
+        ctx.Send(initializer, new TEvents::TEvPoisonPill());
+    }
+    ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials, 0, CredentialsGeneration);
 }
 
 void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     LOG_N("Killed");
+    if (auto initializer = std::exchange(CredentialsInitializer, {})) {
+        ctx.Send(initializer, new TEvents::TEvPoisonPill());
+    }
     if (ReadSession)
         ReadSession->Close(TDuration::Zero());
     ReadSession = nullptr;
@@ -249,16 +261,18 @@ void TMirrorer::ProcessWriteResponse(
     const TActorContext& ctx,
     const NKikimrClient::TPersQueuePartitionResponse& response
 ) {
-    PQ_ENSURE(response.CmdWriteResultSize() == WriteInFlight.size())
-        ("CmdWriteResultSize", response.CmdWriteResultSize())("expected", WriteInFlight.size())
-        ("First expected offset", (WriteInFlight.empty() ? -1 : WriteInFlight.front().GetOffset()))
-        ("response", response);
+    PQ_ENSURE(response.CmdWriteResultSize() == WriteInFlight.size(),
+        {"cmdWriteResultSize", response.CmdWriteResultSize()},
+        {"expected", WriteInFlight.size()},
+        {"firstExpectedOffset", (WriteInFlight.empty() ? -1 : WriteInFlight.front().GetOffset())},
+        {"response", response});
 
     NYdb::NTopic::TDeferredCommit deferredCommit;
 
     for (auto& result : response.GetCmdWriteResult()) {
         if (result.GetAlreadyWritten()) {
-            PQ_ENSURE(!WasSuccessfulRecording)("got write result 'already written', but we have successful recording before", result);
+            PQ_ENSURE(!WasSuccessfulRecording,
+                {"got write result 'already written', but we have successful recording before", result});
             ProcessError(ctx, TStringBuilder() << "got write result 'already written': " << result);
         } else {
             WasSuccessfulRecording = true;
@@ -270,7 +284,9 @@ void TMirrorer::ProcessWriteResponse(
         }
         ui64 offset = writtenMessageInfo.GetOffset();
         PQ_ENSURE((ui64)result.GetOffset() == offset);
-        PQ_ENSURE(EndOffset <= offset)("EndOffset", EndOffset)("offset", offset);
+        PQ_ENSURE(EndOffset <= offset,
+            {"endOffset", EndOffset},
+            {"offset", offset});
         const ui64 logicalMessageCount = GetLogicalMessageCount(writtenMessageInfo);
         EndOffset = offset + logicalMessageCount;
         BytesInFlight -= writtenMessageInfo.GetData().size();
@@ -424,19 +440,35 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
 }
 
 void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
+    const auto& tabletConfig = ev->Get()->Config;
     bool equalConfigs = google::protobuf::util::MessageDifferencer::Equals(
         Config,
-        ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
+        tabletConfig.GetPartitionConfig().GetMirrorFrom()
     );
+    const auto& topicConverter = ev->Get()->TopicConverter;
+    PQ_ENSURE(topicConverter);
+    const bool equalPathsContext = TopicConverter->GetDatabase() == topicConverter->GetDatabase()
+        && TopicConverter->GetPrimaryPath() == topicConverter->GetPrimaryPath();
+    TopicConverter = topicConverter;
     LOG_N(
         "Got new config, equal with previous",
-        {"previous", equalConfigs}
+        {"previous", equalConfigs && equalPathsContext}
     );
-    if (!equalConfigs) {
-        Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
+    if (!equalConfigs || !equalPathsContext) {
+        Config = tabletConfig.GetPartitionConfig().GetMirrorFrom();
         LOG_N("Changing config");
 
         StartInit(ctx);
+    } else if (!ev->Get()->ConsumersToResendOffsets.empty()) {
+        for (const auto& consumer : ev->Get()->ConsumersToResendOffsets) {
+            auto it = ReplicatedOffsetsByConsumers.find(consumer);
+            if (it != ReplicatedOffsetsByConsumers.end()) {
+                // A queued upstream update is newer than the last value sent to the partition.
+                OffsetsByConsumers.try_emplace(consumer, it->second);
+                ReplicatedOffsetsByConsumers.erase(it);
+            }
+        }
+        TryToSendReplicationData(ctx);
     }
 }
 
@@ -519,7 +551,7 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
             continue;
         }
-        
+
         offsetsByConsumersToSend[consumer] = offsetToSend;
     }
 
@@ -560,7 +592,11 @@ void TMirrorer::Handle(TEvPQ::TEvPersistDone::TPtr& ev, const TActorContext& ctx
     TryToSendReplicationData(ctx);
 }
 
-void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
+void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != 0 && ev->Cookie != CredentialsGeneration) {
+        LOG_D("Ignoring stale credentials init", {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
+        return;
+    }
     if (CredentialsRequestInFlight) {
         LOG_W("Credentials request already inflight");
         return;
@@ -570,35 +606,27 @@ void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, c
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
-    auto future = factory->GetCredentialsProvider(Config.GetCredentials());
-    future.Subscribe(
-        [
-            actorSystem = ctx.ActorSystem(),
-            selfId = SelfId()
-        ](const NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr>& result) {
-            THolder<TEvPQ::TEvCredentialsCreated> ev;
-            if (result.HasException()) {
-                TString error;
-                try {
-                    result.TryRethrow();
-                } catch(...) {
-                    error = CurrentExceptionMessage();
-                }
-                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(error);
-            } else {
-                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(result.GetValue());
-            }
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
-        }
-    );
+    CredentialsInitializer = ctx.Register(CreateMirrorCredentialsInitializer(
+        SelfId(), CredentialsGeneration, Config.GetCredentials(),
+        NPersQueue::NormalizeFullPath(TopicConverter->GetDatabase().GetOrElse(TString())),
+        TopicConverter->GetPrimaryPath(), factory
+    ));
     CredentialsRequestInFlight = true;
 }
 
 void TMirrorer::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != 0 && ev->Cookie != CredentialsGeneration) {
+        LOG_D("Ignoring stale credentials", {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
+        return;
+    }
+    CredentialsInitializer = {};
     CredentialsRequestInFlight = false;
     if (ev->Get()->Error) {
         ProcessError(ctx, TStringBuilder() << "cannot initialize credentials provider: " << ev->Get()->Error.value());
-        ScheduleWithIncreasingTimeout<TEvPQ::TEvInitCredentials>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
+        ctx.Schedule(ConsumerInitInterval, std::make_unique<IEventHandle>(
+            SelfId(), SelfId(), new TEvPQ::TEvInitCredentials(), 0, CredentialsGeneration
+        ));
+        ConsumerInitInterval = Min(ConsumerInitInterval * 2, CONSUMER_INIT_INTERVAL_MAX);
         return;
     }
 
@@ -634,8 +662,12 @@ void TMirrorer::HandleWakeup(const TActorContext& ctx) {
     TryToSendReplicationData(ctx);
 }
 
-void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorContext& ctx) {
-    if (CredentialsRequestInFlight) {
+void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != CredentialsGeneration) {
+        LOG_D("Ignoring stale consumer creation", {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
+        return;
+    }
+    if (CredentialsRequestInFlight || !CredentialsProvider) {
         // защита от гонки между TEvInitCredentials, TEvCredentialsCreated и TEvCreateConsumer
         // когда придёт TEvCredentialsCreated актор ещё раз отправит себе TEvCreateConsumer
         LOG_W("Wait for credentials response");
@@ -755,9 +787,7 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     ctx.Send(TabletActorId, request.Release());
 }
 
-void TMirrorer::AddMessagesToQueue(
-    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages
-) {
+void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
         if (NYdb::NTopic::IsReplicationServiceMessage(offset, msg.GetMessageMeta()->Fields)) {
@@ -767,8 +797,7 @@ void TMirrorer::AddMessagesToQueue(
                 LOG_D("Received replication data", {"replicationData", replicationData.DebugString()});
 
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
-                    auto& pendingOffset = OffsetsByConsumers[consumer];
-                    pendingOffset = Max(pendingOffset, offset);
+                    OffsetsByConsumers[consumer] = offset;
                 }
             } else {
                 LOG_E("Failed to parse replication service message", {"payloadSize", msg.GetData().size()});
@@ -804,7 +833,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     Become(&TThis::StateInitConsumer);
 
     LOG_N("Schedule consumer creation");
-    ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
+    ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx, CredentialsGeneration);
 }
 
 TStructuredMessage TMirrorer::BuildLogPrefix() const {

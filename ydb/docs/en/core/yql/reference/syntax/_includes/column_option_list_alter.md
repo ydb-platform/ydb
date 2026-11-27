@@ -25,7 +25,7 @@ Sets a default value for the column. If no value is specified for this column wh
 
 The following operations are available:
 
-{% if feature_alter_column_not_null == true %}
+{% if feature_flags.enable_set_column_constraint == true %}
 * `SET NOT NULL` — sets the `NOT NULL` constraint for the column.
 {% endif %}
 * `DROP NOT NULL` — removes the `NOT NULL` constraint from the column, again allowing `NULL` values.

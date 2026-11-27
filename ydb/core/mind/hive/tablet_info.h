@@ -172,6 +172,9 @@ public:
 
 protected:
     TMetrics ResourceValues; // current values of various metrics
+    ui64 ProtoMetricsRevision = 0;
+    ui64 PersistedProtoMetricsRevision = 0;
+    void MarkProtoMetricsDirty();
     TTabletMetricsAggregates ResourceMetricsAggregates;
     TResourceNormalizedValues ResourceNormalizedValues;
     // Estimated share of the node's total usage caused by this tablet, including load it causes
@@ -191,6 +194,7 @@ public:
     bool IsBackup = false;
     TNodeId FailedNodeId = 0; // last time we tried to start the tablet, we failed on this node
     TInstant BootTime;
+    ui64 BootAttemptId = 0;
     TNodeFilter NodeFilter;
     bool InWaitQueue = false;
     bool UpdateMetricsEnqueued = false;
@@ -277,6 +281,10 @@ public:
     bool IsPinnedToNode() const;
 
     void UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics);
+    // Named resources describe the current incarnation of the tablet: on restart the work follows the tablet,
+    // but its values become an estimate until the new incarnation reports them
+    void CarryOverNamedResources();
+    void DropExpiredNamedResourceEstimates();
     TResourceRawValues GetResourceCurrentValues() const;
     TResourceRawValues GetResourceMaximumValues() const;
     i64 GetCounterValue() const;
@@ -326,6 +334,20 @@ public:
         return ResourceValues;
     }
 
+    bool IsProtoMetricsDirty() const {
+        return ProtoMetricsRevision != PersistedProtoMetricsRevision;
+    }
+
+    ui64 GetProtoMetricsRevision() const {
+        return ProtoMetricsRevision;
+    }
+
+    void ConfirmProtoMetricsPersistence(ui64 revision) {
+        if (ProtoMetricsRevision == revision) {
+            PersistedProtoMetricsRevision = revision;
+        }
+    }
+
     void InitTabletMetrics() {
         UpdateResourceUsage({});
     }
@@ -340,6 +362,7 @@ public:
 
     // ONLY for use in unit tests
     TMetrics& GetMutableResourceValues() {
+        MarkProtoMetricsDirty();
         return ResourceValues;
     }
 

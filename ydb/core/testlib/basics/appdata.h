@@ -62,11 +62,15 @@ namespace NKikimr {
             std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
             std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
             std::shared_ptr<NSchemeShard::IOperationFactory> SchemeOperationFactory;
+            std::shared_ptr<NSysView::ISystemViewScanFactory> SystemViewScanFactory;
 
             ~TMine();
         };
 
         using TFnReg = std::function<NMiniKQL::IFunctionRegistry*(const NScheme::TTypeRegistry&)>;
+
+        struct TLightweightTag {};
+        explicit TAppPrepare(TLightweightTag, std::shared_ptr<NDataShard::IExportFactory> ef = {});
 
         TAppPrepare(std::shared_ptr<NKikimr::NDataShard::IExportFactory> ef = {});
 

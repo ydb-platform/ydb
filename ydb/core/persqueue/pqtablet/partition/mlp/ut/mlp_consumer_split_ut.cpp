@@ -1698,6 +1698,7 @@ static TMap<TString, TString> ReadAllDedupAndCommit(
     NActors::TTestActorRuntime& runtime,
     const TString& topicName,
     const TString& consumer,
+    size_t expectedCount = Max<size_t>(),
     int retries = 100
 ) {
     TMap<TString, TString> readMessages;
@@ -1742,6 +1743,9 @@ static TMap<TString, TString> ReadAllDedupAndCommit(
         auto commitResult = GetChangeResponse(runtime);
         UNIT_ASSERT_C(commitResult, "ReadAllDedupAndCommit: commit response timeout");
         UNIT_ASSERT_VALUES_EQUAL(commitResult->Status, Ydb::StatusIds::SUCCESS);
+        if (readMessages.size() >= expectedCount) {
+            retries = Min(retries, 1);
+        }
     }
 
     return readMessages;
@@ -1835,9 +1839,10 @@ static void RunDedupTest(const TString& testName, const std::vector<TDedupStage>
     }
 
     ACerr << ">>>>> " << testName << ": reading all messages" << Endl;
-    auto readMessages = ReadAllDedupAndCommit(runtime, "/Root/topic1", "mlp-consumer");
+    const auto expectedMessages = ComputeExpectedMessages(stages);
+    auto readMessages = ReadAllDedupAndCommit(runtime, "/Root/topic1", "mlp-consumer",
+        writeDuration == TDuration::Zero() ? expectedMessages.size() : Max<size_t>());
     if (writeDuration == TDuration::Zero()) {
-        const auto expectedMessages = ComputeExpectedMessages(stages);
         VerifyDedupResult(readMessages, expectedMessages, testName);
     }
     ACerr << ">>>>> " << testName << ": done" << Endl;
@@ -2242,7 +2247,7 @@ static void RunRepeatedDedupWithSplits(TStringBuf testName, TDuration writePause
     }
 
     ACerr << ">>>>> " << testName << ": reading all messages" << Endl;
-    auto readMessages = ReadAllDedupAndCommit(runtime, "/Root/topic1", "mlp-consumer");
+    auto readMessages = ReadAllDedupAndCommit(runtime, "/Root/topic1", "mlp-consumer", numIterations);
     UNIT_ASSERT_C(!readMessages.empty(), testName << ": expected at least one message");
     for (const auto& [body, readDedupId] : readMessages) {
         UNIT_ASSERT_VALUES_EQUAL_C(readDedupId, dedupId, testName << ": dedupId mismatch for body=" << body);

@@ -10,13 +10,13 @@ extern "C" {
     #define YQL_UDF_META_NOEXCEPT
 #endif
 
-    typedef struct TYqlUdfMetaString {
+    typedef struct TYqlUdfMetaString { // NOLINT(modernize-use-using): C-compatible ABI.
         const char* Data;
         size_t Size;
     } TYqlUdfMetaString;
 
     // String buffers are immutable and remain valid until the owning cookie is freed.
-    typedef struct TYqlUdfMetaFunction {
+    typedef struct TYqlUdfMetaFunction { // NOLINT(modernize-use-using): C-compatible ABI.
         int IsTypeAwareness;
         TYqlUdfMetaString CallableType;
         TYqlUdfMetaString RunConfigType;
@@ -34,7 +34,7 @@ extern "C" {
     // they return 1 for presence, 0 for absence, or -1 for an exception.
     // GetMetadata writes a caller-owned descriptor and never exposes a C++ object.
     // Copies borrow the cookie; Free must be called exactly once by its owner.
-    typedef struct TYqlUdfMeta {
+    typedef struct TYqlUdfMeta { // NOLINT(modernize-use-using): C-compatible ABI.
         void* Context;
         void (*Free)(void* context) YQL_UDF_META_NOEXCEPT;
         int (*HasModule)(const void* context, TYqlUdfMetaString module) YQL_UDF_META_NOEXCEPT;

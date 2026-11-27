@@ -10,6 +10,8 @@
 
 #include <util/system/byteorder.h>
 
+#include <cmath>
+#include <limits>
 #include <utility>
 #include <variant>
 
@@ -55,12 +57,16 @@ XX(Int8, i8, i64)
 XX(Int16, i16, i64)
 XX(Int32, i32, i64)
 XX(Int64, i64, i64)
+XX(VarInt32, i32, i64)
+XX(VarInt64, i64, i64)
 XX(Uint8, ui8, ui64)
 XX(Uint16, ui16, ui64)
 XX(Uint32, ui32, ui64)
 XX(Uint64, ui64, ui64)
+XX(Float, float, double)
 XX(Double, double, double)
 XX(String32, TStringBuf, TStringBuf)
+XX(StringVar, TStringBuf, TStringBuf)
 #undef XX
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -257,6 +263,34 @@ void TUuidWriteFunction::operator()(TStringBuf value, NSkiff::TCheckedInDebugSki
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TStringFixedParseFunction::TStringFixedParseFunction(i64 size)
+    : Size_(size)
+{ }
+
+TStringBuf TStringFixedParseFunction::operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const
+{
+    return parser->ParseStringFixed(Size_);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TStringFixedWriteFunction::TStringFixedWriteFunction(i64 size)
+    : Size_(size)
+{ }
+
+void TStringFixedWriteFunction::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
+{
+    if (std::ssize(value) != Size_) {
+        THROW_ERROR_EXCEPTION("Invalid size of wire type %Qlv value: expected %v bytes, got %v",
+            NSkiff::EWireType::StringFixed,
+            Size_,
+            std::ssize(value));
+    }
+    writer->WriteStringFixed(value);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <typename TCppType>
 struct TCppTypeToValueType
 {
@@ -337,6 +371,8 @@ auto DispatchOptionalKind(NSkiffExt::EOptionalKind optionalKind, TFunction&& fun
             return function.template operator()<EOptionalKind::None>();
         case EOptionalKind::Variant8:
             return function.template operator()<EOptionalKind::Variant8>();
+        case EOptionalKind::VariantVar:
+            return function.template operator()<EOptionalKind::VariantVar>();
     }
     YT_ABORT();
 }
@@ -389,10 +425,19 @@ TConverter CreateSimpleConverter(
             }
         });
     } else {
-        return DispatchNonComplexWireType(wireType, [&args...] <EWireType WireType> () -> TConverter {
+        return DispatchNonComplexWireType(wireType, [&skiffSchema, &args...] <EWireType WireType> () -> TConverter {
             if constexpr (WireType == EWireType::Yson32) {
                 using TYson32Converter = typename TConverters::TYson32Converter;
                 return TYson32Converter(std::forward<TArgs>(args)...);
+            } else if constexpr (WireType == EWireType::StringFixed) {
+                using TStringFixedFunction = typename TFunctions::TStringFixedFunction;
+                using TStringFixedConverter = typename TConverters::template TPhysicalConverter<
+                    TStringBuf,
+                    TStringFixedFunction
+                >;
+                return TStringFixedConverter(
+                    std::forward<TArgs>(args)...,
+                    TStringFixedFunction(skiffSchema->GetSize()));
             } else if constexpr (requires { typename TDirectSkiffTypeTraits<WireType>::TPhysical; }) {
                 using TPhysical = typename TDirectSkiffTypeTraits<WireType>::TPhysical;
                 using TDirectFunction = typename TFunctions::template TDirectFunction<WireType>;
@@ -451,6 +496,11 @@ bool IsInRange(TValue value)
 {
     if constexpr (std::is_same_v<TValue, i64> || std::is_same_v<TValue, ui64>) {
         return std::in_range<TWire>(value);
+    }
+    if constexpr (std::is_same_v<TWire, float>) {
+        return std::isinf(value) ||
+            std::isnan(value) ||
+            (std::numeric_limits<TWire>::lowest() <= value && value <= std::numeric_limits<TWire>::max());
     }
     return true;
 }

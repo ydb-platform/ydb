@@ -12,6 +12,7 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
+
 using namespace NKikimr;
 using namespace NStorage;
 
@@ -114,15 +115,16 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
             const bool firstInvalidEncryptionMode = !storedHasEncryptionMode && !incomingEncryptionModeIsKnown;
             const bool encryptionModeChanged = storedHasEncryptionMode && storedEncryptionMode != incomingEncryptionMode;
             if (firstInvalidEncryptionMode || encryptionModeChanged) {
-                STLOG(PRI_ERROR, BS_NODE, NW114, "ApplyServiceSet group EncryptionMode diagnostics",
-                    (Origin, origin),
-                    (GroupId, groupId),
-                    (IncomingGeneration, incomingGroup.GetGroupGeneration()),
-                    (StoredHasEncryptionMode, storedHasEncryptionMode),
-                    (StoredEncryptionModeRaw, storedEncryptionMode),
-                    (IncomingEncryptionModeRaw, incomingEncryptionMode),
-                    (StoredLifeCyclePhase, storedLifeCyclePhase),
-                    (IncomingLifeCyclePhase, incomingGroup.GetLifeCyclePhase()));
+                YDB_LOG_ERROR("ApplyServiceSet group EncryptionMode diagnostics",
+                    {"marker", "NW114"},
+                    {"origin", origin},
+                    {"groupId", groupId},
+                    {"incomingGeneration", incomingGroup.GetGroupGeneration()},
+                    {"storedHasEncryptionMode", storedHasEncryptionMode},
+                    {"storedEncryptionModeRaw", storedEncryptionMode},
+                    {"incomingEncryptionModeRaw", incomingEncryptionMode},
+                    {"storedLifeCyclePhase", storedLifeCyclePhase},
+                    {"incomingLifeCyclePhase", incomingGroup.GetLifeCyclePhase()});
                 break;
             }
         }
@@ -351,6 +353,22 @@ void TNodeWarden::ApplyStateStorageConfig() {
     FETCH_CONFIG(stateStorage, StateStorage)
     FETCH_CONFIG(board, StateStorageBoard)
     FETCH_CONFIG(schemeBoard, SchemeBoard)
+
+    // Previously committed SUSPENDED configurations can still describe these rings as SYNCHRONIZED.
+    // Apply the current pile state to the runtime infos without changing the persisted config or its fingerprint.
+    const auto excludeSuspendedPiles = [this](TStateStorageInfo& info) {
+        if (BridgeInfo) {
+            for (auto& group : info.RingGroups) {
+                const auto* pile = BridgeInfo->FindPile(group.BridgePileId);
+                if (pile && pile->State == NKikimrBridge::TClusterState::SUSPENDED) {
+                    group.State = ERingGroupState::DISCONNECTED;
+                }
+            }
+        }
+    };
+    excludeSuspendedPiles(*stateStorageInfo);
+    excludeSuspendedPiles(*boardInfo);
+    excludeSuspendedPiles(*schemeBoardInfo);
 
     YDB_LOG_DEBUG("ApplyStateStorageConfig",
         {"marker", "NW55"},

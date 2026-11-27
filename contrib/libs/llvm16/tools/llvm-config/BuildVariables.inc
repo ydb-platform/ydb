@@ -29,7 +29,7 @@
 #define LLVM_INSTALL_CMAKEDIR "/02qcpld1y6xhs5gz9bchpxaw0xdhmsp5dv88lh25r2ss44kh8dxz/lib/cmake/llvm/"
 #define LLVM_INSTALL_PACKAGE_DIR "/02qcpld1y6xhs5gz9bchpxaw0xdhmsp5dv88lh25r2ss44kh8dxz/lib/cmake/llvm/"
 #define LLVM_TARGETS_BUILT "AArch64 ARM BPF PowerPC X86 NVPTX LoongArch WebAssembly"
-#define LLVM_SYSTEM_LIBS "-lrt -ldl -lm -lz"
+#define LLVM_SYSTEM_LIBS "-lrt -ldl -lm -lz -lzstd"
 #define LLVM_BUILD_SYSTEM "cmake"
 #define LLVM_HAS_RTTI 1
 #define LLVM_ENABLE_DYLIB 0

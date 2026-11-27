@@ -88,8 +88,7 @@ struct TGetQueryOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
 {
-    std::vector<std::string> ProgressParts;
-    std::optional<ui32> MinProgressRevision;
+    NYTree::IMapNodePtr ProgressOptions;
 
     NYTree::TAttributeFilter Attributes;
     NTransactionClient::TTimestamp Timestamp = NTransactionClient::NullTimestamp;

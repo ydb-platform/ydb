@@ -116,6 +116,25 @@ Y_UNIT_TEST_SUITE(Replication) {
         UNIT_ASSERT(!replication->GetConfig().GetInitialScan());
     }
 
+    Y_UNIT_TEST(InitialStateFollowsInitialScanAndSwitchover) {
+        // A replication that takes over its destination tables must start working, not wait paused
+        // for an import that will never come: the tables already hold the data. Getting this wrong
+        // creates the targets and then never starts a worker.
+        NKikimrReplication::TReplicationConfig config;
+        config.SetInitialScan(false);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Paused);
+
+        config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Ready);
+
+        config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_IMPORT);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Paused);
+
+        config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SCAN);
+        config.SetInitialScan(true);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Ready);
+    }
+
     struct TLagSetup {
         TReplication::TPtr Replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2),
             NKikimrReplication::TReplicationConfig(), "/Root/db");
@@ -234,9 +253,9 @@ Y_UNIT_TEST_SUITE(Replication) {
         const auto base = replication->AddTarget(TReplication::ETargetKind::Table,
             std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/replica"));
         const auto index = replication->AddTarget(TReplication::ETargetKind::IndexTable,
-            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value"));
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value", false));
         const auto otherIndex = replication->AddTarget(TReplication::ETargetKind::IndexTable,
-            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/other", "/Root/replica/other"));
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/other", "/Root/replica/other", false));
         replication->UpdateLag(base, TDuration::Seconds(1));
         replication->UpdateLag(index, TDuration::Seconds(20));
         replication->UpdateLag(otherIndex, TDuration::Seconds(20));
@@ -264,7 +283,7 @@ Y_UNIT_TEST_SUITE(Replication) {
         const auto base = replication->AddTarget(TReplication::ETargetKind::Table,
             std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/replica"));
         const auto index = replication->AddTarget(TReplication::ETargetKind::IndexTable,
-            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value"));
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value", false));
         replication->UpdateLag(base, TDuration::Seconds(1));
         UNIT_ASSERT(!replication->GetLag());
 

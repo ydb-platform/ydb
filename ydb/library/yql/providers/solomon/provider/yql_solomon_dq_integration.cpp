@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.h>
+#include <ydb/library/yql/providers/solomon/common/constants.h>
 #include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
@@ -468,6 +469,12 @@ public:
 
         const TTypeAnnotationNode* itemType = shard.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         FillScheme(*itemType, *shardDesc.MutableScheme());
+
+        const auto config = State_->Configuration->Snapshot();
+        shardDesc.SetMaxRequestsInflight(config->WriteMaxRequestsInflight.Get().GetOrElse(NSo::NConstants::DefaultWriteMaxRequestsInflight));
+        shardDesc.SetMaxPointsPerRequest(config->WriteMaxPointsPerRequest.Get().GetOrElse(NSo::NConstants::DefaultWriteMaxPointsPerRequest));
+        YQL_ENSURE(shardDesc.GetMaxPointsPerRequest() >= static_cast<ui64>(shardDesc.GetScheme().SensorsSize()),
+            "solomon.WriteMaxPointsPerRequest must be at least the number of sensors in a row");
 
         if (auto maybeToken = shard.Token()) {
             shardDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));

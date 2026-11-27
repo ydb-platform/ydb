@@ -40,6 +40,7 @@
 #include <util/generic/singleton.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
 #include <util/stream/null.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -733,6 +734,12 @@ IGraphTransformer::TStatus FailMeWrapper(const TExprNode::TPtr& input, TExprNode
         input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String)));
     } else if (failureKind == "exception") {
         ythrow yexception() << "FailMe exception";
+    } else if (failureKind == "oom" && TryGetEnv("YQL_DETERMINISTIC_MODE")) {
+        constexpr size_t allocationSize = 1024 * 1024;
+        TVector<THolder<char, TDeleteArray>> allocations;
+        for (;;) {
+            allocations.emplace_back(new char[allocationSize]);
+        }
     } else if (failureKind == "opt_cycle" || failureKind == "opt_inf") {
         maxCount = 2;
         input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
@@ -2668,7 +2675,7 @@ IGraphTransformer::TStatus MinMaxWrapper(const TExprNode::TPtr& input, TExprNode
     return IGraphTransformer::TStatus::Ok;
 }
 
-template <bool Equal, bool Order>
+template <bool Equal, bool Order, bool Optional = false>
 IGraphTransformer::TStatus AggrCompareWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -2697,6 +2704,19 @@ IGraphTransformer::TStatus AggrCompareWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
+    if constexpr (Optional) {
+        const auto kind = input->Head().GetTypeAnn()->GetKind();
+        if (kind == ETypeAnnotationKind::Null) {
+            output = MakeBoolNothing(input->Pos(), ctx.Expr);
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        if (kind == ETypeAnnotationKind::Optional) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool)));
+            input->SetUnorderedChildren();
+            return IGraphTransformer::TStatus::Ok;
+        }
+    }
+
     if (IsInstantEqual(*input->Head().GetTypeAnn())) {
         output = MakeBool(input->Pos(), Equal, ctx.Expr);
         return IGraphTransformer::TStatus::Repeat;
@@ -2707,6 +2727,27 @@ IGraphTransformer::TStatus AggrCompareWrapper(const TExprNode::TPtr& input, TExp
         input->SetUnorderedChildren();
     }
     return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus JoinEqualsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureArgsCount(*input, 2, ctx.Expr) ||
+        !EnsureComputable(input->Head(), ctx.Expr) || !EnsureComputable(input->Tail(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    const TTypeAnnotationNode* type = input->Head().GetTypeAnn();
+    if (type->HasUniversal() || input->Tail().GetTypeAnn()->HasUniversal()) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    if (!EnsureEquatableType(input->Pos(), *type, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!IsSameAnnotation(*type, *input->Tail().GetTypeAnn())) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                                                                         << "Type mismatch, left: " << *type << ", right: " << *input->Tail().GetTypeAnn()));
+        return IGraphTransformer::TStatus::Error;
+    }
+    return CompareWrapper<true>(input, output, ctx);
 }
 
 IGraphTransformer::TStatus AggrMinMaxWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -6139,6 +6180,12 @@ IGraphTransformer::TStatus CoalesceWrapper(const TExprNode::TPtr& input, TExprNo
 
     const auto leftType = input->Head().GetTypeAnn();
     const auto rightType = input->Tail().GetTypeAnn();
+
+    if (leftType->GetKind() == ETypeAnnotationKind::Universal ||
+        (rightType->GetKind() == ETypeAnnotationKind::Universal && leftType->IsOptionalOrNull())) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
 
     auto leftItemType = leftType;
     if (leftType->GetKind() == ETypeAnnotationKind::Optional) {
@@ -12207,7 +12254,7 @@ IGraphTransformer::TStatus TableSourceWrapper(const TExprNode::TPtr& input, TExp
     }
 
     if (isWide) {
-        if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+        if (!EnsureWideStreamType(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
     } else {
@@ -16201,7 +16248,10 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ExtFunctions["Min"] = &MinMaxWrapper;
     ExtFunctions["Max"] = &MinMaxWrapper;
     Functions["AggrEquals"] = &AggrCompareWrapper<true, false>;
+    Functions["JoinEquals"] = &JoinEqualsWrapper;
     Functions["AggrNotEquals"] = &AggrCompareWrapper<false, false>;
+    Functions["OptAggrEquals"] = &AggrCompareWrapper<true, false, true>;
+    Functions["OptAggrNotEquals"] = &AggrCompareWrapper<false, false, true>;
     Functions["AggrLess"] = &AggrCompareWrapper<false, true>;
     Functions["AggrLessOrEqual"] = &AggrCompareWrapper<true, true>;
     Functions["AggrGreater"] = &AggrCompareWrapper<false, true>;
@@ -16970,13 +17020,17 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ColumnOrderFunctions["AssumeSorted"] = ColumnOrderFunctions["Unordered"] =
         ColumnOrderFunctions["UnorderedSubquery"] = ColumnOrderFunctions["AssumeUniq"] = &OrderFromFirst;
 
+    ExtFunctions["YqlFlattenBy"] = &YqlFlattenWrapper;
+    ExtFunctions["YqlFlattenColumns"] = &YqlFlattenWrapper;
     ExtFunctions["YqlSelect"] = &SqlSelectWrapper;
     ExtFunctions["YqlSetItem"] = &SqlSetItemWrapper;
     ExtFunctions["YqlResultItem"] = &SqlResultItemWrapper;
     ExtFunctions["YqlValuesList"] = &SqlValuesListWrapper;
     Functions["YqlColumnRef"] = &SqlColumnRefWrapper;
     Functions["YqlColumnRefOrType"] = &SqlColumnRefWrapper;
+    Functions["YqlColumnRefOrDefault"] = &SqlColumnRefWrapper;
     Functions["YqlColumnOrType"] = &YqlColumnOrTypeWrapper;
+    Functions["YqlColumnOrAccess"] = &YqlColumnRefOrAccessWrapper;
     Functions["YqlSubLink"] = &SqlSubLinkWrapper;
     Functions["YqlSelf"] = &SqlSelfWrapper;
     Functions["YqlStar"] = &SqlStarWrapper;

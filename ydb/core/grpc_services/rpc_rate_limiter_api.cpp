@@ -29,67 +29,19 @@ public:
             this->GetProtoRequest()->coordination_node_path()))
     {}
 
-    static bool ValidateMetric (const Ydb::RateLimiter::MeteringConfig::Metric& srcMetric, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        static const TSet<TString> supportedFields{
-            {"version"},
-            {"schema"},
-            {"cloud_id"},
-            {"folder_id"},
-            {"resource_id"},
-            {"source_id"},
-            {"database"},
-        };
-        auto& metricFields = srcMetric.metric_fields().fields();
-
-        for (auto& [key, field] : metricFields) {
-            if (supportedFields.count(key) == 0) {
-                status = StatusIds::BAD_REQUEST;
-                issues.AddIssue(TStringBuilder() << "Unsupported key for metric. Key: " << key << ".");
-                return false;
-            }
-            if (!field.has_string_value()) {
-                status = StatusIds::BAD_REQUEST;
-                issues.AddIssue(TStringBuilder() << "Unsupported type for metric. Key: " << key << ".");
-                return false;
-            }
-        }
-
-        return true;
-    };
-
     bool ValidateResource(const Ydb::RateLimiter::Resource& resource, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
         if (!ValidateResourcePath(resource.resource_path(), status, issues)) {
             return false;
         }
 
-        if (resource.type_case() == Ydb::RateLimiter::Resource::TYPE_NOT_SET) {
-            status = StatusIds::BAD_REQUEST;
-            issues.AddIssue("No resource properties.");
+        auto self = static_cast<TDerived*>(this);
+        const bool canConfigureMetering = resource.has_metering_config()
+            && IsAdministrator(AppData(), self->Request_->GetInternalToken().Get());
+        TString error;
+        if (!ValidateRateLimiterResourceProperties(resource, canConfigureMetering, status, error)) {
+            issues.AddIssue(error);
             return false;
         }
-
-        if (resource.has_metering_config()) {
-            auto self = static_cast<TDerived*>(this);
-
-            if (!IsAdministrator(AppData(), self->Request_->GetInternalToken().Get())) {
-                status = StatusIds::UNAUTHORIZED;
-                issues.AddIssue("Setting metering is allowed only for administrators");
-                return false;
-            }
-
-            const auto& acc = resource.metering_config();
-
-            if (acc.has_provisioned() && !ValidateMetric(acc.provisioned(), status, issues)) {
-                return false;
-            }
-            if (acc.has_on_demand() && !ValidateMetric(acc.on_demand(), status, issues)) {
-                return false;
-            }
-            if (acc.has_overshoot() && !ValidateMetric(acc.overshoot(), status, issues)) {
-                return false;
-            }
-        }
-
         return true;
     }
 

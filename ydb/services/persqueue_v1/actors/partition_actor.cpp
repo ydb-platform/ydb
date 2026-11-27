@@ -19,8 +19,11 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/charset/utf8.h>
 
-#define PARTITION_ENSURE(condition) \
-    AFL_ENSURE(condition)("session", Session)("partition", Partition)("tablet_id", TabletID)
+#define PARTITION_ENSURE(condition,...) YDB_LOG_ENSURE(condition,           \
+    {"session", Session},                                                   \
+    {"partition", Partition},                                               \
+    {"tablet_id", TabletID},                                                \
+    __VA_ARGS__)
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -84,6 +87,7 @@ TPartitionActor::TPartitionActor(
     , Protocol(protocol)
     , FirstRead(true)
     , ReadingFinishedSent(false)
+    , WindowExhaustedSent(false)
     , NotCommitedToFinishParents(notCommitedToFinishParents)
 {
 }
@@ -153,16 +157,16 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
 
     auto jt = Offsets.begin();
     while(jt != Offsets.end() && jt->ReadId != readId) ++jt;
-    PARTITION_ENSURE(jt != Offsets.end())
-        ("read_id", readId);
+    PARTITION_ENSURE(jt != Offsets.end(),
+        {"readId", readId});
 
     offset = Max(offset, jt->Offset);
 
     Offsets.erase(Offsets.begin(), ++jt);
 
-    PARTITION_ENSURE(offset > ClientCommitOffset)
-        ("offset", offset)
-        ("client_commit_offset", ClientCommitOffset);
+    PARTITION_ENSURE(offset > ClientCommitOffset,
+        {"offset", offset},
+        {"clientCommitOffset", ClientCommitOffset});
 
     ClientCommitOffset = offset;
     CommitsInfly.emplace_back(readId, TCommitInfo{startReadId, offset, ctx.Now()});
@@ -192,7 +196,10 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications() && !TopicHolder->IsAsyncReplication) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()
+        && !TopicHolder->IsAsyncReplication
+        && !TopicHolder->IsReplicationConsumer)
+    {
         CloseSessionAndDie("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx);
         return;
     }
@@ -217,16 +224,16 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
         request.MutablePartitionRequest()->SetPartition(Partition.Partition);
         request.MutablePartitionRequest()->SetCookie(readId);
 
-        PARTITION_ENSURE(PipeClient)
-            ("read_id", readId)
-            ("offset", offset);
+        PARTITION_ENSURE(PipeClient,
+            {"readId", readId},
+            {"offset", offset});
 
         ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
         auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
         commit->SetClientId(ClientId);
         commit->SetOffset(offset);
-        PARTITION_ENSURE(!Session.empty())
-            ("read_id", readId);
+        PARTITION_ENSURE(!Session.empty(),
+            {"readId", readId});
         commit->SetSessionId(Session);
 
         LOG_D("Committing to position prev end by cookie",
@@ -288,14 +295,14 @@ void TPartitionActor::SendPublishDirectRead(const ui64 directReadId, const TActo
     request.MutablePartitionRequest()->SetPartition(Partition.Partition);
     request.MutablePartitionRequest()->SetCookie(ReadOffset);
 
-    PARTITION_ENSURE(PipeClient)
-        ("direct_read_id", directReadId);
+    PARTITION_ENSURE(PipeClient,
+        {"directReadId", directReadId});
 
     ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
     auto publish = request.MutablePartitionRequest()->MutableCmdPublishRead();
     publish->SetDirectReadId(directReadId);
-    PARTITION_ENSURE(!Session.empty())
-        ("direct_read_id", directReadId);
+    PARTITION_ENSURE(!Session.empty(),
+        {"directReadId", directReadId});
 
     publish->MutableSessionKey()->SetSessionId(Session);
     publish->MutableSessionKey()->SetPartitionSessionId(Partition.AssignId);
@@ -316,14 +323,14 @@ void TPartitionActor::SendForgetDirectRead(const ui64 directReadId, const TActor
     request.MutablePartitionRequest()->SetPartition(Partition.Partition);
     request.MutablePartitionRequest()->SetCookie(ReadOffset);
 
-    PARTITION_ENSURE(PipeClient)
-        ("direct_read_id", directReadId);
+    PARTITION_ENSURE(PipeClient,
+        {"directReadId", directReadId});
 
     ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
     auto publish = request.MutablePartitionRequest()->MutableCmdForgetRead();
     publish->SetDirectReadId(directReadId);
-    PARTITION_ENSURE(!Session.empty())
-        ("direct_read_id", directReadId);
+    PARTITION_ENSURE(!Session.empty(),
+        {"directReadId", directReadId});
 
     publish->MutableSessionKey()->SetSessionId(Session);
     publish->MutableSessionKey()->SetPartitionSessionId(Partition.AssignId);
@@ -430,8 +437,8 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
     if (InitDone && DirectRead) {
         DirectReadsToRestore = DirectReadResults;
         DirectReadsToPublish = PublishedDirectReads;
-        PARTITION_ENSURE(!DirectReadsToPublish.contains(DirectReadId))
-            ("direct_read_id", DirectReadId);
+        PARTITION_ENSURE(!DirectReadsToPublish.contains(DirectReadId),
+            {"directReadId", DirectReadId});
         RestoredDirectReadId = 0;
         RestartDirectReadSession();
         return;
@@ -444,9 +451,9 @@ void TPartitionActor::ResendRecentRequests() {
         return;
     }
 
-    PARTITION_ENSURE(!DirectRead || DirectReadRestoreStage == EDirectReadRestoreStage::None)
-        ("direct_read", DirectRead)
-        ("direct_read_restore_stage", static_cast<int>(DirectReadRestoreStage));
+    PARTITION_ENSURE(!DirectRead || DirectReadRestoreStage == EDirectReadRestoreStage::None,
+        {"directRead", DirectRead},
+        {"directReadRestoreStage", static_cast<int>(DirectReadRestoreStage)});
 
     const auto& ctx = ActorContext();
     if (RequestInfly) { //got read infly
@@ -499,24 +506,26 @@ void SetBatchWriteTimestampMS(Topic::StreamReadMessage::ReadResponse::Batch* bat
 }
 
 TString GetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch) {
-    AFL_ENSURE(batch);
+    YDB_LOG_ENSURE(batch);
     return batch->source_id();
 }
 
 TString GetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch) {
-    AFL_ENSURE(batch);
+    YDB_LOG_ENSURE(batch);
     return batch->producer_id();
 }
 
 void SetBatchExtraField(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString key, TString value) {
-    AFL_ENSURE(batch)("key", key);
+    YDB_LOG_ENSURE(batch,
+        {"key", key});
     auto* item = batch->add_extra_fields();
     item->set_key(std::move(key));
     item->set_value(std::move(value));
 }
 
 void SetBatchExtraField(Topic::StreamReadMessage::ReadResponse::Batch* batch, TString key, TString value) {
-    AFL_ENSURE(batch)("key", key);
+    YDB_LOG_ENSURE(batch,
+        {"key", key});
     (*batch->mutable_write_session_meta())[key] = std::move(value);
 }
 
@@ -565,15 +574,15 @@ bool FillBatchedData(
         const ui64 messageCount = BatchedResultMessageCount(r.GetLogicalMessageCount());
         // When reading from the middle of a batch, tablet returns the whole blob
         // with base offset below ReadOffset; SDK skips already-committed records.
-        AFL_ENSURE(BatchedResultCoversReadOffset(r.GetOffset(), r.GetLogicalMessageCount(), ReadOffset))
-            ("partition", Partition)
-            ("topic", topic->GetPrimaryPath())
-            ("offset", r.GetOffset())
-            ("message_count", messageCount)
-            ("logical_message_count", r.GetLogicalMessageCount())
-            ("read_offset", ReadOffset)
-            ("result_index", i)
-            ("end_offset", EndOffset);
+        YDB_LOG_ENSURE(BatchedResultCoversReadOffset(r.GetOffset(), r.GetLogicalMessageCount(), ReadOffset),
+            {"partition", Partition},
+            {"topic", topic->GetPrimaryPath()},
+            {"offset", r.GetOffset()},
+            {"messageCount", messageCount},
+            {"logicalMessageCount", r.GetLogicalMessageCount()},
+            {"readOffset", ReadOffset},
+            {"resultIndex", i},
+            {"endOffset", EndOffset});
         AdvanceReadOffsetFromBatchedResult(r.GetOffset(), r.GetLogicalMessageCount(), ReadOffset);
         hasOffset = true;
 
@@ -606,10 +615,10 @@ bool FillBatchedData(
             // If write time and source id are the same, the rest fields will be the same too.
             currentBatch = partitionData->add_batches();
             i64 write_ts = static_cast<i64>(r.GetWriteTimestampMS());
-            AFL_ENSURE(write_ts >= 0)
-                ("partition", Partition)
-                ("write_ts", write_ts)
-                ("offset", r.GetOffset());
+            YDB_LOG_ENSURE(write_ts >= 0,
+                {"partition", Partition},
+                {"writeTs", write_ts},
+                {"offset", r.GetOffset()});
             SetBatchWriteTimestampMS(currentBatch, write_ts);
             SetBatchSourceId(currentBatch, std::move(sourceId));
             batchCodec = GetDataChunkCodec(proto);
@@ -700,8 +709,8 @@ void TPartitionActor::Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, co
 }
 
 void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionResponse& result, const TActorContext& ctx) {
-    PARTITION_ENSURE(DirectReadRestoreStage == EDirectReadRestoreStage::None)
-        ("direct_read_restore_stage", static_cast<int>(DirectReadRestoreStage));
+    PARTITION_ENSURE(DirectReadRestoreStage == EDirectReadRestoreStage::None,
+        {"directReadRestoreStage", static_cast<int>(DirectReadRestoreStage)});
     if (result.GetCookie() != InitCookie) {
         LOG_D("Unwaited response in init with cookie",
             {"partition", Partition},
@@ -712,11 +721,11 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
     CurrentRequest.Clear();
     RequestInfly = false;
 
-    PARTITION_ENSURE(result.HasCmdGetClientOffsetResult())
-        ("result", result.ShortDebugString());
+    PARTITION_ENSURE(result.HasCmdGetClientOffsetResult(),
+        {"result", result.ShortDebugString()});
     const auto& resp = result.GetCmdGetClientOffsetResult();
-    PARTITION_ENSURE(resp.HasEndOffset())
-        ("resp", resp.ShortDebugString());
+    PARTITION_ENSURE(resp.HasEndOffset(),
+        {"resp", resp.ShortDebugString()});
     EndOffset = resp.GetEndOffset();
     RetainedStartOffset = resp.HasStartOffset() ? MakeMaybe(resp.GetStartOffset()) : Nothing();
     SizeLag = resp.GetSizeLag();
@@ -725,9 +734,9 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
 
     ClientCommitOffset = ReadOffset = CommittedOffset = resp.HasOffset() ? resp.GetOffset() : 0;
     ClientMaxOffset.Clear();
-    PARTITION_ENSURE(EndOffset >= CommittedOffset)
-        ("end_offset", EndOffset)
-        ("committed_offset", CommittedOffset);
+    PARTITION_ENSURE(EndOffset >= CommittedOffset,
+        {"endOffset", EndOffset},
+        {"committedOffset", CommittedOffset});
 
     if (resp.HasWriteTimestampMS())
         WTime = resp.GetWriteTimestampMS();
@@ -774,8 +783,8 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
             }
             return;
         case EDirectReadRestoreStage::Prepare:
-            PARTITION_ENSURE(RestoredDirectReadId != 0)
-                ("restored_direct_read_id", RestoredDirectReadId);
+            PARTITION_ENSURE(RestoredDirectReadId != 0,
+                {"restoredDirectReadId", RestoredDirectReadId});
             // Late/duplicate non-Prepare is possible after nested pipe restart — soft-ignore.
             if (!result.HasCmdPrepareReadResult()) {
                 LOG_D("Invalid response on direct read restore for expect PrepareReadResult, got",
@@ -817,8 +826,8 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
             }
             return;
         case EDirectReadRestoreStage::Publish:
-            PARTITION_ENSURE(RestoredDirectReadId != 0)
-                ("restored_direct_read_id", RestoredDirectReadId);
+            PARTITION_ENSURE(RestoredDirectReadId != 0,
+                {"restoredDirectReadId", RestoredDirectReadId});
 
             // Late/duplicate Prepare (or other non-Publish) is possible after nested pipe restart:
             // restore may re-send Prepare for the same id while a previous Prepare is still delivered
@@ -894,8 +903,8 @@ void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQ
 }
 
 void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult& res, const TActorContext& ctx) {
-    PARTITION_ENSURE(DirectReadRestoreStage == EDirectReadRestoreStage::None)
-        ("direct_read_restore_stage", static_cast<int>(DirectReadRestoreStage));
+    PARTITION_ENSURE(DirectReadRestoreStage == EDirectReadRestoreStage::None,
+        {"directReadRestoreStage", static_cast<int>(DirectReadRestoreStage)});
 
     PARTITION_ENSURE(DirectRead);
     if (!PipeClient)
@@ -916,9 +925,9 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
         return;
     }
 
-    PARTITION_ENSURE(res.GetDirectReadId() == DirectReadId)
-        ("got_direct_read_id", res.GetDirectReadId())
-        ("direct_read_id", DirectReadId);
+    PARTITION_ENSURE(res.GetDirectReadId() == DirectReadId,
+        {"gotDirectReadId", res.GetDirectReadId()},
+        {"directReadId", DirectReadId});
 
     EndOffset = res.GetEndOffset();
     SizeLag = res.GetSizeLag();
@@ -946,11 +955,11 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
     ++ReadIdToResponse;
 
     ReadGuid = TString();
-    PARTITION_ENSURE(DirectReadResults.find(DirectReadId) != DirectReadResults.end())
-        ("direct_read_id", DirectReadId);
-    PARTITION_ENSURE(res.GetDirectReadId() == DirectReadId)
-        ("got_direct_read_id", res.GetDirectReadId())
-        ("direct_read_id", DirectReadId);
+    PARTITION_ENSURE(DirectReadResults.find(DirectReadId) != DirectReadResults.end(),
+        {"directReadId", DirectReadId});
+    PARTITION_ENSURE(res.GetDirectReadId() == DirectReadId,
+        {"gotDirectReadId", res.GetDirectReadId()},
+        {"directReadId", DirectReadId});
     PublishedDirectReads.insert(DirectReadId);
 
     PARTITION_ENSURE(!RequestInfly);
@@ -969,8 +978,8 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
 
     ctx.Send(ParentId, readResponse.Release());
 
-    PARTITION_ENSURE(!WaitForData)
-        ("direct_read_id", DirectReadId);
+    PARTITION_ENSURE(!WaitForData,
+        {"directReadId", DirectReadId});
 
     bool isInFlightMemoryOk = PartitionInFlightMemoryController.Add(dr.GetReadOffset(), dr.GetBytesSizeEstimate());
     ReadOffset = dr.GetLastOffset() + 1;
@@ -983,8 +992,12 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
         {"directReadId", DirectReadId},
         {"isInFlightMemoryOk", isInFlightMemoryOk});
 
-    PARTITION_ENSURE(!RequestInfly)
-        ("direct_read_id", DirectReadId);
+    PARTITION_ENSURE(!RequestInfly,
+        {"directReadId", DirectReadId});
+
+    if (!WindowExhaustedSent && IsPartitionExhausted()) {
+        return SendReadWindowExhausted(ctx);
+    }
 
     if (isInFlightMemoryOk && IsPartitionDataReady()) {
         SendPartitionReady(ctx);
@@ -996,8 +1009,8 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
 }
 
 void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TActorContext& ctx) {
-    PARTITION_ENSURE(res.HasMaxOffset())
-        ("res", res.ShortDebugString());
+    PARTITION_ENSURE(res.HasMaxOffset(),
+        {"res", res.ShortDebugString()});
     EndOffset = res.GetMaxOffset();
     SizeLag = res.GetSizeLag();
 
@@ -1086,6 +1099,10 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
         ctx.Send(ParentId, readResponse.Release());
     }
 
+    if (!WindowExhaustedSent && IsPartitionExhausted()) {
+        SendReadWindowExhausted(ctx);
+    }
+
     PipeGeneration = 0; //reset tries counter - all ok
 }
 
@@ -1095,7 +1112,8 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         const auto errorCode = ev->Get()->Record.GetErrorCode();
         if (errorCode == NPersQueue::NErrorCode::WRONG_COOKIE
             || errorCode == NPersQueue::NErrorCode::BAD_REQUEST
-            || errorCode == NPersQueue::NErrorCode::READ_ERROR_NO_SESSION) {
+            || errorCode == NPersQueue::NErrorCode::READ_ERROR_NO_SESSION
+            || ev->Get()->Record.GetPartitionResponse().GetCloseSession()) {
             Counters.Errors.Inc();
             ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("status is not ok: " + ev->Get()->Record.GetErrorReason(), ConvertOldCode(ev->Get()->Record.GetErrorCode())));
         } else {
@@ -1105,10 +1123,10 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     }
 
     if (ev->Get()->Record.GetStatus() != NKikimr::NMsgBusProxy::MSTATUS_OK) { //this is incorrect answer, die
-        PARTITION_ENSURE(!ev->Get()->Record.HasErrorCode())
-            ("error_code", NPersQueue::NErrorCode::EErrorCode_Name(ev->Get()->Record.GetErrorCode()))
-            ("status", NMsgBusProxy::ToCString(static_cast<NMsgBusProxy::EResponseStatus>(ev->Get()->Record.GetStatus())))
-            ("error_reason", ev->Get()->Record.GetErrorReason());
+        PARTITION_ENSURE(!ev->Get()->Record.HasErrorCode(),
+            {"errorCode", NPersQueue::NErrorCode::EErrorCode_Name(ev->Get()->Record.GetErrorCode())},
+            {"status", NMsgBusProxy::ToCString(static_cast<NMsgBusProxy::EResponseStatus>(ev->Get()->Record.GetStatus()))},
+            {"errorReason", ev->Get()->Record.GetErrorReason()});
         Counters.Errors.Inc();
         // map NMsgBusProxy::EResponseStatus to PersQueue::ErrorCode???
 
@@ -1196,8 +1214,8 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         return;
     }
 
-    PARTITION_ENSURE(false)
-        ("unexpected_response", result.ShortDebugString());
+    PARTITION_ENSURE(false,
+        {"unexpectedResponse", result.ShortDebugString()});
 }
 
 void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
@@ -1269,6 +1287,11 @@ void TPartitionActor::SendPartitionReady(const TActorContext& ctx) {
     ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
 }
 
+void TPartitionActor::SendReadWindowExhausted(const TActorContext& ctx) {
+    WindowExhaustedSent = true;
+    ctx.Send(ParentId, new TEvPQProxy::TEvReadWindowExhausted(Topic->GetInternalName(), Partition.Partition, Partition.AssignId));
+}
+
 
 void TPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
@@ -1324,8 +1347,9 @@ void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActo
     ClientMaxOffset = ev->Get()->MaxOffset;
 
     if (StartReading) {
-        PARTITION_ENSURE(ev->Get()->StartReading) //otherwise it is signal from actor, this could not be done
-            ("start_reading", StartReading);
+        // otherwise it is signal from actor, this could not be done
+        PARTITION_ENSURE(ev->Get()->StartReading,
+            {"startReading", StartReading});
         ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("double partition locking", PersQueue::ErrorCode::BAD_REQUEST));
         return;
     }
@@ -1336,8 +1360,8 @@ void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActo
 
 void TPartitionActor::InitStartReading(const TActorContext& ctx) {
 
-    PARTITION_ENSURE(AllPrepareInited)
-        ("start_reading", StartReading);
+    PARTITION_ENSURE(AllPrepareInited,
+        {"startReading", StartReading});
     PARTITION_ENSURE(!WaitForData);
     LOG_I("Start reading EndOffset readOffset committedOffset clientCommitOffset clientReadOffset clientMaxOffset",
         {"partition", Partition},
@@ -1417,8 +1441,8 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
                         PersQueue::ErrorCode::BAD_REQUEST));
             return;
         }
-        PARTITION_ENSURE(CommitsInfly.empty())
-            ("commits_infly", CommitsInfly.size());
+        PARTITION_ENSURE(CommitsInfly.empty(),
+            {"commitsInfly", CommitsInfly.size()});
         CommitsInfly.emplace_back(Max<ui64>(), TCommitInfo{Max<ui64>(), ClientCommitOffset.GetOrElse(0), ctx.Now()});
         if (Counters.SLITotal)
             Counters.SLITotal.Inc();
@@ -1426,6 +1450,10 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
             SendCommit(CommitsInfly.back().first, CommitsInfly.back().second.Offset, ctx);
     } else {
         ClientCommitOffset = CommittedOffset;
+    }
+
+    if (!WindowExhaustedSent && IsPartitionExhausted()) {
+        return SendReadWindowExhausted(ctx);
     }
 
     if (!MaxTimeLagMs && !ReadTimestampMs && IsPartitionDataReady()) {
@@ -1498,10 +1526,11 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
         NTabletPipe::SendData(ctx, PipeClient, req.Release());
     } else {
-        PARTITION_ENSURE(StartReading) //otherwise it is double locking from actor, not client - client makes lock always with StartReading == true
-            ("init_done", InitDone);
-        PARTITION_ENSURE(InitDone)
-            ("start_reading", StartReading);
+        // otherwise it is double locking from actor, not client - client makes lock always with StartReading == true
+        PARTITION_ENSURE(StartReading,
+            {"init_done", InitDone});
+        PARTITION_ENSURE(InitDone,
+            {"startReading", StartReading});
         InitStartReading(ctx);
     }
 }
@@ -1539,24 +1568,24 @@ bool TPartitionActor::SendNextRestorePrepareOrForget() {
             {"prepareId", prepareId},
             {"id", dr.GetDirectReadId()},
             {"partition", Partition});
-        PARTITION_ENSURE(prepareId != 0)
-            ("prepare_id", prepareId)
-            ("forget_id", forgetId);
+        PARTITION_ENSURE(prepareId != 0,
+            {"prepareId", prepareId},
+            {"forgetId", forgetId});
 
         //Restore;
-        PARTITION_ENSURE(prepareId == dr.GetDirectReadId())
-            ("prepare_id", prepareId)
-            ("direct_read_id", dr.GetDirectReadId());
+        PARTITION_ENSURE(prepareId == dr.GetDirectReadId(),
+            {"prepareId", prepareId},
+            {"directReadId", dr.GetDirectReadId()});
 
-        PARTITION_ENSURE(RestoredDirectReadId < dr.GetDirectReadId())
-            ("restored_direct_read_id", RestoredDirectReadId)
-            ("direct_read_id", dr.GetDirectReadId());
+        PARTITION_ENSURE(RestoredDirectReadId < dr.GetDirectReadId(),
+            {"restoredDirectReadId", RestoredDirectReadId},
+            {"directReadId", dr.GetDirectReadId()});
         RestoredDirectReadId = dr.GetDirectReadId();
         DirectReadRestoreStage = EDirectReadRestoreStage::Prepare;
-        PARTITION_ENSURE(dr.GetReadOffset() <= dr.GetLastOffset())
-            ("read_offset", dr.GetReadOffset())
-            ("last_offset", dr.GetLastOffset())
-            ("direct_read_id", dr.GetDirectReadId());
+        PARTITION_ENSURE(dr.GetReadOffset() <= dr.GetLastOffset(),
+            {"readOffset", dr.GetReadOffset()},
+            {"lastOffset", dr.GetLastOffset()},
+            {"directReadId", dr.GetDirectReadId()});
 
         auto request = MakeReadRequest(dr.GetReadOffset(), dr.GetLastOffset() + 1, std::numeric_limits<i32>::max(),
                                     std::numeric_limits<i32>::max(), 0, 0, dr.GetDirectReadId(), dr.GetBytesSizeEstimate());
@@ -1574,8 +1603,8 @@ bool TPartitionActor::SendNextRestorePrepareOrForget() {
 bool TPartitionActor::SendNextRestorePublishRequest() {
     const auto& ctx = ActorContext();
     if (DirectReadsToPublish.empty()) {
-        PARTITION_ENSURE(DirectReadsToRestore.empty())
-            ("direct_reads_to_restore", DirectReadsToRestore.size());
+        PARTITION_ENSURE(DirectReadsToRestore.empty(),
+            {"directReadsToRestore", DirectReadsToRestore.size()});
         return false;
     }
     auto id = *DirectReadsToPublish.begin();
@@ -1583,9 +1612,9 @@ bool TPartitionActor::SendNextRestorePublishRequest() {
         {"id", id},
         {"partition", Partition});
 
-    PARTITION_ENSURE(RestoredDirectReadId == id)
-        ("restored_direct_read_id", RestoredDirectReadId)
-        ("direct_read_id", id);
+    PARTITION_ENSURE(RestoredDirectReadId == id,
+        {"restoredDirectReadId", RestoredDirectReadId},
+        {"directReadId", id});
     DirectReadRestoreStage = EDirectReadRestoreStage::Publish;
 
     if (!PipeClient) //Pipe will be recreated soon
@@ -1596,10 +1625,10 @@ bool TPartitionActor::SendNextRestorePublishRequest() {
 }
 
 void TPartitionActor::OnDirectReadsRestored() {
-    PARTITION_ENSURE(DirectReadsToRestore.empty() && DirectReadsToPublish.empty() && DirectReadsToForget.empty())
-        ("direct_reads_to_restore", DirectReadsToRestore.size())
-        ("direct_reads_to_publish", DirectReadsToPublish.size())
-        ("direct_reads_to_forget", DirectReadsToForget.size());
+    PARTITION_ENSURE(DirectReadsToRestore.empty() && DirectReadsToPublish.empty() && DirectReadsToForget.empty(),
+        {"directReadsToRestore", DirectReadsToRestore.size()},
+        {"directReadsToPublish", DirectReadsToPublish.size()},
+        {"directReadsToForget", DirectReadsToForget.size()});
     DirectReadRestoreStage = EDirectReadRestoreStage::None;
 
     const auto& ctx = ActorContext();
@@ -1627,12 +1656,12 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
 
     PARTITION_ENSURE(InitDone);
     PARTITION_ENSURE(PipeClient);
-    PARTITION_ENSURE(MaxTimeLagMs || ReadTimestampMs || IsNeedMorePartitionData())
-        ("max_time_lag_ms", MaxTimeLagMs)
-        ("read_timestamp_ms", ReadTimestampMs)
-        ("wait_for_data", WaitForData)
-        ("read_offset", ReadOffset)
-        ("end_offset", EndOffset);
+    PARTITION_ENSURE(MaxTimeLagMs || ReadTimestampMs || IsNeedMorePartitionData(),
+        {"maxTimeLagMs", MaxTimeLagMs},
+        {"readTimestampMs", ReadTimestampMs},
+        {"waitForData", WaitForData},
+        {"readOffset", ReadOffset},
+        {"endOffset", EndOffset});
 
     TAutoPtr<TEvPersQueue::TEvHasDataInfo> event(new TEvPersQueue::TEvHasDataInfo());
     event->Record.SetPartition(Partition.Partition);
@@ -1710,17 +1739,19 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
         Counters.WaitsForData.Inc();
     }
 
-    PARTITION_ENSURE(record.HasEndOffset())
-        ("record", record.ShortDebugString());
-    PARTITION_ENSURE(EndOffset <= record.GetEndOffset()) //end offset could not be changed if no data arrived, but signal will be sended anyway after timeout
-        ("end_offset", EndOffset)
-        ("record_end_offset", record.GetEndOffset());
-    PARTITION_ENSURE(MaxTimeLagMs || ReadTimestampMs || IsNeedMorePartitionData()) //otherwise no WaitData were needed
-        ("max_time_lag_ms", MaxTimeLagMs)
-        ("read_timestamp_ms", ReadTimestampMs)
-        ("wait_for_data", WaitForData)
-        ("read_offset", ReadOffset)
-        ("end_offset", EndOffset);
+    PARTITION_ENSURE(record.HasEndOffset(),
+        {"record", record.ShortDebugString()});
+    //end offset could not be changed if no data arrived, but signal will be sended anyway after timeout
+    PARTITION_ENSURE(EndOffset <= record.GetEndOffset(),
+        {"endOffset", EndOffset},
+        {"recordEndOffset", record.GetEndOffset()});
+    //otherwise no WaitData were needed
+    PARTITION_ENSURE(MaxTimeLagMs || ReadTimestampMs || IsNeedMorePartitionData(),
+        {"maxTimeLagMs", MaxTimeLagMs},
+        {"readTimestampMs", ReadTimestampMs},
+        {"waitForData", WaitForData},
+        {"readOffset", ReadOffset},
+        {"endOffset", EndOffset});
 
     LOG_D("Wait for data done: readOffset EndOffset newEndOffset commitOffset clientCommitOffset clientMaxOffset cookie readingFinished firstRead",
         {"partition", Partition},
@@ -1764,7 +1795,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
             childPartitionIds.reserve(record.GetChildPartitionIds().size());
             childPartitionIds.insert(childPartitionIds.end(), record.GetChildPartitionIds().begin(), record.GetChildPartitionIds().end());
 
-            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead,
+            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, Partition.AssignId, FirstRead,
                      std::move(adjacentPartitionIds), std::move(childPartitionIds), EndOffset));
         } else if (FirstRead) {
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));
@@ -1831,10 +1862,10 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
         {"clientMaxOffset", ClientMaxOffset},
         {"guid", ev->Get()->Guid});
 
-    PARTITION_ENSURE(ReadGuid.empty())
-        ("read_guid", ReadGuid);
-    PARTITION_ENSURE(!RequestInfly)
-        ("read_guid", ReadGuid);
+    PARTITION_ENSURE(ReadGuid.empty(),
+        {"readGuid", ReadGuid});
+    PARTITION_ENSURE(!RequestInfly,
+        {"readGuid", ReadGuid});
 
     ReadGuid = ev->Get()->Guid;
 
@@ -1862,9 +1893,9 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
 
 void TPartitionActor::Handle(TEvPQProxy::TEvCommitCookie::TPtr& ev, const TActorContext& ctx) {
     //TODO: add here processing of cookie == 0 if ReadOffset > ClientCommittedOffset if any
-    PARTITION_ENSURE(ev->Get()->AssignId == Partition.AssignId)
-        ("assign_id", ev->Get()->AssignId)
-        ("partition_assign_id", Partition.AssignId);
+    PARTITION_ENSURE(ev->Get()->AssignId == Partition.AssignId,
+        {"assignId", ev->Get()->AssignId},
+        {"partitionAssignId", Partition.AssignId});
     for (auto& readId : ev->Get()->CommitInfo.Cookies) {
         if (readId == 0) {
             if (ReadIdCommitted > 0) {
@@ -1903,9 +1934,9 @@ void TPartitionActor::Handle(TEvPQProxy::TEvCommitCookie::TPtr& ev, const TActor
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvCommitRange::TPtr& ev, const TActorContext& ctx) {
-    PARTITION_ENSURE(ev->Get()->AssignId == Partition.AssignId)
-        ("assign_id", ev->Get()->AssignId)
-        ("partition_assign_id", Partition.AssignId);
+    PARTITION_ENSURE(ev->Get()->AssignId == Partition.AssignId,
+        {"assignId", ev->Get()->AssignId},
+        {"partitionAssignId", Partition.AssignId});
 
     for (auto& c : ev->Get()->CommitInfo.Ranges) {
         NextRanges.InsertInterval(c.first, c.second);
@@ -1977,6 +2008,10 @@ bool TPartitionActor::IsPartitionDataReady() const {
 
 bool TPartitionActor::IsNeedMorePartitionData() const {
     return ReadOffset >= EndOffset && (!ClientMaxOffset.Defined() || ReadOffset < *ClientMaxOffset);
+}
+
+bool TPartitionActor::IsPartitionExhausted() const {
+    return ClientMaxOffset.Defined() && ReadOffset >= *ClientMaxOffset;
 }
 
 }

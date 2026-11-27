@@ -48,6 +48,11 @@ IF (NOT USE_STL_SYSTEM)
     RECURSE(
         libcxxabi
         libcxxrt
-        openmp
     )
+
+    IF (NOT OS_WINDOWS)
+        RECURSE(
+            openmp
+        )
+    ENDIF()
 ENDIF()

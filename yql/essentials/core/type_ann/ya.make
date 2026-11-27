@@ -17,7 +17,10 @@ SRCS(
     type_ann_types.cpp
     type_ann_wide.cpp
     type_ann_yql.cpp
+    type_ann_yql_aggregation.cpp
+    type_ann_yql_flatten.cpp
     type_ann_match_recognize.cpp
+    type_ann_impl.cpp
 )
 
 PEERDIR(
@@ -40,5 +43,7 @@ PEERDIR(
     yql/essentials/public/udf_meta
     library/cpp/yson/node
 )
+
+PEERDIR_FROM_POLICY(ALLOW classifieds/vsdwh/tools/ci/jobs/yql_udf/parser)
 
 END()

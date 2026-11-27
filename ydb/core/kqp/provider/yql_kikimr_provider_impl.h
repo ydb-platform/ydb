@@ -352,6 +352,7 @@ Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::s
 Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);
 
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
+bool IsYqlNullExprNode(const NNodes::TExprBase& literal);
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto);
@@ -374,6 +375,8 @@ const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns();
 bool IsKikimrSystemColumn(const TStringBuf columnName);
 
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos);
+
+bool ValidateExternalTablePgCompatibility(const TKikimrTableMetadata& metadata, bool disablePgCompatibility, TExprContext& ctx, TPositionHandle pos);
 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content);
 

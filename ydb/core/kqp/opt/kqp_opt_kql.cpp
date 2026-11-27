@@ -2,7 +2,7 @@
 #include "kqp_opt_generated_columns.h"
 
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -202,7 +202,7 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultLiteralColumns(const
         YQL_ENSURE(colType);
 
         TExprBase memberValue = literalExpr;
-        if (colType->IsOptionalOrNull()) {
+        if (colType->IsOptionalOrNull() && !colMeta->DefaultFromLiteral.type().has_optional_type()) {
             memberValue = Build<TCoJust>(ctx, pos)
                 .Input(literalExpr)
                 .Done();
@@ -258,6 +258,8 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
             return "global sync unique secondary";
         case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
             return "global sync vector_kmeans_tree";
+        case NYql::TIndexDescription::EType::GlobalSyncHnsw:
+            return "global sync hnsw";
         case NYql::TIndexDescription::EType::GlobalFulltextPlain:
         case NYql::TIndexDescription::EType::GlobalFulltextCompact:
             return "global sync fulltext_plain";
@@ -499,7 +501,7 @@ TCoAtomList ExtendGenerateOnInsertColumnsList(const TKiWriteTable& write, TCoAto
 TExprBase BuildFillTable(const TKiWriteTable& write, TExprContext& ctx)
 {
     auto originalPathNode = GetSetting(write.Settings().Ref(), "OriginalPath");
-    AFL_ENSURE(originalPathNode);
+    YDB_LOG_ENSURE(originalPathNode);
     auto builder = Build<TKqlFillTable>(ctx, write.Pos())
         .Input(write.Input())
         .Table(write.Table())
@@ -507,7 +509,7 @@ TExprBase BuildFillTable(const TKiWriteTable& write, TExprContext& ctx)
         .OriginalPath(TCoNameValueTuple(originalPathNode).Value().Cast<TCoAtom>());
     if (const auto& node = GetSetting(write.Settings().Ref(), "CtasShardingColumns")) {
         const auto& columns = TCoNameValueTuple(node).Value().Cast<TCoAtomList>();
-        AFL_ENSURE(columns.Ref().ChildrenSize() > 0);
+        YDB_LOG_ENSURE(columns.Ref().ChildrenSize() > 0);
         builder.CtasShardingColumns(columns);
     }
     return builder.Done();
@@ -590,10 +592,7 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
                 return BuildTableMeta(meta, pos, ctx);
             });
         const auto onlyStreamIndexes = std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            return index.second->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree
-                && index.second->Type != TIndexDescription::EType::GlobalFulltextPlain
-                && index.second->Type != TIndexDescription::EType::GlobalFulltextRelevance
-                && index.second->Type != TIndexDescription::EType::GlobalJson;
+            return !TIndexDescription::NeedsWritePrecompute(index.second->Type);
         });
 
         if (onlyStreamIndexes) {
@@ -1070,7 +1069,7 @@ THashSet<TStringBuf> GetUpdateLookupColumns(const TKikimrTableDescription& table
         }
 
         if (indexDesc.Type != TIndexDescription::EType::GlobalSync) {
-            AFL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalAsync);
+            YDB_LOG_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalAsync);
             continue;
         }
 
@@ -1208,6 +1207,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 return false;
             case TIndexDescription::EType::GlobalSyncUnique:
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+            case TIndexDescription::EType::GlobalSyncHnsw:
             case TIndexDescription::EType::GlobalFulltextPlain:
             case TIndexDescription::EType::GlobalFulltextRelevance:
             case TIndexDescription::EType::GlobalJson:
@@ -1225,7 +1225,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
     const bool needsKqpEffect = std::any_of(indexes.begin(), indexes.end(), idxNeedsKqpEffect);
 
     const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
-    AFL_ENSURE(!kqpCtx.UsePessimisticLocks || useStreamIndex);
+    YDB_LOG_ENSURE(!kqpCtx.UsePessimisticLocks || useStreamIndex);
 
     // For unique or vector index rewrite UPDATE to UPDATE ON
     if (needsKqpEffect) {

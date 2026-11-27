@@ -7,6 +7,7 @@ PEERDIR(
     ydb/library/formats/arrow/hash
     ydb/library/yql/dq/actors/compute/events
     ydb/library/yql/dq/actors/protos
+    ydb/library/yql/dq/actors/spilling/counters
     ydb/library/yql/dq/common
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/expr_nodes

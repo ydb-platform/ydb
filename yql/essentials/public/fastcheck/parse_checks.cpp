@@ -6,7 +6,7 @@ namespace NYql::NFastCheck {
 
 TVector<TCheckFilter> ParseChecks(const TString& checks) {
     TVector<TCheckFilter> res;
-    for (TStringBuf one : StringSplitter(checks).SplitByString(",")) {
+    for (TStringBuf one : StringSplitter(checks).Split(',')) {
         TCheckFilter f;
         TStringBuf afterPrefix = one;
         if (one.AfterPrefix("-", afterPrefix)) {

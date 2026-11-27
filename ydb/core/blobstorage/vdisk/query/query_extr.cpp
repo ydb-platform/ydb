@@ -1,5 +1,6 @@
 #include "query_base.h"
 #include <ydb/core/blobstorage/base/blobstorage_checksum.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_query_result.h>
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 
 using namespace NKikimrServices;
@@ -127,21 +128,20 @@ namespace NKikimr {
                     NMatrix::TVectorType actuallyHave = ingress.LocalParts(QueryCtx->HullCtx->VCtx->Top->GType);
                     NMatrix::TVectorType missingParts = mustHave - actuallyHave;
 
-                    // If we don't have something locally we return NOT_YET unless that blob is going to be collected
-                    auto status = mustHave.Empty() ? NKikimrProto::NODATA : // we do not have any parts of this blob
-                        IsBlobDeleted(query->LogoBlobID, Merger) ? NKikimrProto::NODATA :
+                    const bool deleted = IsBlobDeleted(query->LogoBlobID, Merger);
+                    auto status = deleted || mustHave.Empty() ? NKikimrProto::NODATA :
                         missingParts.Empty() ? NKikimrProto::OK : NKikimrProto::NOT_YET;
 
-                    // Add result
+                    // Once the barrier hides the payload, report the same layout as after compaction.
+                    // A live handoff can still supply local parts even when mustHave is empty.
                     const ui64 ingressRaw = ingress.Raw();
-                    const ui64 *pingr = ShowInternals ? &ingressRaw : nullptr;
+                    const ui64 *pingr = ShowInternals && !deleted ? &ingressRaw : nullptr;
 
                     const int mode = ingress.GetCollectMode(TIngress::IngressMode(QueryCtx->HullCtx->VCtx->Top->GType));
                     const bool keep = (mode & CollectModeKeep) && !(mode & CollectModeDoNotKeep);
                     const bool doNotKeep = mode & CollectModeDoNotKeep;
-                    const NMatrix::TVectorType local = ingress.LocalParts(QueryCtx->HullCtx->VCtx->Top->GType);
-
-                    Result->AddResult(status, query->LogoBlobID, cookiePtr, pingr, &local, keep, doNotKeep);
+                    Result->AddResult(status, query->LogoBlobID, cookiePtr, pingr, deleted ? nullptr : &actuallyHave,
+                        keep, doNotKeep);
                     Merger.Clear();
                 }
             }
@@ -217,13 +217,11 @@ namespace NKikimr {
                     case NReadBatcher::TDataItem::ET_CLEAN:
                         Y_ABORT_S(QueryCtx->HullCtx->VCtx->VDiskLogPrefix << "Impossible case");
                     case NReadBatcher::TDataItem::ET_NODATA:
-                        // put NODATA
-                        Result->AddResult(NKikimrProto::NODATA, it->Id, cookiePtr, pingr);
+                        Result->AddResult(NKikimrProto::NODATA, it->Id, cookiePtr, pingr, nullptr, keep, doNotKeep);
                         break;
                     case NReadBatcher::TDataItem::ET_ERROR:
-                        // put ERROR
                         Y_VERIFY_S(it->Id.PartId() > 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
-                        Result->AddResult(NKikimrProto::ERROR, it->Id, cookiePtr, pingr);
+                        Result->AddResult(NKikimrProto::ERROR, it->Id, cookiePtr, pingr, nullptr, keep, doNotKeep);
                         break;
                     case NReadBatcher::TDataItem::ET_NOT_YET:
                         // put NOT_YET
@@ -356,8 +354,10 @@ namespace NKikimr {
                     const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(res.GetBlobID());
                     const auto it = map.find(id.FullID());
                     Y_VERIFY_S(it != map.end(), QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
-                    if (it->second->Status == NKikimrProto::OK) {
-                        const TRope& buffer = it->second->GetPartData(id);
+                    const auto& recovered = *it->second;
+                    MergeVGetKeepFlags(res, recovered.Keep, recovered.DoNotKeep);
+                    if (recovered.Status == NKikimrProto::OK) {
+                        const TRope& buffer = recovered.GetPartData(id);
                         const ui32 shift = res.GetShift();
                         const ui32 size = res.GetSize() ? res.GetSize() : buffer.size() - shift;
                         TRope slice = {buffer.Position(shift), buffer.Position(shift + size)};

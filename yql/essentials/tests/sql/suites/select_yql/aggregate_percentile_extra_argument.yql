@@ -1,0 +1,4 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT Percentile(value, 0.5, 1.0)
+FROM (VALUES (1.0)) AS x(value);

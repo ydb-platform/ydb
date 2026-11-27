@@ -1238,6 +1238,10 @@ public:
         InitMonHttpIncomingRequest(Event->Get());
         AuditCtx.InitAudit(Event);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
+        if (Fields.AuthMode == TMon::EAuthMode::Disabled && Fields.ExtractDatabaseUserToken && !Event->Get()->Database.empty() &&
+                (CredentialsProvided() || !AppData()->DefaultUserSIDs.empty())) {
+            Fields.AuthMode = TMon::EAuthMode::Relaxed;
+        }
         if (Fields.AuthMode != TMon::EAuthMode::Disabled && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get());
             if (handle) {
@@ -1367,6 +1371,10 @@ public:
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
             return Cancelled();
+        }
+        if (Fields.AuthMode == TMon::EAuthMode::Relaxed && ev->Get()->SourceType == NKikimr::NGRpcService::TEvHttpRequestAuthAndCheck::EventType) {
+            AuditCtx.LogOnReceived();
+            return SendRequest();
         }
         ReplyWith(Request->CreateResponseServiceUnavailable(
             TStringBuilder() << "Actor is not available"));

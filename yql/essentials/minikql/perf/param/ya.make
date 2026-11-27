@@ -1,4 +1,6 @@
-PROGRAM()
+NO_BUILD_IF(SANITIZER_TYPE)
+
+G_BENCHMARK()
 
 PEERDIR(
     yql/essentials/minikql/comp_nodes/llvm16

@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 import pyarrow as pa
 
@@ -8,7 +10,7 @@ from ydb.tests.datashard.lib.types_of_variables import (
     pk_types,
     non_pk_types,
     cleanup_type_name,
-    format_sql_value,
+    string_to_ydb_type,
     types_not_supported_yet_in_columnshard
 )
 
@@ -265,6 +267,8 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         schema_inclusion_mode=None,
         arrow_format_settings=None,
         concurrent_result_sets=False,
+        idempotent=False,
+        parameters=None,
     ):
         may_throw = (
             arrow_format_settings is not None
@@ -277,6 +281,8 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             try:
                 return pool.execute_with_retries(
                     query,
+                    parameters=parameters,
+                    retry_settings=ydb.RetrySettings(idempotent=idempotent),
                     result_set_format=ydb.QueryResultSetFormat.ARROW,
                     schema_inclusion_mode=schema_inclusion_mode,
                     arrow_format_settings=arrow_format_settings,
@@ -303,31 +309,40 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         self._try_execute(query)
 
     def _fill_table(self, table_name, rows_count, store_type, batch_size=100, offset=0):
-        type_names = list(self.all_types.keys())
-
-        columns = ["pk_Uint64"]
-        for type_name in type_names:
-            columns.append(f"col_{cleanup_type_name(type_name)}")
+        pk_type = ydb.PrimitiveType.Uint64
+        if store_type == "ROW":
+            pk_type = ydb.OptionalType(pk_type)
+        row_type = ydb.StructType().add_member("pk_Uint64", pk_type)
+        for type_name in self.all_types:
+            row_type.add_member(
+                f"col_{cleanup_type_name(type_name)}",
+                ydb.OptionalType(string_to_ydb_type[type_name]),
+            )
+        rows_type = ydb.ListType(row_type)
 
         values = []
         for i in range(rows_count):
-            value = [format_sql_value(i + offset, "Uint64", store_type == "COLUMN")]
-            for type_name in type_names:
+            row = {"pk_Uint64": i + offset}
+            for type_name, make_value in self.all_types.items():
+                value = None
                 if i % 4 != 3:
-                    value.append(format_sql_value(self.all_types[type_name](i % 128), type_name))
-                else:
-                    value.append('NULL')
-            values.append("(" + ", ".join(value) + ")")
+                    value = make_value(i % 128)
+                    if type_name.startswith("Decimal"):
+                        value = Decimal(value)
+                    elif type_name in ("String", "Yson"):
+                        value = value.encode()
+                    elif type_name == "DyNumber":
+                        value = str(value)
+                row[f"col_{cleanup_type_name(type_name)}"] = value
+            values.append(row)
 
         assert len(values) != 0
         assert batch_size > 0
-        # Execute batches separately to limit query compilation work under ASAN.
+        # Keep the query independent of batch values to limit compilation work under ASAN.
+        query = f"DECLARE $rows AS {rows_type};\nUPSERT INTO {table_name} SELECT * FROM AS_TABLE($rows);"
         for batch_start in range(0, rows_count, batch_size):
-            batch_rows = values[batch_start:batch_start + batch_size]
-            if not batch_rows:
-                continue
-            query = f"UPSERT INTO {table_name} ({", ".join(columns)}) VALUES {", ".join(batch_rows)};\n"
-            self._try_execute(query)
+            parameters = {"$rows": (values[batch_start:batch_start + batch_size], rows_type)}
+            self._try_execute(query, parameters=parameters, idempotent=True)
 
     def _read_table(
         self,

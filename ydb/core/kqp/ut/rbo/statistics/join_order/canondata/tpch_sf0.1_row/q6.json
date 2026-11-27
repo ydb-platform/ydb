@@ -1,0 +1,4 @@
+{
+  "op_name":"TableFullScan",
+  "table":"lineitem"
+}

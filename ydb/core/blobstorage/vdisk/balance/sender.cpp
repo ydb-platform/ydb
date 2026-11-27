@@ -4,7 +4,6 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
 
-#include <ydb/core/util/stlog.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_BALANCING
 
@@ -86,7 +85,9 @@ namespace {
         void Handle(NPDisk::TEvChunkReadResult::TPtr ev) {
             ++Responses;
             auto *msg = ev->Get();
-            if (msg->Status != NKikimrProto::EReplyStatus::OK) {
+            if (msg->Status != NKikimrProto::EReplyStatus::OK || !msg->Data.IsReadable()) {
+                // PDisk reports bad sectors as gaps in an OK result; leave such a part on this handoff,
+                // it is skipped by SendPartsOnMain and restored by scrub
                 return;
             }
             ui64 i = reinterpret_cast<ui64>(msg->Cookie);

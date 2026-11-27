@@ -15,31 +15,23 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/json
-    ydb/library/actors/core
-    library/cpp/containers/disjoint_interval_tree
-    ydb/library/grpc/server
+    library/cpp/monlib/dynamic_counters
     ydb/core/base
     ydb/core/grpc_services
-    ydb/core/kqp/common/events
-    ydb/core/kqp/common/simple
+    ydb/core/grpc_services/base
     ydb/core/persqueue/common
-    ydb/core/persqueue/events
-    ydb/core/persqueue/public/codecs
-    ydb/core/persqueue/writer
+    ydb/core/persqueue/public/cluster_tracker
     ydb/core/protos
-    ydb/core/ydb_convert
-    ydb/library/aclib
-    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
-#    ydb/library/persqueue/tests
-    ydb/library/persqueue/topic_parser
+    ydb/core/tx/scheme_board
+    ydb/library/actors/core
     ydb/library/cloud_permissions
+    ydb/library/grpc/server
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos
-    ydb/services/lib/actors
-    ydb/services/lib/sharding
     ydb/services/persqueue_v1/actors
+    ydb/services/persqueue_v1/actors/schema/pqv1
+    ydb/services/persqueue_v1/actors/schema/topic
 )
 
 END()

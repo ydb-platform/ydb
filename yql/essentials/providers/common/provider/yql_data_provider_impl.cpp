@@ -108,6 +108,10 @@ bool TDataProviderBase::Initialize(TExprContext& ctx) {
     return true;
 }
 
+bool TDataProviderBase::AcceptsProjectSetting(const TProjectSettings::TPragma&) const {
+    return false;
+}
+
 IGraphTransformer& TDataProviderBase::GetConfigurationTransformer() {
     return NullTransformer_;
 }

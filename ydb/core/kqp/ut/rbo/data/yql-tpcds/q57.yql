@@ -29,13 +29,13 @@ $v1 = (
                 d_moy
         ) rn
     FROM
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/catalog_sales`
+        `catalog_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/call_center`
+        `call_center`
     WHERE
         cs_item_sk == i_item_sk
         AND cs_sold_date_sk == d_date_sk

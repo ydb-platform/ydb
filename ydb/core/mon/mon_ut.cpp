@@ -1,3 +1,4 @@
+#include <ydb/core/mon/counters_adapter_impl.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/mon/ut_utils/ut_utils.h>
 #include <ydb/core/base/appdata.h>
@@ -6,7 +7,13 @@
 
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/http/simple/http_client.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/monlib/consumers/collecting_consumer.h>
+#include <library/cpp/monlib/encode/spack/spack_v1.h>
+#include <library/cpp/monlib/metrics/histogram_collector.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/algorithm.h>
+#include <util/generic/is_in.h>
 #include <util/system/datetime.h>
 
 namespace NMonitoring::NTests {
@@ -556,6 +563,76 @@ Y_UNIT_TEST_SUITE(MessageBusHttp) {
         };
         UNIT_ASSERT_VALUES_EQUAL(sampleCount(httpServer->RequestTotalTimeHistogram), 3);
         UNIT_ASSERT_VALUES_EQUAL(sampleCount(httpServer->RequestPrepareTimeHistogram), 1);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TMemOnlyCountersTest) {
+    Y_UNIT_TEST(FactorySetsMemOnly) {
+        auto counters = MakeIntrusive<TDynamicCounters>();
+        TMetricFactoryForDynamicCounters factory(counters->GetSubgroup("subsystem", "mon"));
+        auto labels = [](TStringBuf sensor) {
+            return MakeLabels({{"sensor", sensor}, {"direction", "in"}, {"url", "/a"}});
+        };
+        factory.RateWithOpts(labels("count"), {.MemOnly = true})->Inc();
+        factory.HistogramRateWithOpts(labels("time_ms"), ExplicitHistogram({1, 10}), {.MemOnly = true})->Record(5);
+        factory.Rate(labels("plain"))->Inc();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(factory.Rate(labels("count")), yexception, "memOnly=");
+
+        const auto group = counters->FindSubgroup("subsystem", "mon")->FindSubgroup("url", "/a");
+        UNIT_ASSERT(group->FindCounter("count")->IsMemOnly());
+        UNIT_ASSERT(group->FindHistogram("time_ms")->IsMemOnly());
+        UNIT_ASSERT(!group->FindCounter("plain")->IsMemOnly());
+    }
+
+    // Fails if /counters does not export the HTTP proxy sensors memOnly.
+    Y_UNIT_TEST(CountersPageExportsProxySensorsMemOnly) {
+        THttpMonTestEnv env;
+        auto fetch = [&](TStringBuf format) {
+            TStringStream body;
+            const auto status = env.GetHttpClient().DoGet(TStringBuilder() << "/counters/counters=utils/" << format,
+                &body, env.MakeAuthHeaders());
+            UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+            return body.ReadAll();
+        };
+        // (subsystem is mon, memOnly) of each metric.
+        using TFlags = TVector<std::pair<bool, bool>>;
+        auto fromJson = [](const TString& body) {
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(body, &json));
+            TFlags flags;
+            for (const auto& sensor : json["sensors"].GetArray()) {
+                flags.emplace_back(sensor["labels"]["subsystem"].GetString() == "mon", sensor["memOnly"].GetBooleanSafe(false));
+            }
+            return flags;
+        };
+        auto fromSpack = [](const TString& body) {
+            TStringInput in(body);
+            TCollectingConsumer consumer;
+            DecodeSpackV1(&in, &consumer);
+            TFlags flags;
+            for (const auto& metric : consumer.Metrics) {
+                const auto subsystem = metric.Labels.Find("subsystem");
+                flags.emplace_back(subsystem && subsystem->Value() == "mon", metric.Opts.MemOnly);
+            }
+            return flags;
+        };
+        auto check = [](const TFlags& flags, TStringBuf format) {
+            UNIT_ASSERT_C(IsIn(flags, std::pair(true, true)), format << ": no memOnly mon metric");
+            UNIT_ASSERT_C(!IsIn(flags, std::pair(true, false)), format << ": a mon metric without memOnly");
+            UNIT_ASSERT_C(IsIn(flags, std::pair(false, false)), format << ": no plain metric");
+        };
+
+        // A request's sensors are recorded once its reply is built, so a scrape never shows its own request.
+        TFlags json;
+        const auto hasMon = [&] {
+            json = fromJson(fetch("json"));
+            return AnyOf(json, [](const auto& flag) { return flag.first; });
+        };
+        for (const TInstant deadline = TInstant::Now() + TDuration::Seconds(30); !hasMon() && TInstant::Now() < deadline;) {
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        check(json, "json");
+        check(fromSpack(fetch("spack")), "spack");
     }
 }
 

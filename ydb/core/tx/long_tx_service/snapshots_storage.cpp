@@ -53,16 +53,24 @@ TDuration Age(const TInstant now, const TInstant since) {
     return now > since ? now - since : TDuration::Zero();
 }
 
+} // namespace
+
 ui64 PromotionCutoffStep(const TInstant now, const TDuration promotionTime) {
     const ui64 nowMs = now.MilliSeconds();
     const ui64 promotionMs = promotionTime.MilliSeconds();
     return nowMs > promotionMs ? nowMs - promotionMs : 0;
 }
 
-} // namespace
-
-void TLocalSnapshotsStorage::Insert(TLocalSnapshotInfo snapshot) {
+bool TLocalSnapshotsStorage::Insert(TLocalSnapshotInfo snapshot) {
+    const auto it = LocalSnapshots.find(snapshot);
+    if (it != LocalSnapshots.end()) {
+        if (it->AliveFlag->load()) {
+            return false;
+        }
+        LocalSnapshots.erase(it);
+    }
     LocalSnapshots.emplace(std::move(snapshot));
+    return true;
 }
 
 void TLocalSnapshotsStorage::CleanExpired() {
@@ -76,6 +84,9 @@ void TLocalSnapshotsStorage::CleanExpired() {
 }
 
 void TLocalSnapshotsStorage::Clear() {
+    for (const auto& snapshot : LocalSnapshots) {
+        snapshot.AliveFlag->store(false);
+    }
     LocalSnapshots.clear();
 }
 
@@ -111,7 +122,7 @@ TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::ViewPromotedUpToStep(ui64 
 }
 
 void TRemoteSnapshotsStorage::Init(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& nodeIdToCollectionTime) {
-    AFL_ENSURE(NodeIdToState.empty());
+    YDB_LOG_ENSURE(NodeIdToState.empty());
     // Seed collection times from the peer first, so freshness (GetOldestCollectionTime) is meaningful
     // right after prefill instead of collapsing to Zero (which disables age-based cleanup).
     for (const auto& [nodeId, collectionTime] : nodeIdToCollectionTime) {

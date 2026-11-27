@@ -152,13 +152,14 @@ namespace NDataShard {
             BlockFailPointUnblocked = 1ULL << 49,
             // Operation sent a TEvProposeTransactionRestart notification
             RestartNotificationSent = 1ULL << 50,
+            ReadOnlyPrepare = 1ULL << 51,
 
-            LastFlag = RestartNotificationSent,
+            LastFlag = ReadOnlyPrepare,
 
             PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
             PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader
                 | GlobalWriter | KqpDataTransaction | KqpScanTransaction
-                | BlockingImmediateOps | BlockingImmediateWrites,
+                | BlockingImmediateOps | BlockingImmediateWrites | ReadOnlyPrepare,
         };
     };
 
@@ -409,10 +410,22 @@ namespace TEvDataShard {
         EvS3DirectWriteFinishResult,
         EvS3DirectWriteAbort,
 
+        EvDatabaseFreeze,
+        EvDatabaseFreezeResult,
+
+        EvDeltaKMeansRequest,
+        EvDeltaKMeansResponse,
+
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_DATASHARD), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_DATASHARD)");
+    struct TEvDatabaseFreeze : public TEventPB<TEvDatabaseFreeze,
+        NKikimrTxDataShard::TEvDatabaseFreeze, EvDatabaseFreeze> {};
+
+    struct TEvDatabaseFreezeResult : public TEventPB<TEvDatabaseFreezeResult,
+        NKikimrTxDataShard::TEvDatabaseFreezeResult, EvDatabaseFreezeResult> {};
+
     struct TEvGetShardState : public TEventPB<TEvGetShardState, NKikimrTxDataShard::TEvGetShardState,
         TEvDataShard::EvGetShardState> {
         TEvGetShardState()
@@ -1784,6 +1797,18 @@ namespace TEvDataShard {
         : public TEventPB<TEvPrefixKMeansResponse,
                           NKikimrTxDataShard::TEvPrefixKMeansResponse,
                           TEvDataShard::EvPrefixKMeansResponse> {
+    };
+
+    struct TEvDeltaKMeansRequest
+        : public TEventPB<TEvDeltaKMeansRequest,
+                          NKikimrTxDataShard::TEvDeltaKMeansRequest,
+                          TEvDataShard::EvDeltaKMeansRequest> {
+    };
+
+    struct TEvDeltaKMeansResponse
+        : public TEventPB<TEvDeltaKMeansResponse,
+                          NKikimrTxDataShard::TEvDeltaKMeansResponse,
+                          TEvDataShard::EvDeltaKMeansResponse> {
     };
 
     struct TEvFilterKMeansRequest

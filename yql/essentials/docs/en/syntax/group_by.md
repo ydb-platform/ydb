@@ -2,6 +2,12 @@
 
 Group the `SELECT` results by the values of the specified columns or expressions. `GROUP BY` is often combined with [aggregate functions](../builtins/aggregation.md) (`COUNT`, `MAX`, `MIN`, `SUM`, `AVG`) to perform calculations in each group.
 
+{% note info %}
+
+`NaN` values in `GROUP BY` keys are treated as equal to each other.
+
+{% endnote %}
+
 #### Syntax
 
 ```yql

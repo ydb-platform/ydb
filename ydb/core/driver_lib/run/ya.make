@@ -47,6 +47,7 @@ PEERDIR(
     ydb/core/blobstorage/nodewarden
     ydb/core/blobstorage/other
     ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/subsystem
     ydb/core/blobstorage/vdisk/common
     ydb/core/client/minikql_compile
     ydb/core/client/scheme_cache_lib
@@ -73,8 +74,11 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/keyvalue
     ydb/core/kqp
+    ydb/core/kqp/common/dynamic_function_registry
+    ydb/core/kqp/common/warmup
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/rm_service
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/script_executions/finalization
     ydb/core/load_test
     ydb/core/log_backend
@@ -82,6 +86,7 @@ PEERDIR(
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification
+    ydb/core/mind/bootstrapper
     ydb/core/mind/bscontroller
     ydb/core/mind/hive
     ydb/core/mon
@@ -90,6 +95,7 @@ PEERDIR(
     ydb/core/path_aliasing
     ydb/core/persqueue
     ydb/core/persqueue/deferred_publish
+    ydb/core/persqueue/public/write_sessions_quoter
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter
@@ -105,6 +111,7 @@ PEERDIR(
     ydb/core/subsystems/actor_system_monitoring
     ydb/core/subsystems/inmemory_metrics_monitoring
     ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart
+    ydb/core/sys_view
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet
@@ -113,6 +120,8 @@ PEERDIR(
     ydb/core/tracing
     ydb/core/transfer
     ydb/core/tx
+    ydb/core/tx/cdc_aggregator/service
+    ydb/core/tx/cdc_aggregator/tablet
     ydb/core/tx/columnshard
     ydb/core/tx/columnshard/column_fetching
     ydb/core/tx/columnshard/data_accessor/cache_policy

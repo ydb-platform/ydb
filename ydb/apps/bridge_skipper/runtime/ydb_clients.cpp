@@ -1,6 +1,8 @@
 #include "ydb_clients.h"
 
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
+#include <yaml-cpp/yaml.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/yexception.h>
@@ -8,6 +10,8 @@
 #include <util/string/cast.h>
 
 #include <algorithm>
+#include <iterator>
+#include <set>
 #include <utility>
 
 namespace NBridgeSkipper {
@@ -45,6 +49,13 @@ void Fail(TUpdateResult& result, TStringBuf status) {
     result.Outcome = EMutationOutcome::Ambiguous;
 }
 
+void Fail(TInventoryResult& result, TStringBuf status) {
+    result.Rpc.Success = false;
+    result.Rpc.Status = status;
+    result.Endpoints.clear();
+    result.Error = status;
+}
+
 struct TTokenFactory final : NYdb::ICredentialsProviderFactory {
     std::shared_ptr<TTokenSource> Source;
 
@@ -79,17 +90,18 @@ NYdb::TDriverConfig MakeDriverConfig(
 
 class TYdbClients final : public IYdbClients {
 public:
-    TYdbClients(const TConfig& config, const TLoadedCredentials& credentials, TYdbClock clock, TTokenLoader tokenLoader)
+    TYdbClients(const TConfig& config, const TLoadedCredentials& credentials, TYdbClock clock,
+        TTokenLoader tokenLoader, std::shared_ptr<TTokenSource> tokens)
         : Timing(config.Timing)
-        , Tokens(std::make_shared<TTokenSource>(config.Auth.TokenFile, credentials.Token, std::move(tokenLoader)))
+        , Tokens(tokens ? std::move(tokens) : std::make_shared<TTokenSource>(config.Auth.TokenFile, credentials.Token, std::move(tokenLoader)))
         , Redactor(std::make_shared<const TRedactor>(Tokens))
         , Clock(std::move(clock))
-        , Driver(MakeDriverConfig(config, credentials, Tokens)) {
+        , Driver(std::make_shared<NYdb::TDriver>(MakeDriverConfig(config, credentials, Tokens))) {
         // Construct clients before actor registration; subsequent RPC starts do
         // not perform client discovery or mutate this endpoint inventory.
         for (const auto& [pile, endpoints] : config.Endpoints) {
             for (const auto& endpoint : endpoints) {
-                Clients.emplace(endpoint.Uri, std::make_unique<TClients>(Driver, endpoint, pile));
+                Clients.emplace(endpoint.Uri, std::make_unique<TClients>(*Driver, endpoint, pile));
             }
         }
     }
@@ -156,8 +168,94 @@ public:
         }, authorization.ValidUntil);
     }
 
+    void AddEndpoint(const TEndpoint& endpoint, const TString& pile) override {
+        Y_ENSURE(!Clients.contains(endpoint.Uri));
+        Clients.emplace(endpoint.Uri, std::make_unique<TClients>(*Driver, endpoint, pile));
+    }
+
+    void RemoveEndpoint(const TString& endpoint) override {
+        Clients.erase(endpoint);
+    }
+
+    void Discover(TRpcRequest request, std::function<void(TInventoryResult)> completed) override {
+        TInventoryResult base;
+        base.Rpc.Request = std::move(request);
+        base.Rpc.Method = EYdbMethod::Inventory;
+        auto* client = Find(base.Rpc.Request);
+        if (!client) {
+            CompleteInvalid(std::move(base), std::move(completed));
+            return;
+        }
+        const auto timeout = Timing.ReadTimeout + TDuration::Seconds(2);
+        // The chain owns its driver and completion; it never touches the actor
+        // or mutates the SDK endpoint map from an SDK callback.
+        base.Rpc.SentAt = Clock();
+        auto finish = [completed = std::move(completed), clock = Clock, tokens = Tokens](TInventoryResult result) mutable {
+            if (result.Rpc.SdkStatus == NYdb::EStatus::UNAUTHORIZED) {
+                tokens->Reload();
+            }
+            result.Rpc.FinishedAt = clock();
+            completed(std::move(result));
+        };
+        const auto settings = NYdb::NConfig::TFetchAllConfigsSettings()
+            .OperationTimeout(Timing.ReadTimeout).ClientTimeout(timeout);
+        const auto redactor = Redactor->ForRequest();
+        try {
+            auto future = client->Config.FetchAllConfigs(settings);
+            future.Subscribe([base = std::move(base), finish, driver = Driver, redactor,
+                    timeout](const auto& settled) mutable {
+                try {
+                    const auto& config = settled.GetValueSync();
+                    FillStatus(base.Rpc, config, redactor);
+                    if (!base.Rpc.Success) {
+                        finish(std::move(base));
+                        return;
+                    }
+                    TString mainYaml;
+                    TString storageYaml;
+                    if (!config.Transient()) {
+                        for (const auto& entry : config.GetConfigs()) {
+                            if (std::holds_alternative<NYdb::NConfig::TMainConfigIdentity>(entry.Identity)) {
+                                Y_ENSURE(mainYaml.empty(), "ambiguous main config");
+                                mainYaml = entry.Config;
+                            } else if (std::holds_alternative<NYdb::NConfig::TStorageConfigIdentity>(entry.Identity)) {
+                                Y_ENSURE(storageYaml.empty(), "ambiguous storage config");
+                                storageYaml = entry.Config;
+                            }
+                        }
+                    }
+                    if (mainYaml.empty()) {
+                        base.Error = "DISCOVERY_CONFIG_UNAVAILABLE";
+                        finish(std::move(base));
+                        return;
+                    }
+                    const auto database = DiscoveryDatabase(mainYaml, storageYaml);
+                    const auto endpoint = ParseEndpoint(base.Rpc.Request.Endpoint);
+                    auto discovery = std::make_shared<NYdb::NDiscovery::TDiscoveryClient>(*driver,
+                        MakePinnedClientSettings(endpoint).Database(Std(database)));
+                    auto listed = discovery->ListEndpoints(NYdb::NDiscovery::TListEndpointsSettings().ClientTimeout(timeout));
+                    listed.Subscribe([base = std::move(base), discovery, finish, redactor,
+                            scheme = endpoint.Scheme](const auto& settled) mutable {
+                        try {
+                            finish(DecodeInventoryResult(settled.GetValueSync(), std::move(base.Rpc), redactor, scheme));
+                        } catch (...) {
+                            Fail(base, "SDK_RESULT_ERROR");
+                            finish(std::move(base));
+                        }
+                    });
+                } catch (...) {
+                    base.Error = "INVALID_DISCOVERY_CONFIG";
+                    finish(std::move(base));
+                }
+            });
+        } catch (...) {
+            Fail(base, "SDK_START_ERROR");
+            finish(std::move(base));
+        }
+    }
+
     void Stop() override {
-        Driver.Stop(true);
+        Driver->Stop(true);
     }
 
 private:
@@ -165,11 +263,13 @@ private:
         TString Pile;
         NYdb::NBridge::TBridgeClient Bridge;
         NYdb::NMonitoring::TMonitoringClient Monitoring;
+        NYdb::NConfig::TConfigClient Config;
 
         TClients(const NYdb::TDriver& driver, const TEndpoint& endpoint, const TString& pile)
             : Pile(pile)
             , Bridge(driver, MakePinnedClientSettings(endpoint))
-            , Monitoring(driver, MakePinnedClientSettings(endpoint)) {
+            , Monitoring(driver, MakePinnedClientSettings(endpoint))
+            , Config(driver, MakePinnedClientSettings(endpoint)) {
         }
     };
 
@@ -190,6 +290,7 @@ private:
         TMonotonic validUntil = TMonotonic::Max())
     {
         decltype(launch()) future;
+        const auto redactor = Redactor->ForRequest();
         try {
             base.Rpc.SentAt = Clock();
             if (base.Rpc.SentAt >= validUntil) {
@@ -206,9 +307,9 @@ private:
         // No actor pointer, activation context, driver or client reference is
         // captured. The coordinator keeps ActorSystem alive through Stop(true).
         future.Subscribe([base = std::move(base), completed = std::move(completed),
-                decode = std::move(decode), redactor = Redactor, tokens = Tokens, clock = Clock](const auto& settled) mutable {
+                decode = std::move(decode), redactor, tokens = Tokens, clock = Clock](const auto& settled) mutable {
             try {
-                base = decode(settled.GetValueSync(), base.Rpc, *redactor);
+                base = decode(settled.GetValueSync(), base.Rpc, redactor);
             } catch (...) {
                 Fail(base, "SDK_RESULT_ERROR");
             }
@@ -225,21 +326,29 @@ private:
     std::shared_ptr<TTokenSource> Tokens;
     std::shared_ptr<const TRedactor> Redactor;
     TYdbClock Clock;
-    NYdb::TDriver Driver;
+    std::shared_ptr<NYdb::TDriver> Driver;
     std::map<TString, std::unique_ptr<TClients>> Clients;
 };
 
 } // namespace
 
+struct TTokenSource::TTokenVersion {
+    explicit TTokenVersion(TString value)
+        : Value(std::move(value)) {
+    }
+    TString Value;
+    std::shared_ptr<TTokenVersion> Next;
+};
+
 TTokenSource::TTokenSource(const TMaybe<TString>& file, const TMaybe<TString>& token, TTokenLoader loader)
     : File(file)
-    , Current(token.GetOrElse(TString()))
+    , Current(std::make_shared<TTokenVersion>(token.GetOrElse(TString())))
     , Loader(std::move(loader)) {
 }
 
 TString TTokenSource::Token() const {
     std::lock_guard lock(Mutex);
-    return Current;
+    return Current->Value;
 }
 
 void TTokenSource::Reload() {
@@ -254,10 +363,14 @@ void TTokenSource::Reload() {
     }
     {
         std::lock_guard lock(Mutex);
-        if (Current == *token) {
+        if (Current->Value == *token) {
             return;
         }
-        Current = *token;
+        // A request retains its first version, including versions installed
+        // before the SDK actually asks for its credential. With no such owner,
+        // the previous version is destroyed instead of becoming global history.
+        Current->Next = std::make_shared<TTokenVersion>(*token);
+        Current = Current->Next;
     }
     Cerr << "{\"event\":\"token_reloaded\",\"level\":\"info\",\"category\":\"credentials\"}\n";
 }
@@ -270,6 +383,53 @@ bool TTokenSource::IsValid() const {
     return !Token().empty();
 }
 
+std::shared_ptr<TTokenSource::TTokenVersion> TTokenSource::Capture() const {
+    std::lock_guard lock(Mutex);
+    for (auto it = Active.begin(); it != Active.end();) {
+        it = it->second.expired() ? Active.erase(it) : std::next(it);
+    }
+    Active[Current.get()] = Current;
+    return Current;
+}
+
+std::vector<TString> TTokenSource::RedactionTokens(const std::shared_ptr<TTokenVersion>& first) const {
+    std::lock_guard lock(Mutex);
+    // Most records have one credential version, regardless of RPC concurrency.
+    // Avoid building and sorting sets until an older request retains a version.
+    if (first == Current || (!first && (Active.empty()
+            || (Active.size() == 1 && Active.begin()->first == Current.get()))))
+    {
+        return Current->Value.empty() ? std::vector<TString>{} : std::vector<TString>{Current->Value};
+    }
+    std::set<TString> unique;
+    std::set<const TTokenVersion*> visited;
+    const auto collect = [&](auto version) {
+        for (; version && visited.insert(version.get()).second; version = version->Next) {
+            if (!version->Value.empty()) {
+                unique.insert(version->Value);
+            }
+        }
+    };
+    if (first) {
+        collect(first);
+    } else {
+        collect(Current);
+        for (auto it = Active.begin(); it != Active.end();) {
+            if (auto version = it->second.lock()) {
+                collect(std::move(version));
+                ++it;
+            } else {
+                it = Active.erase(it);
+            }
+        }
+    }
+    std::vector<TString> tokens(unique.begin(), unique.end());
+    // A rotated token can contain the previous one. Hide the entire longer
+    // credential before replacing a shorter matching prefix.
+    std::sort(tokens.begin(), tokens.end(), [](const auto& a, const auto& b) { return a.size() > b.size(); });
+    return tokens;
+}
+
 TRedactor::TRedactor(std::shared_ptr<const TTokenSource> tokens)
     : Tokens(std::move(tokens)) {
 }
@@ -278,13 +438,20 @@ TRedactor::TRedactor(const TLoadedCredentials& credentials)
     : TRedactor(std::make_shared<const TTokenSource>(Nothing(), credentials.Token)) {
 }
 
+TRedactor TRedactor::ForRequest() const {
+    TRedactor result(Tokens);
+    result.First = Tokens->Capture();
+    return result;
+}
+
 TString TRedactor::Redact(TStringBuf text, size_t limit) const {
-    const TString token = Tokens->Token();
     TString result(text);
-    size_t offset = 0;
-    while (!token.empty() && (offset = result.find(token, offset)) != TString::npos) {
-        result.replace(offset, token.size(), "[REDACTED]");
-        offset += 10;
+    for (const auto& token : Tokens->RedactionTokens(First)) {
+        size_t offset = 0;
+        while ((offset = result.find(token, offset)) != TString::npos) {
+            result.replace(offset, token.size(), "[REDACTED]");
+            offset += 10;
+        }
     }
     // Redact the complete input before truncating it across a secret boundary.
     result.resize(std::min(result.size(), limit));
@@ -302,6 +469,137 @@ NYdb::TCommonClientSettings MakePinnedClientSettings(const TEndpoint& endpoint) 
         .DiscoveryMode(NYdb::EDiscoveryMode::Off);
 }
 
+TString DiscoveryDatabase(TStringBuf yaml, TStringBuf storageYaml) {
+    try {
+        const auto parse = [](TStringBuf text) {
+            Y_ENSURE(text.size() <= 4 * 1024 * 1024);
+            const auto docs = YAML::LoadAll(std::string(text.data(), text.size()));
+            Y_ENSURE(docs.size() == 1);
+            const auto config = docs.front()["config"];
+            Y_ENSURE(config.IsMap());
+            return config;
+        };
+        const auto main = parse(yaml);
+        const auto storage = storageYaml.empty() ? YAML::Node(YAML::NodeType::Map) : parse(storageYaml);
+        // Node startup fills missing top-level keys from StorageConfig into
+        // MainConfig. Existing maps are kept whole, without recursive merging.
+        const auto field = [&](const char* key) {
+            const auto value = main[key];
+            return value.IsDefined() ? value : storage[key];
+        };
+        // Match YDB's raw YAML domain-name precedence. The v1 downgrade
+        // transform rejects dedicated storage and independently configured boards.
+        // TEphemeralInputFields.DomainName defaults to Root on the server.
+        TString value = "Root";
+        const auto modernName = field("domain_name");
+        if (modernName.IsDefined()) {
+            Y_ENSURE(modernName.IsScalar());
+            value = modernName.Scalar();
+        }
+        const auto pools = field("storage_pool_types");
+        Y_ENSURE(!pools.IsDefined() || pools.IsSequence());
+        // MoveFields rebuilds the domain only for a nonempty top-level pool
+        // list. Otherwise PrepareDomainsConfig keeps an existing domain name.
+        if (!modernName.IsDefined() || !pools.IsDefined() || pools.size() == 0) {
+            const auto domainsConfig = field("domains_config");
+            if (domainsConfig.IsDefined()) {
+                Y_ENSURE(domainsConfig.IsMap());
+                const auto domains = domainsConfig["domain"];
+                if (domains.IsDefined()) {
+                    Y_ENSURE(domains.IsSequence() && domains.size() <= 1);
+                    if (domains.size() == 1) {
+                        const auto name = domains[0]["name"];
+                        Y_ENSURE(name.IsScalar());
+                        value = name.Scalar();
+                    }
+                }
+            }
+        }
+        Y_ENSURE(!value.empty() && value.find_first_of("/\\\r\n") == TString::npos && value.find('\0') == TString::npos);
+        return "/" + value;
+    } catch (...) {
+        throw yexception() << "INVALID_DISCOVERY_CONFIG";
+    }
+}
+
+TInventoryResult DecodeInventoryResult(const NYdb::NDiscovery::TListEndpointsResult& result,
+    TRpcResult rpc, const TRedactor& redactor, TStringBuf scheme)
+{
+    TInventoryResult decoded;
+    decoded.Rpc = std::move(rpc);
+    FillStatus(decoded.Rpc, result, redactor);
+    if (!decoded.Rpc.Success) {
+        return decoded;
+    }
+    if (result.GetEndpointsInfo().size() > 16384) {
+        decoded.Error = "DISCOVERY_INVENTORY_TOO_LARGE";
+        return decoded;
+    }
+    std::map<TString, std::pair<TString, ui32>> seen;
+    std::map<ui32, TString> piles;
+    for (const auto& item : result.GetEndpointsInfo()) {
+        // Preserve the seed transport and its TLS verification. Endpoint-specific
+        // certificate-name overrides are not supported by pinned SDK clients.
+        if (item.Ssl != (scheme == "grpcs") || !item.SslTargetNameOverride.empty()) {
+            continue;
+        }
+        try {
+            Y_ENSURE(item.NodeId != 0 && item.BridgePileName.find('\0') == std::string::npos);
+            const std::pair<TString, ui32> identity{TString(item.BridgePileName), item.NodeId};
+            const auto [node, newNode] = piles.emplace(item.NodeId, identity.first);
+            Y_ENSURE(newNode || node->second == identity.first);
+            const auto addAddress = [&](TStringBuf address, bool optionalAlias = false) {
+                TEndpoint endpoint;
+                try {
+                    TString host(address);
+                    if (host.find(':') != TString::npos && !host.StartsWith('[')) {
+                        host = "[" + host + "]";
+                    }
+                    endpoint = ParseEndpoint(TString(scheme) + "://" + host + ":" + ::ToString(item.Port));
+                } catch (const yexception&) {
+                    // Unsupported optional locators must not discard usable
+                    // addresses. Identity conflicts below remain fatal.
+                    if (optionalAlias) {
+                        return;
+                    }
+                    throw;
+                }
+                const auto [it, inserted] = seen.emplace(endpoint.Uri, identity);
+                Y_ENSURE(inserted || it->second == identity);
+                if (inserted) {
+                    if (decoded.Endpoints.size() == 16384) {
+                        decoded.Error = "DISCOVERY_INVENTORY_TOO_LARGE";
+                        return;
+                    }
+                    decoded.Endpoints.push_back({std::move(endpoint), identity.first, identity.second});
+                }
+            };
+            addAddress(item.Address);
+            // TLS IP connections need certificate-name overrides, unsupported
+            // by pinned clients. Plaintext clients can use the published IPs.
+            if (scheme == "grpc") {
+                for (const auto& addresses : {&item.IPv4Addrs, &item.IPv6Addrs}) {
+                    for (const auto& address : *addresses) {
+                        if (!decoded.Error.empty()) {
+                            break;
+                        }
+                        addAddress(address, /*optionalAlias=*/true);
+                    }
+                }
+            }
+            if (!decoded.Error.empty()) {
+                decoded.Endpoints.clear();
+                return decoded;
+            }
+        } catch (...) {
+            decoded.Endpoints.clear();
+            decoded.Error = "INVALID_DISCOVERY_ENDPOINT";
+            return decoded;
+        }
+    }
+    return decoded;
+}
+
 TString ToString(EYdbMethod method) {
     switch (method) {
         case EYdbMethod::PlainState:
@@ -310,6 +608,8 @@ TString ToString(EYdbMethod method) {
             return "get_cluster_state_connectivity";
         case EYdbMethod::SelfCheck:
             return "self_check";
+        case EYdbMethod::Inventory:
+            return "endpoint_inventory";
         case EYdbMethod::Update:
             return "update_cluster_state";
     }
@@ -459,9 +759,10 @@ std::shared_ptr<IYdbClients> CreateYdbClients(
     const TConfig& config,
     const TLoadedCredentials& credentials,
     TYdbClock clock,
-    TTokenLoader tokenLoader)
+    TTokenLoader tokenLoader,
+    std::shared_ptr<TTokenSource> tokens)
 {
-    return std::make_shared<TYdbClients>(config, credentials, std::move(clock), std::move(tokenLoader));
+    return std::make_shared<TYdbClients>(config, credentials, std::move(clock), std::move(tokenLoader), std::move(tokens));
 }
 
 } // namespace NBridgeSkipper

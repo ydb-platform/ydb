@@ -7,7 +7,6 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 
 #include <util/generic/ymath.h>
@@ -573,7 +572,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             }
             TEvBlobStorage::TEvPut *put;
 
-            DecryptInplace(item.Buffer, 0, 0, item.Buffer.size(), item.BlobId, *Info);
+            // VDisk requests are sent only after the whole buffer is encrypted, so it is restarted as it is, with
+            // AlreadyEncrypted set, and the new request must not encrypt it again; groups without encryption never
+            // set the flag
+            Y_DEBUG_ABORT_UNLESS(item.AlreadyEncrypted || Info->GetEncryptionMode() == TBlobStorageGroupInfo::EEM_NONE);
 
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,
@@ -598,6 +600,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 item.Span.GetTraceId()
             ));
             put->RestartCounter = counter;
+            put->IsProxySubrequest = item.IsProxySubrequest;
             put->ExecutionRelay = std::move(item.ExecutionRelay);
         }
         return ev;

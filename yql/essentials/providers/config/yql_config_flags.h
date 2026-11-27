@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 #include <functional>
 
@@ -21,6 +22,7 @@ public:
     struct TFlag {
         TStringBuf Name;
         bool System = false;
+        bool AllowInProjectSettings = false;
         TFlagHandler Handler;
     };
 
@@ -39,12 +41,14 @@ public:
     TFlagHandler Ui32Handler(ui32* field);
     TFlagHandler Ui64Handler(ui64* field);
     TFlagHandler NoopHandler();
+    TFlagHandler FlagsHandler(THashSet<TString>& flags);
 
 protected:
     bool IsSettingAllowed(const TPosition& pos, TStringBuf name, TExprContext& ctx);
     bool ApplyFlag(const TPosition& pos, TStringBuf name, const TVector<TStringBuf>& args, TExprContext& ctx, bool fromInitialize = false);
-    void AddFlag(TStringBuf name, TStringBuf disableName, bool system, TFlagHandler handler);
+    void AddFlag(TStringBuf name, TStringBuf disableName, bool system, bool allowInProjectSettings, TFlagHandler handler);
     void InitFlags();
+    bool ApplyProjectSettings(TExprContext& ctx);
 
     bool ImportUdfs(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx);
     bool AddCredential(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx);

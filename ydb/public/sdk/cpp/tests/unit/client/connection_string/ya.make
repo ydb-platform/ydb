@@ -7,8 +7,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-FORK_SUBTESTS()
-
 PEERDIR(
     ydb/public/sdk/cpp/src/client/impl/internal/common
 )

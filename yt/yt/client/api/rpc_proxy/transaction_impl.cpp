@@ -419,6 +419,10 @@ void TTransaction::ModifyRows(
 {
     ValidateTabletTransactionId(GetId());
 
+    if (options.ReplicationStreamId) {
+        THROW_ERROR_EXCEPTION("Replication fences are not supported in RPC client");
+    }
+
     for (const auto& modification : modifications) {
         // TODO(sandello): handle versioned rows
         Visit(modification,
@@ -985,16 +989,6 @@ TFuture<void> TTransaction::ExternalizeNode(
     return Client_->ExternalizeNode(
         path,
         cellTag,
-        PatchTransactionId(options));
-}
-
-TFuture<void> TTransaction::InternalizeNode(
-    const TYPath& path,
-    const TInternalizeNodeOptions& options)
-{
-    ValidateActive();
-    return Client_->InternalizeNode(
-        path,
         PatchTransactionId(options));
 }
 

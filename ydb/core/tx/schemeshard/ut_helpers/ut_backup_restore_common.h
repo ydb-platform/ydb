@@ -363,6 +363,7 @@ private:
 
         const char* ConsumerPublic = R"(
             name: "Consumer_%d"
+            replicate_offsets: true
             read_from {
             }
             attributes {
@@ -378,6 +379,10 @@ public:
     {
         google::protobuf::TextFormat::ParseFromString(Sprintf(TopicPrivate, number), &PrivateProto);
         google::protobuf::TextFormat::ParseFromString(TopicPublic, &PublicProto);
+
+        const auto& partitionConfig = PrivateProto.GetPQTabletConfig().GetPartitionConfig();
+        PublicProto.set_partition_write_speed_messages_per_second(partitionConfig.GetWriteSpeedInMessagesPerSecond());
+        PublicProto.set_partition_write_burst_messages(partitionConfig.GetBurstSizeInMessages());
 
         for (ui64 i = 0; i < countConsumers; ++i) {
             auto consumer = TSimpleConsumer(i, i % 2);

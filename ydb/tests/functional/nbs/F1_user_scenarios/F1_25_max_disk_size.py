@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import pytest
+import yatest.common
 
 from ydb.tests.functional.nbs.lib.fixtures.base import NbsCase
 from ydb.tests.functional.nbs.lib.fixtures.geometry import (
@@ -15,7 +16,7 @@ def _block_size_params():
     reason = 'Eager vchunk metadata at 2^31 blocks'
     params = []
     for block_size in SUPPORTED_BLOCK_SIZES:
-        if block_size == DEFAULT_BLOCK_SIZE:
+        if block_size == DEFAULT_BLOCK_SIZE and not yatest.common.context.sanitize:
             params.append(pytest.param(block_size))
         else:
             params.append(pytest.param(block_size, marks=known_bug(reason)))

@@ -106,8 +106,8 @@ enum class ESchemaKind
 ////////////////////////////////////////////////////////////////////////////////
 
 ESchemaKind GetSchemaKind(EWireType type);
-TString GetShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema);
-void PrintShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, IOutputStream* out);
+TString GetShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, bool includeNames = false);
+void PrintShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, IOutputStream* out, bool includeNames = false);
 
 std::shared_ptr<TSimpleTypeSchema> CreateSimpleTypeSchema(EWireType type);
 std::shared_ptr<TStringFixedSchema> CreateStringFixedSchema(i64 size);

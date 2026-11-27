@@ -1,177 +1,65 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-import boto3
-import logging
 import time
 
+import boto3
 import pytest
 
-import ydb.public.api.protos.ydb_value_pb2 as ydb
-import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
+from ydb.tests.fq.streaming_common.common import counter_nodes, get_sensors
 
 
-class TestS3:
-    @yq_v1
-    @pytest.mark.parametrize("kikimr_params", [{"inflight": 1}, {"inflight": 2}, {"inflight": 5}], indirect=True)
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_inflight(self, kikimr, s3, client, unique_prefix):
+class TestS3Inflight:
+    @staticmethod
+    def run(kikimr, client, sql, limit, sensor):
+        future = kikimr.ydb_client.query_async(sql, timeout=120)
+        deadline = time.monotonic() + 130
+        observed_counter = False
+        while True:
+            for node_id in counter_nodes(kikimr.cluster):
+                value = get_sensors(kikimr.cluster, node_id, 'utils').find_sensor(
+                    {'subcomponent': 'http_gateway', 'sensor': sensor}
+                )
+                if value is None:
+                    continue
+                observed_counter = True
+                assert value <= limit, f'{sensor}={value} exceeds {limit} on node {node_id}'
+            if future.done():
+                result = future.result(timeout=1)[0]
+                assert observed_counter, f'HTTP gateway counter {sensor} was not exposed'
+                return result
+            assert time.monotonic() < deadline, 'S3 SQL query did not complete'
+            time.sleep(0.1)
+
+    @staticmethod
+    def prepare(s3, client, unique_prefix, count):
         resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+            's3', endpoint_url=s3.s3_url, aws_access_key_id='key', aws_secret_access_key='secret_key'
         )
-
-        bucket = resource.Bucket("bbucket")
+        bucket = resource.Bucket('inflight')
         bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+        for i in range(count):
+            bucket.put_object(Key=f'fruits{i}.csv', Body='Fruit,Price,Weight\nBanana,3,100\nApple,2,22\nPear,15,33')
+        source = client.create_external_data_source(unique_prefix + 'source', 'inflight').name
+        return f'`{client.path(source)}`.`*`'
 
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
+    @pytest.mark.parametrize('kikimr_params', [{'inflight': 1}, {'inflight': 2}, {'inflight': 5}], indirect=True)
+    def test_inflight(self, kikimr, s3, client, unique_prefix, kikimr_params):
+        # HTTP requests are serialized at limit=1. This is enough files to
+        # exercise all limits without turning the test into a throughput run.
+        file_count = 30
+        source = self.prepare(s3, client, unique_prefix, file_count)
+        sql = f'''PRAGMA ydb.MaxTasksPerStage='1';
+            SELECT COUNT(*) AS cnt FROM {source}
+            WITH (FORMAT=csv_with_names, SCHEMA=(Fruit String NOT NULL, Price Int32 NOT NULL, Weight Int32 NOT NULL));'''
+        result = self.run(kikimr, client, sql, kikimr_params.param['inflight'], 'InFlightStreams')
+        assert result.rows[0]['cnt'] == file_count * 3
+        sql = f'''SELECT COUNT(*) AS cnt FROM {source} WITH (FORMAT=raw, SCHEMA=(Data String NOT NULL));'''
+        result = self.run(kikimr, client, sql, kikimr_params.param['inflight'], 'InFlight')
+        assert result.rows[0]['cnt'] == file_count
 
-        fruits = R'''Fruit,Price,Weight
-Banana,3,100
-Apple,2,22
-Pear,15,33'''
-        for i in range(100, 1000):
-            s3_client.put_object(Body=fruits, Bucket='bbucket', Key='fruits{}.csv'.format(i), ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "big_bucket"
-        client.create_storage_connection(storage_connection_name, "bbucket")
-
-        sql = fR'''PRAGMA dq.MaxTasksPerStage="1";
-            SELECT count(*) as cnt
-            FROM `{storage_connection_name}`.`*`
-            WITH (format=csv_with_names, SCHEMA (
-                Fruit String NOT NULL,
-                Price Int NOT NULL,
-                Weight Int NOT NULL
-            ));
-            '''
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-
-        start = time.time()
-        deadline = start + 60
-        while True:
-            inflight = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"subcomponent": "http_gateway", "sensor": "InFlightStreams"}
-            )
-            if inflight is None:
-                inflight = 0
-            assert inflight <= kikimr.inflight, "Inflight {} must not exceed limit of {}".format(
-                inflight, kikimr.inflight
-            )
-            status = client.describe_query(query_id).result.query.meta.status
-            if status == fq.QueryMeta.COMPLETED:
-                break
-            assert time.time() < deadline, "Query {} is not completed for {}s. Query status: {}.".format(
-                query_id, time.time() - start, fq.QueryMeta.ComputeStatus.Name(status)
-            )
-
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
-        logging.debug(str(result_set))
-        assert len(result_set.columns) == 1
-        assert result_set.columns[0].name == "cnt"
-        assert result_set.columns[0].type.type_id == ydb.Type.UINT64
-        assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].uint64_value == (1000 - 100) * 3
-
-        sql = fR'''PRAGMA dq.MaxTasksPerStage="1";
-            SELECT count(*) as cnt
-            FROM `{storage_connection_name}`.`*`
-            WITH (format=raw, SCHEMA (
-                Data String NOT NULL
-            ));
-            '''
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-
-        start = time.time()
-        deadline = start + 60
-        while True:
-            inflight = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"subcomponent": "http_gateway", "sensor": "InFlight"}
-            )
-            if inflight is None:
-                inflight = 0
-            assert inflight <= kikimr.inflight, "Inflight {} must not exceed limit of {}".format(
-                inflight, kikimr.inflight
-            )
-            status = client.describe_query(query_id).result.query.meta.status
-            if status == fq.QueryMeta.COMPLETED:
-                break
-            assert time.time() < deadline, "Query {} is not completed for {}s. Query status: {}.".format(
-                query_id, time.time() - start, fq.QueryMeta.ComputeStatus.Name(status)
-            )
-
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
-        logging.debug(str(result_set))
-        assert len(result_set.columns) == 1
-        assert result_set.columns[0].name == "cnt"
-        assert result_set.columns[0].type.type_id == ydb.Type.UINT64
-        assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].uint64_value == (1000 - 100)
-
-    @yq_v1
-    @pytest.mark.parametrize("kikimr_params", [{"inflight": 1, "data_inflight": 1}], indirect=True)
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.parametrize('kikimr_params', [{'inflight': 1, 'data_inflight': 1}], indirect=True)
     def test_data_inflight(self, kikimr, s3, client, unique_prefix):
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        bucket = resource.Bucket("sbucket")
-        bucket.create(ACL='public-read')
-
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        fruits = R'''Fruit,Price,Weight
-Banana,3,100
-Apple,2,22
-Pear,15,33'''
-        for i in range(10, 20):
-            s3_client.put_object(Body=fruits, Bucket='sbucket', Key='fruits{}.csv'.format(i), ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "slow_bucket"
-        client.create_storage_connection(storage_connection_name, "sbucket")
-
-        sql = fR'''PRAGMA dq.MaxTasksPerStage="1";
-            SELECT count(*) as cnt
-            FROM `{storage_connection_name}`.`*`
-            WITH (format=csv_with_names, SCHEMA (
-                Fruit String NOT NULL,
-                Price Int NOT NULL,
-                Weight Int NOT NULL
-            ));
-            '''
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-
-        start = time.time()
-        deadline = start + 60
-        while True:
-            inflight = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-                {"subcomponent": "http_gateway", "sensor": "InFlightStreams"}
-            )
-            if inflight is None:
-                inflight = 0
-            assert inflight <= 1, "Inflight {} must not exceed 1 with mem back pressure".format(inflight)
-            status = client.describe_query(query_id).result.query.meta.status
-            if status == fq.QueryMeta.COMPLETED:
-                break
-            assert time.time() < deadline, "Query {} is not completed for {}s. Query status: {}.".format(
-                query_id, time.time() - start, fq.QueryMeta.ComputeStatus.Name(status)
-            )
-
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
-        logging.debug(str(result_set))
-        assert len(result_set.columns) == 1
-        assert result_set.columns[0].name == "cnt"
-        assert result_set.columns[0].type.type_id == ydb.Type.UINT64
-        assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].uint64_value == (20 - 10) * 3
+        source = self.prepare(s3, client, unique_prefix, 10)
+        sql = f'''SELECT COUNT(*) AS cnt FROM {source}
+            WITH (FORMAT=csv_with_names, SCHEMA=(Fruit String NOT NULL, Price Int32 NOT NULL, Weight Int32 NOT NULL));'''
+        result = self.run(kikimr, client, sql, 1, 'InFlightStreams')
+        assert result.rows[0]['cnt'] == 30

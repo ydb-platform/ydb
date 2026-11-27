@@ -25,6 +25,7 @@ PEERDIR(
     contrib/libs/fmt
     contrib/libs/grpc
     contrib/libs/jwt-cpp
+    library/cpp/json
     library/cpp/json/writer
     library/cpp/string_utils/base64
     ydb/core/security/certificate_check/test_utils

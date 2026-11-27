@@ -127,6 +127,8 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
         case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpRepairIndexShadowData:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareVectorIndex:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
         case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:

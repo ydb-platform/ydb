@@ -1,0 +1,74 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    *
+FROM (
+    SELECT
+        [1, 2] AS items
+) AS x
+    FLATTEN LIST BY items
+ORDER BY
+    items
+;
+
+SELECT
+    *
+FROM (
+    VALUES
+        ([1, 2])
+) AS x (
+    items
+)
+    FLATTEN LIST BY items
+ORDER BY
+    items
+;
+
+$source = (
+    SELECT
+        [1, 2] AS items
+);
+
+SELECT
+    *
+FROM
+    $source
+    FLATTEN LIST BY items
+ORDER BY
+    items
+;
+
+SELECT
+    *
+FROM (
+    SELECT
+        [1, 2] AS left_items
+) AS l
+    FLATTEN LIST BY left_items
+CROSS JOIN (
+    SELECT
+        [3, 4] AS right_items
+) AS r
+    FLATTEN LIST BY right_items
+ORDER BY
+    l.left_items,
+    r.right_items
+;
+
+SELECT
+    x.items,
+    item
+FROM (
+    VALUES
+        ([1, 2]),
+        (ListCreate(Int32)),
+        ([3])
+) AS x (
+    items
+)
+    FLATTEN LIST BY (
+        ListMap(x.items, ($value) -> ($value + 100)) AS item
+    )
+ORDER BY
+    item
+;

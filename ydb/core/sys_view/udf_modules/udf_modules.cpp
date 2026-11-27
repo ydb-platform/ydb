@@ -1,7 +1,7 @@
 #include "udf_modules.h"
 
 #include <ydb/core/sys_view/common/registry.h>
-#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/core/sys_view/scan/scan_actor_base_impl.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>

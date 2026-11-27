@@ -14,7 +14,8 @@ class TRBOContext;
 class TPhysicalQueryBuilder : public NNonCopyable::TNonCopyable {
 public:
     TPhysicalQueryBuilder(const TVector<TIntrusivePtr<TOpRoot>>& roots, TVector<TStageGraph>&& graph, TVector<THashMap<ui32, NYql::TExprNode::TPtr>>&& stages, TVector<THashMap<ui32, TVector<NYql::TExprNode::TPtr>>>&& stageArgs,
-                          TVector<THashMap<ui32, NYql::TPositionHandle>>&& stagePos, TVector<TPhysicalNames>&& names, TRBOContext& rboCtx);
+                          TVector<THashMap<ui32, NYql::TExprNode::TPtr>>&& stageSources, TVector<THashMap<ui32, NYql::TPositionHandle>>&& stagePos,
+                          TVector<TPhysicalNames>&& names, TRBOContext& rboCtx);
 
     NYql::TExprNode::TPtr BuildPhysicalQuery();
     TPhysicalQueryBuilder() = delete;
@@ -57,6 +58,8 @@ private:
     TVector<TStageGraph> Graphs;
     TVector<THashMap<ui32, NYql::TExprNode::TPtr>> Stages;
     TVector<THashMap<ui32, TVector<NYql::TExprNode::TPtr>>> StageArgs;
+    // By row read stage, its source input, which the first stage argument reads.
+    TVector<THashMap<ui32, NYql::TExprNode::TPtr>> StageSources;
     TVector<THashMap<ui32, NYql::TPositionHandle>> StagePos;
     TVector<TPhysicalNames> Names;
     ui32 UniqueParamsId{0};

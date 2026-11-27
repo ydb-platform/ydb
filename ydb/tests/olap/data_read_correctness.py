@@ -5,6 +5,7 @@ import yatest.common
 import ydb
 import pytest
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.olap.common.ydb_client import YdbClient
@@ -108,6 +109,11 @@ class TestDataReadCorrectness(object):
 class TestDataReadPerformanceNoIntersections(object):
     test_name = "data_read_performance_no_intersections"
     rows_count = 10000
+    queries_count = 100
+    # The 180 s budget for 100 full scans over 10k single-row portions is calibrated for release builds.
+    # Under sanitizers one such count(*) takes 2.3-4.4 s (about 3.8 s on CI runners), so the same loop
+    # needs 6-8 minutes there; keep the per-query correctness checks and relax only the time budget.
+    time_budget = datetime.timedelta(seconds=plain_or_under_sanitizer(180, 900))
 
     @classmethod
     def setup_class(cls):
@@ -165,7 +171,7 @@ class TestDataReadPerformanceNoIntersections(object):
         self.write_data(table_path)
 
         t = datetime.datetime.now()
-        for _ in range(100):
+        for i in range(self.queries_count):
             result_sets = self.ydb_client.query(
                 f"""
                 select count(*) as `count` from `{table_path}`
@@ -178,4 +184,7 @@ class TestDataReadPerformanceNoIntersections(object):
             count_value = result_sets[0].rows[0]['count']
             assert count_value == self.rows_count, f"Expected COUNT(*) to return {self.rows_count}, but got {count_value}"
 
-            assert datetime.datetime.now() - t < datetime.timedelta(seconds=180)
+            elapsed = datetime.datetime.now() - t
+            assert elapsed < self.time_budget, (
+                f"{i + 1} of {self.queries_count} queries took {elapsed}, budget is {self.time_budget}"
+            )

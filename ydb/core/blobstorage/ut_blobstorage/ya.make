@@ -48,6 +48,7 @@ SRCS(
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
+    sector_preparation.cpp
     select_groups.cpp
     self_heal.cpp
     shred.cpp
@@ -66,6 +67,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/blobstorage/syncer
     ydb/core/blobstorage/dsproxy
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/ut_blobstorage/lib

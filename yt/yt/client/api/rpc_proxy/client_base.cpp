@@ -649,21 +649,6 @@ TFuture<void> TClientBase::ExternalizeNode(
     return req->Invoke().As<void>();
 }
 
-TFuture<void> TClientBase::InternalizeNode(
-    const TYPath& path,
-    const TInternalizeNodeOptions& options)
-{
-    auto proxy = CreateApiServiceProxy();
-
-    auto req = proxy.InternalizeNode();
-    SetTimeoutOptions(*req, options);
-
-    ToProto(req->mutable_path(), path);
-    ToProto(req->mutable_transactional_options(), options);
-
-    return req->Invoke().As<void>();
-}
-
 TFuture<NObjectClient::TObjectId> TClientBase::CreateObject(
     NObjectClient::EObjectType type,
     const TCreateObjectOptions& options)
@@ -1203,6 +1188,7 @@ void FillRequestBySelectRowsOptionsBase(
     if (options.HyperLogLogPrecision) {
         request->set_hyper_log_log_precision(*options.HyperLogLogPrecision);
     }
+    request->set_merge_versioned_rows(options.MergeVersionedRows);
 }
 
 TFuture<TSelectRowsResult> TClientBase::SelectRows(
@@ -1260,7 +1246,6 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
     req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
-    req->set_merge_versioned_rows(options.MergeVersionedRows);
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
     YT_OPTIONAL_SET_PROTO(req, expression_builder_version, options.ExpressionBuilderVersion);

@@ -4,9 +4,7 @@
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
-#include <ydb/core/util/hp_timer_helpers.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/util/stlog.h>
 #include <ydb/core/util/pb.h>
 
 #define XXH_INLINE_ALL
@@ -185,6 +183,9 @@ namespace NKikimr::NDDisk {
             update->Record.SetAvailableSize(ui64(Min(ev->Get()->FreeChunks, ownerFree)) * ChunkSize);
             update->Record.SetPersistentBufferId(MakeBlobStoragePersistentBufferId(
                 SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId).ToString());
+            if (BaseInfo.StoragePoolName) {
+                update->Record.SetStoragePoolName(BaseInfo.StoragePoolName);
+            }
             if (ev->Get()->Status == NKikimrProto::OK && NormalizedOccupancy >= 0) {
                 update->Record.SetDDiskOccupancy(NormalizedOccupancy);
             }
@@ -248,6 +249,7 @@ namespace NKikimr::NDDisk {
                 {"marker", "BSPB"},
                 {"PBufferId", SelfId()});
             PersistentBufferReady = true;
+            PublishHealth();
             UpdateFreeSpaceInfo();
             *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
             *Counters.PersistentBuffer.TotalBytes =
@@ -824,6 +826,7 @@ namespace NKikimr::NDDisk {
                 {"marker", "BSPB"},
                 {"PBufferId", SelfId()});
             PersistentBufferReady = true;
+            PublishHealth();
             UpdateFreeSpaceInfo();
             *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
             *Counters.PersistentBuffer.TotalBytes =

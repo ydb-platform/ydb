@@ -12,12 +12,14 @@ protected:
     TNodeId PreferredNodeId;
     TSideEffects SideEffects;
     bool ForceStop = false;
+    ui64 BootAttemptId = 0;
 public:
-    TTxRestartTablet(TFullTabletId tabletId, THive *hive, bool forceStop = false)
+    TTxRestartTablet(TFullTabletId tabletId, THive *hive, bool forceStop = false, ui64 bootAttemptId = 0)
         : TBase(hive)
         , TabletId(tabletId)
         , PreferredNodeId(0)
         , ForceStop(forceStop)
+        , BootAttemptId(bootAttemptId)
     {}
 
     TTxRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId, THive *hive)
@@ -30,7 +32,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
-        TTabletInfo* tablet = Self->FindTablet(TabletId);
+        TTabletInfo* tablet = BootAttemptId ? Self->FindStartingBootAttempt(BootAttemptId) : Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             if (PreferredNodeId == 0) {
                 YDB_LOG_DEBUG("THive::TTxRestartTablet::Execute restarting tablet",
@@ -43,6 +45,10 @@ public:
                     {"preferredNodeId", PreferredNodeId});
             }
             if (!tablet->IsStopped()) {
+                if (tablet->IsStarting() && tablet->BootTime != TInstant()) {
+                    Self->UpdateCounterTabletsStarting(-1);
+                    tablet->BootTime = {};
+                }
                 NIceDb::TNiceDb db(txc.DB);
                 if (tablet->Node != nullptr) {
                     if (tablet->IsLeader()) {
@@ -85,6 +91,10 @@ ITransaction* THive::CreateRestartTablet(TFullTabletId tabletId, TNodeId preferr
 
 ITransaction* THive::CreateForceRestartTablet(TFullTabletId tabletId) {
     return new TTxRestartTablet(tabletId, this, true);
+}
+
+ITransaction* THive::CreateRestartTabletAfterBootUndelivered(TFullTabletId tabletId, ui64 bootAttemptId) {
+    return new TTxRestartTablet(tabletId, this, false, bootAttemptId);
 }
 
 } // NHive

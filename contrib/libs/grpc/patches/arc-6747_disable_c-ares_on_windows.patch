@@ -1,5 +1,5 @@
---- contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.cc	(114b291e56d003d1352ef14ad0c6858dd8cee56f)
-+++ contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.cc	(working tree)
+--- contrib/libs/grpc/src/core/resolver/dns/c_ares/dns_resolver_ares.cc	(114b291e56d003d1352ef14ad0c6858dd8cee56f)
++++ contrib/libs/grpc/src/core/resolver/dns/c_ares/dns_resolver_ares.cc	(working tree)
 @@ -711,7 +711,12 @@ class AresDNSResolver : public DNSResolver {
  }  // namespace
  

@@ -51,6 +51,16 @@ class Logger {
 void setGlobalLogger(Logger * logger);
 Logger * getGlobalLogger();
 
+class ScopedLoggingDisabled {
+ public:
+  ScopedLoggingDisabled();
+  ~ScopedLoggingDisabled();
+  ScopedLoggingDisabled(const ScopedLoggingDisabled&) = delete;
+  ScopedLoggingDisabled& operator=(const ScopedLoggingDisabled&) = delete;
+ private:
+  bool previous_;
+};
+
 class StdErrLogger
   : public Logger {
  public:

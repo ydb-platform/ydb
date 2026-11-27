@@ -111,12 +111,16 @@ class TestRenameTableRestart(RestartToAnotherVersionFixture):
         self.change_cluster_version()
 
         # check that renamed table is working
-        self._write_to_table("renamed1", table1_start_value + rows_per_write, rows_per_write)
+        wait_for_undetermined_ok(
+            lambda: self._write_to_table("renamed1", table1_start_value + rows_per_write, rows_per_write)
+        )
         assert self._expected_sum(table1_start_value, rows_per_write * 2) == self._get_sum("renamed1")
 
         # check that created table can be renamed
         self._rename_table("table2", "renamed2")
-        self._write_to_table("renamed2", table2_start_value + rows_per_write, rows_per_write)
+        wait_for_undetermined_ok(
+            lambda: self._write_to_table("renamed2", table2_start_value + rows_per_write, rows_per_write)
+        )
         assert self._expected_sum(table2_start_value, rows_per_write * 2) == self._get_sum("renamed2")
 
 

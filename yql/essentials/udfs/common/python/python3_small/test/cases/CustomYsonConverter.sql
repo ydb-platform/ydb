@@ -1,5 +1,4 @@
 --sanitizer ignore memory
-/* syntax version 1 */
 $script = @@
 import json
 

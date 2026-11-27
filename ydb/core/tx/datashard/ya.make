@@ -488,6 +488,7 @@ PEERDIR(
     ydb/core/split
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tablet_flat/base
     ydb/core/tx/cdc_aggregator/public
     ydb/core/tx/datashard/hnsw_index
     ydb/core/tx/datashard/snapshot_retention
@@ -505,11 +506,10 @@ PEERDIR(
     ydb/library/chunks_limiter
     ydb/library/json_index
     ydb/library/protobuf_printer
-    ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/actors
     ydb/public/api/protos
     ydb/services/lib/sharding
     yql/essentials/core/minsketch
-    yql/essentials/parser/pg_wrapper/interface
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber

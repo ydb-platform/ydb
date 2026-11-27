@@ -1,6 +1,7 @@
 #include "viewer.h"
 #include <ydb/core/base/http_database_param.h>
 #include "counters_hosts.h"
+#include "viewer_bridge_storage.h"
 #include "viewer_healthcheck.h"
 #include "json_handlers.h"
 #include "log.h"
@@ -17,6 +18,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -27,6 +29,7 @@
 #include <ydb/library/actors/core/mon.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
+#include <deque>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
 
@@ -442,7 +445,6 @@ public:
                         return {TMon::EAuthMode::Enforce, databaseAllowedSIDs};
                     case EViewerEndpointAccessType::Any: {
                         static const TVector<TString> emptyAllowedSIDs; // empty list allows any SID to proceed
-                        // The endpoint is available to anyone, so it needs no authentication at all.
                         return {TMon::EAuthMode::Disabled, emptyAllowedSIDs};
                     }
                 }
@@ -460,6 +462,7 @@ public:
                         .Handler = ctx.SelfID,
                         .AuthMode = auth.AuthMode,
                         .AllowedSIDs = auth.AllowedSIDs,
+                        .ExtractDatabaseUserToken = path == "/viewer/capabilities",
                     });
                 }
 
@@ -784,8 +787,68 @@ private:
         return EDatabaseScopedRequestValidationResult::Ok;
     }
 
+    using TPoolSnapshot = std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse>;
+    using TBridgeModeRequest = TEvViewer::TEvGetDatabaseBridgeMode;
+
+    std::weak_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> IndexedPools;
+    TBridgePoolModeIndex PoolModes;
+    std::deque<std::pair<TMonotonic, TBridgeModeRequest::TPtr>> BridgeModeWaiters;
+    TActorId PoolRefreshAlias;
+    TMonotonic PoolRefreshRetryAt;
+
+    void ForgetExpiredBridgeModeWaiters(TMonotonic now) {
+        while (!BridgeModeWaiters.empty() && BridgeModeWaiters.front().first <= now) {
+            BridgeModeWaiters.pop_front();
+        }
+    }
+
+    void ReplyBridgeMode(const TPoolSnapshot& pools, const TBridgeModeRequest::TPtr& ev) {
+        if (IndexedPools.lock() != pools) {
+            PoolModes = TBridgePoolModeIndex(pools->Record);
+            IndexedPools = pools;
+        }
+        const auto mode = PoolModes.GetDatabaseMode(ev->Get()->PoolNames);
+        Send(ev->Sender, new TEvViewer::TEvDatabaseBridgeMode(mode), 0, ev->Cookie);
+    }
+
+    void EndPoolRefresh() {
+        if (PoolRefreshAlias) {
+            UnregisterAlias(PoolRefreshAlias);
+            PoolRefreshAlias = {};
+        }
+    }
+
+    void RequestPoolRefresh(TMonotonic now) {
+        if (PoolRefreshAlias && now < PoolRefreshRetryAt) {
+            return;
+        }
+        EndPoolRefresh();
+        PoolRefreshAlias = RegisterAlias();
+        PoolRefreshRetryAt = now + TDuration::Seconds(10);
+        NTabletPipe::SendData(PoolRefreshAlias, GetTabletPipe(MakeBSControllerID()), new NSysView::TEvSysView::TEvGetStoragePoolsRequest());
+    }
+
+    void Handle(TBridgeModeRequest::TPtr& ev) {
+        const TMonotonic now = TActivationContext::Monotonic();
+        ForgetExpiredBridgeModeWaiters(now);
+        bool needUpdate = false;
+        const auto pools = GetCachedStoragePools(needUpdate);
+        if (needUpdate || !pools) {
+            RequestPoolRefresh(now);
+        }
+        if (pools) {
+            ReplyBridgeMode(pools, ev);
+        } else {
+            BridgeModeWaiters.emplace_back(now + TBridgeModeRequest::MaxWait, std::move(ev));
+        }
+    }
+
     void Handle(TEvents::TEvWakeup::TPtr&) {
         DeleteOldSharedCacheData();
+        ForgetExpiredBridgeModeWaiters(TActivationContext::Monotonic());
+        if (IndexedPools.expired()) {
+            PoolModes = {};
+        }
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
@@ -797,35 +860,73 @@ private:
         };
     }
 
+    void ForgetTabletPipe(TTabletId tabletId, TActorId clientId) {
+        const auto it = TabletPipes.find(tabletId);
+        if (it != TabletPipes.end() && it->second == clientId) {
+            TabletPipes.erase(it);
+            if (tabletId == MakeBSControllerID()) {
+                EndPoolRefresh();
+            }
+        }
+    }
+
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            TabletPipes.erase(ev->Get()->TabletId);
+            ForgetTabletPipe(ev->Get()->TabletId, ev->Get()->ClientId);
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        TabletPipes.erase(ev->Get()->TabletId);
+        ForgetTabletPipe(ev->Get()->TabletId, ev->Get()->ClientId);
+    }
+
+    TActorId GetTabletPipe(TTabletId tabletId) {
+        auto itPipe = TabletPipes.find(tabletId);
+        if (itPipe == TabletPipes.end()) {
+            auto pipe = NTabletPipe::CreateClient(SelfId(), tabletId, GetPipeClientConfig());
+            itPipe = TabletPipes.emplace(tabletId, RegisterWithSameMailbox(pipe)).first;
+        }
+        return itPipe->second;
     }
 
     void Handle(TEvViewer::TEvUpdateSharedCacheTabletRequest::TPtr& ev) {
-        auto itPipe = TabletPipes.find(ev->Get()->TabletId);
-        if (itPipe == TabletPipes.end()) {
-            auto pipe = NTabletPipe::CreateClient(SelfId(), ev->Get()->TabletId, GetPipeClientConfig());
-            itPipe = TabletPipes.emplace(ev->Get()->TabletId, RegisterWithSameMailbox(pipe)).first;
+        auto& request = *ev->Get();
+        if (request.TabletId == MakeBSControllerID() && request.Request->Type() == NSysView::TEvSysView::EvGetStoragePoolsRequest) {
+            RequestPoolRefresh(TActivationContext::Monotonic());
+        } else {
+            NTabletPipe::SendData(SelfId(), GetTabletPipe(request.TabletId), request.Request.release());
         }
-        NTabletPipe::SendData(SelfId(), itPipe->second, ev->Get()->Request.release());
+    }
+
+    void UpdateCache(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> update) {
+        if (const auto* pools = std::get_if<TPoolSnapshot>(&update->Response)) {
+            ForgetExpiredBridgeModeWaiters(TActivationContext::Monotonic());
+            for (const auto& waiter : BridgeModeWaiters) {
+                ReplyBridgeMode(*pools, waiter.second);
+            }
+            BridgeModeWaiters.clear();
+        }
+        UpdateSharedCacheData(std::move(update));
     }
 
     void Handle(TEvViewer::TEvUpdateSharedCacheTabletResponse::TPtr& ev) {
-        UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse>(ev->Release().Release()));
+        UpdateCache(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse>(ev->Release().Release()));
+    }
+
+    void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
+        if (ev->Recipient == PoolRefreshAlias) {
+            EndPoolRefresh();
+            UpdateCache(std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(TPoolSnapshot(ev->Release().Release())));
+        }
     }
 
     template<typename TEvent>
     void HandleForUpdateSharedCacheData(TAutoPtr<TEventHandle<TEvent>>& ev) {
-        UpdateSharedCacheData(std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(std::shared_ptr<TEvent>(ev->Release().Release())));
+        UpdateCache(std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(std::shared_ptr<TEvent>(ev->Release().Release())));
     }
 
     void PassAway() override {
+        EndPoolRefresh();
         for (const auto& [tabletId, pipe] : TabletPipes) {
             NTabletPipe::CloseClient(SelfId(), pipe);
         }
@@ -838,9 +939,10 @@ private:
             hFunc(TEvViewer::TEvViewerRequest, Handle);
             hFunc(TEvViewer::TEvUpdateSharedCacheTabletRequest, Handle);
             hFunc(TEvViewer::TEvUpdateSharedCacheTabletResponse, Handle);
+            hFunc(TBridgeModeRequest, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, HandleForUpdateSharedCacheData);
+            hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, HandleForUpdateSharedCacheData);
             hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, HandleForUpdateSharedCacheData);
             hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, HandleForUpdateSharedCacheData);

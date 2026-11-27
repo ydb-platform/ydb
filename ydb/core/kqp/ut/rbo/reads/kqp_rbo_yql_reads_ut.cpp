@@ -1728,6 +1728,118 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    // As in the old optimizer, a read of the index named by VIEW reads the index with the ranges of the predicate and
+    // only the columns the query needs, so it looks the rows up in the main table only when the index does not cover
+    // them. A lookup join probes the index. Without ranges the whole index is read, with a warning.
+    Y_UNIT_TEST(ViewIndexRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64,
+                s String,
+                PRIMARY KEY (a, b)
+            ) WITH (PARTITION_AT_KEYS = (1, 2));
+
+            CREATE TABLE `/Root/dim` (
+                a Int64,
+                d Int64,
+                PRIMARY KEY (a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, b, c, s] : std::vector<std::tuple<i64, i64, std::optional<i64>, std::string>>{
+                {0, 9, 5, "e"}, {1, 1, std::nullopt, "d"}, {1, 2, 3, "c"}, {2, 1, 1, "b"}, {2, 2, 4, "a"}}) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("b").Int64(b)
+                .AddMember("c").OptionalInt64(c)
+                .AddMember("s").OptionalString(s)
+            .EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder dimRows;
+        dimRows.BeginList();
+        for (const auto& [a, d] : std::vector<std::pair<i64, i64>>{{1, 10}, {3, 30}, {4, 40}, {7, 70}}) {
+            dimRows.AddListItem().BeginStruct().AddMember("a").OptionalInt64(a).AddMember("d").OptionalInt64(d).EndStruct();
+        }
+        dimRows.EndList();
+        const auto dimResult = db.BulkUpsert("/Root/dim", dimRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(dimResult.IsSuccess(), dimResult.GetIssues().ToString());
+
+        // The index is built over the loaded rows.
+        schemeResult = session.ExecuteSchemeQuery("ALTER TABLE `/Root/t` ADD INDEX idx_c GLOBAL ON (c)").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // Whether the read of the index takes the ranges of the predicate.
+            bool Ranges;
+            // Whether the rows found in the index are looked up in the main table.
+            bool MainLookup;
+            // Whether a lookup join probes the index.
+            bool LookupJoin = false;
+            // Whether the filter runs on the index, before the rows are looked up in the main table.
+            bool FilterOnIndex = false;
+        };
+        const std::vector<TCase> cases = {
+            // The index covers the main table key.
+            {"select a, b from `/Root/t` view idx_c where c = 4", "[[2;2]]", true, false},
+            {"select a, b, s from `/Root/t` view idx_c where c = 4", "[[2;2;[\"a\"]]]", true, true},
+            // The index can not evaluate the rest of the predicate, which filters the rows looked up in the main table.
+            {"select a, b, s from `/Root/t` view idx_c where c >= 3 and s = 'a'", "[[2;2;[\"a\"]]]", true, true},
+            {"select c from `/Root/t` view idx_c where c > 3 order by c limit 1", "[[[4]]]", true, false},
+            {"select a, b from `/Root/t` view idx_c order by a, b", "[[0;9];[1;1];[1;2];[2;1];[2;2]]", false, false},
+            {"select a, s from `/Root/t` view idx_c where s = 'b'", "[[2;[\"b\"]]]", false, true},
+            // A filter without ranges which needs only the columns of the index runs on the index.
+            {"select a, s from `/Root/t` view idx_c where c + 0 = 4", "[[2;[\"a\"]]]", false, true, false, true},
+            {"select d.d, t.a, t.b from `/Root/dim` as d join `/Root/t` view idx_c as t on t.c = d.a order by d.d",
+                "[[[10];2;1];[[30];1;2];[[40];2;2]]", false, false, true},
+            {"select d.d, t.a, t.s from `/Root/dim` as d join `/Root/t` view idx_c as t on t.c = d.a order by d.d",
+                "[[[10];2;[\"b\"]];[[30];1;[\"c\"]];[[40];2;[\"a\"]]]", false, true, true},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; " + testCase.Query + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_C(ast.Contains("(KqpTable '\"/Root/t/idx_c/indexImplTable\""), query << ": expected an index read, ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("KqlKey"), testCase.Ranges, query << ", ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("(KqpTable '\"/Root/t\""), testCase.MainLookup, query << ", ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("LookupJoinRows"), testCase.LookupJoin, query << ", ast: " << ast);
+            if (testCase.MainLookup && !testCase.LookupJoin) {
+                // The stage which reads the index comes before the lookup in the plan.
+                UNIT_ASSERT_VALUES_EQUAL_C(ast.find("Filter") < ast.find("KqpCnStreamLookup"), testCase.FilterOnIndex,
+                    query << ", ast: " << ast);
+            }
+            const bool wholeIndex = !testCase.Ranges && !testCase.LookupJoin;
+            const TString issues{explain.GetIssues().ToString()};
+            UNIT_ASSERT_VALUES_EQUAL_C(issues.Contains("Given predicate is not suitable for used index: idx_c"), wholeIndex,
+                query << ": " << issues);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(ExistsDropsSubquerySort) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -1948,6 +2060,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {"select a, b, s from `/Root/t` view idx_c where c = 4"},
             {"select c from `/Root/t` view idx_c where c > 3 order by c limit 1"},
             {"select c from `/Root/t` view idx_s where s = 'x2'"},
+            {"select a, b, s from `/Root/t` view idx_c where c >= 4 and s = 'x4'"},
+            {"select a, b from `/Root/t` view idx_c"},
+            {"select a, s from `/Root/t` view idx_c where s = 'x3'"},
+            {"select a, s from `/Root/t` view idx_c where c + 0 = 4"},
+            {"select d.d, t.a, t.s from `/Root/dim` as d join `/Root/t` view idx_c as t on t.c = d.a"},
+            {"select d.d, t.a, t.b from `/Root/dim` as d join `/Root/t` view idx_c as t on t.c = d.a where t.c > 1"},
             // Unions and nested selects.
             {"select a from `/Root/t` where a = 1 union all select a from `/Root/t` where a = 2"},
             {"select a from (select a, b from `/Root/t` where a > 0) where b = 1"},

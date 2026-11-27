@@ -11,6 +11,7 @@
 #include <ydb/core/client/metadata/functions_metadata.h>
 #include <ydb/core/client/metadata/types_metadata.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
+#include <ydb/core/client/scheme_cache_lib/mkql_compile_service.h>
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/core/client/server/msgbus_server.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>

@@ -225,6 +225,8 @@ namespace NKikimr::NGroupSyncer {
             if (missingData) {
                 CountToCopy(blobId);
                 CountedToCopy.insert(blobId);
+            } else {
+                ++UnverifiedTargetBlobs;
             }
             if (sourceItem->Keep || sourceItem->DoNotKeep) {
                 SourceBlobFlags.emplace(blobId, TSourceBlobFlags{sourceItem->Keep, sourceItem->DoNotKeep});
@@ -344,9 +346,6 @@ namespace NKikimr::NGroupSyncer {
         MERGE(Blobs)
 #undef MERGE
 
-        if (ScansBlobs()) {
-            SyncerDataStats->ScanFinished = true;
-        }
         finish();
         Finished = true;
         CheckIfDone();
@@ -406,6 +405,9 @@ namespace NKikimr::NGroupSyncer {
     void TSyncerActor::CheckIfDone() {
         ProcessRestoreQueue();
 
+        if (Finished && ScansBlobs() && !UnverifiedTargetBlobs && !SyncerDataStats->ScanFinished.load(std::memory_order_relaxed)) {
+            SyncerDataStats->ScanFinished = true;
+        }
         if (Finished && !QueriesInFlight) {
             Y_VERIFY_S(Payloads.empty() && RestoreQueue.empty() && AbsenceQueue.empty(), " Payloads.size# "
                 << Payloads.size() << " RestoreQueue.size# " << RestoreQueue.size()
@@ -668,10 +670,16 @@ namespace NKikimr::NGroupSyncer {
         } else if (msg.GroupId == TargetGroupId.GetRawId()) { // it was an index query for checking target blob
             std::unique_ptr<TVector<TLogoBlobID>> keep;
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
-                if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
+                const auto& r = msg.Responses[i];
+                const bool counted = CountedToCopy.erase(r.Id);
+                if (!counted && (r.Status == NKikimrProto::OK || r.Status == NKikimrProto::NODATA)) {
+                    Y_DEBUG_ABORT_UNLESS(UnverifiedTargetBlobs);
+                    --UnverifiedTargetBlobs;
+                }
+                if (r.Status == NKikimrProto::OK) {
                     // blob exists and okay; its redundancy has been restored; its keep flag was synced earlier, unless
                     // the blob has been written since then without it, as the bridge proxy restoring it may do
-                    if (CountedToCopy.erase(r.Id)) {
+                    if (counted) {
                         CountCopied(r.Id); // it has been written since the scan
                     }
                     const auto sourceFlags = TakeSourceBlobFlags(r.Id);
@@ -685,7 +693,7 @@ namespace NKikimr::NGroupSyncer {
                     ++SyncerDataStats->BlobsDone;
                 } else if (r.Status == NKikimrProto::NODATA) {
                     // we have to query this blob and do full rewrite -- there was no data for it
-                    if (!CountedToCopy.erase(r.Id)) {
+                    if (!counted) {
                         CountToCopy(r.Id); // the target has a record of the blob, but its data can't be read
                     }
                     // the rate limits traffic between piles, and the read brings about one copy of the blob data across
@@ -693,7 +701,6 @@ namespace NKikimr::NGroupSyncer {
                         NKikimrBlobStorage::AsyncRead), {}, r.Id.BlobSize());
                 } else if (r.Status == NKikimrProto::ERROR) {
                     SourceBlobFlags.erase(r.Id);
-                    CountedToCopy.erase(r.Id);
                     SyncerDataStats->BytesError += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsError;
                     errorReason = "TEvGet from target group failed with ERROR";

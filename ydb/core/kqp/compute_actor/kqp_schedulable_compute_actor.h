@@ -1,8 +1,8 @@
 #pragma once
 
-#include "kqp_schedulable_work_factory.h"
-#include "kqp_schedulable_base.h"
-#include "kqp_schedulable_task.h"
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_base.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_task.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_work_factory.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>
 

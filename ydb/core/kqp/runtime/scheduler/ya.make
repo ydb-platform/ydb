@@ -18,7 +18,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/resource_pools
     ydb/library/actors/core
-    ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/actors/common
     yql/essentials/utils
     yt/yt/core
 )

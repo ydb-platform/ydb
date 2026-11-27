@@ -198,6 +198,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
         schema_inclusion_mode=None,
         concurrent_result_sets=False,
         parameters=None,
+        idempotent=False,
     ):
         with ydb.QuerySessionPool(self.driver) as pool:
             try:
@@ -212,7 +213,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
                         schema_inclusion_mode=schema_inclusion_mode,
                         concurrent_result_sets=concurrent_result_sets,
                     ))
-                return pool.retry_operation_sync(callee)
+                return pool.retry_operation_sync(callee, retry_settings=ydb.RetrySettings(idempotent=idempotent))
             except Exception as e:
                 assert False, f"Failed query `{query}`, error: {e}"
 
@@ -266,7 +267,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
         query = f"DECLARE $rows AS {rows_type};\nUPSERT INTO {table_name} SELECT * FROM AS_TABLE($rows);"
         for batch_start in range(0, rows_count, batch_size):
             parameters = {"$rows": (values[batch_start:batch_start + batch_size], rows_type)}
-            self._try_execute(query, parameters=parameters)
+            self._try_execute(query, parameters=parameters, idempotent=True)
 
     def _read_table(
         self,

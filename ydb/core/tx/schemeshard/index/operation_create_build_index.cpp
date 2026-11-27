@@ -214,34 +214,42 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         return {CreateReject(opId, status, errStr)};
     }
 
+    const bool isVectorIndex = GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+        || GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw;
+
     TVector<ISubOperation::TPtr> result;
 
     if (isRebuild) {
-        // For rebuild: set existing index to WriteOnly. Impl table drop and recreation
+        // For rebuild: set existing index to NotReady. Impl table drop and recreation
         // is handled in the build state machine after Initiating completes.
-        {
-            auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
-            *outTx.MutableLockGuard() = tx.GetLockGuard();
-            outTx.SetInternal(tx.GetInternal());
-            auto alterIndex = outTx.MutableAlterTableIndex();
-            alterIndex->SetName(index.LeafName());
-            alterIndex->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
-            if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
-                *alterIndex->MutableHnswIndexDescription() = indexDesc.GetHnswIndexDescription();
-            }
-            // Update key columns and data columns (may change during rebuild, e.g. non-prefixed to prefixed)
-            *alterIndex->MutableKeyColumnNames() = indexDesc.GetKeyColumnNames();
-            *alterIndex->MutableDataColumnNames() = indexDesc.GetDataColumnNames();
-
-            result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
+        auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        *outTx.MutableLockGuard() = tx.GetLockGuard();
+        outTx.SetInternal(tx.GetInternal());
+        auto alterIndex = outTx.MutableAlterTableIndex();
+        alterIndex->SetName(index.LeafName());
+        alterIndex->SetState(isVectorIndex
+            ? NKikimrSchemeOp::EIndexStateNotReady
+            : NKikimrSchemeOp::EIndexStateWriteOnly);
+        if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            *alterIndex->MutableHnswIndexDescription() = indexDesc.GetHnswIndexDescription();
         }
+        // Update key columns and data columns (may change during rebuild, e.g. non-prefixed to prefixed)
+        *alterIndex->MutableKeyColumnNames() = indexDesc.GetKeyColumnNames();
+        *alterIndex->MutableDataColumnNames() = indexDesc.GetDataColumnNames();
+
+        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     } else {
-        // For new build: create the index in WriteOnly state
+        // For new build: create the index in NotReady state until the data is built and
+        // the main table snapshot for the delta scan is taken. Vector indexes are
+        // switched to WriteOnly by PrepareVectorIndex; other indexes are visible for
+        // writes during the whole build, as before.
         auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
         outTx.MutableCreateTableIndex()->CopyFrom(indexDesc);
         outTx.MutableCreateTableIndex()->SetType(GetIndexType(indexDesc));
-        outTx.MutableCreateTableIndex()->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
+        outTx.MutableCreateTableIndex()->SetState(isVectorIndex
+            ? NKikimrSchemeOp::EIndexStateNotReady
+            : NKikimrSchemeOp::EIndexStateWriteOnly);
         outTx.SetInternal(tx.GetInternal());
 
         result.push_back(CreateNewTableIndex(NextPartId(opId, result), outTx));
@@ -272,10 +280,18 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             *implTableDesc.MutableDetailedMetricsSettings()->MutableConfigured() = tableInfo->GetDetailedMetricsSettings();
         }
 
-        if (!forReplication && (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique ||
+        // Only the posting table is written incrementally (by the build, the delta scan
+        // and KQP in WriteOnly), so only it needs a shadow copy published at the end.
+        // Level and prefix tables are read-only for KQP and must be visible during
+        // WriteOnly, so they are written directly to the user table.
+        const bool needShadow = !isVectorIndex || implTableDesc.GetName() == NTableIndex::NKMeans::PostingTable;
+        if (!forReplication && needShadow && (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique ||
             context.SS->EnableOnlineAddUniqueIndex))
         {
             implTableDesc.MutablePartitionConfig()->SetShadowData(true);
+        }
+        if (isVectorIndex) {
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(needShadow);
         }
 
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);

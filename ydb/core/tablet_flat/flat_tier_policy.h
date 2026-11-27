@@ -1,9 +1,8 @@
 #pragma once
 
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/scheme_log.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/vector.h>
@@ -77,8 +76,8 @@ namespace NTable {
     };
 
     // Replaces the whole content of the proto with the policy
-    void TieringPolicyToProto(const TTieringPolicy& policy, NTabletFlatScheme::TTieringPolicySettings& proto);
-    TTieringPolicy TieringPolicyFromProto(const NTabletFlatScheme::TTieringPolicySettings& proto);
+    void TieringPolicyToProto(const TTieringPolicy& policy, NKikimrSchemeOp::TTieringPolicySettings& proto);
+    TTieringPolicy TieringPolicyFromProto(const NKikimrSchemeOp::TTieringPolicySettings& proto);
 
 }
 }

@@ -13,9 +13,16 @@ PEERDIR(
     yql/essentials/sql/pg
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    logos/projects/abt_bs_calc/tasks/calc_dashboard/alice/calc_kpi_metrics$
+    quality/ab_testing/cofe/tests/bin/lib/projects$
+    quality/ab_testing/cofe/tests/bin/lib/projects_medium$
+    quality/user_sessions/createlib/qb3/parser$
+)
+
 END()
 
 RECURSE(
     no_llvm
 )
-

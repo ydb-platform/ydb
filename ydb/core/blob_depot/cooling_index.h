@@ -28,11 +28,13 @@ namespace NKikimr::NBlobDepot {
             bool SelectionLimited = false;
         };
 
-        TCoolingIndex(const TData& data, ui64 tabletId, ui64 hotTargetBytes, ui32 targetObjectBytes);
+        TCoolingIndex(const TData& data, ui64 tabletId, ui64 hotTargetBytes, ui32 targetObjectBytes, ui32 repackBelowLivePercent);
 
         void RemoveHotKey(const TKey& key, ui32 generation, ui64 sequence);
         void AddHotKey(const TKey& key, const TData::TValue& value);
         void UpdateSourceRetry(const TKey& key, const TData::TValue* value);
+        bool IsRepackingEnabled() const { return RepackBelowLivePercent != 0; }
+        void UpdateObjectOccupancy(const TS3ObjectKey& key, ui32 size, ui64 liveBytes);
         bool HasWork(ui64 waitingBytes);
         TPack SelectPack(ui64 waitingBytes, TMonotonic now, TSchedule schedule);
         void FinishPack(const TPack& pack, std::optional<size_t> failedSource, TMonotonic now);
@@ -42,6 +44,7 @@ namespace NKikimr::NBlobDepot {
         const ui64 TabletId;
         const ui64 HotTargetBytes;
         const ui32 TargetObjectBytes;
+        const ui32 RepackBelowLivePercent;
         static constexpr size_t MaxKeysPerCoolingPack = 1024;
         static constexpr size_t MaxKeysVisitedPerSelection = 2 * MaxKeysPerCoolingPack;
 
@@ -49,6 +52,9 @@ namespace NKikimr::NBlobDepot {
         std::set<THotKey> HotKeys;
         std::optional<THotKey> HotSelectionAfter;
         bool HotSelectionNeedsRestart = false;
+        std::set<TS3ObjectKey> SparseS3Objects;
+        std::optional<std::pair<TS3ObjectKey, TKey>> ColdSelectionNext;
+        bool ColdSelectionNeedsRestart = false;
 
         THashSet<TKey> CoolingKeysInFlight;
         struct TSourceRetry {

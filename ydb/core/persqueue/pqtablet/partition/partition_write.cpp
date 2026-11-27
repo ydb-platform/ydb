@@ -780,7 +780,8 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     const bool replicationDisabled = replicatedPartition
         && AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled();
 
-    if (ev->Get()->FromMirrorer && replicationDisabled) {
+    const auto& mirrorer = ev->Get()->MirrorerActor;
+    if (mirrorer && replicationDisabled) {
         DestroyMirrorer();
 
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
@@ -788,8 +789,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return;
     }
 
-    const auto mirrorer = ev->Get()->FromMirrorer ? GetActiveMirrorer() : TActorId{};
-    if (ev->Get()->FromMirrorer && !mirrorer) {
+    if (mirrorer && mirrorer != GetActiveMirrorer()) {
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR, "Mirroring has stopped");
         return;
     }

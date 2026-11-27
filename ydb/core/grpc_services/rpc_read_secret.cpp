@@ -13,6 +13,10 @@ class TReadSecretRPC : public TRpcSchemeRequestActor<TReadSecretRPC, TEvReadSecr
     using TBase = TRpcSchemeRequestActor<TReadSecretRPC, TEvReadSecretRequest>;
 
     TPathId AuthorizedDomainKey;
+    bool CanManageDatabase = false;
+
+    TString DatabaseName;
+    TString SecretPath;
 
 public:
     using TBase::TBase;
@@ -20,25 +24,41 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
 
+        SecretPath = Request_->NormalizePath(GetProtoRequest()->path());
+        DatabaseName = CanonizePath(Request_->GetDatabaseName().GetOrElse(""));
+
         // TODO(vlad-serikov): After rebasing onto the EnableReadSecrets change, return gRPC
         // FAILED_PRECONDITION here when the flag is disabled, before checking the token.
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = CanonizePath(Request_->GetDatabaseName().GetOrElse(""));
+        request->DatabaseName = DatabaseName;
+
         auto& root = request->ResultSet.emplace_back();
-        root.Path = NKikimr::SplitPath(request->DatabaseName);
-        if (root.Path.empty()) {
-            Request_->RaiseIssue(NYql::TIssue("Database name is required"));
-            return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
-        }
+        root.Path = NKikimr::SplitPath(DatabaseName);
         root.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         root.SyncVersion = true;
+
+        auto& secret = request->ResultSet.emplace_back();
+        secret.Path = NKikimr::SplitPath(SecretPath);
+        secret.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        secret.SyncVersion = true;
+
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 
         Become(&TReadSecretRPC::StateResolveDatabase);
     }
 
 private:
+    void DenyRead(const TActorContext& ctx) {
+        Request_->RaiseIssue(NYql::TIssue(
+            "ReadSecret requires both ydb.database.create and ydb.database.drop on the database root or ownership of the secret"));
+        Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
+    }
+
+    bool IsSecretOwner(const TString& owner) const {
+        return !owner.empty() && Request_->GetInternalToken()->IsExist(owner);
+    }
+
     STATEFN(StateResolveDatabase) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleDatabase);
@@ -49,12 +69,12 @@ private:
 
     void HandleDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         const auto& entries = ev->Get()->Request->ResultSet;
-        if (entries.size() != 1) {
-            Request_->RaiseIssue(NYql::TIssue("Unexpected database lookup response"));
+        if (entries.size() != 2) {
+            Request_->RaiseIssue(NYql::TIssue("Unexpected scheme lookup response"));
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
         }
 
-        const auto& root = entries.front();
+        const auto& root = entries[0];
         switch (root.Status) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
                 break;
@@ -77,16 +97,40 @@ private:
         }
 
         const auto& token = Request_->GetInternalToken();
-        if (!token || !root.SecurityObject || !root.SecurityObject->CheckAccess(NACLib::GenericFull, *token)) {
-            Request_->RaiseIssue(NYql::TIssue("ReadSecret requires FULL on the database root"));
+        if (!token) {
+            Request_->RaiseIssue(NYql::TIssue("Cannot get user token from auth token"));
             return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
         }
-
         AuthorizedDomainKey = root.DomainInfo->DomainKey;
+        CanManageDatabase = root.SecurityObject && root.SecurityObject->CheckAccess(NACLib::GenericManage, *token);
+        if (!CanManageDatabase) {
+            const auto& secret = entries[1];
+            switch (secret.Status) {
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
+                    Request_->RaiseIssue(NYql::TIssue("Secret lookup is temporarily unavailable"));
+                    return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+                    break;
+                default:
+                    Request_->RaiseIssue(NYql::TIssue("Cannot resolve secret"));
+                    return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
+            }
+            if (secret.Kind != NSchemeCache::TSchemeCacheNavigate::KindSecret
+                || !secret.DomainInfo || secret.DomainInfo->DomainKey != AuthorizedDomainKey
+                || !secret.SecurityObject || !IsSecretOwner(secret.SecurityObject->GetOwnerSID()))
+            {
+                Request_->RaiseIssue(NYql::TIssue(
+                    "ReadSecret requires both ydb.database.create and ydb.database.drop on the database root or ownership of the secret"));
+                return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
+            }
+        }
+
         auto navigateRequest = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         SetDatabase(navigateRequest.get(), *Request_);
         auto* describePath = navigateRequest->Record.MutableDescribePath();
-        describePath->SetPath(Request_->NormalizePath(GetProtoRequest()->path()));
+        describePath->SetPath(SecretPath);
         describePath->MutableOptions()->SetReturnSecretValue(true);
         Send(MakeTxProxyID(), navigateRequest.release());
 
@@ -120,6 +164,9 @@ private:
                 if (!domain.HasDomainKey() || TPathId::FromDomainKey(domain.GetDomainKey()) != AuthorizedDomainKey) {
                     Request_->RaiseIssue(NYql::TIssue("Secret path does not belong to the authorized database"));
                     return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                }
+                if (!CanManageDatabase && !IsSecretOwner(pathDescription.GetSelf().GetOwner())) {
+                    return DenyRead(ctx);
                 }
                 if (!pathDescription.HasSecretDescription()) {
                     Request_->RaiseIssue(NYql::TIssue("Secret description is missing"));

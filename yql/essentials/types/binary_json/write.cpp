@@ -12,6 +12,8 @@
 #include <yql/essentials/utils/parse_double.h>
 
 #include <cmath>
+#include <cstring>
+#include <string>
 
 namespace NKikimr::NBinaryJson {
 
@@ -656,8 +658,31 @@ void SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const NBi
 std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json, bool allowInf) {
     std::variant<TBinaryJson, TString> res;
     TBinaryJsonCallbacks callbacks(/* throwException */ false, allowInf);
-    const simdjson::padded_string paddedJson(json);
-    simdjson::ondemand::parser parser;
+    // Documents are usually converted one value at a time, so allocating a parser and a padded
+    // copy for each one costs more than parsing a small document. Reuse both within a thread.
+    // Larger documents get their own parser and buffer, so a thread never keeps a large one.
+    constexpr size_t MaxReusedJsonSize = 64 << 10;
+    thread_local simdjson::ondemand::parser reusedParser;
+    thread_local std::string reusedBuffer;
+    simdjson::ondemand::parser localParser;
+    simdjson::padded_string localJson;
+    simdjson::padded_string_view paddedJson;
+    const bool reuse = json.size() <= MaxReusedJsonSize;
+    if (reuse) {
+        if (reusedBuffer.size() < json.size() + simdjson::SIMDJSON_PADDING) {
+            reusedBuffer.resize(json.size() + simdjson::SIMDJSON_PADDING);
+        }
+        if (!json.empty()) {
+            std::memcpy(reusedBuffer.data(), json.data(), json.size());
+        }
+        // A reused buffer holds bytes of earlier documents past the end: zero the padding.
+        std::memset(reusedBuffer.data() + json.size(), 0, simdjson::SIMDJSON_PADDING);
+        paddedJson = simdjson::padded_string_view(reusedBuffer.data(), json.size(), reusedBuffer.size());
+    } else {
+        localJson = simdjson::padded_string(json);
+        paddedJson = localJson;
+    }
+    auto& parser = reuse ? reusedParser : localParser;
     try {
         auto doc = parser.iterate(paddedJson);
         if (auto status = doc.error(); status != simdjson::SUCCESS) {

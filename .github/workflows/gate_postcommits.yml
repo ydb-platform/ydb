@@ -41,9 +41,6 @@ jobs:
                 id,
                 title: (.display_title // .head_branch // ("run #" + (.id|tostring))),
                 html_url,
-                branch: (.pull_requests[0].base.ref // null),
-                head_branch,
-                head_owner: (.head_repository.owner.login // null),
                 waiting: (.waiting_seconds | fmt_duration),
                 waiting_seconds,
                 ignored: (.waiting_seconds > $max_age)
@@ -120,37 +117,6 @@ jobs:
 
         echo "Runner labels synchronized"
 
-        # Summary-only: resolve target branch when pull_requests[] is empty.
-        enriched='[]'
-        while IFS= read -r item; do
-          [ -z "$item" ] && continue
-          branch=$(jq -r '.branch // empty' <<<"$item")
-          if [ -z "$branch" ]; then
-            owner=$(jq -r '.head_owner // empty' <<<"$item")
-            head=$(jq -r '.head_branch // empty' <<<"$item")
-            if [ -n "$owner" ] && [ -n "$head" ]; then
-              pulls_json=$(curl --retry 2 --retry-delay 1 --max-time 10 -sS -G \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer ${{github.token}}" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                --data-urlencode "head=${owner}:${head}" \
-                --data-urlencode "state=all" \
-                --data-urlencode "per_page=5" \
-                "https://api.github.com/repos/${{github.repository}}/pulls" || true)
-              branch=$(jq -r '
-                [.[].base.ref] | unique
-                | if length == 1 then .[0] else empty end
-              ' <<<"${pulls_json:-[]}" || true)
-            fi
-          fi
-          if [ -z "$branch" ]; then
-            branch='?'
-          fi
-          item=$(jq --arg branch "$branch" '.branch = $branch | del(.head_branch, .head_owner)' <<<"$item")
-          enriched=$(jq -c --argjson item "$item" '. + [$item]' <<<"$enriched")
-        done < <(jq -c '.[]' <<<"$pr_check_items")
-        pr_check_items="$enriched"
-
         postcommit_fetch_ok=1
         postcommit_queued_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/${{github.repository}}/actions/runs?per_page=100\&page=1\&status=queued\&event=push) || postcommit_fetch_ok=0
@@ -179,7 +145,6 @@ jobs:
                 name: $name,
                 title: (.display_title // .head_branch // ("run #" + (.id|tostring))),
                 html_url,
-                branch: (.head_branch // "?"),
                 waiting: (.waiting_seconds | fmt_duration),
                 waiting_seconds
               }
@@ -207,16 +172,15 @@ jobs:
           echo "### Queued PR-check (>60s): ${pr_check_queue_size} total, ${queue_size} in queue, ${ignored_stale} ignored"
           echo ""
           if (( pr_check_queue_size > 0 )); then
-            echo "| Gate | Waiting | Branch | Run |"
-            echo "|------|---------|--------|-----|"
+            echo "| Gate | Waiting | Run |"
+            echo "|------|---------|-----|"
             jq -r '
-              def esc_cell: tostring | gsub("\\|"; "\\\\|") | gsub("\n"; " ");
               def esc_link: tostring | gsub("\\]"; "\\\\]") | gsub("\\|"; "\\\\|") | gsub("\n"; " ");
               .[]
               | (if .ignored then "ignored" else "counted" end) as $gate
               | (.title | esc_link) as $title
               | (if .ignored then "~~[\($title)](\(.html_url))~~" else "[\($title)](\(.html_url))" end) as $run
-              | "| \($gate) | \(.waiting) | `\(.branch | esc_cell)` | \($run) |"
+              | "| \($gate) | \(.waiting) | \($run) |"
             ' <<<"$pr_check_items"
           else
             echo "_No queued PR-check runs._"
@@ -230,14 +194,14 @@ jobs:
             echo "### Queued postcommit (>60s): ${postcommit_queue_size}"
             echo ""
             if (( postcommit_queue_size > 0 )); then
-              echo "| Waiting | Workflow | Branch | Run |"
-              echo "|---------|----------|--------|-----|"
+              echo "| Waiting | Workflow | Run |"
+              echo "|---------|----------|-----|"
               jq -r '
                 def esc_cell: tostring | gsub("\\|"; "\\\\|") | gsub("\n"; " ");
                 def esc_link: tostring | gsub("\\]"; "\\\\]") | gsub("\\|"; "\\\\|") | gsub("\n"; " ");
                 .[]
                 | (.title | esc_link) as $title
-                | "| \(.waiting) | `\(.name | esc_cell)` | `\(.branch | esc_cell)` | [\($title)](\(.html_url)) |"
+                | "| \(.waiting) | `\(.name | esc_cell)` | [\($title)](\(.html_url)) |"
               ' <<<"$postcommit_items"
             else
               echo "_No queued postcommit runs._"

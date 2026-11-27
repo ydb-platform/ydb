@@ -1,5 +1,6 @@
 #pragma once
 
+#include "global_write_txs.h"
 #include "logging.h"
 #include "nodes_manager.h"
 #include "private_events.h"
@@ -79,7 +80,7 @@ private:
         THashMap<TWorkerId, ui64> WorkerOffsets;
         ui64 DstAlterTxId = 0;
 
-        // These IDs remain in AssignedTxIds after their target-only commits.
+        // These IDs remain in GlobalWriteTxs after their target-only commits.
         // The next ordinary global commit retires them across all targets.
         TVector<ui64> TargetFlushTxIds;
         size_t NextTargetFlushTxId = 0;
@@ -367,7 +368,6 @@ private:
     THashSet<TActorId> InflightDropStream;
 
     TActorId TxAllocatorClient;
-    TDeque<ui64> AllocatedTxIds; // got from tx allocator
     bool AllocateTxIdInFlight = false;
     TMap<std::pair<ui64, ui64>, NKikimrReplication::TIndexBuildState> IndexBuilds;
     THashMap<TWorkerId, NKikimrReplication::TIndexBuildProgress> IndexBuildProgress;
@@ -378,7 +378,7 @@ private:
     THashMap<std::pair<ui64, ui64>, TActorId> IndexReadyActors;
     bool IndexBuildTxInFlight = false;
     TMap<ui64, TRowVersion> CommittedVersions; // Completed global frontier per replication.
-    TMap<TRowVersion, ui64> AssignedTxIds; // tx ids assigned to version
+    TGlobalWriteTxs GlobalWriteTxs{TGlobalWriteTxsConfig{.MaxOpenWriteTxs = MaxOpenTxIds}};
     TMap<TRowVersion, THashSet<ui32>> PendingTxId;
     bool AssignTxIdInFlight = false;
 

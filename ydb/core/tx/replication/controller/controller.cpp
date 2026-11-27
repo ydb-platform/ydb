@@ -223,7 +223,7 @@ void TController::Reset() {
     ReplicationsByPathId.clear();
     UpdateLagCounters();
     UnresolvedDatabaseReplications.clear();
-    AssignedTxIds.clear();
+    GlobalWriteTxs.ClearOpenWriteTxs();
     CommittedVersions.clear();
     Workers.clear();
     LagExpiryQueue.Clear();

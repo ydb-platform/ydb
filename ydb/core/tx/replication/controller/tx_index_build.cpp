@@ -1,5 +1,6 @@
 #include "controller_impl.h"
 #include "dst_schema_changer.h"
+#include "global_write_txs_repository.h"
 
 #include <ydb/core/base/path.h>
 
@@ -128,16 +129,6 @@ class TController::TTxIndexBuild: public TTxBase {
     TVector<std::pair<ui64, THolder<TEvService::TEvTxIdResult>>> Assignments;
     TVector<std::pair<ui64, TVector<TString>>> Commits;
 
-    ui64 Allocate(const TRowVersion& end, NIceDb::TNiceDb& db) {
-        const ui64 txId = Self->AllocatedTxIds.front();
-        Self->AllocatedTxIds.pop_front();
-        db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
-            NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-        );
-        Self->AssignedTxIds.emplace(end, txId);
-        return txId;
-    }
-
     void Checkpoint(NIceDb::TNiceDb& db) {
         while (!Self->PendingIndexBuildProgress.empty()) {
             auto ev = std::move(Self->PendingIndexBuildProgress.front());
@@ -171,16 +162,6 @@ class TController::TTxIndexBuild: public TTxBase {
         }
     }
 
-    bool CanReuseLastGlobalAssignment(const TRowVersion& join) const {
-        if (Self->AssignedTxIds.size() < MaxOpenTxIds) {
-            return false;
-        }
-
-        const auto& last = *Self->AssignedTxIds.rbegin();
-        return last.first > join
-            && last.second != Self->CommittingTxId;
-    }
-
     void Assign(NIceDb::TNiceDb& db) {
         for (auto it = Self->PendingIndexTxIds.begin(); it != Self->PendingIndexTxIds.end();) {
             const auto id = TWorkerId::Parse((*it)->Get()->Record.GetWorker());
@@ -209,21 +190,11 @@ class TController::TTxIndexBuild: public TTxBase {
                 const bool global = build.GetPhase() != TBuild::FILLING && version >= join;
                 ui64 txId = 0;
                 if (global) {
-                    auto assigned = Self->AssignedTxIds.lower_bound(end);
-                    if (assigned != Self->AssignedTxIds.end()) {
-                        end = assigned->first;
-                        txId = assigned->second;
-                    } else if (CanReuseLastGlobalAssignment(join)) {
-                        auto node = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
-                        db.Table<Schema::TxIds>().Key(node.key().Step, node.key().TxId).Delete();
-                        node.key() = end;
-                        txId = node.mapped();
-                        db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
-                            NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-                        );
-                        Self->AssignedTxIds.insert(std::move(node));
-                    } else if (!Self->AllocatedTxIds.empty() && Self->AssignedTxIds.size() < MaxOpenTxIds + 1) {
-                        txId = Allocate(end, db);
+                    const auto writeTx = Self->GlobalWriteTxs.AssignIndexBuildWriteTx(end, join, Self->CommittingTxId);
+                    TGlobalWriteTxsRepository::SaveChanges(db, Self->GlobalWriteTxs);
+                    if (writeTx) {
+                        end = writeTx->Version;
+                        txId = writeTx->WriteTxId;
                     }
                 } else {
                     if (build.GetPhase() != TBuild::FILLING) {
@@ -251,9 +222,8 @@ class TController::TTxIndexBuild: public TTxBase {
                         }
                     }
 
-                    if (!txId && !Self->AllocatedTxIds.empty() && build.AssignmentsSize() < MaxOpenTxIds) {
-                        txId = Self->AllocatedTxIds.front();
-                        Self->AllocatedTxIds.pop_front();
+                    if (!txId && Self->GlobalWriteTxs.CountFreeWriteTxIds() > 0 && build.AssignmentsSize() < MaxOpenTxIds) {
+                        txId = *Self->GlobalWriteTxs.TakeFreeWriteTxId();
                         auto& assigned = *build.AddAssignments();
                         end.ToProto(assigned.MutableVersion());
                         assigned.SetWriteTxId(txId);
@@ -359,15 +329,15 @@ class TController::TTxIndexBuild: public TTxBase {
                 continue;
             }
 
-            if (build.GetPhase() == TBuild::FILLING && heartbeat > maxVersion && !Self->AllocatedTxIds.empty()) {
+            if (build.GetPhase() == TBuild::FILLING && heartbeat > maxVersion && Self->GlobalWriteTxs.CountFreeWriteTxIds() > 0) {
                 const auto interval = GetCommitInterval(*replication);
                 // Every already issued interval ends before or at C. Taking
                 // the next boundary after the last global interval also
                 // excludes an already proposed commit, including after reboot.
                 auto join = Max(IntervalEnd(heartbeat, interval),
                     IntervalEnd(Self->CommittedVersions[key.first], interval));
-                if (!Self->AssignedTxIds.empty()) {
-                    join = Max(join, IntervalEnd(Self->AssignedTxIds.rbegin()->first, interval));
+                if (const auto openWriteTxs = Self->GlobalWriteTxs.GetOpenWriteTxs(); !openWriteTxs.empty()) {
+                    join = Max(join, IntervalEnd(openWriteTxs.back().Version, interval));
                 }
 
                 for (const auto& assigned : build.GetAssignments()) {
@@ -375,7 +345,8 @@ class TController::TTxIndexBuild: public TTxBase {
                 }
                 join.ToProto(build.MutableJoinVersion());
                 build.SetPhase(TBuild::JOINING);
-                Allocate(join, db); // Force the first joint commit even with no further data.
+                Self->GlobalWriteTxs.OpenWriteTx(join); // Force the first joint commit even with no further data.
+                TGlobalWriteTxsRepository::SaveChanges(db, Self->GlobalWriteTxs);
                 Self->SaveIndexBuild(db, key, build);
             }
 

@@ -27,7 +27,7 @@ struct TReadCandidate {
     TIntrusivePtr<NYql::TKikimrTableMetadata> IndexMeta;
     TString IndexName;
     TVector<TString> KeyColumns;
-    TKeyMatch Match;
+    TKeyRangeMatch Match;
     bool Covering = true;
     TIndexScore Score;
 
@@ -38,7 +38,7 @@ struct TReadCandidate {
     double Cost = 0;
 };
 
-TIndexScore ScoreKeyOrder(const TKeyMatch& result, size_t keyLen, const TVector<TString>& sortColumns,
+TIndexScore ScoreKeyOrder(const TKeyRangeMatch& result, size_t keyLen, const TVector<TString>& sortColumns,
                           const TVector<TString>& keyColumns, bool covering);
 
 void SetTableSize(TReadCandidate& candidate, const NYql::TKikimrTableMetadata& mainMeta);

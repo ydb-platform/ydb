@@ -32,5 +32,7 @@ bool SortMatchesKeyOrder(const TVector<TString>& sortColumns, const TVector<TStr
 // order (false) returns rows; nothing if the sort has no keys or mixes the directions.
 std::optional<bool> GetKeyReadDirection(const TSortIUs& sortElements);
 
+bool IsCostBasedIndexSelectionEnabled(const NOpt::TKqpOptimizeContext& kqpCtx);
+
 }
 }

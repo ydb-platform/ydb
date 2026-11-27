@@ -133,7 +133,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         hints,
         shuffleCtx ? shuffleCtx->FSM : nullptr);
 
-    auto providerCtx = NOpt::TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin, props.ColumnLineage);
+    auto providerCtx = NOpt::TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin, props.ColumnLineage, &ctx.TypeCtx);
     auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(
         providerCtx, settings, ctx.ExprCtx,
         enableShuffleElimination && canBuildShuffleCtx,

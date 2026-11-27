@@ -3,6 +3,8 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
 
+#include <optional>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql::NNodes;
@@ -221,7 +223,7 @@ private:
 
 // The key ranges the extractor would build for a key, predicted on the normalized predicate tree, so that the
 // candidates can be scored and costed without building their ranges.
-struct TKeyMatch {
+struct TKeyRangeMatch {
     size_t PointPrefixLen = 0;
     size_t UsedPrefixLen = 0;
     TMaybe<size_t> ExpectedMaxRanges;
@@ -229,8 +231,14 @@ struct TKeyMatch {
 
     // The part of the predicate the ranges enforce, null if none
     std::shared_ptr<TTreeNode> Consumed;
+    // The ranges as tuples over the used key prefix when every bound is a literal
+    std::optional<TVector<TVector<TPredicateRange>>> Tuples;
+    // Points of the point prefix; an upper bound when disjuncts overlap
+    size_t PointRanges = 0;
 };
 
-TKeyMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges);
+TKeyRangeMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges);
+
+TString RangesToString(const TKeyRangeMatch& match);
 
 } // namespace NKikimr::NKqp

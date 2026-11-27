@@ -40,7 +40,7 @@ bool IsBetterCandidate(const TReadCandidate& candidate, const TReadCandidate& ot
 
 } // anonymous namespace
 
-TIndexScore ScoreKeyOrder(const TKeyMatch& result, size_t keyLen, const TVector<TString>& sortColumns,
+TIndexScore ScoreKeyOrder(const TKeyRangeMatch& result, size_t keyLen, const TVector<TString>& sortColumns,
                           const TVector<TString>& keyColumns, bool covering) {
     TIndexScore score;
     score.PointCoversKey = keyLen != 0 && result.PointPrefixLen == keyLen;
@@ -79,7 +79,9 @@ double EstimateAccessPathCost(const TReadCandidate& candidate, double mainRows) 
 
     const double mainLookups = candidate.Covering ? 0.0 : mainRows * candidate.SelTotal;
     const double residualRows = candidate.Match.HasResidual ? rowsRead : 0.0;
-    return 5000.0 * probes + 1.0 * rowsRead * rowBytes + 10000.0 * mainLookups + 5.0 * residualRows;
+
+    const double traceCost = 5000.0 * probes + 1.0 * rowsRead * rowBytes + 10000.0 * mainLookups + 5.0 * residualRows;
+    return traceCost;
 }
 
 bool EstimateCandidateCosts(TVector<TReadCandidate>& candidates, TOpRead& read, const std::shared_ptr<TTreeNode>& predicate,
@@ -128,7 +130,8 @@ void LogCandidates(const TVector<TReadCandidate>& candidates, const TVector<size
              << ": score (Sort+NoRes " << score.SortMatchesAndNoResidual << ", PCover " << score.PointCoversKey << ", PPrefix " << score.PointPrefixLen
              << ", UCover " << score.UsedCoversKey << ", UPrefix " << score.UsedPrefixLen << ", SortMatches " << score.SortMatches << ")"
              << ", covering " << candidate.Covering << ", points " << match.PointPrefixLen << ", used " << match.UsedPrefixLen
-             << ", ranges " << (match.ExpectedMaxRanges ? ToString(*match.ExpectedMaxRanges) : "?") << ", residual " << match.HasResidual;
+             << ", ranges " << (match.ExpectedMaxRanges ? ToString(*match.ExpectedMaxRanges) : "?") << ", residual " << match.HasResidual
+             << ", key ranges " << RangesToString(match);
         if (costBased) {
             line << ", rows " << candidate.TableRows << ", bytes " << candidate.TableBytes
                  << ", sel range " << candidate.SelRange << ", sel total " << candidate.SelTotal << ", cost " << candidate.Cost;

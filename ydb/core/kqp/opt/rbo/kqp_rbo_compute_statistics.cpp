@@ -1,4 +1,5 @@
 #include "kqp_operator.h"
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_lookup_join.h>
 
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_hints.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
@@ -162,6 +163,69 @@ ELogicalCardinality LimitCardinality(ELogicalCardinality input, const TExpressio
     return bounds.ToCardinality();
 }
 
+const NYql::TKikimrTableMetadata& GetLookupTableMeta(const TOpTableLookup& lookup, TRBOContext& ctx) {
+    const auto& desc = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, TKqpTable(lookup.Table).Path().Value());
+    Y_ENSURE(desc.Metadata);
+    return *desc.Metadata;
+}
+
+// The main table of an index implementation table, "<main table>/<index>/indexImplTable"
+const NYql::TKikimrTableMetadata& GetMainTableMeta(const NYql::TKikimrTableMetadata& meta, TRBOContext& ctx) {
+    if (!meta.IsIndexImplTable) {
+        return meta;
+    }
+    const TStringBuf path = TStringBuf(meta.Name).RBefore('/').RBefore('/');
+    const auto& desc = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, path);
+    Y_ENSURE(desc.Metadata);
+    return *desc.Metadata;
+}
+
+// Statistics of the rows a lookup fetches, as of a read of its table: rows and bytes of the table, the column statistics
+// and key of the columns the lookup outputs, and the selectivity of the filter it applies to the fetched rows.
+TOptimizerStatistics BuildLookupTableStatistics(const TOpTableLookup& lookup, const NYql::TKikimrTableMetadata& meta,
+                                                TRBOContext& ctx, const TColumnLineage& lineage) {
+    THashMap<TString, TInfoUnitId> idByColumn;
+    for (const auto id : lookup.GetColumns()) {
+        if (const auto* entry = lineage.Find(id)) {
+            idByColumn.emplace(entry->ColumnName, id);
+        }
+    }
+
+    auto columnStats = MakeIntrusive<TOptimizerStatistics::TColumnStatMap>();
+    if (const auto it = ctx.TypeCtx.ColumnStatisticsByTableName.find(meta.Name); it != ctx.TypeCtx.ColumnStatisticsByTableName.end() && it->second) {
+        for (const auto& [column, id] : idByColumn) {
+            if (const auto stats = it->second->Data.find(column); stats != it->second->Data.end()) {
+                columnStats->Data.emplace(ToString(id), stats->second);
+            }
+        }
+    }
+
+    // The key only describes the output when the lookup outputs all of it
+    TVector<TString> keyColumns;
+    for (const auto& column : meta.KeyColumnNames) {
+        const auto it = idByColumn.find(column);
+        if (it == idByColumn.end()) {
+            keyColumns.clear();
+            break;
+        }
+        keyColumns.push_back(ToString(it->second));
+    }
+
+    const double rows = static_cast<double>(meta.RecordsCount);
+    const double columnShare = meta.Columns.empty() ? 1.0
+        : std::min(1.0, static_cast<double>(lookup.GetColumns().Size()) / static_cast<double>(meta.Columns.size()));
+    TOptimizerStatistics stats(EStatisticsType::BaseTable, rows, lookup.GetColumns().Size(), meta.DataSize * columnShare, 0.0,
+                               MakeIntrusive<TOptimizerStatistics::TKeyColumns>(keyColumns), columnStats, EStorageType::RowStorage);
+    if (lookup.FetchedRowFilter) {
+        auto filterStats = std::make_shared<TOptimizerStatistics>(stats);
+        const double selectivity = TPredicateSelectivityComputer(filterStats).Compute(TCoLambda(lookup.FetchedRowFilter->GetLambda()).Body());
+        stats.Nrows *= selectivity;
+        stats.ByteSize *= selectivity;
+        stats.Selectivity = selectivity;
+    }
+    return stats;
+}
+
 } // anonymous namespace
 
 /**
@@ -307,6 +371,91 @@ void TOpIndexLookupJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps
     IUnaryOperator::ComputeMetadata(ctx, planProps);
     if (Props.Metadata) {
         Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrMore;
+    }
+}
+
+/***
+ * Statistics of an index lookup join: the join of the left rows with the rows of the table the chain of lookups fetches,
+ * by the same formula the CBO joins them with, and the cost of the lookups of every left row the CBO chose it by.
+ */
+void TOpIndexLookupJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
+    // A lookup join without keys only drops the left rows the lookup below it found nothing for. The lookup join above
+    // it, which owns the join keys, has the statistics of the join.
+    if (JoinKeys.Items().empty()) {
+        IUnaryOperator::ComputeStatistics(ctx, planProps);
+        return;
+    }
+
+    // From the last hop, which fetches the rows of the right side, to the first, which probes by the join keys
+    TVector<TIntrusivePtr<TOpTableLookup>> lookups;
+    TIntrusivePtr<IOperator> left = GetInput();
+    while (true) {
+        if (left->Kind == EOperator::TableLookup && CastOperator<TOpTableLookup>(left)->IsJoin()) {
+            lookups.push_back(CastOperator<TOpTableLookup>(left));
+            left = lookups.back()->GetInput();
+        } else if (left->Kind == EOperator::IndexLookupJoin && CastOperator<TOpIndexLookupJoin>(left)->JoinKeys.Items().empty()) {
+            left = CastOperator<TOpIndexLookupJoin>(left)->GetInput();
+        } else {
+            break;
+        }
+    }
+    if (lookups.empty() || !left->Props.Statistics.has_value() || !left->Props.Metadata.has_value()) {
+        IUnaryOperator::ComputeStatistics(ctx, planProps);
+        return;
+    }
+
+    const auto& lineage = planProps.ColumnLineage;
+    const auto& rightLookup = *lookups.front();
+    const auto& probe = *lookups.back();
+    const auto& rightMeta = GetLookupTableMeta(rightLookup, ctx);
+    const auto& probeMeta = GetLookupTableMeta(probe, ctx);
+
+    auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(*left, lineage, true, ctx.TypeCtx));
+    auto rightStats = std::make_shared<TOptimizerStatistics>(BuildLookupTableStatistics(rightLookup, rightMeta, ctx, lineage));
+
+    TVector<TJoinColumn> leftJoinKeys;
+    TVector<TJoinColumn> rightJoinKeys;
+    for (const auto& [leftKey, rightKey, equalNulls] : JoinKeys.Items()) {
+        leftJoinKeys.push_back(StatisticsColumn(lineage, leftKey));
+        rightJoinKeys.push_back(StatisticsColumn(lineage, rightKey));
+        leftJoinKeys.back().EqualNulls = rightJoinKeys.back().EqualNulls = equalNulls;
+    }
+
+    TVector<TString> leftAliases;
+    TVector<TString> rightAliases;
+    TVector<TString> unionOfAliases;
+    ComputeAlisesForJoin(left.Get(), lineage, leftAliases, rightAliases, unionOfAliases);
+
+    auto hints = ctx.KqpCtx.GetOptimizerHints();
+    leftStats = ApplyRowsHints(leftStats, leftAliases, *hints.CardinalityHints);
+    rightStats = ApplyRowsHints(rightStats, rightAliases, *hints.CardinalityHints);
+    leftStats = ApplyBytesHints(leftStats, leftAliases, *hints.BytesHints);
+    rightStats = ApplyBytesHints(rightStats, rightAliases, *hints.BytesHints);
+
+    auto CBOStats = ctx.CBOCtx.ComputeJoinStatsV2(*leftStats,
+        *rightStats,
+        leftJoinKeys,
+        rightJoinKeys,
+        EJoinAlgoType::LookupJoin,
+        ConvertToJoinKind(JoinKind),
+        FindCardHint(unionOfAliases, *hints.CardinalityHints),
+        false,
+        false,
+        FindCardHint(unionOfAliases, *hints.BytesHints));
+
+    Props.Statistics = TRBOStatistics();
+    Props.Statistics->EBytes = CBOStats.ByteSize;
+    Props.Statistics->ERows = CBOStats.Nrows;
+    Props.Statistics->Selectivity = CBOStats.Selectivity;
+    Props.Cost = CBOStats.Cost;
+
+    // As in the CBO, a cost-based lookup join costs the lookups of its left rows instead of reading the right side
+    if (IsCostBasedIndexSelectionEnabled(ctx.KqpCtx) && ctx.CBOCtx.OptLevel != 3) {
+        const size_t prefixLen = probe.LookupKeys.Items().size() + (probe.Prefix ? probe.Prefix->Columns.size() : 0);
+        const double points = probe.Prefix && probe.Prefix->ExpectedMaxPoints ? static_cast<double>(*probe.Prefix->ExpectedMaxPoints) : 1.0;
+        const double costPerLeftRow = EstimateLookupCostPerLeftRow(probeMeta, GetMainTableMeta(probeMeta, ctx), lookups.size() == 1,
+                                                                   prefixLen, points, &ctx.TypeCtx);
+        Props.Cost = EstimateLookupJoinCost(ctx.CBOCtx, *leftStats, *rightStats, CBOStats.Nrows, CBOStats.ByteSize, costPerLeftRow);
     }
 }
 

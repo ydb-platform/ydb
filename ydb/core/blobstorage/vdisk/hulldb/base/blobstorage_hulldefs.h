@@ -141,8 +141,8 @@ namespace NKikimr {
         // Reserve chunks for compacting Fresh before accepting the writes that fill it
         // (EnableVDiskFreshSpaceProjection). See TFreshData and TFreshAdmissionGate.
         const bool FreshChunkReservation;
-        // Max<ui32>() generation block alone lets us drop all data of the tablet, see IsCompleteTabletDeletionBlock
-        const bool CollectByCompleteDeletionBlock;
+        // EnableCollectByCompleteDeletionBlock permits discarding barriers covered by a permanent block.
+        const bool DropBarriersOnTabletDeletion;
 
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
@@ -170,7 +170,7 @@ namespace NKikimr {
                 ui32 hullCompSortedPartsNum,
                 bool freshChunkReservation = false,
                 ui32 appendBlockSize = 4096,
-                bool collectByCompleteDeletionBlock = false
+                bool dropBarriersOnTabletDeletion = false
         );
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);

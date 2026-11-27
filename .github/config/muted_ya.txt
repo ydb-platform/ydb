@@ -9,6 +9,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepotMoveData.SharedCopyOv
 ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepotMoveData.TrashNotEmptyDuringCheckTrash
 ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepotMoveData.ValueChainChangeNeedsAnotherPass
 ydb/core/blobstorage/ut_blobstorage/ut_blob_depot unittest.sole chunk
+ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogMemOverflowSwapsDoNotFragmentDiskIndex
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.VCompactCutLogRecordMissingFromSyncLogAfterRestart
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk

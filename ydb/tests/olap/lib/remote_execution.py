@@ -9,12 +9,22 @@ import yatest.common
 import shutil
 import shlex
 import allure
-import random
+import tempfile
+import sys
 from contextlib import AbstractContextManager
 from time import time
 from typing import Union, Optional, Tuple, List, Dict, Any, NamedTuple
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _ssh_options() -> list[str]:
+    options = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15',
+               '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null']
+    key_file = os.getenv('SSH_KEY_FILE')
+    if key_file:
+        options += ['-i', key_file]
+    return options
 
 
 class ExecutionResult(NamedTuple):
@@ -294,20 +304,11 @@ class RemoteExecutor:
             """Выполняет команду через SSH"""
             LOGGER.info(f"Executing SSH command on {host}: {cmd}")
 
-            ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-
-            # Добавляем SSH пользователя и ключ
+            ssh_cmd = ['ssh', *_ssh_options()]
             ssh_user = os.getenv('SSH_USER')
-            if ssh_user is not None:
+            if ssh_user:
                 ssh_cmd += ['-l', ssh_user]
-            ssh_key_file = os.getenv('SSH_KEY_FILE')
-            if ssh_key_file is not None:
-                ssh_cmd += ['-i', ssh_key_file]
-
-            if isinstance(cmd, list):
-                full_cmd = ssh_cmd + [host] + cmd
-            else:
-                full_cmd = ssh_cmd + [host, cmd]
+            full_cmd = ssh_cmd + ['--', host, shlex.join(cmd) if isinstance(cmd, list) else cmd]
 
             try:
                 execution = yatest.common.execute(
@@ -434,7 +435,8 @@ def ensure_directory_with_permissions(host: str, path: str, raise_on_error: bool
         return False
 
 
-def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool = True) -> str:
+def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool = True, *,
+              prepare_destination: bool = True) -> str:
     """
     Копирует файл на хост через SCP или локально
 
@@ -454,6 +456,15 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
         return None
 
     try:
+        if not prepare_destination:
+            if is_localhost(host):
+                if os.path.isdir(local_path):
+                    shutil.copytree(local_path, remote_path)
+                else:
+                    shutil.copy2(local_path, remote_path)
+            else:
+                _scp(local_path, host, remote_path)
+            return f"Copy successful: {remote_path}"
         if is_localhost(host):
             return _copy_file_unified(local_path, host, remote_path, is_local=True)
         else:
@@ -481,7 +492,6 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
             return f"Local copy successful: {remote_path}"
         except PermissionError:
             # Используем временный файл и sudo
-            import tempfile
             with tempfile.NamedTemporaryFile(delete=False, prefix="deploy_") as tmp_file:
                 temp_path = tmp_file.name
             shutil.copy2(local_path, temp_path)
@@ -493,24 +503,21 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
         filename = os.path.basename(local_path)
         tmp_path = f"/tmp/{filename}.{timestamp}.tmp"
 
-        # SCP в /tmp
-        scp_cmd = ['scp', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-
-        ssh_user = os.getenv('SSH_USER')
-        scp_host = f"{ssh_user}@{host}" if ssh_user else host
-
-        ssh_key_file = os.getenv('SSH_KEY_FILE')
-        if ssh_key_file:
-            scp_cmd += ['-i', ssh_key_file]
-
-        scp_cmd += [local_path, f"{scp_host}:{tmp_path}"]
-
-        yatest.common.execute(scp_cmd, wait=True, check_exit_code=True)
+        _scp(local_path, host, tmp_path)
 
         # Перемещаем из /tmp в целевое место
         if execute_command(host, f"mv {tmp_path} {remote_path}", raise_on_error=False).exit_code != 0:
             execute_command(host, f"sudo mv {tmp_path} {remote_path}", raise_on_error=True)
         return f"SCP copy successful: {remote_path}"
+
+
+def _scp(local_path: str, host: str, remote_path: str) -> None:
+    target_host = f'[{host}]' if ':' in host else host
+    user = os.getenv('SSH_USER')
+    target = f'{user}@{target_host}' if user else target_host
+    recursive = ['-r'] if os.path.isdir(local_path) else []
+    yatest.common.execute(['scp', *_ssh_options(), *recursive, '--', local_path, f'{target}:{remote_path}'])
+
 
 
 def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: bool = True) -> dict:
@@ -625,46 +632,59 @@ def get_remote_tmp_path(host: str, *localpath: str) -> str:
 
 
 class LongRemoteExecution(AbstractContextManager):
-    def __init__(self, host: str, *cmd: str, env: dict[str, str] = {}):
-        self.host = host
+    def __init__(self, host: str, *cmd: str, env: Optional[dict[str, str]] = None):
+        self.host = host or 'localhost'
         self.cmd = shlex.join(cmd)
-        self_hash = f're_{abs(hash((self.host, self.cmd)))}_{random.randint(0, 1000000)}'
-        tmpdir = get_remote_tmp_path(self.host, self_hash)
-        self._script_path = os.path.join(tmpdir, f'run_{self_hash}.sh')
-        self._out_path = os.path.join(tmpdir, 'out.txt')
-        self._err_path = os.path.join(tmpdir, 'err.txt')
-        self._return_code_path = os.path.join(tmpdir, 'rc')
-        self._pid_path = os.path.join(tmpdir, 'pid')
         self._return_code = None
         self._out = None
         self._err = None
         self._finished = False
         self.allure = None
-        self.env = env
+        self.env = env or {}
 
     def start(self) -> None:
         assert not self._finished, 'command cannot be started again'
-        local_script_path = yatest.common.work_path(os.path.basename(self._script_path))
-        env_script = ''.join([f'export {var}="{val}"\n' for var, val in self.env.items()])
-        with open(local_script_path, 'w') as script_file:
-            script_file.write(f'''#!/bin/bash
-                {env_script}
-                {self.cmd} >{self._out_path} 2>{self._err_path}
-                echo -n $? >{self._return_code_path}
-            ''')
-        deploy_result = deploy_binary(local_script_path, self.host, os.path.dirname(self._script_path))
-        assert deploy_result.get('success', False), deploy_result.get('error', '')
-        execute_command(self.host, f'start-stop-daemon --start --pidfile {self._pid_path} --make-pid --background --no-close --exec {self._script_path} >/dev/null 2>&1')
+        self._directory = execute_command(self.host, ['mktemp', '-d', '/tmp/ydb-remote-exec.XXXXXXXX']).stdout.strip()
+        self._out_path = f'{self._directory}/out'
+        self._err_path = f'{self._directory}/err'
+        self._return_code_path = f'{self._directory}/rc'
+        self._pid_path = f'{self._directory}/pid'
+        script_path = f'{self._directory}/run.sh'
+        env_script = ''.join(f'export {var}={shlex.quote(val)}\n' for var, val in self.env.items())
+        script = (
+            f'printf "%s" "$$" >{shlex.quote(self._pid_path)}\n'
+            f'{env_script}{self.cmd} >{shlex.quote(self._out_path)} 2>{shlex.quote(self._err_path)}\n'
+            f'printf "%s" "$?" >{shlex.quote(self._return_code_path)}\n'
+        )
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                local_script = os.path.join(directory, 'run.sh')
+                with open(local_script, 'w') as script_file:
+                    script_file.write(f'#!/bin/bash\nexec setsid bash -c {shlex.quote(script)}\n')
+                os.chmod(local_script, 0o700)
+                copy_file(local_script, self.host, script_path, prepare_destination=False)
+            launch = shlex.join(['start-stop-daemon', '--start', '--background', '--exec', script_path])
+            pid_path = shlex.quote(self._pid_path)
+            execute_command(self.host, f'{launch} && for i in $(seq 50); do '
+                            f'test ! -s {pid_path} || exit 0; sleep 0.1; done; exit 1')
+        except Exception:
+            execute_command(self.host, ['rm', '-rf', '--', self._directory], raise_on_error=False)
+            raise
 
     def is_running(self) -> bool:
         if self._finished:
             return False
-        cmd = f'start-stop-daemon --status --pidfile {self._pid_path}'
-        self._finished = execute_command(self.host, cmd, raise_on_error=False).exit_code != 0
+        cmd = f'test ! -s {shlex.quote(self._return_code_path)} && start-stop-daemon --status --pidfile {shlex.quote(self._pid_path)}'
+        result = execute_command(self.host, cmd, raise_on_error=False, timeout=30)
+        if result.exit_code not in (0, 1, 3):
+            raise RuntimeError(f'Cannot check remote process on {self.host} (exit {result.exit_code}): {result.stderr}')
+        self._finished = result.exit_code != 0
         return not self._finished
 
     def terminate(self) -> None:
-        execute_command(self.host, f'pkill -f {shlex.quote(self.cmd)}', raise_on_error=False)
+        if self.is_running():
+            execute_command(self.host, f'pid=$(cat {shlex.quote(self._pid_path)}) && /bin/kill -TERM -- "-$pid"',
+                            raise_on_error=False)
 
     def _get_content(self, path: str) -> Optional[str]:
         res = execute_command(self.host, f'cat {path}', raise_on_error=False)
@@ -696,7 +716,11 @@ class LongRemoteExecution(AbstractContextManager):
         self.allure = allure.step('Run remote command')
         self.allure.params = {'host': self.host, 'command': self.cmd}
         self.allure.__enter__()
-        self.start()
+        try:
+            self.start()
+        except Exception:
+            self.allure.__exit__(*sys.exc_info())
+            raise
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -705,4 +729,5 @@ class LongRemoteExecution(AbstractContextManager):
             allure.attach(str(self.return_code), 'return code', allure.attachment_type.TEXT)
         allure.attach(self.stdout, 'remote stdout', allure.attachment_type.TEXT)
         allure.attach(self.stderr, 'remote stderr', allure.attachment_type.TEXT)
+        execute_command(self.host, ['rm', '-rf', '--', self._directory], raise_on_error=False)
         self.allure.__exit__(exc_type, exc_val, exc_tb)

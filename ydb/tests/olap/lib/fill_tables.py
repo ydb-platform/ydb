@@ -9,7 +9,6 @@ import logging
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import subprocess
 from time import sleep
@@ -19,7 +18,7 @@ from uuid import uuid4
 import requests
 
 from .compaction import wait_column_compaction
-from .remote_execution import is_localhost
+from .remote_execution import LongRemoteExecution, copy_file, execute_command, is_localhost
 from .ydb_cluster import YdbCluster
 
 
@@ -64,32 +63,6 @@ class Worker:
     cli: str
     auth: tuple[str, ...]
     remote: bool
-
-
-def ssh_options() -> list[str]:
-    options = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15',
-               '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null']
-    if os.getenv('SSH_KEY_FILE'):
-        options += ['-i', os.environ['SSH_KEY_FILE']]
-    return options
-
-
-def run_on(host: str, command: list[str], *, capture=False, check=True, timeout=None):
-    if host:
-        user = os.getenv('SSH_USER')
-        target = f'{user}@{host}' if user else host
-        command = ['ssh', *ssh_options(), '--', target, shlex.join(command)]
-    return subprocess.run(command, check=check, stdin=subprocess.DEVNULL, text=True,
-                          capture_output=capture, timeout=timeout)
-
-
-def copy_to(worker_host: str, source: str, destination: str, *, directory=False):
-    user = os.getenv('SSH_USER')
-    host = f'[{worker_host}]' if ':' in worker_host else worker_host
-    target = f'{user}@{host}' if user else host
-    recursive = ['-r'] if directory else []
-    subprocess.run(['scp', *ssh_options(), *recursive, '--', source, f'{target}:{destination}'],
-                   check=True, stdin=subprocess.DEVNULL)
 
 
 def find_resources(workload: str, count: int) -> list[dict]:
@@ -148,20 +121,21 @@ class TableFiller:
             self.workers = []
             for host, endpoint in endpoints.items():
                 remote = not is_localhost(host)
-                target = host if remote else ''
-                directory = run_on(target, ['mktemp', '-d', '/tmp/ydb-fill-tables.XXXXXXXX'],
-                                   capture=True, timeout=30).stdout.strip()
+                target = host if remote else 'localhost'
+                directory = execute_command(
+                    target, ['mktemp', '-d', '/tmp/ydb-fill-tables.XXXXXXXX'], timeout=30,
+                ).stdout.strip()
                 if not re.fullmatch(r'/tmp/ydb-fill-tables\.[A-Za-z0-9]{8}', directory):
                     raise RuntimeError(f'Unexpected temporary directory on {host}: {directory!r}')
                 stack.callback(self._cleanup, target, directory)
                 cli, auth = self.cli, self.auth
                 if remote:
                     cli = f'{directory}/ydb'
-                    copy_to(host, self.cli, cli)
-                    run_on(host, ['chmod', 'u+x', cli], timeout=30)
+                    copy_file(self.cli, host, cli, prepare_destination=False)
+                    execute_command(host, ['chmod', 'u+x', cli], timeout=30)
                     if auth:
                         key_path = f'{directory}/credentials'
-                        copy_to(host, auth[1], key_path)
+                        copy_file(auth[1], host, key_path, prepare_destination=False)
                         auth = (auth[0], key_path)
                 self.workers.append(Worker(host, endpoint, directory, cli, auth, remote))
             self._stack = stack.pop_all()
@@ -173,8 +147,8 @@ class TableFiller:
     @staticmethod
     def _cleanup(host, directory):
         try:
-            result = run_on(host, ['rm', '-rf', '--', directory], check=False, timeout=30)
-            if result.returncode:
+            result = execute_command(host, ['rm', '-rf', '--', directory], raise_on_error=False, timeout=30)
+            if result.exit_code != 0:
                 LOGGER.warning('Failed to remove %s on %s', directory, host or 'localhost')
         except (OSError, subprocess.TimeoutExpired):
             LOGGER.warning('Failed to remove %s on %s', directory, host or 'localhost', exc_info=True)
@@ -197,12 +171,12 @@ class TableFiller:
                     command += ['--float-mode', dataset.float_mode]
         if dataset.clear:
             command.append('--clear')
-        run_on('', command)
+        execute_command('localhost', command)
 
     def _import_part(self, dataset, worker, index, part, count, resource):
-        host = worker.host if worker.remote else ''
+        host = worker.host if worker.remote else 'localhost'
         directory = f'{worker.directory}/dataset-{index}/part-{part}'
-        run_on(host, ['mkdir', '-p', directory], timeout=30)
+        execute_command(host, ['mkdir', '-p', directory], timeout=30)
         command = [worker.cli, '-e', worker.endpoint, '-d', self.database, *worker.auth,
                    *dataset.command, 'import', *dataset.import_options]
         if resource:
@@ -214,13 +188,13 @@ class TableFiller:
                 output_options = ['--untar', '--output', data_path]
             else:
                 output_options = ['--output', data_path]
-            run_on(host, ['ya', 'download', *output_options, f'sbr:{resource_id}'], timeout=7200)
+            execute_command(host, ['ya', 'download', *output_options, f'sbr:{resource_id}'], timeout=7200)
         else:
             data_path = dataset.input_path
             if data_path and worker.remote:
                 data_path = f'{directory}/input/{Path(dataset.input_path).name}'
-                run_on(host, ['mkdir', '-p', f'{directory}/input'], timeout=30)
-                copy_to(host, dataset.input_path, data_path, directory=os.path.isdir(dataset.input_path))
+                execute_command(host, ['mkdir', '-p', f'{directory}/input'], timeout=30)
+                copy_file(dataset.input_path, host, data_path, prepare_destination=False)
 
         if dataset.uses_generator:
             command += ['generator', '--scale', str(dataset.scale), '-C', str(count), '-i', str(part)]
@@ -230,12 +204,12 @@ class TableFiller:
             suite_path = dataset.suite_path
             if worker.remote:
                 suite_path = f'{directory}/suite'
-                copy_to(host, dataset.suite_path, suite_path, directory=True)
+                copy_file(dataset.suite_path, host, suite_path, prepare_destination=False)
             elif resource:
                 suite_path = f'{directory}/suite'
                 shutil.copytree(dataset.suite_path, suite_path)
             if resource:
-                run_on(host, ['ln', '-s', data_path, f'{suite_path}/import'])
+                execute_command(host, ['ln', '-s', data_path, f'{suite_path}/import'])
             command += ['--suite-path', suite_path]
         if dataset.tables:
             command += ['--tables', dataset.tables]
@@ -243,14 +217,22 @@ class TableFiller:
         for attempt in range(1, self.attempts + 1):
             LOGGER.info('Import %s, part %s/%s on %s (attempt %s)',
                         dataset.path, part + 1, count, worker.host, attempt)
-            result = run_on(host, command, check=False)
-            if not result.returncode:
+            if worker.remote:
+                with LongRemoteExecution(host, *command) as execution:
+                    while execution.is_running():
+                        sleep(5)
+                    return_code = execution.return_code
+                    if return_code != 0:
+                        LOGGER.warning('Import command failed on %s (exit %s): %s', host, return_code, execution.stderr)
+            else:
+                return_code = execute_command('localhost', command, raise_on_error=False).exit_code
+            if return_code == 0:
                 if resource:
                     self._cleanup(host, directory)
                 return
             if attempt < self.attempts:
                 sleep(5)
-        raise RuntimeError(f'Import of {dataset.path} part {part} on {worker.host} failed: exit {result.returncode}')
+        raise RuntimeError(f'Import of {dataset.path} part {part} on {worker.host} failed: exit {return_code}')
 
     def _fill(self, dataset, index, resources):
         count = len(resources) if resources else len(self.workers) if dataset.uses_generator else 1
@@ -267,9 +249,9 @@ class TableFiller:
     def _wait_compaction(self, dataset: Dataset, timeout: float):
         cli = [self.cli, '-e', YdbCluster.ydb_endpoint, '-d', self.database, *self.auth]
         path = f'{self.database}/{dataset.path.strip("/")}'
-        entries = json.loads(run_on(
-            '', cli + ['scheme', 'ls', '--format', 'json', '-l', '-R', path],
-            capture=True, timeout=60,
+        entries = json.loads(execute_command(
+            'localhost', cli + ['scheme', 'ls', '--format', 'json', '-l', '-R', path],
+            timeout=60,
         ).stdout)
         if isinstance(entries, dict):
             tables = [path] if entries['type'] == 'column-table' else []
@@ -279,8 +261,10 @@ class TableFiller:
             return
 
         def execute_query(query, remaining):
-            result = run_on('', cli + ['sql', '--format', 'json-unicode-array', '-s', query],
-                            capture=True, timeout=min(60, remaining))
+            result = execute_command(
+                'localhost', cli + ['sql', '--format', 'json-unicode-array', '-s', query],
+                timeout=min(60, remaining),
+            )
             return json.loads(result.stdout)
 
         LOGGER.info('Waiting for compaction of %s (%d column tables)', path, len(tables))
@@ -298,7 +282,7 @@ class TableFiller:
             for workload in sorted({d.workload for d in datasets if d.needs_resources})
         }
         for worker in self.workers[:self.resource_parts] if resources else ():
-            run_on(worker.host if worker.remote else '', ['ya', 'download', '--help'], capture=True, timeout=30)
+            execute_command(worker.host if worker.remote else 'localhost', ['ya', 'download', '--help'], timeout=30)
         # A new namespace also allows successive fills using the same deployed CLI.
         run_id = uuid4().hex
         with ThreadPoolExecutor(max_workers=len(datasets)) as executor:

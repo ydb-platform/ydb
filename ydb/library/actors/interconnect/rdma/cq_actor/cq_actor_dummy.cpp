@@ -14,7 +14,8 @@ class TCqActorDummy: public TInterconnectLoggingBase, public TActorBootstrapped<
 
 public:
     TCqActorDummy()
-        : TInterconnectLoggingBase("CqActor")
+        : TInterconnectLoggingBase(YDB_LOG_CREATE_MESSAGE(
+            {"selfActorKind", "CqActor"}))
     {}
 
     static constexpr IActor::EActivityType ActorActivityType() {

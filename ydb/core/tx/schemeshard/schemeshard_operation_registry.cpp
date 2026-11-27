@@ -41,6 +41,10 @@ TParts MakeAlterTable(const TOperation& op, const TTxTransaction& tx, TOperation
     return CreateConsistentAlterTable(op.NextPartId(), tx, context);
 }
 
+TParts MakeRepairIndexShadowData(const TOperation& op, const TTxTransaction& tx, TOperationContext& context) {
+    return {CreateRepairIndexShadowData(op.NextPartId(), tx, context)};
+}
+
 TParts MakeSplitMergeTablePartitions(const TOperation& op, const TTxTransaction& tx, TOperationContext&) {
     return {CreateSplitMerge(op.NextPartId(), tx)};
 }
@@ -248,6 +252,10 @@ TParts MakeInitiateBuildIndexImplTable(const TOperation& op, const TTxTransactio
 
 TParts MakePrepareIndexValidation(const TOperation& op, const TTxTransaction& tx, TOperationContext&) {
     return {CreatePrepareIndexValidation(op.NextPartId(), tx)};
+}
+
+TParts MakePrepareVectorIndex(const TOperation& op, const TTxTransaction& tx, TOperationContext&) {
+    return {CreatePrepareVectorIndex(op.NextPartId(), tx)};
 }
 
 TParts MakeCancelIndexBuild(const TOperation& op, const TTxTransaction& tx, TOperationContext& context) {

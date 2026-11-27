@@ -2,6 +2,9 @@
 
 #include <ydb/core/kqp/opt/rbo/copy_logical_subtree.h>
 #include <ydb/core/kqp/opt/rbo/rules/decorrelation/dependent_join_pushdown.h>
+#include <ydb/library/testlib/helpers.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -272,8 +275,10 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
         }
     }
 
-    Y_UNIT_TEST(JoinSidesGetNullSafeDomainPairs) {
+    Y_UNIT_TEST_TWIN(JoinSidesGetNullSafeDomainPairs, EqualNullsJoinKeys) {
         TPlan plan;
+        plan.Test.Config->SetUseBlockHashJoin(true);
+        plan.Test.Config->SetEnableBlockHashJoinEqualNulls(EqualNullsJoinKeys);
         const auto parameter = plan.Id(), local = plan.Id(), value = plan.Id();
         auto hub = TReplicate::Create(plan.Producer(parameter, local, value),
             plan.Pos, plan.Root.PlanProps.InfoUnitRegistry);
@@ -286,13 +291,27 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
         auto& join = CastOperator<TOpJoin>((*plan.Root.GetInput()));
         UNIT_ASSERT_VALUES_EQUAL(join.JoinKind, "Inner");
         UNIT_ASSERT_VALUES_EQUAL(join.JoinKeys.Items().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(join.JoinKeys.Items().front().EqualNulls, EqualNullsJoinKeys);
         UNIT_ASSERT_VALUES_EQUAL(join.JoinFilters.size(), 1);
         UNIT_ASSERT(join.JoinFilters.front().GetExpressionBody()->IsCallable(">"));
         for (auto* side : join.GetChildren()) {
-            const auto& map = CastOperator<TOpMap>(*side);
-            UNIT_ASSERT_VALUES_EQUAL(map.GetMapElements().Keys().Size(), 1);
-            const auto& entry = *map.GetMapElements().Items().begin();
-            UNIT_ASSERT(entry.second.GetExpression().GetExpressionBody()->IsCallable("StablePickle"));
+            if (!EqualNullsJoinKeys) {
+                UNIT_ASSERT(side->Kind == EOperator::Map);
+                const auto& map = CastOperator<TOpMap>(*side);
+                UNIT_ASSERT_VALUES_EQUAL(map.GetMapElements().Keys().Size(), 1);
+                const auto& entry = *map.GetMapElements().Items().begin();
+                UNIT_ASSERT(entry.second.GetExpression().GetExpressionBody()->IsCallable("StablePickle"));
+            } else {
+                for (const auto& item : IterateSubtree(side)) {
+                    if (item.Current->Kind != EOperator::Map) {
+                        continue;
+                    }
+                    const auto& map = CastOperator<TOpMap>(*item.Current);
+                    for (const auto& entry : map.GetMapElements().Items()) {
+                        UNIT_ASSERT(!entry.second.GetExpression().GetExpressionBody()->IsCallable("StablePickle"));
+                    }
+                }
+            }
         }
         UNIT_ASSERT(!HasFreeCorrelation(plan.Root.GetInput(), {parameter}));
     }
@@ -848,6 +867,71 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
             }
             UNIT_ASSERT_VALUES_EQUAL(hubs.size(), 2);
             NTests::AssertIdInvariants(*result, f.Props);
+        }
+    }
+
+    Y_UNIT_TEST(GenericInExistsInlinesIntoMap) {
+        for (const bool exists : {false, true}) {
+            for (const bool correlated : {false, true}) {
+                for (const bool nullable : {false, true}) {
+                    NTests::TIdTestContext f;
+                    const auto lookup = f.Id(), value = f.Id(), call = f.Id(), output = f.Id();
+                    auto left = f.Read({lookup});
+                    f.SetType(*left, nullable ? TUnorderedIUs{lookup} : TUnorderedIUs{});
+                    TIntrusivePtr<IOperator> right = f.Read({value});
+                    if (correlated) {
+                        TDependencyIUs captures;
+                        captures.Add(f.Id(), TCapturedIU{lookup, left->GetIUType(lookup, f.ExprCtx)});
+                        right = MakeIntrusive<TOpAddDependencies>(std::move(right), f.Pos, std::move(captures));
+                    }
+                    f.SetType(*right, nullable ? TUnorderedIUs{value} : TUnorderedIUs{});
+                    if (exists) {
+                        f.Props.Subplans.Add(call, std::move(right), ESubplanType::EXISTS);
+                    } else {
+                        // A nullable lookup makes the query type the IN result Bool?.
+                        f.Props.Subplans.Add(call, std::move(right), ESubplanType::IN_SUBPLAN, {lookup}, value, nullable);
+                    }
+                    f.Props.Subplans.RefreshDependencies(call);
+
+                    // The projection returns the subplan result as a column.
+                    TMapIUs elements;
+                    elements.Add(output, f.Column(call));
+                    TIntrusivePtr<IOperator> map = MakeIntrusive<TOpMap>(std::move(left), f.Pos, std::move(elements));
+                    const auto* original = map.get();
+
+                    TInlineGenericInExistsSubplanRule generic;
+                    UNIT_ASSERT(generic.QuickMatch(map, f.Props));
+                    auto result = generic.SimpleMatchAndApply(map, f.RboCtx, f.Props);
+
+                    UNIT_ASSERT(result.get() != original);
+                    UNIT_ASSERT(result->Kind == EOperator::Map);
+                    const auto& newMap = CastOperator<TOpMap>(*result);
+                    UNIT_ASSERT(newMap.GetMapElements().Keys() == TUnorderedIUs{output});
+                    UNIT_ASSERT(newMap.GetInput()->GetOutputIUs().Contains(call));
+                    UNIT_ASSERT(!f.Props.Subplans.Contains(call));
+
+                    size_t dependentJoins = 0;
+                    for (const auto& item : IterateSubtree(result.get())) {
+                        dependentJoins += item.Current->Kind == EOperator::DependentJoin;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(dependentJoins, correlated ? 1 : 0);
+
+                    // Only a Bool? IN result can be NULL.
+                    const TMapElement* definition = nullptr;
+                    for (const auto& item : IterateSubtree(result.get())) {
+                        if (item.Current != result.get() && item.Current->Kind == EOperator::Map) {
+                            if (const auto* element = CastOperator<TOpMap>(*item.Current).FindOutputElement(call)) {
+                                definition = element;
+                            }
+                        }
+                    }
+                    UNIT_ASSERT(definition);
+                    const bool canBeNull = FindNode(definition->GetExpression().GetExpressionBody(),
+                        [](const TExprNode::TPtr& node) { return node->IsCallable("Nothing"); }) != nullptr;
+                    UNIT_ASSERT_VALUES_EQUAL(canBeNull, !exists && nullable);
+                    NTests::AssertIdInvariants(*result, f.Props);
+                }
+            }
         }
     }
 }

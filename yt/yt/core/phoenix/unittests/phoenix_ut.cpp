@@ -326,16 +326,18 @@ struct S
     int B = 42;
     int C = 42;
 
-    PHOENIX_DECLARE_TYPE(S, 0xcdf77a11)
-    {
-        PHOENIX_REGISTER_FIELD(1, A);
-        PHOENIX_REGISTER_FIELD(2, B,
-            .SinceVersion(100)
-            .KeepWhenMissing());
-        PHOENIX_REGISTER_FIELD(3, C,
-            .SinceVersion(100));
-    }
+    PHOENIX_DECLARE_TYPE(S, 0xcdf77a11);
 };
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, A);
+    PHOENIX_REGISTER_FIELD(2, B,
+        .SinceVersion(100)
+        .KeepWhenMissing());
+    PHOENIX_REGISTER_FIELD(3, C,
+        .SinceVersion(100));
+}
 
 PHOENIX_DEFINE_TYPE(S);
 

@@ -4,23 +4,8 @@ namespace NYT::NBacktrace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLibunwindCursor::TLibunwindCursor()
-{
-    if (unw_getcontext(&Context_) != 0) {
-        Finished_ = true;
-        return;
-    }
-
-    Initialize();
-}
-
 TLibunwindCursor::TLibunwindCursor(const unw_context_t& context)
     : Context_(context)
-{
-    Initialize();
-}
-
-void TLibunwindCursor::Initialize()
 {
     if (unw_init_local(&Cursor_, &Context_) != 0) {
         Finished_ = true;

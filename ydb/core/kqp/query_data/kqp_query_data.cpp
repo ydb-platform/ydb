@@ -6,7 +6,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/result_set_format/kqp_result_set_builders.h>
 #include <ydb/core/kqp/common/kqp_row_builder.h>
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
@@ -21,11 +21,28 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
+#include <library/cpp/protobuf/util/walk.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NKikimr::NMiniKQL;
 using namespace NYql;
 using namespace NYql::NUdf;
+
+void TQueryData::ValidateNoPgParameters(const NProtoBuf::Map<TBasicString<char>, Ydb::TypedValue>& params) {
+    for (const auto& [name, param] : params) {
+        if (param.type().has_type_id()) {
+            continue;
+        }
+        NProtoBuf::WalkReflection(param.type(), [&name](const NProtoBuf::Message& message, const NProtoBuf::FieldDescriptor* field) {
+            Y_ENSURE(field->containing_type() != Ydb::Type::descriptor() ||
+                field->number() != Ydb::Type::kPgTypeFieldNumber ||
+                !message.GetReflection()->HasField(message, field),
+                "PostgreSQL compatibility is disabled: parameter " << name << " has a PostgreSQL type");
+            return true;
+        });
+    }
+}
 
 TTypedUnboxedValue TKqpExecuterTxResult::GetUV(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

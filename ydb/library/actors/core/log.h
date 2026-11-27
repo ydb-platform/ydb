@@ -52,26 +52,23 @@
 #define IS_DEBUG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, component)
 #define IS_TRACE_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, component)
 
-#define LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                               \
+#define LOG_LOG(actorCtxOrSystem, priority, component, ...)                                                                    \
     do {                                                                                                                       \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)) {                                    \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, 0ull)) {                                        \
             ::NActors::MemLogAdapter(                                                                                          \
                 actorCtxOrSystem, priority, component, __FILE_NAME__, __LINE__, __VA_ARGS__);                                  \
         }                                                                                                                      \
     } while (0) /**/
 
-#define LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream)      \
+#define LOG_LOG_S(actorCtxOrSystem, priority, component, stream)                                                               \
     do {                                                                                                                       \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)) {                                    \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, 0ull)) {                                        \
             TStringBuilder logStringBuilder;                                                                                   \
             logStringBuilder << stream;                                                                                        \
             ::NActors::MemLogAdapter(                                                                                          \
                 actorCtxOrSystem, priority, component, __FILE_NAME__, __LINE__, std::move(logStringBuilder));                  \
         }                                                                                                                      \
     } while (0) /**/
-
-#define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
-#define LOG_LOG_S(actorCtxOrSystem, priority, component, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
 
 #define LOG_LOG_SOURCELESS_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                      \
     do {                                                                                                                        \
@@ -104,26 +101,6 @@
 #define LOG_INFO_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_INFO, component, stream)
 #define LOG_DEBUG_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, stream)
 #define LOG_TRACE_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, stream)
-
-#define LOG_EMERG_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, sampleBy, __VA_ARGS__)
-#define LOG_ALERT_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, sampleBy, __VA_ARGS__)
-#define LOG_CRIT_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_CRIT, component, sampleBy, __VA_ARGS__)
-#define LOG_ERROR_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_ERROR, component, sampleBy, __VA_ARGS__)
-#define LOG_WARN_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_WARN, component, sampleBy, __VA_ARGS__)
-#define LOG_NOTICE_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_NOTICE, component, sampleBy, __VA_ARGS__)
-#define LOG_INFO_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_INFO, component, sampleBy, __VA_ARGS__)
-#define LOG_DEBUG_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, sampleBy, __VA_ARGS__)
-#define LOG_TRACE_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, sampleBy, __VA_ARGS__)
-
-#define LOG_EMERG_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, sampleBy, stream)
-#define LOG_ALERT_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, sampleBy, stream)
-#define LOG_CRIT_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_CRIT, component, sampleBy, stream)
-#define LOG_ERROR_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_ERROR, component, sampleBy, stream)
-#define LOG_WARN_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_WARN, component, sampleBy, stream)
-#define LOG_NOTICE_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_NOTICE, component, sampleBy, stream)
-#define LOG_INFO_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_INFO, component, sampleBy, stream)
-#define LOG_DEBUG_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, sampleBy, stream)
-#define LOG_TRACE_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, sampleBy, stream)
 
 #define TRACE_EVENT(component)                                                              \
     const auto& currentTracer = component;                                                  \
@@ -484,7 +461,17 @@ namespace NActors {
         const TString& str,
         NActors::NStructuredLog::TStructuredMessage&& structuredMessage = {}) {
 
-        MemLogWrite(str.data(), str.size(), true);
+        TStringBuilder memLogText;
+        memLogText << str;
+        if (structuredMessage.GetValuesCount() > 0) {
+            memLogText << " (";
+            NActors::NStructuredLog::TTextWriter textWriter;
+            textWriter.Write(memLogText, structuredMessage);
+            memLogText << ')';
+        }
+        const TString memLogRecord(memLogText);
+
+        MemLogWrite(memLogRecord.data(), memLogRecord.size(), true);
         DeliverLogMessage(
             actorCtxOrSystem,
             mPriority,
@@ -675,6 +662,12 @@ namespace NActors {
 
         [[noreturn]] ~TEnsureFormattedRecordWriter() noexcept(false);
     };
+
+    [[noreturn]] void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui64 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage);
+
+    [[noreturn]] void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui64 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage);
 }
 
 #define AFL_VERIFY(condition) if (condition) { static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); } else [[unlikely]] NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
@@ -694,18 +687,30 @@ namespace NActors {
             )("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 
 
-#define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
+#define YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRIO, COMP, SAMPLE_BY, T, ...) \
     do { \
         auto& ydblogActorContext = (CTX); \
         const auto ydblogPriority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
         const auto ydblogComponent = [&]{ using namespace NKikimrServices; return (COMP); }(); \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(ydblogActorContext, ydblogPriority, ydblogComponent, 0ull)) { \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(ydblogActorContext, ydblogPriority, ydblogComponent, SAMPLE_BY)) { \
             NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage = NActors::NStructuredLog::TLogStack::GetTop(); \
             YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__); \
             TStringStream ydblogMessageTextStream; ydblogMessageTextStream << T; \
             MemStructLogAdapter(ydblogActorContext, ydblogPriority, ydblogComponent, __FILE_NAME__, __LINE__, ydblogMessageTextStream.Str(), std::move(ydblogStructuredMessage) ); \
         } \
     } while (false)
+
+#define YDB_LOG_EMERG_CTX_COMP_SAMPLED_BY(CTX, COMP, SAMPLE_BY, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_EMERG, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_ALERT_CTX_COMP_SAMPLED_BY(CTX, COMP, SAMPLE_BY, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_ALERT, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_CRIT_CTX_COMP_SAMPLED_BY(CTX, COMP, SAMPLE_BY, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_CRIT, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(CTX, COMP, SAMPLE_BY, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_ERROR, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_WARN_CTX_COMP_SAMPLED_BY(CTX, COMP, SAMPLE_BY, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_WARN, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_NOTICE_CTX_COMP_SAMPLED_BY(CTX, COMP, SAMPLE_BY, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_NOTICE, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_INFO_CTX_COMP_SAMPLED_BY(CTX, COMP, SAMPLE_BY, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_INFO, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(CTX, COMP, SAMPLE_BY, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_DEBUG, COMP, SAMPLE_BY, T, __VA_ARGS__)
+#define YDB_LOG_TRACE_CTX_COMP_SAMPLED_BY(CTX, COMP, SAMPLE_BY, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRI_TRACE, COMP, SAMPLE_BY, T, __VA_ARGS__)
+
+#define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(CTX, PRIO, COMP, 0ull, T, __VA_ARGS__)
 
 #define YDB_LOG_CTX_COMP_FAIL(CTX, PRIO, COMP, T, ...) \
     do { \
@@ -780,3 +785,39 @@ namespace NActors {
 #define YDB_LOG_DEBUG(T, ...) YDB_LOG(PRI_DEBUG, T, __VA_ARGS__)
 #define YDB_LOG_DEBUG_FAIL(T, ...) YDB_LOG_COMP_FAIL(PRI_DEBUG, YDB_LOG_THIS_FILE_COMPONENT, T, __VA_ARGS__)
 #define YDB_LOG_TRACE(T, ...) YDB_LOG(PRI_TRACE, T, __VA_ARGS__)
+
+#define YDB_LOG_VERIFY(condition, ...)                                                                                              \
+    do {                                                                                                                            \
+        if (condition) {                                                                                                            \
+            static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+        } else [[unlikely]] {                                                                                                       \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+            NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+        }                                                                                                                           \
+    } while (false)
+
+#define YDB_LOG_ENSURE(condition, ...)                                                                                              \
+    do {                                                                                                                            \
+        if (condition) {                                                                                                            \
+            static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+        } else [[unlikely]] {                                                                                                       \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+            NActors::LogEnsureFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+        }                                                                                                                           \
+    } while (false)
+
+/// Assert that depends on NDEBUG macro; the message is built from structured key/value pairs.
+#ifndef NDEBUG
+#define YDB_LOG_VERIFY_DEBUG YDB_LOG_VERIFY
+#else
+#define YDB_LOG_VERIFY_DEBUG(condition, ...)                                                                                        \
+    do {                                                                                                                            \
+        if (true); else [[unlikely]] {                                                                                              \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+            NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+        }                                                                                                                           \
+    } while (false)
+#endif

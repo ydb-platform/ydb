@@ -14,7 +14,7 @@
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
-#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/common/events/stream.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -64,7 +64,7 @@ public:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            IgnoreFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress);
+            IgnoreFunc(NKqp::TEvKqpExecuterProgress);
             default: TBase::StateWork(ev);
         }
     }

@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
+    kqp_stage_graph_ut.cpp
     kqp_rbo_compatibility_ut.cpp
     kqp_rbo_lowering_ut.cpp
     kqp_rbo_yql_physical_ut.cpp
@@ -14,16 +15,17 @@ SRCS(
 
 PEERDIR(
     library/cpp/resource
+    ydb/core/kqp/common/simple
     ydb/core/kqp/ut/common
-    yql/essentials/public/udf/service/exception_policy
-    yql/essentials/sql/pg
-    yql/essentials/parser/pg_wrapper
-    ydb/library/benchmarks/queries/tpch
-    ydb/library/plan2svg
-    ydb/public/lib/ut_helpers
-    ydb/library/yql/udfs/statistics_internal
     ydb/core/kqp/ut/olap/helpers
     ydb/core/statistics/ut_common
+    ydb/library/benchmarks/queries/tpch
+    ydb/library/plan2svg
+    ydb/library/yql/udfs/statistics_internal
+    ydb/public/lib/ut_helpers
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/hyperloglog
     yql/essentials/udfs/common/url_base

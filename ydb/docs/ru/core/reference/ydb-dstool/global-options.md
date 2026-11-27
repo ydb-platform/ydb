@@ -11,7 +11,7 @@
 `-e`, `--endpoint` | Эндпоинт для подключения к кластеру {{ ydb-short-name }} в формате `[PROTOCOL://]HOST[:PORT]`.<br/>Значения по умолчанию: протокол — `http`, порт — `8765`.
 `--grpc-port` | gRPC-порт для вызова процедур.
 `--mon-port` | Порт для просмотра данных HTTP-мониторинга в формате JSON.
-`--token-file` | Путь к файлу с [Access Token](../../security/authentication.md#iam).
+`--token-file` | Путь к файлу с [аутентификационным токеном](connect.md#token-file-format).
 `--ca-file` | Путь к файлу корневого PEM-сертификата для TLS-соединения.
 `--http` | Использовать HTTP для подключения к Blob Storage вместо gRPC.
 `--http-timeout` | Тайм-аут на операции ввода-вывода сокета во время HTTP(s)-запросов.

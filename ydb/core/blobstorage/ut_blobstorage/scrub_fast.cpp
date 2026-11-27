@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/vdisk/scrub/blob_recovery.h>
+#include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -139,6 +140,118 @@ void Test() {
 }
 
 Y_UNIT_TEST_SUITE(ScrubFast) {
+    Y_UNIT_TEST(RecoverCorruptedPartInSoloRealm) {
+        using TLayout = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
+        TEnvironmentSetup env{{.Erasure = TBlobStorageGroupType::ErasureMirror3dc}};
+        env.CreateBoxAndPool();
+        env.UpdateSettings(false, false);
+        env.Sim(TDuration::Minutes(1));
+        const ui32 groupId = env.GetGroups().front();
+        const auto initialInfo = env.GetGroupInfo(groupId);
+        const TString data(1_MB, 'x');
+        const TLogoBlobID id(1, 1, 1, 0, data.size(), 0);
+        const auto& topology = initialInfo->GetTopology();
+        ui32 includedRealm = 0;
+        for (ui32 disk = 0; disk < initialInfo->GetTotalVDisksNum(); ++disk) {
+            if (initialInfo->GetActorId(disk).NodeId() == env.Settings.ControllerNodeId) {
+                includedRealm = initialInfo->GetVDiskId(disk).FailRealm;
+            }
+        }
+
+        TBlobStorageGroupInfo::TOrderNums subgroup;
+        topology.PickSubgroup(id.Hash(), subgroup);
+        ui32 targetIdx = 0;
+        while (initialInfo->GetVDiskId(subgroup[targetIdx]).FailRealm != includedRealm) {
+            ++targetIdx;
+        }
+        const ui32 targetDisk = subgroup[targetIdx];
+        const ui32 sourceDisk = subgroup[targetIdx + 3];
+        const TLogoBlobID partId(id, targetIdx + 1);
+        const auto target = initialInfo->GetActorId(targetDisk);
+        const auto source = initialInfo->GetActorId(sourceDisk);
+        env.PutBlob(initialInfo->GetVDiskId(targetDisk), partId, data);
+        env.PutBlob(initialInfo->GetVDiskId(sourceDisk), partId, data);
+
+        std::unique_ptr<IEventHandle> scrubGrant;
+        bool holdGrant = true;
+        bool readFromSource = false;
+        std::optional<NKikimrProto::EReplyStatus> restoreStatus;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            const ui32 type = ev->GetTypeRewrite();
+            if (holdGrant && type == TEvBlobStorage::EvControllerScrubStartQuantum && ev->Recipient == target) {
+                scrubGrant = std::move(ev);
+                return false;
+            }
+            if (!holdGrant && type == TEvBlobStorage::EvVGet && nodeId == source.NodeId()
+                    && ev->Recipient == source && ev->Sender.NodeId() == target.NodeId()) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvVGet>()->Record;
+                for (const auto& query : record.GetExtremeQueries()) {
+                    readFromSource |= record.GetHandleClass() == NKikimrBlobStorage::AsyncRead
+                        && LogoBlobIDFromLogoBlobID(query.GetId()) == id;
+                }
+            }
+            if (!holdGrant && type == TEvBlobStorage::EvRestoreCorruptedBlobResult && nodeId == target.NodeId()) {
+                for (const auto& item : ev->Get<TEvRestoreCorruptedBlobResult>()->Items) {
+                    if (item.BlobId == id) {
+                        restoreStatus = item.Status;
+                    }
+                }
+            }
+            return true;
+        };
+
+        // Reserve a real scrub quantum while all realms are up. Run it after losing both peers.
+        env.SetScrubPeriodicity(TDuration::Seconds(1));
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT_C(scrubGrant, "The controller did not grant a scrub quantum for the target VDisk");
+        for (ui32 disk = 0; disk < initialInfo->GetTotalVDisksNum(); ++disk) {
+            if (initialInfo->GetVDiskId(disk).FailRealm != includedRealm) {
+                env.StopNode(initialInfo->GetActorId(disk).NodeId());
+            }
+        }
+        env.Sim(TDuration::Seconds(10));
+
+        using TRealm = NKikimrBlobStorage::TDataCenterState;
+        NKikimrBlobStorage::TConfigRequest config;
+        config.SetIgnoreGroupFailModelChecks(true);
+        config.SetIgnoreDegradedGroupsChecks(true);
+        auto* definition = config.AddCommand()->MutableDefineGroupState()->AddGroups();
+        definition->SetGroupId(groupId);
+        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_SOLO_INV2);
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            definition->AddFailRealmStates(realm == includedRealm ? TRealm::INCLUDED : TRealm::EXCLUDED);
+        }
+        const auto response = env.Invoke(config);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        env.Sim(TDuration::Seconds(10));
+        const auto info = env.GetGroupInfo(groupId);
+        UNIT_ASSERT_GT(info->GroupGeneration, initialInfo->GroupGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(info->GetMirror3dcState().State),
+            static_cast<ui32>(NKikimrBlobStorage::TGroupState::DC_SOLO_INV2));
+
+        const auto [nodeId, pdiskId, slotId] = DecomposeVDiskServiceId(target);
+        const auto& pdisk = env.PDiskMockStates.at({nodeId, pdiskId});
+        const auto layout = env.SyncQuery<TLayout, TEvBlobStorage::TEvCaptureVDiskLayout>(target);
+        bool corrupted = false;
+        for (const auto& item : layout->Layout) {
+            if (item.RecordType == TLayout::ERecordType::HugeBlob && item.BlobId.FullID() == id) {
+                const auto& loc = item.Location;
+                pdisk->SetCorruptedArea(loc.ChunkIdx, loc.Offset, loc.Offset + loc.Size, true);
+                corrupted = true;
+            }
+        }
+        UNIT_ASSERT(corrupted);
+
+        holdGrant = false;
+        env.Runtime->Send(scrubGrant.release(), nodeId);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_C(readFromSource, "The scrub VGet did not reach the surviving replica");
+        UNIT_ASSERT_C(restoreStatus, "Scrub did not finish restoring the corrupted part");
+        UNIT_ASSERT_VALUES_EQUAL(*restoreStatus, NKikimrProto::OK);
+        env.Runtime->FilterFunction = {};
+        env.CheckBlob(target, info->GetVDiskId(targetDisk), partId, data);
+    }
+
     Y_UNIT_TEST(RecoverBlobInExtendedGroup) {
         TEnvironmentSetup env{{
             .NodeCount = 12,

@@ -1269,6 +1269,67 @@ TMap<TSet<TVector<NYamlConfig::TLabel>>, TVector<int>> ExpectedResolved =
     },
 };
 
+Y_UNIT_TEST_SUITE(DynamicNodeNameservice) {
+    struct TFixture : public NUnitTest::TBaseFixture {
+        NKikimrConfig::TAppConfig Console;
+        NKikimrConfig::TAppConfig Yaml;
+        NKikimrConfig::TAppConfig Registration;
+
+        TFixture() {
+            auto* legacy = Console.MutableNameserviceConfig();
+            legacy->SetClusterUUID("cluster-uuid");
+            auto* oldNode = legacy->AddNode();
+            oldNode->SetNodeId(1);
+            oldNode->MutableWalleLocation()->SetDataCenter("BRO");
+
+            Yaml.SetYamlConfigEnabled(true);
+            auto* bridge = Yaml.MutableBridgeConfig();
+            bridge->AddPiles()->SetName("original");
+            bridge->AddPiles()->SetName("added");
+            for (ui32 id : {1u, 2u}) {
+                auto* node = Registration.MutableNameserviceConfig()->AddNode();
+                node->SetNodeId(id);
+                node->SetInterconnectHost(id == 1 ? "static-1" : "static-2");
+                node->MutableLocation()->SetBridgePileName(id == 1 ? "original" : "added");
+            }
+        }
+
+        NKikimrConfig::TStaticNameserviceConfig ExpectedNameservice(const NKikimrConfig::TAppConfig& nodes) const {
+            auto expected = Console.GetNameserviceConfig();
+            expected.MutableNode()->CopyFrom(nodes.GetNameserviceConfig().GetNode());
+            return expected;
+        }
+    };
+
+    Y_UNIT_TEST_F(BridgedYamlHostsSurviveLegacyConsoleItem, TFixture) {
+        Yaml.MutableNameserviceConfig()->CopyFrom(Registration.GetNameserviceConfig());
+        Yaml.MutableNameserviceConfig()->MutableNode(1)->SetInterconnectHost("from-yaml");
+        const auto expected = ExpectedNameservice(Yaml);
+
+        const auto source = NYamlConfig::ReplaceUnmanagedKinds(Console, Yaml, Registration);
+
+        UNIT_ASSERT(source == NYamlConfig::ENameserviceNodesOverride::Yaml);
+        UNIT_ASSERT_NO_DIFF(expected.DebugString(), Yaml.GetNameserviceConfig().DebugString());
+    }
+
+    Y_UNIT_TEST_F(BridgedYamlWithoutHostsUsesRegisteredStaticNodes, TFixture) {
+        const auto source = NYamlConfig::ReplaceUnmanagedKinds(Console, Yaml, Registration);
+
+        UNIT_ASSERT(source == NYamlConfig::ENameserviceNodesOverride::NodeRegistration);
+        UNIT_ASSERT_NO_DIFF(ExpectedNameservice(Registration).DebugString(), Yaml.GetNameserviceConfig().DebugString());
+    }
+
+    Y_UNIT_TEST_F(OrdinaryYamlUsesConsoleNodes, TFixture) {
+        Yaml.ClearBridgeConfig();
+        Yaml.MutableNameserviceConfig()->CopyFrom(Registration.GetNameserviceConfig());
+
+        const auto source = NYamlConfig::ReplaceUnmanagedKinds(Console, Yaml, Registration);
+
+        UNIT_ASSERT(source == NYamlConfig::ENameserviceNodesOverride::None);
+        UNIT_ASSERT_NO_DIFF(Console.GetNameserviceConfig().DebugString(), Yaml.GetNameserviceConfig().DebugString());
+    }
+}
+
 Y_UNIT_TEST_SUITE(YamlConfigOpaqueConfigMarker) {
 
     Y_UNIT_TEST(OpaqueConfigFieldsIncludesExistingOpaqueFields) {

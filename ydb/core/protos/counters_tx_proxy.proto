@@ -24,6 +24,6 @@ enum EPercentileCounters {
 }
 
 enum ETxTypes {
-    TXTYPE_INIT = 0                                       [(TxTypeOpts) = {Name: "TxInit"}];
-    TXTYPE_RESERVE_IDS = 1                                [(TxTypeOpts) = {Name: "TxReserveIds"}];
+    TXTYPE_INIT_DEPRECATED = 0                            [deprecated = true];
+    TXTYPE_RESERVE_IDS_DEPRECATED = 1                     [deprecated = true];
 }

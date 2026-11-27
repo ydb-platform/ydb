@@ -35,7 +35,7 @@ $$\mathrm{Scatter} = \frac{\mathrm{MaxUsage} - \mathrm{MinUsage}}{\mathrm{MaxUsa
 
 $\mathrm{MaxUsage}$ и $\mathrm{MinUsage}$ — максимум и минимум потребления данного ресурса среди всех узлов, соответственно. Для нормировки потребления на каждом узле используется число доступных ресурсов на узле, которое может различаться между узлами. При низких нагрузках эта величина может сильно колебаться. Чтобы этого избежать, при вычислении $\mathrm{Scatter}$ считается, что потребление ресурса не может быть ниже 30%. Если $Scatter$ превышает порог, запускается балансировка.
 
-Максимальное из значений $Scatter$ по разным ресурсам доступно в виде [сенсора](../devops/observability/monitoring.md) `Hive/MAX(BalanceScatter)` в подгруппе `tablets`.
+Максимальное из значений $Scatter$ по разным ресурсам доступно в виде [сенсора](../devops/observability/monitoring.md) `MAX(Hive/BalanceScatter)` в подгруппе `tablets`.
 
 ### Перегруженность узла {#emergency}
 
@@ -43,13 +43,13 @@ $\mathrm{MaxUsage}$ и $\mathrm{MinUsage}$ — максимум и миниму�
 
 Этот вариант балансировки отличается от других более аггресивными перевозами таблеток.
 
-Максимальное потребление на узле доступно в виде [сенсора](../devops/observability/monitoring.md) `Hive/MAX(BalanceUsageMax)` в подгруппе `tablets`.
+Максимальное потребление на узле доступно в виде [сенсора](../devops/observability/monitoring.md) `MAX(Hive/BalanceUsageMax)` в подгруппе `tablets`.
 
 ### Равномерное распределение конкретного объекта {#imbalance}
 
 Для таблеток, которые используют ресурс Counter, также отслеживается равномерность распределения таблеток каждого объекта (каждой таблицы) с помощью метрики `ObjectImbalance`, аналогичной описанной выше $Scatter$. При рестартах узлов равномерность может нарушаться, и тогда запускается балансировка.
 
-Максимальное из значений `ObjectImbalance` по разным объектам доступно в виде [сенсора](../devops/observability/monitoring.md) `Hive/MAX(BalanceObjectImbalance)` в подгруппе `tablets`.
+[Сенсор](../devops/observability/monitoring.md) `MAX(Hive/ImbalancedObjects)` показывает максимальное среди Hive в подгруппе `tablets` количество объектов с ненулевым `ObjectImbalance`. Для каждого Hive значение `WorstObjectVariance` равно дисперсии числа таблеток по узлам у объекта с наибольшим `ObjectImbalance`; сенсор `MAX(Hive/WorstObjectVariance)` показывает максимум этих значений.
 
 ## Смотрите также
 

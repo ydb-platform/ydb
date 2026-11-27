@@ -1,4 +1,4 @@
-#include "ydb_common_ut.h"
+#include "ydb_relative_database_ut.h"
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -12,7 +12,6 @@ using namespace NYdb;
 namespace {
 
 const TString TenantPath = "/Root/Root/mydb";
-const TString TenantPoolKind = "mydb";
 
 struct TDiscoveryResult {
     grpc::Status Status;
@@ -74,24 +73,9 @@ Y_UNIT_TEST(DisabledFlagPreservesLegacyDatabaseNames) {
 }
 
 Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
-    TKikimrWithGrpcAndRootSchema server({}, {}, {}, false, nullptr, [](auto& settings) {
-        settings.FeatureFlags.SetEnableRelativePaths(true);
-        settings.StoragePoolTypes.clear();
-        settings.AddStoragePool(TenantPoolKind, TStringBuilder() << TenantPath << ':' << TenantPoolKind);
-    });
-
-    Ydb::Cms::CreateDatabaseRequest createRequest;
-    createRequest.set_path(TenantPath);
-    auto* storage = createRequest.mutable_resources()->add_storage_units();
-    storage->set_unit_kind(TenantPoolKind);
-    storage->set_count(1);
-    server.Tenants_->CreateTenant(std::move(createRequest));
-
-    const ui16 tenantGrpcPort = server.GetPortManager().GetPort();
-    server.GetServer().EnableGRpc(
-        tenantGrpcPort,
-        server.Tenants_->List(TenantPath).front(),
-        TString(TenantPath));
+    TRelativeDatabaseFixture fixture(TenantPath);
+    auto& server = fixture.Server;
+    const ui16 tenantGrpcPort = fixture.Port;
 
     auto channel = grpc::CreateChannel(
         TStringBuilder() << "localhost:" << tenantGrpcPort,
@@ -118,10 +102,7 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
         }
     }
 
-    TDriver driver(TDriverConfig()
-        .SetEndpoint(TStringBuilder() << "localhost:" << tenantGrpcPort)
-        .SetDatabase("Root/mydb")
-        .SetDiscoveryMode(EDiscoveryMode::Sync));
+    auto driver = fixture.CreateDriver("Root/mydb");
     NYdb::NTable::TTableClient tableClient(driver);
     const auto sessionResult = tableClient.CreateSession().GetValueSync();
     AssertSuccess(sessionResult);

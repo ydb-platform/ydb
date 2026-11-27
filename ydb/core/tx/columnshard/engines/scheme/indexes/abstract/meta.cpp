@@ -1,4 +1,3 @@
-#include "fetcher.h"
 #include "meta.h"
 
 #include <ydb/core/tx/columnshard/engines/portions/index_chunk.h>
@@ -29,9 +28,9 @@ bool IIndexMeta::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescripti
 }
 
 void IIndexMeta::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
-    AFL_VERIFY(IndexId);
+    YDB_LOG_VERIFY(IndexId);
     proto.SetId(IndexId);
-    AFL_VERIFY(IndexName);
+    YDB_LOG_VERIFY(IndexName);
     proto.SetName(IndexName);
     if (DefaultStorageId) {
         proto.SetStorageId(DefaultStorageId);
@@ -44,11 +43,6 @@ NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TString& iChunk, const T
     NJson::TJsonValue result = NJson::JSON_MAP;
     result.InsertValue("data", DoSerializeDataToJson(iChunk, indexInfo));
     return result;
-}
-
-std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
-    const std::shared_ptr<IIndexMeta>& selfPtr, const std::shared_ptr<IStoragesManager>& storagesManager) const {
-    return std::make_shared<TIndexFetcherLogic>(dataAddresses, selfPtr, storagesManager);
 }
 
 std::optional<ui64> IIndexMeta::CalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const {
@@ -65,7 +59,7 @@ TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> IIndexMet
     for (auto&& i : *conclusion) {
         checkRecordsCount += i->GetRecordsCountVerified();
     }
-    AFL_VERIFY(checkRecordsCount == recordsCount);
+    YDB_LOG_VERIFY(checkRecordsCount == recordsCount);
     return conclusion;
 }
 

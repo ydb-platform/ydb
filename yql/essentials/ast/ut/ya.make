@@ -13,6 +13,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/yson/node
+    yql/essentials/ast/test_support
 )
 
 END()

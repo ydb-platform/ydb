@@ -9,7 +9,7 @@ private:
     THashMap<ui64, TBlobRangeLink16> Ranges;
 
     virtual std::optional<TBlobRangeLink16> DoGetAddressForCategory(const std::optional<ui64> cat) const override {
-        AFL_VERIFY(!!cat);
+        YDB_LOG_VERIFY(!!cat);
         auto it = Ranges.find(*cat);
         if (it == Ranges.end()) {
             return std::nullopt;

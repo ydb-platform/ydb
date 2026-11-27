@@ -199,16 +199,18 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             if (rename.Side == EJoinSide::kLeft) {
                 auto* resType = descr.LeftSource.ColumnTypes[rename.Index];
                 arr.push_back([&] {
-                    if (ForceLeftOptional(joinKind) && !resType->IsOptional()) {
+                    if (ForceLeftOptional(joinKind) && !resType->IsOptional() && !resType->IsNull()) {
                         return pb.NewOptionalType(resType);
                     } else {
                         return resType;
                     }
                 }());
+            } else if (joinSettings.Mark) {
+                arr.push_back(pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<bool>::Id)));
             } else {
                 auto* resType = descr.RightSource.ColumnTypes[rename.Index];
                 arr.push_back([&] {
-                    if (ForceRightOptional(joinKind) && !resType->IsOptional()) {
+                    if (ForceRightOptional(joinKind) && !resType->IsOptional() && !resType->IsNull()) {
                         return pb.NewOptionalType(resType);
                     } else {
                         return resType;

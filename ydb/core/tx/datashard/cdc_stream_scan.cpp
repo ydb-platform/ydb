@@ -246,6 +246,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto& ev = *Request->Get();
+        if (Self->DatabaseFreeze.GetStage() >= NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC) {
+            return true;
+        }
         const auto& tablePathId = ev.TablePathId;
         const auto& streamPathId = ev.StreamPathId;
         const auto& readVersion = ev.ReadVersion;
@@ -321,27 +324,27 @@ public:
             NKikimrChangeExchange::TDataChange body;
             switch (it->second.Mode) {
                 case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
-                    Serialize(body, ERowOp::Upsert, key, keyTags, {});
+                    SerializeUpdates(body, ERowOp::Upsert, key, keyTags, {});
                     break;
                 case NKikimrSchemeOp::ECdcStreamModeUpdate:
-                    Serialize(body, ERowOp::Upsert, key, keyTags, MakeUpdates(v.GetCells(), valueTags, table));
+                    SerializeUpdates(body, ERowOp::Upsert, key, keyTags, MakeUpdates(v.GetCells(), valueTags, table));
                     break;
                 case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
                     if (auto updates = NIncrRestoreHelpers::MakeRestoreUpdates(v.GetCells(), valueTags, table->Columns); updates) {
-                        Serialize(body, ERowOp::Upsert, key, keyTags, *updates);
+                        SerializeUpdates(body, ERowOp::Upsert, key, keyTags, *updates);
                     } else {
-                        Serialize(body, ERowOp::Erase, key, keyTags, {});
+                        SerializeUpdates(body, ERowOp::Erase, key, keyTags, {});
                     }
                     break;
                 case NKikimrSchemeOp::ECdcStreamModeNewImage:
                 case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages: {
                     const auto newImage = MakeRow(v.GetCells());
-                    Serialize(body, ERowOp::Upsert, key, keyTags, nullptr, &newImage, valueTags);
+                    SerializeImages(body, ERowOp::Upsert, key, keyTags, nullptr, &newImage, valueTags);
                     break;
                 }
                 case NKikimrSchemeOp::ECdcStreamModeOldImage: {
                     const auto oldImage = MakeRow(v.GetCells());
-                    Serialize(body, ERowOp::Upsert, key, keyTags, &oldImage, nullptr, valueTags);
+                    SerializeImages(body, ERowOp::Upsert, key, keyTags, &oldImage, nullptr, valueTags);
                     break;
                 }
                 default:
@@ -573,6 +576,11 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
+        if (Self->DatabaseFreeze.GetStage() >= NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC) {
+            Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::BAD_REQUEST,
+                "Database is frozen for CDC scan generation");
+            return true;
+        }
 
         YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Handling CDC stream scan request",
             {"tabletId", TabletID()},
@@ -661,7 +669,7 @@ public:
         if (it->second.Mode != NKikimrSchemeOp::ECdcStreamModeKeysOnly) {
             valueTags.reserve(table->Columns.size() - 1);
             for (const auto& [tag, column] : table->Columns) {
-                if (!column.IsKey) {
+                if (!column.IsKey && !column.IsBuildInProgress) {
                     valueTags.push_back(tag);
                 }
             }
@@ -740,4 +748,3 @@ void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TA
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

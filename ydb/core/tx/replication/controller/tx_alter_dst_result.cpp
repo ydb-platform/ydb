@@ -62,17 +62,25 @@ public:
         }
 
         if (Ev->Get()->IsSuccess()) {
-            target->SetDstState(NextState(Replication->GetDesiredState()));
-            if (Replication->GetDesiredState() == TReplication::EState::Done) {
-                target->SetPendingDstPathId({});
+            const bool removing = Replication->GetState() == TReplication::EState::Removing;
+            if (removing) {
+                target->SetDstState(TReplication::EDstState::Done);
+            } else {
+                target->SetDstState(NextState(Replication->GetDesiredState()));
             }
             target->UpdateConfig(Replication->GetConfig());
+
+            // A destination success says nothing about the source: while the stream is failed,
+            // its issue is still the live one and PAUSE never resets it.
+            if (target->GetStreamState() != TReplication::EStreamState::Error) {
+                target->SetIssue({});
+            }
 
             YDB_LOG_NOTICE_CTX(ctx, "Target dst altered",
                 {"rid", rid},
                 {"tid", tid});
 
-            if (Replication->CheckAlterDone()) {
+            if (!removing && Replication->CheckAlterDone()) {
                 YDB_LOG_NOTICE_CTX(ctx, "Replication altered",
                     {"rid", rid},
                     {"state", Replication->GetDesiredState()});
@@ -99,13 +107,13 @@ public:
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(rid, tid).Update(
-            NIceDb::TUpdate<Schema::Targets::PendingDstPathOwnerId>(target->GetPendingDstPathId().OwnerId),
-            NIceDb::TUpdate<Schema::Targets::PendingDstPathLocalId>(target->GetPendingDstPathId().LocalPathId),
             NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );
 
-        if (Replication->GetState() != TReplication::EState::Ready) {
+        if (Replication->GetState() != TReplication::EState::Ready
+            && Replication->GetState() != TReplication::EState::Removing)
+        {
             Replication.Reset();
         }
 

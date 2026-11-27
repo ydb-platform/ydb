@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/compute_actor/kqp_scan_fetcher_actor.h>
 
 #include <ydb/core/testlib/basics/appdata.h>
@@ -8,6 +9,46 @@
 #include <ydb/library/testlib/helpers.h>
 
 Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
+
+    Y_UNIT_TEST_TWIN(SortedReadPolicySurvivesRetry, Reverse) {
+        using namespace NKikimr;
+        using namespace NKikimr::NKqp;
+        NActors::TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto pipeCache = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakePipePerNodeCacheID(false), pipeCache);
+        const auto compute = runtime.AllocateEdgeActor();
+        NKikimrKqp::TKqpSnapshot snapshot;
+        NYql::NDq::TComputeRuntimeSettings settings;
+        NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta meta;
+        meta.SetRequireSortedRead(true);
+        meta.SetOptionalSorting(static_cast<ui32>(Reverse ? NYql::ERequestSorting::DESC : NYql::ERequestSorting::ASC));
+        auto& read = *meta.AddReads();
+        read.SetShardId(1001001);
+        read.AddKeyRanges();
+        const auto fetcher = runtime.Register(CreateKqpScanFetcher(snapshot, {compute}, meta, settings,
+            "/Root", {}, 42, {}, 0, {}, TShardsScanningPolicy(),
+            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()), {}, TCPULimits()));
+        runtime.EnableScheduleForActor(fetcher, true);
+
+        TString scanPolicy;
+        for (ui32 attempt = 0; attempt < 3; ++attempt) {
+            if (attempt) {
+                runtime.Send(fetcher, pipeCache, new TEvPipeCache::TEvDeliveryProblem(1001001, false));
+            }
+            const auto event = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
+            const auto* scan = dynamic_cast<TEvDataShard::TEvKqpScan*>(event->Get()->Ev.get());
+            UNIT_ASSERT(scan);
+            UNIT_ASSERT(scan->Record.HasReverse());
+            UNIT_ASSERT_VALUES_EQUAL(scan->Record.GetReverse(), Reverse);
+            UNIT_ASSERT(!scan->Record.GetCSScanPolicy().empty());
+            if (!attempt) {
+                scanPolicy = scan->Record.GetCSScanPolicy();
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(scan->Record.GetCSScanPolicy(), scanPolicy);
+            }
+        }
+    }
 
     Y_UNIT_TEST(SchemeCacheUsesDatabasePathNotSchedulerDatabaseId) {
         using namespace NKikimr;

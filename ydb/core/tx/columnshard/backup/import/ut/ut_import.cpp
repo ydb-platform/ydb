@@ -105,6 +105,20 @@ Y_UNIT_TEST_SUITE(ImportSessionStateMachine) {
         UNIT_ASSERT_C(!shouldCallAbort, "TAbortSessionControl::DoApply would call Abort() on an already-Aborted "
                                         "session, reproducing the crash at session.cpp:33");
     }
+
+    Y_UNIT_TEST(AbortErrorMessageSurvivesStateReload) {
+        auto session = MakeSession();
+        session->Confirm();
+        session->Abort("Import operation timed out");
+        const TString state = session->SerializeStateToString();
+
+        auto reloaded = MakeSession();
+        UNIT_ASSERT(reloaded->DeserializeStateFromString(state).IsSuccess());
+        UNIT_ASSERT(reloaded->IsReadyForRemoveOnFinished());
+        const auto status = reloaded->GetStatus();
+        UNIT_ASSERT(!status.Success);
+        UNIT_ASSERT_VALUES_EQUAL(status.ErrorMessage, "Import operation timed out");
+    }
 }
 
 namespace {
@@ -258,7 +272,7 @@ Y_UNIT_TEST_SUITE(Restore) {
             Cerr << "waiting " << title << Endl;
             runtime.SimulateSleep(TDuration::Seconds(1));
         }
-        AFL_VERIFY(checker());
+        YDB_LOG_VERIFY(checker());
     }
 
     void PlanAndWait(TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const TPlanStep planStep,
@@ -274,9 +288,9 @@ Y_UNIT_TEST_SUITE(Restore) {
     template <class TCounter>
     void RunCountedTx(TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody,
         ui64& txId, const TCounter& counter, std::optional<TMessageSeqNo> seqNo = std::nullopt) {
-        AFL_VERIFY(counter() == 0);
+        YDB_LOG_VERIFY(counter() == 0);
         const auto planStep = ProposeTx(runtime, sender, txKind, txBody, ++txId, seqNo);
-        AFL_VERIFY(counter() == 1);
+        YDB_LOG_VERIFY(counter() == 1);
         PlanAndWait(runtime, sender, txKind, planStep, txId);
     }
 

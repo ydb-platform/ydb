@@ -277,6 +277,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     case TIndexBuildInfo::EState::AlterSequence:
     case TIndexBuildInfo::EState::AlterIndexTable:
     case TIndexBuildInfo::EState::PrepareValidation:
+    case TIndexBuildInfo::EState::PrepareVectorIndex:
         index.SetState(Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
         index.SetProgress(indexInfo.CalcProgressPercent());
         break;
@@ -345,6 +346,9 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
             *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw:
+            *index.mutable_global_hnsw_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact:

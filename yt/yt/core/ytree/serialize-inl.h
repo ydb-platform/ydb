@@ -734,6 +734,16 @@ void Deserialize(
     T& message,
     const INodePtr& node)
 {
+    if (node->GetType() == ENodeType::String) {
+        std::string string;
+        Deserialize(string, node);
+        if (!TryDeserializeProto(&message, TRef::FromString(string))) {
+            THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
+                .With("protobuf_type", message.GetTypeName());
+        }
+        return;
+    }
+
     NYson::TProtobufWriterOptions options;
     options.UnknownYsonFieldModeResolver = NYson::TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
         NYson::EUnknownYsonFieldsMode::Keep);
@@ -745,12 +755,8 @@ void Deserialize(
     T& message,
     const INodePtr& node)
 {
-    std::string string;
-    Deserialize(string, node);
-    if (!TryDeserializeProto(&message, TRef::FromString(string))) {
-        THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
-            .With("protobuf_type", message.GetTypeName());
-    }
+    using TMessage = std::remove_cvref_t<decltype(T::default_instance())>;
+    Deserialize(static_cast<TMessage&>(message), node);
 }
 
 template <class T, class TTag, TStrongTypedefOptions Options>

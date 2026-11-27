@@ -9,6 +9,12 @@ PEERDIR(
 SRCS(
     registry.cpp
     resource.cpp
+    static_blob_default.cpp
+)
+
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib
 )
 
 END()

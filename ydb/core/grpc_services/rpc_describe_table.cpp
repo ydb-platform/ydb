@@ -11,6 +11,8 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
+#include <util/string/builder.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
 namespace NKikimr {
@@ -149,6 +151,8 @@ private:
                     selfEntry->set_name(parts.empty() ? TString("/") : parts.back());
                 }
 
+                FillAttributes(describeTableResult, pathDescription);
+
                 if (pathDescription.HasColumnTableDescription()) {
                     const auto& tableDescription = pathDescription.GetColumnTableDescription();
                     FillColumnDescription(describeTableResult, tableDescription);
@@ -172,6 +176,18 @@ private:
                 }
 
                 const auto& tableDescription = pathDescription.GetTable();
+                // The dump schema format cannot represent generated-column definitions.
+                if (Request_->GetRequestType().GetOrElse("") == "dump") {
+                    for (const auto& column : tableDescription.GetColumns()) {
+                        if (column.HasDefaultFromExpression()) {
+                            Request_->RaiseIssue(NYql::TIssue(TStringBuilder()
+                                << "Cannot dump table " << TablePath.Quote()
+                                << ": exporting tables with generated columns is not supported"));
+                            return Reply(Ydb::StatusIds::UNSUPPORTED, ctx);
+                        }
+                    }
+                }
+
                 NKikimrMiniKQL::TType splitKeyType;
 
                 try {
@@ -230,7 +246,6 @@ private:
 
                 FillStorageSettings(describeTableResult, tableDescription);
                 FillColumnFamilies(describeTableResult, tableDescription);
-                FillAttributes(describeTableResult, pathDescription);
                 FillPartitioningSettings(describeTableResult, tableDescription);
                 FillKeyBloomFilter(describeTableResult, tableDescription);
                 FillReadReplicasSettings(describeTableResult, tableDescription);

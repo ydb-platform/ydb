@@ -51,6 +51,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const 
     Execute(CreateTxReply(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvDataShard::TEvDeltaKMeansResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxReply(ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxReply(ev), ctx);
 }
@@ -140,6 +144,10 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
                 *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
                     std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
                 break;
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+                *serializableRepresentation.MutableHnswIndexDescription() =
+                    std::get<NKikimrSchemeOp::THnswIndexDescription>(info.SpecializedIndexDescription);
+                break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -196,6 +204,10 @@ void TSchemeShard::PersistBuildIndexSpecializedDescription(NIceDb::TNiceDb& db, 
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
                 std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            *serializableRepresentation.MutableHnswIndexDescription() =
+                std::get<NKikimrSchemeOp::THnswIndexDescription>(info.SpecializedIndexDescription);
             break;
         default:
             break;

@@ -158,10 +158,9 @@ namespace NKikimr {
         //    collectStep=Max<ui32>(). For this command perGenCounter must also be
         //    set to Max<ui32>()
         //
-        // With EnableCollectByCompleteDeletionBlock, once the Max generation block is
-        // present, the tablet is treated as fully deleted: no blob data is needed, and
-        // compaction may drop every barrier record for that tablet. The Max generation
-        // block itself is kept. Without the flag, the data waits for the barrier.
+        // The Max generation block is kept permanently and covers all blob data on every
+        // channel. EnableCollectByCompleteDeletionBlock also permits compacting away the
+        // final hard barrier.
 
         ////////////////////////////////////////////////////////////////////////
         // Blocks

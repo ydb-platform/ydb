@@ -368,6 +368,7 @@ public:
         {
         }
 
+        OPTION_FIELD_DEFAULT(bool, SkipFmr, false)
         OPTION_FIELD(TUserDataTable, UserDataBlocks)
         OPTION_FIELD(TUdfModulesTable, UdfModules)
         OPTION_FIELD(IUdfResolver::TPtr, UdfResolver)
@@ -389,6 +390,7 @@ public:
     };
 
     struct TResOrPullResult : public NCommon::TOperationResult {
+        bool FmrFallback = false;
         TString Data;
     };
 
@@ -419,9 +421,12 @@ public:
         OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
         OPTION_FIELD(TVector<TString>, LayersPaths)
+        OPTION_FIELD_DEFAULT(bool, SkipFmr, false)
     };
 
     struct TRunResult : public NCommon::TOperationResult {
+        // Ask the query thread to retry Run with SkipFmr enabled.
+        bool FmrFallback = false;
         // Return pair of table name, table stat for each output table
         TVector<std::pair<TString, TYtTableStatInfo::TPtr>> OutTableStats;
     };
@@ -486,6 +491,7 @@ public:
         {
         }
 
+        OPTION_FIELD_DEFAULT(bool, SkipFmr, false)
         OPTION_FIELD(TMaybe<ui32>, PublicId)
         OPTION_FIELD(TYqlRowSpecInfo::TPtr, DestinationRowSpec)
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
@@ -495,6 +501,7 @@ public:
     };
 
     struct TPublishResult : public NCommon::TOperationResult {
+        bool FmrFallback = false;
     };
 
     //////////////////////////////////////////////////////////////

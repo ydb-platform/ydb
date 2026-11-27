@@ -38,6 +38,8 @@ namespace NWilson {
 
 namespace NKikimr {
 
+struct TBridgeProxyPoolCounters;
+
 static constexpr ui32 MaxProtobufSize = 67108000;
 static constexpr ui32 MaxVDiskBlobSize = 10 << 20; // 10 megabytes
 static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000;
@@ -102,9 +104,8 @@ inline bool SendToBSProxy(const TActorContext &ctx, TGroupId groupId, IEventBase
 
 // A block with generation Max<ui32>() is the persistent tombstone of a complete tablet deletion:
 // Hive sets it (see THive::BlockStorageForDelete) right before collecting the tablet's data, and
-// afterwards nothing can ever be written for that tablet again. So whoever stores data for this
-// tablet may drop all of it, along with any barrier bookkeeping, without waiting for the hard
-// barrier that Hive sends next -- that barrier may legitimately never be observed.
+// afterwards nothing can ever be written for that tablet again. All its blobs can be collected
+// even if the hard barrier that Hive sends next has already been compacted away.
 inline constexpr bool IsCompleteTabletDeletionBlock(ui32 blockedGeneration) {
     return blockedGeneration == Max<ui32>();
 }
@@ -580,6 +581,8 @@ struct TEvBlobStorage {
         EvControllerDDiskInfoGetTabletResult        = 0x10031635,
         EvControllerDDiskInfoTabletRevisionChanged  = 0x10031636,
         EvControllerSubscribeDatabaseSpace          = 0x10031637,
+        EvControllerQueryBridgeStorage             = 0x10031638,
+        EvControllerQueryBridgeStorageResult       = 0x10031639,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -647,6 +650,11 @@ struct TEvBlobStorage {
         EvNodeWardenAcquireBlobDepotS3Router,
         EvNodeWardenReleaseBlobDepotS3Router,
         EvNodeConfigGetSelfHealState,
+        EvNodeWardenStandbyDirty,
+        EvNodeWardenRegisterBridgeProxy,
+        EvNodeWardenStandbySeal,
+        EvNodeWardenStandbySealed,
+        EvNodeWardenBlobDepotS3RouterReady,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -676,6 +684,9 @@ struct TEvBlobStorage {
 
         EvVRestorePart,
         EvVRestorePartResult,
+        EvMirror3dcRepairScanResult,
+        EvRunMirror3dcRepair,
+        EvRunMirror3dcRepairResult,
 
         EvEnd
     };
@@ -683,7 +694,10 @@ struct TEvBlobStorage {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE)");
 
-    struct TExecutionRelay {};
+    struct TExecutionRelay {
+        // A reply observer owns the terminal sample while the forwarded request can still be routed by a bridge.
+        std::shared_ptr<const TBridgeProxyPoolCounters> BridgeProxyPoolCounters;
+    };
     static constexpr struct TCloneEventPolicy {} CloneEventPolicy{};
 
     struct TEvPutResult;
@@ -703,11 +717,16 @@ struct TEvBlobStorage {
         ui32 RestartCounter = 0;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
         std::optional<ui32> ForceGroupGeneration;
+        // Capture time and pool on first receipt by the logical bridge. Restarts keep both on the original event.
+        TMonotonic BridgeProxyStartTime;
+        std::shared_ptr<const TBridgeProxyPoolCounters> BridgeProxyPoolCounters;
 
         // Admission hint deciding whether the write this request performs -- the put itself, or the
         // restore a MustRestoreFirst read triggers -- is still accepted when the group is low on
         // space. It is never stored along with the blob.
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
+        // I/O generated on behalf of another proxy request must not start a new logical bridge sample.
+        bool IsProxySubrequest = false;
 
         TEvRequestCommon() = default;
 
@@ -718,6 +737,7 @@ struct TEvBlobStorage {
         // A clone keeps the admission hint, but starts its own restart counter and execution relay.
         TEvRequestCommon(TCloneEventPolicy, const TEvRequestCommon& origin)
             : DataKind(origin.DataKind)
+            , IsProxySubrequest(origin.IsProxySubrequest)
         {}
 
         static TString GetRequestName(ui32 eventType) {
@@ -729,7 +749,7 @@ struct TEvBlobStorage {
             case EvBlock:
                 return "Block";
             case EvCollectGarbage:
-                return "CollectGarbase";
+                return "CollectGarbage";
             case EvDiscover:
                 return "Discover";
             case EvPatch:
@@ -1029,6 +1049,14 @@ struct TEvBlobStorage {
             }
         };
 
+        static ui64 CountRequestBytes(TConstArrayRef<TQuery> queries) {
+            ui64 bytes = 0;
+            for (const auto& query : queries) {
+                bytes += query.Size ? query.Size : Max<i32>(0, query.Id.BlobSize() - query.Shift);
+            }
+            return bytes;
+        }
+
         // todo: replace with queue-like thing
         const ui32 QuerySize;
         TArrayHolder<TQuery> Queries;
@@ -1039,6 +1067,7 @@ struct TEvBlobStorage {
         ui64 TabletId = 0; // set to non-zero tablet id to get the blocked generation
         bool AcquireBlockedGeneration = false; // get the blocked generation along with the blobs
         bool IsIndexOnly;
+        bool VerifyKeepFlags = false; // read replica votes for a bridge repair without restoring payload
         bool IsVerboseNoDataEnabled; // Debug use only
         bool IsInternal = false; // set to true if generated by ds proxy
         bool CollectDebugInfo = false; // collect query debug info and return in response
@@ -1071,6 +1100,7 @@ struct TEvBlobStorage {
             , TabletId(origin.TabletId)
             , AcquireBlockedGeneration(origin.AcquireBlockedGeneration)
             , IsIndexOnly(origin.IsIndexOnly)
+            , VerifyKeepFlags(origin.VerifyKeepFlags)
             , IsVerboseNoDataEnabled(origin.IsVerboseNoDataEnabled)
             , IsInternal(origin.IsInternal)
             , CollectDebugInfo(origin.CollectDebugInfo)
@@ -1201,9 +1231,16 @@ struct TEvBlobStorage {
             ui32 RequestedSize;
             TRope Buffer;
             TVector<TPartMapItem> PartMap;
+            // GC metadata reported by the replicas contributing to this response. DoNotKeep overrides Keep.
+            // Both false means no flag was reported. A retained index record can report a flag even on NODATA.
             bool Keep = false;
             bool DoNotKeep = false;
             std::optional<bool> LooksLikePhantom; // filled only when PhantomCheck is true
+
+            void MergeKeepFlags(bool keep, bool doNotKeep) {
+                DoNotKeep |= doNotKeep;
+                Keep = (Keep || keep) && !DoNotKeep;
+            }
 
             TResponse()
                 : Status(NKikimrProto::UNKNOWN)
@@ -1284,8 +1321,8 @@ struct TEvBlobStorage {
             return Print(false);
         }
 
-        ui32 PayloadSizeBytes() const {
-            ui32 size = 0;
+        ui64 PayloadSizeBytes() const {
+            ui64 size = 0;
             for (ui32 i = 0; i < ResponseSz; ++i) {
                 size += Responses[i].Buffer.size();
             }
@@ -2470,6 +2507,8 @@ struct TEvBlobStorage {
         std::optional<TLogoBlobID> SkipBlobsUpTo;
         bool IgnoreDecommitState;
         bool Reverse;
+        std::optional<ui32> ExpectedGeneration;
+        bool IncludePartPlacement = false;
 
         TEvAssimilate(TCloneEventPolicy, const TEvAssimilate& origin)
             : TEvRequestCommon(CloneEventPolicy, origin)
@@ -2478,6 +2517,8 @@ struct TEvBlobStorage {
             , SkipBlobsUpTo(origin.SkipBlobsUpTo)
             , IgnoreDecommitState(origin.IgnoreDecommitState)
             , Reverse(origin.Reverse)
+            , ExpectedGeneration(origin.ExpectedGeneration)
+            , IncludePartPlacement(origin.IncludePartPlacement)
         {}
 
         TEvAssimilate(std::optional<ui64> skipBlocksUpTo, std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo,
@@ -2587,6 +2628,12 @@ struct TEvBlobStorage {
             TLogoBlobID Id;
             bool Keep = false;
             bool DoNotKeep = false;
+            // some disk has a part of the blob; a disk may have a record of the blob with flags only, e.g. a Keep flag
+            // that has come before the data
+            bool HasData = true;
+
+            // Masks of subgroup positions holding each part, populated for a placement scan.
+            TStackVec<ui16, TBlobStorageGroupType::MaxTotalParts> PartDisks{};
 
             TString ToString() const {
                 TStringStream str;
@@ -2602,6 +2649,9 @@ struct TEvBlobStorage {
                 if (DoNotKeep) {
                     s << "d";
                 }
+                if (!HasData) {
+                    s << "n";
+                }
             }
 
             auto GetKey() const {
@@ -2612,6 +2662,7 @@ struct TEvBlobStorage {
         std::deque<TBlock> Blocks;
         std::deque<TBarrier> Barriers;
         std::deque<TBlob> Blobs;
+        ui64 ReplyBytes = 0; // total size of the VDisk replies the proxy has got for this result
 
         TEvAssimilateResult(NKikimrProto::EReplyStatus status, TString errorReason = {})
             : TEvResultCommon(status)
@@ -2755,6 +2806,8 @@ struct TEvBlobStorage {
     struct TEvControllerDistconfResponse;
     struct TEvControllerUpdateSyncerState;
     struct TEvControllerSubscribeDatabaseSpace;
+    struct TEvControllerQueryBridgeStorage;
+    struct TEvControllerQueryBridgeStorageResult;
     struct TEvControllerDatabaseSpaceState;
 
     struct TEvControllerAllocateDDiskBlockGroup;

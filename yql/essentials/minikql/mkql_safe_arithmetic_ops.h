@@ -6,8 +6,7 @@
 #include <type_traits>
 #include <concepts>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 // Safe arithmetic operations that avoid undefined behavior from signed integer overflow
 // by performing operations in unsigned arithmetic and casting back to signed.
@@ -103,5 +102,4 @@ template <typename T>
     return -u;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -282,6 +282,7 @@ STFUNC(TKesusTablet::StateWork) {
         hFunc(TEvKesus::TEvAcquireSemaphore, Handle);
         hFunc(TEvKesus::TEvCreateSemaphore, Handle);
         hFunc(TEvKesus::TEvDescribeSemaphore, Handle);
+        hFunc(TEvKesus::TEvDescribeSemaphores, Handle);
         hFunc(TEvKesus::TEvDeleteSemaphore, Handle);
         hFunc(TEvKesus::TEvReleaseSemaphore, Handle);
         hFunc(TEvKesus::TEvUpdateSemaphore, Handle);

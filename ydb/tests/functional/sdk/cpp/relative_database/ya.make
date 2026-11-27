@@ -2,10 +2,9 @@ GTEST()
 
 ENV(YDB_TEST_ROOT="sdk_tests")
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 DEPENDS(
-    ydb/apps/ydbd
     ydb/tests/functional/sdk/cpp/relative_database/recipe
 )
 

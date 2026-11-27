@@ -79,8 +79,8 @@ public:
         : ChannelContainer(channel)
         , LogicControlContainer(logic)
     {
-        AFL_VERIFY(!!ChannelContainer);
-        AFL_VERIFY(!!LogicControlContainer);
+        YDB_LOG_VERIFY(!!ChannelContainer);
+        YDB_LOG_VERIFY(!!LogicControlContainer);
     }
 };
 

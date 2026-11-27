@@ -21,15 +21,13 @@ TIntrusivePtr<IOperator> TPushOlapAggregateRule::SimpleMatchAndApply(const TIntr
     }
 
     const auto aggregate = CastOperator<TOpAggregate>(input);
-    const auto olapAggregate = MatchOlapAggregate(*aggregate, ctx.ExprCtx);
+    const auto olapAggregate =
+        MatchOlapAggregate(*aggregate, ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.ExprCtx);
     if (!olapAggregate) {
         return input;
     }
     // The read program replaces the read and the map, so nothing else may consume them.
     if (olapAggregate->Read->Parents.size() != 1 || (olapAggregate->Map && olapAggregate->Map->Parents.size() != 1)) {
-        return input;
-    }
-    if (!ctx.KqpCtx.Config->GetEnableOlapScalarApply() && HasOlapAverageCast(*olapAggregate, ctx.ExprCtx)) {
         return input;
     }
 

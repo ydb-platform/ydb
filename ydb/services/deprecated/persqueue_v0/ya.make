@@ -10,26 +10,39 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/services/deprecated/persqueue_v0/api/grpc
-    ydb/services/deprecated/persqueue_v0/api/protos
-    ydb/library/persqueue/deprecated/read_batch_converter
+    library/cpp/protobuf/util
+    library/cpp/string_utils/quote
     ydb/core/base
-    ydb/core/tx/tx_proxy
     ydb/core/client/server
     ydb/core/grpc_services
     ydb/core/mind/address_classification
     ydb/core/persqueue/events
+    ydb/core/persqueue/public
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/writer
     ydb/core/protos
-    ydb/library/aclib
+    ydb/core/tx/scheme_board
+    ydb/core/tx/scheme_cache
+    ydb/core/tx/tx_proxy
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
+    ydb/library/grpc/server
+    ydb/library/persqueue/deprecated/read_batch_converter
     ydb/library/persqueue/topic_parser
+    ydb/library/services
+    ydb/public/api/protos
+    ydb/public/lib/base
+    ydb/public/lib/deprecated/kicli
+    ydb/public/sdk/cpp/src/client/persqueue_public/include
     ydb/public/sdk/cpp/src/library/kafka
+    ydb/services/deprecated/persqueue_v0/api/grpc
+    ydb/services/deprecated/persqueue_v0/api/protos
     ydb/services/lib/actors
     ydb/services/lib/sharding
-    ydb/services/persqueue_v1
     ydb/services/metadata
+    ydb/services/metadata/manager
+    ydb/services/persqueue_v1/actors
 )
 
 END()

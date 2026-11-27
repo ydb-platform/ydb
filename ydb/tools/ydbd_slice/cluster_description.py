@@ -50,8 +50,9 @@ class ClusterDetails(ClusterDetailsProvider):
     SLOTS_PORTS_START = 31000
     PORTS_SHIFT = 10
 
-    def __init__(self, cluster_description_path, walle_provider=None, validator=None):
+    def __init__(self, cluster_description_path, walle_provider=None, validator=None, *, loader=safe_load_no_duplicates):
         self.__template = None
+        self._loader = loader
         self.__details = None
         self.__databases = None
         self.__dynamic_slots = None
@@ -68,7 +69,7 @@ class ClusterDetails(ClusterDetailsProvider):
     def template(self):
         if self.__template is None:
             with open(self._cluster_description_file, 'r') as file:
-                self.__template = safe_load_no_duplicates(file.read())
+                self.__template = self._loader(file.read())
 
         # for V2 configs, we need to use the config field
         if 'config' in self.__template:

@@ -41,7 +41,7 @@ public:
         , SnapshotBarrier(snapshotBarrier)
         , PathIds(pathIds)
     {
-        AFL_VERIFY(SnapshotBarrier.Valid());
+        YDB_LOG_VERIFY(SnapshotBarrier.Valid());
     }
 };
 

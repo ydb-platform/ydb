@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>:1:60: Error: ydb/library/table_digest/aggregate.cpp:94: Invalid Digest hash byte length
+	SELECT DigestAggregate::AggregateFinalize(DigestAggregate::AggregateAddValue(
+	                                                           ^

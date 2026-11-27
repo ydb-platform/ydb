@@ -12,7 +12,7 @@ using namespace NSkiff;
 template<>
 void Out<TSkiffSchema>(IOutputStream& s, const TSkiffSchema& schema)
 {
-    s << "TSkiffSchema:" << GetShortDebugString(schema.shared_from_this());
+    s << "TSkiffSchema:" << GetShortDebugString(schema.shared_from_this(), /*includeNames*/ true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

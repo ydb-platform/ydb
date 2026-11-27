@@ -10,7 +10,6 @@ import typing
 from typing import Any, ContextManager, List, Optional, Iterator
 from . import connection as conn_impl, driver, issues, settings as settings_impl, _apis
 
-
 try:
     from ydb.public.api.protos import ydb_discovery_pb2
 except ImportError:

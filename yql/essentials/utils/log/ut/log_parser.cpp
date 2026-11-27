@@ -67,4 +67,15 @@ TLogRow ParseLegacyLogRow(TStringBuf str) {
     };
 }
 
+TLogRow ParseLegacyLogRowWithYtTimestamp(TStringBuf str) {
+    static const std::regex TimestampRe(R"(^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{6} )");
+    UNIT_ASSERT_C(std::regex_search(str.data(), str.data() + str.size(), TimestampRe), "invalid YT timestamp: '" << str << '\'');
+    UNIT_ASSERT_STRINGS_EQUAL(str.SubStr(23, 3), "000");
+
+    TString normalized(str);
+    normalized[19] = '.';
+    normalized.erase(23, 3);
+    return ParseLegacyLogRow(normalized);
+}
+
 } // namespace NYql::NLog

@@ -26,6 +26,7 @@ PEERDIR(
 SRCS(
     aggregation.cpp
     builtin.cpp
+    checksum.cpp
     context.cpp
     ddl_backup.cpp
     ddl_identity.cpp
@@ -50,6 +51,7 @@ SRCS(
     source.cpp
     sql.cpp
     sql_call_expr.cpp
+    sql_checksum.cpp
     sql_ddl_backup.cpp
     sql_ddl_identity.cpp
     sql_ddl_resource_pool.cpp
@@ -59,6 +61,7 @@ SRCS(
     sql_ddl_topic.cpp
     sql_ddl_transfer.cpp
     sql_expression.cpp
+    sql_flatten.cpp
     sql_group_by.cpp
     sql_match_recognize.cpp
     sql_into_tables.cpp
@@ -70,6 +73,8 @@ SRCS(
     sql_values.cpp
     query.cpp
     object_processing.cpp
+    antlr_token.cpp
+    sql_call_param.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(match_recognize.h)
@@ -77,6 +82,13 @@ GENERATE_ENUM_SERIALIZATION(match_recognize.h)
 GENERATE_ENUM_SERIALIZATION(node.h)
 
 GENERATE_ENUM_SERIALIZATION(sql_call_param.h)
+
+PEERDIR_FROM_POLICY(
+    ALLOW
+    classifieds/vsdwh/tools/ci/jobs/yql_udf/parser
+    logos/projects/ads/mldwh/querygen
+    toloka/analytics/programs/yql_parser
+)
 
 END()
 

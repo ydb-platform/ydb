@@ -1,25 +1,32 @@
 #include "dsproxy_env_mock_ut.h"
 #include "dsproxy_test_state_ut.h"
 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
+
+using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
+
 namespace NKikimr {
 namespace {
 
-using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
 using TCounts = std::array<ui32, 3>;
 
-enum class ERead { Range, Index, Get, Restore };
+enum class ERead { Range, Index, Get, Restore, VerifyKeep };
+enum class EGcFlags { None, KeepFirst, DoNotKeepFirst, KeepInIndexOnly, KeepOnData };
 
-void CheckRead(ERead operation, const TVector<R::EState>& realms, const TCounts& copies,
+void CheckRead(ERead operation, const TMirror3dcGroupState& realms, const TCounts& copies,
         const TCounts& failures, NKikimrProto::EReplyStatus expected, bool phantomCheck = false,
-        bool expectRestore = false, bool expectBlobError = false) {
+        bool expectRestore = false, bool expectBlobError = false, EGcFlags gcFlags = EGcFlags::None) {
     const bool range = operation == ERead::Range;
+    const bool verify = operation == ERead::VerifyKeep;
     ui32 writes = 0;
+    bool sentKeep = false;
+    bool sentDoNotKeep = false;
     TTestBasicRuntime runtime;
     runtime.SetDispatchTimeout(TDuration::Seconds(10));
     SetupRuntime(runtime);
     TDSProxyEnv env;
     env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureMirror3dc),
-        0, 0, TBlobStorageGroupInfo::EEM_NONE, DormantTimeoutDefaultControl, false, realms);
+        0, 0, TBlobStorageGroupInfo::EEM_NONE, DormantTimeoutDefaultControl, false, TVector<EMirror3dcFailRealmState>(realms.FailRealmStates.begin(), realms.FailRealmStates.end()), realms.State);
     TTestState state(runtime, env.Info);
     auto& group = state.GetGroupMock();
     const TString data = "testdata";
@@ -41,7 +48,8 @@ void CheckRead(ERead operation, const TVector<R::EState>& realms, const TCounts&
         runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, query.release()), 0, true);
     } else {
         auto query = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(),
-            NKikimrBlobStorage::FastRead, operation != ERead::Get, operation == ERead::Index);
+            NKikimrBlobStorage::FastRead, operation != ERead::Get, operation == ERead::Index || verify);
+        query->VerifyKeepFlags = verify;
         query->PhantomCheck = phantomCheck;
         runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, query.release()), 0, true);
     }
@@ -51,7 +59,8 @@ void CheckRead(ERead operation, const TVector<R::EState>& realms, const TCounts&
             TEvBlobStorage::TEvRangeResult, TEvBlobStorage::TEvGetResult>(handle);
         if (get) {
             const auto vdisk = VDiskIDFromVDiskID(get->Record.GetVDiskID());
-            UNIT_ASSERT(realms[vdisk.FailRealm] != R::F);
+            UNIT_ASSERT(IsReadable(realms.FailRealmStates[vdisk.FailRealm]) || (verify && env.Info->IsWriteTargetRealm(vdisk.FailRealm)));
+            UNIT_ASSERT(!verify || get->Record.GetIndexOnly());
             const ui32 disk = env.Info->GetIdxInSubgroup(vdisk, id.Hash());
             TEvBlobStorage::TEvVGet::TPtr request(
                 static_cast<TEventHandle<TEvBlobStorage::TEvVGet>*>(handle.Release()));
@@ -74,10 +83,28 @@ void CheckRead(ERead operation, const TVector<R::EState>& realms, const TCounts&
                 reply->Get()->AddResult(present ? NKikimrProto::OK : NKikimrProto::NODATA,
                     id, &cookie, &raw, &local, false, false);
             }
+            if (gcFlags == EGcFlags::KeepOnData) {
+                for (auto& item : *reply->Get()->Record.MutableResult()) {
+                    item.SetKeep(item.GetStatus() == NKikimrProto::OK);
+                }
+            } else if (gcFlags != EGcFlags::None) {
+                const bool keep = gcFlags == EGcFlags::KeepInIndexOnly ? get->Record.GetIndexOnly()
+                    : gcFlags == EGcFlags::KeepFirst ? !sentKeep : sentDoNotKeep;
+                for (auto& item : *reply->Get()->Record.MutableResult()) {
+                    if (keep) {
+                        item.SetKeep(true);
+                        sentKeep = true;
+                    } else {
+                        item.SetDoNotKeep(true);
+                        sentDoNotKeep = true;
+                    }
+                }
+            }
             runtime.Send(reply.Release());
         } else if (put) {
+            UNIT_ASSERT(!verify);
             const auto vdisk = VDiskIDFromVDiskID(put->Record.GetVDiskID());
-            UNIT_ASSERT(realms[vdisk.FailRealm] != R::F);
+            UNIT_ASSERT(realms.FailRealmStates[vdisk.FailRealm] != TDataCenterState::EXCLUDED);
             TEvBlobStorage::TEvVPut::TPtr request(
                 static_cast<TEventHandle<TEvBlobStorage::TEvVPut>*>(handle.Release()));
             auto reply = state.CreateEventResultPtr(request, group.OnVPut(*request->Get()), vdisk);
@@ -93,12 +120,20 @@ void CheckRead(ERead operation, const TVector<R::EState>& realms, const TCounts&
             break;
         } else {
             UNIT_ASSERT(!range && indexResult);
-            UNIT_ASSERT_VALUES_EQUAL(indexResult->Status,
-                expected == NKikimrProto::NODATA || expectBlobError ? NKikimrProto::OK : expected);
+            UNIT_ASSERT_VALUES_EQUAL_C(indexResult->Status,
+                verify || expected == NKikimrProto::NODATA || expectBlobError ? NKikimrProto::OK : expected,
+                "operation# " << static_cast<ui32>(operation) << " ErrorReason# " << indexResult->ErrorReason);
             if (indexResult->Status == NKikimrProto::OK) {
                 UNIT_ASSERT_VALUES_EQUAL(indexResult->ResponseSz, 1);
                 UNIT_ASSERT_VALUES_EQUAL(indexResult->Responses[0].Status, expected);
-                if (expected == NKikimrProto::OK && operation != ERead::Index && !phantomCheck) {
+                if (gcFlags == EGcFlags::KeepOnData) {
+                    UNIT_ASSERT(indexResult->Responses[0].Keep && !indexResult->Responses[0].DoNotKeep);
+                } else if (gcFlags != EGcFlags::None) {
+                    UNIT_ASSERT(sentKeep && sentDoNotKeep);
+                    UNIT_ASSERT(!indexResult->Responses[0].Keep);
+                    UNIT_ASSERT(indexResult->Responses[0].DoNotKeep);
+                }
+                if (expected == NKikimrProto::OK && operation != ERead::Index && !verify && !phantomCheck) {
                     UNIT_ASSERT_VALUES_EQUAL(indexResult->Responses[0].Buffer.ConvertToString(), data);
                 }
                 if (phantomCheck && expected == NKikimrProto::NODATA) {
@@ -113,13 +148,13 @@ void CheckRead(ERead operation, const TVector<R::EState>& realms, const TCounts&
     }
 }
 
-void CheckPut(const TVector<R::EState>& realms, const TCounts& failures, NKikimrProto::EReplyStatus expected) {
+void CheckPut(const TMirror3dcGroupState& realms, const TCounts& failures, NKikimrProto::EReplyStatus expected) {
     TTestBasicRuntime runtime;
     runtime.SetDispatchTimeout(TDuration::Seconds(10));
     SetupRuntime(runtime);
     TDSProxyEnv env;
     env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureMirror3dc),
-        0, 0, TBlobStorageGroupInfo::EEM_NONE, DormantTimeoutDefaultControl, false, realms);
+        0, 0, TBlobStorageGroupInfo::EEM_NONE, DormantTimeoutDefaultControl, false, TVector<EMirror3dcFailRealmState>(realms.FailRealmStates.begin(), realms.FailRealmStates.end()), realms.State);
     TTestState state(runtime, env.Info);
     auto& group = state.GetGroupMock();
     const TString data = "testdata";
@@ -144,7 +179,7 @@ void CheckPut(const TVector<R::EState>& realms, const TCounts& failures, NKikimr
         }
         UNIT_ASSERT(put);
         const auto vdisk = VDiskIDFromVDiskID(put->Record.GetVDiskID());
-        UNIT_ASSERT(realms[vdisk.FailRealm] != R::F);
+        UNIT_ASSERT(realms.FailRealmStates[vdisk.FailRealm] != TDataCenterState::EXCLUDED);
         TEvBlobStorage::TEvVPut::TPtr request(
             static_cast<TEventHandle<TEvBlobStorage::TEvVPut>*>(handle.Release()));
         auto reply = state.CreateEventResultPtr(request, group.OnVPut(*request->Get()), vdisk);
@@ -154,59 +189,134 @@ void CheckPut(const TVector<R::EState>& realms, const TCounts& failures, NKikimr
 
 } // namespace
 
+Y_UNIT_TEST_SUITE(TDSProxyIndexRestoreGet) {
+    Y_UNIT_TEST(DoNotKeepOverridesKeepAcrossDisks) {
+        const TMirror3dcGroupState normal{NKikimrBlobStorage::TGroupState::NORMAL,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}};
+        for (const auto operation : {ERead::Get, ERead::Index}) {
+            for (const auto flags : {EGcFlags::KeepFirst, EGcFlags::DoNotKeepFirst}) {
+                CheckRead(operation, normal, {}, {}, NKikimrProto::NODATA, false, false, false, flags);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(RestoreReadDoNotKeepOverridesIndexKeep) {
+        const TMirror3dcGroupState solo{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1,
+            {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}};
+        CheckRead(ERead::Index, solo, {1, 0, 0}, {}, NKikimrProto::OK, false, true, false,
+            EGcFlags::KeepInIndexOnly);
+    }
+
+    Y_UNIT_TEST(KeepCheckUsesMetadataQuorum) {
+        const TMirror3dcGroupState normal{NKikimrBlobStorage::TGroupState::NORMAL,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}};
+        CheckRead(ERead::VerifyKeep, normal, {1, 1, 1}, {}, NKikimrProto::OK, false, false, false, EGcFlags::KeepOnData);
+
+        const TMirror3dcGroupState recovery{NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}};
+        CheckRead(ERead::VerifyKeep, recovery, {1, 0, 0}, {}, NKikimrProto::OK, false, false, false, EGcFlags::KeepFirst);
+        CheckRead(ERead::VerifyKeep, recovery, {}, {}, NKikimrProto::NODATA);
+        CheckRead(ERead::VerifyKeep, recovery, {1, 0, 0}, {}, NKikimrProto::UNKNOWN);
+    }
+
+    Y_UNIT_TEST(RestartPreservesForceBlockTabletData) {
+        TTestBasicRuntime runtime(1, false);
+        runtime.SetDispatchTimeout(TDuration::Seconds(10));
+        SetupRuntime(runtime);
+        TDSProxyEnv env;
+        env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureNone), 0, 0,
+            TBlobStorageGroupInfo::EEM_NONE);
+        TTestState state(runtime, env.Info);
+        const TActorId warden = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(runtime.GetNodeId()), warden);
+
+        const ui64 tabletId = 72075186224047637;
+        const ui32 blockedGeneration = 7;
+        const TLogoBlobID id(tabletId, 3, 1, 0, 1, 0);
+        auto request = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(),
+            NKikimrBlobStorage::FastRead, true /*mustRestoreFirst*/, true /*isIndexOnly*/,
+            TEvBlobStorage::TEvGet::TForceBlockTabletData(tabletId, blockedGeneration));
+        runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, request.release()));
+
+        auto vget = state.GrabEventPtr<TEvBlobStorage::TEvVGet>();
+        const auto& record = vget->Get()->Record;
+        UNIT_ASSERT(record.HasForceBlockTabletData());
+        UNIT_ASSERT_VALUES_EQUAL(record.GetForceBlockTabletData().GetId(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetForceBlockTabletData().GetGeneration(), blockedGeneration);
+
+        auto race = state.CreateEventResultPtr(vget, NKikimrProto::RACE);
+        race->Get()->Record.MutableVDiskID()->SetGroupGeneration(record.GetVDiskID().GetGroupGeneration() + 1);
+        race->Get()->Record.SetCookie(record.GetCookie());
+        runtime.Send(race.Release());
+
+        const auto retry = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGet>(warden);
+        UNIT_ASSERT_VALUES_EQUAL(retry->Get()->RestartCounter, 1);
+        UNIT_ASSERT(retry->Get()->ForceBlockTabletData);
+        UNIT_ASSERT_VALUES_EQUAL(retry->Get()->ForceBlockTabletData->Id, tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(retry->Get()->ForceBlockTabletData->Generation, blockedGeneration);
+    }
+}
+
 Y_UNIT_TEST_SUITE(TDSProxyMirror3dcIndexRange) {
     Y_UNIT_TEST(NormalAndSoloWriteQuorumsReturnOk) {
         for (bool range : {false, true}) {
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N0, R::N0, R::N0}, {1, 1, 1}, {}, NKikimrProto::OK);
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::F, R::F}, {2, 0, 0}, {}, NKikimrProto::OK);
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::R, R::F}, {2, 2, 0}, {}, NKikimrProto::OK);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, {1, 1, 1}, {}, NKikimrProto::OK);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, {}, NKikimrProto::OK);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {2, 2, 0}, {}, NKikimrProto::OK);
         }
     }
 
     Y_UNIT_TEST(EnsuredLayoutControlsGroupFailures) {
         for (bool range : {false, true}) {
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::F, R::F}, {}, {}, NKikimrProto::NODATA);
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::F, R::F}, {}, {1, 0, 0}, NKikimrProto::ERROR);
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N2, R::F, R::F}, {}, {1, 0, 0}, NKikimrProto::NODATA);
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::N1, R::R}, {}, {1, 1, 3}, NKikimrProto::ERROR);
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::N1, R::R}, {}, {2, 2, 3}, NKikimrProto::ERROR);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {}, NKikimrProto::NODATA);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 0, 0}, NKikimrProto::ERROR);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 0, 0}, NKikimrProto::NODATA);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {1, 1, 3}, NKikimrProto::ERROR);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {2, 2, 3}, NKikimrProto::ERROR);
         }
     }
 
     Y_UNIT_TEST(AbsenceDependsOnNormalRealmsInEnsuredPair) {
+        const TMirror3dcGroupState recovery{NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}};
         for (const ERead operation : {ERead::Range, ERead::Index, ERead::Get, ERead::Restore}) {
-            CheckRead(operation, {R::N1, R::N1, R::R}, {}, {1, 1, 1}, NKikimrProto::ERROR);
-            CheckRead(operation, {R::N1, R::N1, R::R}, {}, {2, 0, 2}, NKikimrProto::NODATA);
-            CheckRead(operation, {R::N1, R::N1, R::R}, {}, {1, 1, 0}, NKikimrProto::ERROR);
-            CheckRead(operation, {R::N1, R::N1, R::R}, {}, {0, 0, 3}, NKikimrProto::NODATA);
+            CheckRead(operation, recovery, {}, {1, 1, 1}, NKikimrProto::ERROR);
+            CheckRead(operation, recovery, {}, {2, 0, 2},
+                operation == ERead::Index ? NKikimrProto::NODATA : NKikimrProto::ERROR);
+            CheckRead(operation, recovery, {}, {1, 1, 0}, NKikimrProto::ERROR);
+            CheckRead(operation, recovery, {}, {0, 0, 3}, NKikimrProto::NODATA);
         }
     }
 
-    Y_UNIT_TEST(OrdinaryGetReadsNormalAndRecoveringRealms) {
-        CheckRead(ERead::Get, {R::N1, R::F, R::F}, {1, 0, 0}, {}, NKikimrProto::OK);
-        CheckRead(ERead::Get, {R::N1, R::R, R::F}, {0, 1, 0}, {}, NKikimrProto::OK);
+    Y_UNIT_TEST(OrdinaryGetReadsIncludedAndLeavingRealms) {
+        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, NKikimrProto::OK);
+        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::LEAVING}}, {0, 0, 2}, {}, NKikimrProto::OK);
+        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 1, 0}, {}, NKikimrProto::NODATA);
     }
 
-    Y_UNIT_TEST(PhantomCheckSkipsFailedRealmsAndRejectsRecoveryErrors) {
-        CheckRead(ERead::Get, {R::N1, R::F, R::F}, {}, {}, NKikimrProto::NODATA, true);
-        CheckRead(ERead::Get, {R::N1, R::N1, R::R}, {}, {0, 0, 3}, NKikimrProto::ERROR, true, false, true);
+    Y_UNIT_TEST(PhantomCheckSkipsUnreadableRealmsAndReportsReadErrors) {
+        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {}, NKikimrProto::NODATA, true);
+        const TMirror3dcGroupState recovery{NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}};
+        CheckRead(ERead::Get, recovery, {}, {0, 0, 3}, NKikimrProto::NODATA, true);
+        CheckRead(ERead::Get, recovery, {}, {1, 0, 3}, NKikimrProto::ERROR, true, false, true);
     }
 
     Y_UNIT_TEST(PartialCopiesAreRestoredThroughNewPutStrategy) {
         for (const auto operation : {ERead::Index, ERead::Restore}) {
-            CheckRead(operation, {R::N1, R::F, R::F}, {1, 0, 0}, {}, NKikimrProto::OK, false, true);
-            CheckRead(operation, {R::N1, R::R, R::F}, {1, 0, 0}, {}, NKikimrProto::OK, false, true);
+            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, NKikimrProto::OK, false, true);
+            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, NKikimrProto::OK, false, true);
         }
     }
 
     Y_UNIT_TEST(OrdinaryPutChecksFailureModelAndWriteQuorumAndSkipsFailedRealms) {
-        CheckPut({R::N0, R::N0, R::N0}, {1, 1, 1}, NKikimrProto::ERROR);
-        CheckPut({R::N1, R::F, R::F}, {1, 0, 0}, NKikimrProto::ERROR);
-        CheckPut({R::N2, R::F, R::F}, {1, 0, 0}, NKikimrProto::OK);
-        CheckPut({R::N1, R::F, R::F}, {2, 0, 0}, NKikimrProto::ERROR);
-        CheckPut({R::N1, R::R, R::F}, {1, 1, 0}, NKikimrProto::ERROR);
-        CheckPut({R::N1, R::R, R::F}, {0, 1, 0}, NKikimrProto::OK);
-        CheckPut({R::N1, R::R, R::F}, {0, 2, 0}, NKikimrProto::ERROR);
+        CheckPut({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, {1, 1, 1}, NKikimrProto::ERROR);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, NKikimrProto::ERROR);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, NKikimrProto::OK);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, NKikimrProto::ERROR);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {1, 1, 0}, NKikimrProto::ERROR);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 1, 0}, NKikimrProto::OK);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 2, 0}, NKikimrProto::ERROR);
     }
 
 }

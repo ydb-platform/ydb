@@ -5,8 +5,10 @@
 #include <util/generic/ptr.h>
 #include <util/stream/output.h>
 
+#include <atomic>
 #include <list>
 #include <memory>
+#include <variant>
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -25,6 +27,18 @@ namespace NKikimr::NKqp::NScheduler {
         using TId = std::variant<TQueryId, TPoolId>;
 
         struct TStaticAttributes;
+
+        namespace NStatic {
+            struct TTreeElement;
+
+            class TPool;
+            class TDatabase;
+            class TRoot;
+
+            using TPoolPtr = std::shared_ptr<const TPool>;
+            using TDatabasePtr = std::shared_ptr<const TDatabase>;
+            using TRootPtr = std::shared_ptr<const TRoot>;
+        } // namespace NStatic
 
         namespace NDynamic {
             struct TTreeElement;

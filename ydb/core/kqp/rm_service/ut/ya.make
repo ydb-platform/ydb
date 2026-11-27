@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp/rm_service)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(5)
 
 SIZE(MEDIUM)
 
@@ -10,6 +11,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/threading/local_executor
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
 )

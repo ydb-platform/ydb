@@ -188,6 +188,10 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, const TU
         } else {
             if (!props.PgSyntax) {
                 subplanType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Bool);
+                // A projection returns the IN result, so it keeps the type the query gave it.
+                if (subplanEntry.OptionalResult) {
+                    subplanType = ctx.ExprCtx.MakeType<TOptionalExprType>(subplanType);
+                }
             } else {
                 subplanType = ctx.ExprCtx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId);
             }
@@ -568,8 +572,17 @@ TStatus ComputeTypes(TIntrusivePtr<TOpLimit> limit, TRBOContext& ctx) {
 }
 
 TStatus ComputeTypes(TIntrusivePtr<TOpSort> sort, TRBOContext& ctx) {
-    Y_UNUSED(ctx);
     auto inputType = sort->GetInput()->Type;
+    if (sort->LimitCond) {
+        const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        auto& lambda = sort->LimitCond->Node;
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        AnnotateLambdaIfNeeded(lambda, ctx);
+    }
+
     // TODO: Add sanity checks.
     sort->Type = inputType;
     return TStatus::Ok;

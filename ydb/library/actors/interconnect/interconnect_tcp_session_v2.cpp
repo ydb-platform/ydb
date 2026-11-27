@@ -58,12 +58,16 @@ namespace NActors {
         Y_ABORT_UNLESS(!Params.Encryption);
         Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(0);
-        SetPrefix(Sprintf("SessionV2 %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
+        SetPrefix(YDB_LOG_CREATE_MESSAGE(
+            {"selfActorKind", "SessionV2"},
+            {"selfActorId", SelfId()},
+            {"nodeId", Proxy->PeerNodeId}));
         if (const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
                 interval != TDuration::Zero()) {
             Schedule(interval, new TEvPrivate::TEvCheckSubscriberLiveness);
         }
         YDB_LOG_INFO("V2 session created",
+            {"logPrefix", LogPrefix},
             {"marker", "ICS90"});
     }
 
@@ -72,6 +76,7 @@ namespace NActors {
         Y_ABORT_UNLESS(!Socket, "TInterconnectSessionTCPv2 does not support connection continuation");
 
         YDB_LOG_INFO("Handshake done",
+            {"logPrefix", LogPrefix},
             {"marker", "ICS91"},
             {"sender", ev->Sender},
             {"self", ev->Get()->Self},
@@ -98,6 +103,7 @@ namespace NActors {
             useXdc ? XdcSocket : TIntrusivePtr<NInterconnect::TStreamSocket>{});
         if (!EngineHandle) {
             YDB_LOG_ERROR("V2 io_uring engine failed to register the connection",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICS99"});
             return Terminate(TDisconnectReason::LostConnection());
         }
@@ -107,6 +113,7 @@ namespace NActors {
 
     void TInterconnectSessionTCPv2::Terminate(TDisconnectReason reason) {
         YDB_LOG_INFO("V2 session terminated",
+            {"logPrefix", LogPrefix},
             {"marker", "ICS92"},
             {"reason", reason});
 
@@ -154,6 +161,7 @@ namespace NActors {
     void TInterconnectSessionTCPv2::StartHandshake() {
         // no continuation -- lost connection means the session is gone
         YDB_LOG_INFO("StartHandshake on v2 session -> terminating (no continuation)",
+            {"logPrefix", LogPrefix},
             {"marker", "ICS93"});
         Terminate(TDisconnectReason::LostConnection());
     }
@@ -161,6 +169,7 @@ namespace NActors {
     void TInterconnectSessionTCPv2::ReestablishConnectionWithHandshake(TDisconnectReason reason) {
         // no continuation -- lost connection means the session is gone
         YDB_LOG_INFO("ReestablishConnectionWithHandshake on v2 session -> terminating (no continuation)",
+            {"logPrefix", LogPrefix},
             {"marker", "ICS94"});
         Terminate(std::move(reason));
     }
@@ -209,6 +218,7 @@ namespace NActors {
 
     void TInterconnectSessionTCPv2::HandleSubscribe(STATEFN_SIG) {
         YDB_LOG_DEBUG("Subscribe for session state",
+            {"logPrefix", LogPrefix},
             {"marker", "ICS96"},
             {"sender", ev->Sender});
         AddSubscriber(ev->Sender, ev->Cookie);
@@ -217,6 +227,7 @@ namespace NActors {
 
     void TInterconnectSessionTCPv2::HandleUnsubscribe(STATEFN_SIG) {
         YDB_LOG_DEBUG("Unsubscribe for session state",
+            {"logPrefix", LogPrefix},
             {"marker", "ICS97"},
             {"sender", ev->Sender});
         Subscribers.erase(ev->Sender);

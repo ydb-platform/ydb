@@ -72,7 +72,7 @@ public:
     }
 
     virtual void ErasePortion(const NOlap::TPortionInfo& portion) override {
-        AFL_VERIFY(Portions.erase(portion.GetPortionId()));
+        YDB_LOG_VERIFY(Portions.erase(portion.GetPortionId()));
     }
 
     virtual bool LoadPortions(const std::optional<TInternalPathId> pathId,
@@ -111,7 +111,7 @@ public:
                 it->second.MutablePortionConstructor().SetRemoveSnapshot(portion.GetRemoveSnapshotVerified());
             }
         } else {
-            AFL_VERIFY(!it->second.MutablePortionConstructor().HasRemoveSnapshot());
+            YDB_LOG_VERIFY(!it->second.MutablePortionConstructor().HasRemoveSnapshot());
         }
 
         bool replaced = false;
@@ -152,7 +152,7 @@ public:
                 //                auto copy = portionLocal.MakeCopy();
                 //                copy->TestMutableRecords().clear();
                 auto it = LoadContexts.find(portionLocal.GetPortionConstructor().GetAddress());
-                AFL_VERIFY(it != LoadContexts.end());
+                YDB_LOG_VERIFY(it != LoadContexts.end());
                 callback(std::move(it->second));
                 LoadContexts.erase(it);
             }
@@ -276,9 +276,9 @@ void AddIdsToBlobs(std::vector<TWritePortionInfoWithBlobsResult>& portions, NBlo
         for (auto&& rec : portion.GetPortionConstructor().GetRecords()) {
             auto range = portion.GetPortionConstructor().RestoreBlobRangeSlow(rec.BlobRange, rec.GetAddress());
             auto it = blobsData.find(range.BlobId);
-            AFL_VERIFY(it != blobsData.end());
+            YDB_LOG_VERIFY(it != blobsData.end());
             const TString& data = it->second;
-            AFL_VERIFY(range.Offset + range.Size <= data.size());
+            YDB_LOG_VERIFY(range.Offset + range.Size <= data.size());
             blobs.Add(IStoragesManager::DefaultStorageId, range, data.substr(range.Offset, range.Size));
         }
     }
@@ -303,7 +303,8 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, st
     for (auto&& i : changes->GetAppendedPortions()) {
         blobsCount += i.GetBlobs().size();
     }
-    AFL_VERIFY(blobsCount == 5 || blobsCount == 1)("count", blobsCount);
+    YDB_LOG_VERIFY(blobsCount == 5 || blobsCount == 1,
+        {"count", blobsCount});
 
     AddIdsToBlobs(changes->MutableAppendedPortions(), blobs, step);
 
@@ -443,7 +444,8 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<TInter
     }
 
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
-    AFL_VERIFY(vChanges.size() == 1)("count", vChanges.size());
+    YDB_LOG_VERIFY(vChanges.size() == 1,
+        {"count", vChanges.size()});
     auto changes = vChanges.front();
     UNIT_ASSERT_VALUES_EQUAL(changes->GetPortionsToRemove().GetSize(), expectedToDrop);
 
@@ -509,7 +511,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(),
-            CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
+            CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo),
+            std::make_shared<NColumnShard::TShardDataStats>(CommonStoragesManager, 0));
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }
@@ -592,7 +595,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(),
-            CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
+            CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo),
+            std::make_shared<NColumnShard::TShardDataStats>(CommonStoragesManager, 0));
         engine.RegisterTable(pathId);
         engine.TestingLoad(db);
 
@@ -693,7 +697,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(),
-            CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
+            CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo),
+            std::make_shared<NColumnShard::TShardDataStats>(CommonStoragesManager, 0));
         engine.RegisterTable(pathId);
         engine.TestingLoad(db);
 
@@ -719,7 +724,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {   // check it's overloaded after reload
             TColumnEngineForLogs tmpEngine(0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(),
-                CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
+                CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo),
+                std::make_shared<NColumnShard::TShardDataStats>(CommonStoragesManager, 0));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.TestingLoad(db);
         }
@@ -751,7 +757,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {   // check it's not overloaded after reload
             TColumnEngineForLogs tmpEngine(0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(),
-                CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
+                CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo),
+                std::make_shared<NColumnShard::TShardDataStats>(CommonStoragesManager, 0));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.TestingLoad(db);
         }
@@ -772,7 +779,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TSnapshot indexSnapshot(1, 1);
         {
             TColumnEngineForLogs engine(0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(),
-                CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
+                CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo),
+                std::make_shared<NColumnShard::TShardDataStats>(CommonStoragesManager, 0));
             engine.RegisterTable(pathId);
             engine.TestingLoad(db);
 
@@ -836,7 +844,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
             THashMap<TInternalPathId, NOlap::TTiering> pathTtls;
             NOlap::TTiering tiering;
-            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(gap, "timestamp")));
+            YDB_LOG_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(gap, "timestamp")));
             pathTtls.emplace(pathId, std::move(tiering));
             Ttl(engine, db, pathTtls, txCount / 2);
 
@@ -851,7 +859,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         {
             // load
             TColumnEngineForLogs engine(0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(),
-                CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
+                CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo),
+                std::make_shared<NColumnShard::TShardDataStats>(CommonStoragesManager, 0));
             engine.RegisterTable(pathId);
             engine.TestingLoad(db);
 

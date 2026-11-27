@@ -41,7 +41,7 @@ NWilson::TSpan MakeQueryPhaseTraceSpan(ui8 verbosity, NWilson::TTraceId parent,
     NActors::TActorSystem* actorSystem = nullptr);
 
 TQueryTraceDescription DescribeQueryTrace(NKikimrKqp::EQueryType queryType,
-    size_t statementCount, const NKqpProto::TKqpPhyQuery& physicalQuery,
+    const NKqpProto::TKqpPhyQuery& physicalQuery,
     const TMaybe<TString>& commandTag);
 
 TString QueryTraceActionName(NKikimrKqp::EQueryAction action);

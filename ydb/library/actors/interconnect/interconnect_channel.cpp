@@ -140,7 +140,8 @@ namespace NActors {
 
     void TEventOutputChannel::DropConfirmed(ui64 confirm, TEventHolderPool& pool) {
         YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Dropping confirmed messages",
-            {"marker", "ICOCH98"});
+            {"marker", "ICOCH98"},
+            {"logPrefix", LogPrefix});
         for (auto it = NotYetConfirmed.begin(); it != NotYetConfirmed.end() && it->Serial <= confirm; ) {
             pool.Release(NotYetConfirmed, it++);
         }
@@ -205,6 +206,8 @@ namespace NActors {
                         if (hasRdmaSections && Params.UseXdcShuffle && Params.UseRdmaRead && RdmaMemPool && rdmaDeviceIndex >= 0) {
                             if (SerializeEventRdma(event)) {
                                 SerializationInfo = &event.Buffer->GetSerializationInfo();
+                                YDB_LOG_CREATE_CONTEXT(
+                                    {"logPrefix", LogPrefix});
                                 UseRdmaForCurrentEvent = IsRdmaSectionLayoutConsistentWithData(event, rdmaDeviceIndex);
                                 Chunker.DiscardEvent();
                             }
@@ -297,6 +300,7 @@ namespace NActors {
     bool TEventOutputChannel::SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, bool disableChecksums, size_t *bytesSerialized) {
         const bool useRdmaForMainChannelPacket = !External && task.UsePreallocatedInternalStream;
         auto addChunk = [&](const void *data, size_t len, bool allowCopy, const NInterconnect::NRdma::TMemRegion* memRegion = nullptr) {
+            ui32* const zcTransferId = External ? &event.ZcTransferId : nullptr;
             event.UpdateChecksum(data, len);
             if (useRdmaForMainChannelPacket) {
                 if (memRegion) {
@@ -304,13 +308,13 @@ namespace NActors {
                 } else if (allowCopy) {
                     task.Write<External>(data, len);
                 } else {
-                    task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
+                    task.Append<External>(data, len, zcTransferId, disableChecksums);
                 }
             } else {
                 if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
                     task.Write<External>(data, len);
                 } else {
-                    task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
+                    task.Append<External>(data, len, zcTransferId, disableChecksums);
                 }
             }
             *bytesSerialized += len;
@@ -575,7 +579,7 @@ namespace NActors {
 
         // For backwards compatibility use of _NO_CHECKSUMS cmd is gated by Params.AllowDisablingPayloadChecksums
         //  \todo replace with checksumsDisabled
-        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ); 
+        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ);
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
 
@@ -610,7 +614,7 @@ namespace NActors {
     }
 
     std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {
-        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums 
+        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums
             && (event.Descr.Flags & IEventHandle::FlagDisablePayloadChecksums);
         const bool disableChecksums = Params.Encryption || disableChecksumsForEvent;
 
@@ -668,6 +672,7 @@ namespace NActors {
     void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
         YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Notyfying about Undelivered messages!",
             {"marker", "ICOCH89"},
+            {"logPrefix", LogPrefix},
             {"notYetConfirmed", NotYetConfirmed.size()},
             {"queue", Queue.size()});
         if (State == EState::BODY && Queue.front().Event) {

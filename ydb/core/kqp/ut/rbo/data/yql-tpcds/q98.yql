@@ -16,11 +16,11 @@ SELECT
             i_class
     ) AS revenueratio
 FROM
-    `/Root/test/ds/store_sales`
+    `store_sales`
 ,
-    `/Root/test/ds/item`
+    `item`
 ,
-    `/Root/test/ds/date_dim`
+    `date_dim`
 WHERE
     ss_item_sk == i_item_sk
     AND i_category IN ('Jewelry', 'Sports', 'Books')

@@ -4,6 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
 
+#include <algorithm>
 #include <utility>
 
 namespace NKikimr::NGRpcService {
@@ -26,8 +27,27 @@ namespace NKikimr::NGRpcService {
         PathNormalizer_ = std::move(normalizer);
     }
 
-    TString IRequestCtxBaseMtSafe::NormalizePath(TStringBuf path) const {
-        return PathNormalizer_ ? PathNormalizer_->NormalizePath(path) : TString(path);
+    TString IRequestCtxBaseMtSafe::NormalizePath(TStringBuf path, TStringBuf base) const {
+        TString resolved(path);
+        const auto* appData = HasAppData() ? AppData() : nullptr;
+        if (appData && appData->FeatureFlags.GetEnableRelativePaths() && !path.empty() && !path.StartsWith('/')) {
+            auto database = GetDatabaseName().GetOrElse(TString());
+            if (const auto header = GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER); header && !header->empty() && appData->DomainsInfo && appData->DomainsInfo->Domain) {
+                database = PrependDomainIfNeeded("/" + appData->DomainsInfo->Domain->Name, CGIUnescapeRet(*header));
+            }
+            resolved = PrependDomainIfNeeded(
+                base.empty() ? database : PrependDomainIfNeeded(database, base), path);
+            if (resolved.StartsWith('/')) {
+                resolved = CanonizePath(resolved);
+            }
+        }
+        if (appData && appData->FeatureFlags.GetEnableRelativePaths() && resolved.Contains('.')) {
+            auto parts = NKikimr::SplitPath(resolved);
+            if (std::erase(parts, TString("."))) {
+                resolved = (resolved.StartsWith('/') ? "/" : "") + JoinPath(parts);
+            }
+        }
+        return PathNormalizer_ ? PathNormalizer_->NormalizePath(resolved) : resolved;
     }
 
     void IRequestProxyCtx::InitializePathNormalization(
@@ -37,13 +57,18 @@ namespace NKikimr::NGRpcService {
             return;
         }
 
+        const TString method = GetRpcMethodName();
+        if (method == "Ydb.Discovery.V1.DiscoveryService/NodeRegistration") {
+            DisablePathNormalization();
+            return;
+        }
+
         auto database = GetDatabaseNameFromRequest();
         const auto* appData = HasAppData() ? AppData() : nullptr;
         const bool relativeDatabase = database && !database->empty() && !database->StartsWith('/')
             && appData && appData->FeatureFlags.GetEnableRelativePaths()
             && appData->DomainsInfo && appData->DomainsInfo->Domain;
 
-        const TString method = GetRpcMethodName();
         if (method.StartsWith("Ydb.PersQueue.V1.") ||
             method.StartsWith("Ydb.Cms.V1.CmsService/")) {
             DisablePathNormalization();
@@ -52,14 +77,14 @@ namespace NKikimr::NGRpcService {
             return;
         }
 
-        SetPathNormalizer(IsPathNormalizationEnabled() ? std::move(normalizer) : nullptr);
         if (database) {
             if (relativeDatabase) {
                 database = PrependDomainIfNeeded("/" + appData->DomainsInfo->Domain->Name, *database);
             }
-            database = NormalizePath(*database);
+            database = IsPathNormalizationEnabled() && normalizer ? normalizer->NormalizePath(*database) : *database;
         }
 
+        SetPathNormalizer(IsPathNormalizationEnabled() ? std::move(normalizer) : nullptr);
         EffectiveDatabaseName_ = std::move(database);
         PathNormalizationInitialized_ = true;
     }

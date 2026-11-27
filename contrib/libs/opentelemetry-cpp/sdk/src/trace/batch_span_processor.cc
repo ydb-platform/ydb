@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -194,7 +195,7 @@ void BatchSpanProcessor::DoBackgroundWork()
     // Since `Export()` calls `NotifyCompletion()` which takes `force_flush_cv_m`,
     // holding `cv_m` while calling `Export()` can lead to a ABBA deadlock.
     {
-      // Wait for `timeout` milliseconds.
+      // Wait for `timeout` milliseconds, or until a full batch is available.
       std::unique_lock<std::mutex> lk(synchronization_data_->cv_m);
       synchronization_data_->cv.wait_for(lk, timeout, [this] {
         if (synchronization_data_->is_force_wakeup_background_worker.load(
@@ -203,7 +204,7 @@ void BatchSpanProcessor::DoBackgroundWork()
           return true;
         }
 
-        return !buffer_.empty();
+        return buffer_.size() >= max_export_batch_size_;
       });
       synchronization_data_->is_force_wakeup_background_worker.store(false,
                                                                      std::memory_order_release);
@@ -248,28 +249,22 @@ void BatchSpanProcessor::Export()
   }
 #endif /* ENABLE_THREAD_INSTRUMENTATION_PREVIEW */
 
-  do
+  std::uint64_t notify_force_flush =
+      synchronization_data_->force_flush_pending_sequence.load(std::memory_order_acquire);
+  bool should_drain =
+      notify_force_flush >
+          synchronization_data_->force_flush_notified_sequence.load(std::memory_order_acquire) ||
+      synchronization_data_->is_shutdown.load(std::memory_order_acquire);
+
+  // snapshot the target ONCE, before exporting anything
+  size_t remaining =
+      should_drain ? buffer_.size() : std::min(buffer_.size(), max_export_batch_size_);
+
+  while (remaining > 0)
   {
+    size_t num_records_to_export = std::min(remaining, max_export_batch_size_);
+
     std::vector<std::unique_ptr<Recordable>> spans_arr;
-    size_t num_records_to_export{};
-    std::uint64_t notify_force_flush =
-        synchronization_data_->force_flush_pending_sequence.load(std::memory_order_acquire);
-    if (notify_force_flush)
-    {
-      num_records_to_export = buffer_.size();
-    }
-    else
-    {
-      num_records_to_export =
-          buffer_.size() >= max_export_batch_size_ ? max_export_batch_size_ : buffer_.size();
-    }
-
-    if (num_records_to_export == 0)
-    {
-      NotifyCompletion(notify_force_flush, exporter_, synchronization_data_);
-      break;
-    }
-
     // Reserve space for the number of records
     spans_arr.reserve(num_records_to_export);
 
@@ -284,8 +279,10 @@ void BatchSpanProcessor::Export()
                     });
 
     exporter_->Export(nostd::span<std::unique_ptr<Recordable>>(spans_arr.data(), spans_arr.size()));
-    NotifyCompletion(notify_force_flush, exporter_, synchronization_data_);
-  } while (true);
+    remaining -= num_records_to_export;
+  }
+
+  NotifyCompletion(notify_force_flush, exporter_, synchronization_data_);
 
 #ifdef ENABLE_THREAD_INSTRUMENTATION_PREVIEW
   if (worker_thread_instrumentation_ != nullptr)
@@ -348,6 +345,11 @@ void BatchSpanProcessor::GetWaitAdjustedTime(
     std::chrono::microseconds &timeout,
     std::chrono::time_point<std::chrono::system_clock> &start_time)
 {
+  if (timeout == (std::chrono::microseconds::max)())
+  {
+    return;
+  }
+
   auto end_time = std::chrono::system_clock::now();
   auto offset   = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
   start_time    = end_time;

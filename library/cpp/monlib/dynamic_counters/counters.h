@@ -2,8 +2,6 @@
 
 #include <library/cpp/monlib/counters/counters.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
-
-#include <library/cpp/threading/light_rw_lock/lightrwlock.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/cast.h>
@@ -16,6 +14,7 @@
 
 namespace NMonitoring {
     struct TCounterForPtr;
+    struct THistogramCounter;
     struct TDynamicCounters;
     struct ICountableConsumer;
 
@@ -42,8 +41,14 @@ namespace NMonitoring {
             return Visibility_;
         }
 
+        // Written by encoders that support it (JSON, SPACK, protobuf); Prometheus ignores it. Groups ignore it.
+        bool IsMemOnly() const {
+            return MemOnly_;
+        }
+
     protected:
         EVisibility Visibility_{EVisibility::Unspecified};
+        bool MemOnly_ = false;
     };
 
     inline bool IsVisible(TCountableBase::EVisibility myLevel, TCountableBase::EVisibility consumerLevel) {
@@ -68,6 +73,11 @@ namespace NMonitoring {
             const TString& labelName, const TString& labelValue,
             IHistogramSnapshotPtr snapshot, bool derivative) = 0;
 
+        // Called by THistogramCounter::Accept. Forwarding consumers must override it, or memOnly is lost.
+        virtual void OnHistogramCounter(
+            const TString& labelName, const TString& labelValue,
+            const THistogramCounter* histogram);
+
         virtual void OnGroupBegin(
             const TString& labelName, const TString& labelValue,
             const TDynamicCounters* group) = 0;
@@ -87,10 +97,11 @@ namespace NMonitoring {
 #endif                          // _MSC_VER
 
     struct TCounterForPtr: public TDeprecatedCounter, public TCountableBase {
-        TCounterForPtr(bool derivative = false, EVisibility vis = EVisibility::Public)
+        TCounterForPtr(bool derivative = false, EVisibility vis = EVisibility::Public, bool memOnly = false)
             : TDeprecatedCounter(0ULL, derivative)
         {
             Visibility_ = vis;
+            MemOnly_ = memOnly;
         }
 
         TCounterForPtr(const TCounterForPtr&) = delete;
@@ -117,10 +128,9 @@ namespace NMonitoring {
     };
 
     struct TExpiringCounter: public TCounterForPtr {
-        explicit TExpiringCounter(bool derivative = false, EVisibility vis = EVisibility::Public)
-            : TCounterForPtr{derivative}
+        explicit TExpiringCounter(bool derivative = false, EVisibility vis = EVisibility::Public, bool memOnly = false)
+            : TCounterForPtr{derivative, vis, memOnly}
         {
-            Visibility_ = vis;
         }
 
         void Reset() {
@@ -130,11 +140,13 @@ namespace NMonitoring {
 
     struct THistogramCounter: public TCountableBase {
         explicit THistogramCounter(
-            IHistogramCollectorPtr collector, bool derivative = true, EVisibility vis = EVisibility::Public)
+            IHistogramCollectorPtr collector, bool derivative = true, EVisibility vis = EVisibility::Public,
+            bool memOnly = false)
             : Collector_(std::move(collector))
             , Derivative_(derivative)
         {
             Visibility_ = vis;
+            MemOnly_ = memOnly;
         }
 
         void Collect(double value) {
@@ -158,7 +170,7 @@ namespace NMonitoring {
             ICountableConsumer& consumer) const override
         {
             if (IsVisible(Visibility(), consumer.Visibility())) {
-                consumer.OnHistogram(labelName, labelValue, Collector_->Snapshot(), Derivative_);
+                consumer.OnHistogramCounter(labelName, labelValue, this);
             }
         }
 
@@ -168,6 +180,10 @@ namespace NMonitoring {
 
         IHistogramSnapshotPtr Snapshot() const {
             return Collector_->Snapshot();
+        }
+
+        bool ForDerivative() const {
+            return Derivative_;
         }
 
     private:
@@ -180,6 +196,12 @@ namespace NMonitoring {
     };
 
     using THistogramPtr = TIntrusivePtr<THistogramCounter>;
+
+    inline void ICountableConsumer::OnHistogramCounter(
+        const TString& labelName, const TString& labelValue,
+        const THistogramCounter* histogram) {
+        OnHistogram(labelName, labelValue, histogram->Snapshot(), histogram->ForDerivative());
+    }
 
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -270,55 +292,65 @@ namespace NMonitoring {
             return items;
         }
 
+        // Get* return an existing entry as is: derivative, visibility, memOnly
+        // and collector apply only on creation.
         TCounterPtr GetCounter(
             const TString& value,
             bool derivative = false,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public,
+            bool memOnly = false);
 
         TCounterPtr GetNamedCounter(
             const TString& name,
             const TString& value,
             bool derivative = false,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public,
+            bool memOnly = false);
 
         THistogramPtr GetHistogram(
             const TString& value,
             IHistogramCollectorPtr collector,
             bool derivative = true,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public,
+            bool memOnly = false);
 
         THistogramPtr GetNamedHistogram(
             const TString& name,
             const TString& value,
             IHistogramCollectorPtr collector,
             bool derivative = true,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public,
+            bool memOnly = false);
 
         // These counters will be automatically removed from the registry
         // when last reference to the counter expires.
         TCounterPtr GetExpiringCounter(
             const TString& value,
             bool derivative = false,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public,
+            bool memOnly = false);
 
         TCounterPtr GetExpiringNamedCounter(
             const TString& name,
             const TString& value,
             bool derivative = false,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public,
+            bool memOnly = false);
 
         THistogramPtr GetExpiringHistogram(
             const TString& value,
             IHistogramCollectorPtr collector,
             bool derivative = true,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public,
+            bool memOnly = false);
 
         THistogramPtr GetExpiringNamedHistogram(
             const TString& name,
             const TString& value,
             IHistogramCollectorPtr collector,
             bool derivative = true,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public,
+            bool memOnly = false);
 
         TCounterPtr FindCounter(const TString& value) const;
         TCounterPtr FindNamedCounter(const TString& name, const TString& value) const;

@@ -13,6 +13,7 @@ PY3TEST()
         test_overloads.py
         zip_bomb.py
         test_create.py
+        test_cut_history.py
         test_delete.py
         test_insert.py
         test_primary_key_ordering.py
@@ -38,6 +39,7 @@ PY3TEST()
 
     PEERDIR(
         contrib/python/parameterized
+        library/python/retry
         ydb/tests/library
         ydb/tests/library/test_meta
         ydb/tests/olap/common

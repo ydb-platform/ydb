@@ -20,14 +20,19 @@ namespace NBridgeTest {
 
     // replace main config of self-managed cluster with the current one modified by the callback (it gets the config
     // section of the YAML), the version is advanced automatically
-    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ReplaceMainConfig(TEnvironmentSetup& env,
-            const std::function<void(YAML::Node&)>& modify, ui32 nodeId = 1) {
+    inline TString MakeNextMainConfigYaml(TEnvironmentSetup& env, const std::function<void(YAML::Node&)>& modify,
+            ui32 nodeId = 1) {
         YAML::Node yaml = YAML::Load(FetchMainConfigYaml(env, nodeId));
         yaml["metadata"]["version"] = yaml["metadata"]["version"].as<ui64>() + 1;
         yaml["metadata"]["cluster"] = ""; // test environment has no cluster name
         YAML::Node config = yaml["config"];
         modify(config);
-        const TString text(YAML::Dump(yaml));
+        return TString(YAML::Dump(yaml));
+    }
+
+    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ReplaceMainConfig(TEnvironmentSetup& env,
+            const std::function<void(YAML::Node&)>& modify, ui32 nodeId = 1) {
+        const TString text = MakeNextMainConfigYaml(env, modify, nodeId);
         return InvokeDistconf(env, [&](auto& record) {
             auto *cmd = record.MutableReplaceStorageConfig();
             cmd->SetYAML(text);
@@ -52,12 +57,14 @@ namespace NBridgeTest {
     constexpr ui32 LastThirdPileNodeId = 24;
 
     // add hosts of nodes firstNodeId..lastNodeId (located as GetBridgedLocation does, but in the designated pile) to the
-    // config section of main YAML; hosts get the designated host config, if any
+    // config section of main YAML; hosts get the designated host config, if any, and their node ids, as hosts without
+    // them get the ones of their positions in the list
     inline void AddPileHosts(YAML::Node& config, const TString& pileName, ui32 firstNodeId, ui32 lastNodeId,
             std::optional<ui32> hostConfigId = std::nullopt) {
         for (ui32 nodeId = firstNodeId; nodeId <= lastNodeId; ++nodeId) {
             YAML::Node host;
             host["host"] = "host_" + std::to_string(nodeId);
+            host["node_id"] = nodeId;
             if (hostConfigId) {
                 host["host_config_id"] = *hostConfigId;
             }

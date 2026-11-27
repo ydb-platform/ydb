@@ -1240,6 +1240,13 @@ ui64 TPipeline::OutdatedCleanupStep() const
     return LastPlannedTx.Step;
 }
 
+ui64 TPipeline::AllowedSchemaStep() const {
+    // Database freeze may advance the write edge beyond the mediator step for
+    // its final resolved record. Every planned write after thaw must respect
+    // the same floor as immediate writes, including after a reboot.
+    return Max(LastPlannedTx.Step + 1, Self->SnapshotManager.GetImmediateWriteEdge().Step + 1);
+}
+
 ui64 TPipeline::AllowedDataStep() const
 {
     ui64 latestStep = 0;
@@ -1249,7 +1256,7 @@ ui64 TPipeline::AllowedDataStep() const
     }
 
     return Max(
-        LastPlannedTx.Step + 1,
+        AllowedSchemaStep(),
         latestStep ? latestStep + 1 : TAppData::TimeProvider->Now().MilliSeconds());
 }
 
@@ -1278,18 +1285,29 @@ ui64 TPipeline::GetScanTxCompleteLag(ui64 timecastStep) const
     return GetTxCompleteLag(EOperationKind::ReadTable, timecastStep);
 }
 
-void TPipeline::ProposeTx(TOperation::TPtr op, const TStringBuf &txBody, TTransactionContext &txc, const TActorContext &ctx)
+void TPipeline::ProposeTx(TActiveTransaction& op, TTransactionContext& txc, const TActorContext& ctx)
+{
+    ProposeTxImpl(op, txc, ctx);
+}
+
+void TPipeline::ProposeTx(TWriteOperation& op, TTransactionContext& txc, const TActorContext& ctx)
+{
+    ProposeTxImpl(op, txc, ctx);
+}
+
+template <typename TOp>
+void TPipeline::ProposeTxImpl(TOp& op, TTransactionContext& txc, const TActorContext& ctx)
 {
     NIceDb::TNiceDb db(txc.DB);
-    SetProposed(op->GetTxId(), op->GetTarget());
-    if (!op->HasVolatilePrepareFlag()) {
-        PreserveSchema(db, op->GetMaxStep());
+    SetProposed(op.GetTxId(), op.GetTarget());
+    if (!op.HasVolatilePrepareFlag()) {
+        PreserveSchema(db, op.GetMaxStep());
     }
-    Self->TransQueue.ProposeTx(db, op, op->GetTarget(), txBody);
+    Self->TransQueue.ProposeTx(db, op, op.GetTarget());
 
-    if (Self->IsStopping() && op->GetTarget()) {
+    if (Self->IsStopping() && op.GetTarget()) {
         // Send notification if we prepared a tx while shard was stopping
-        op->OnStopping(*Self, ctx);
+        op.OnStopping(*Self, ctx);
     }
 }
 
@@ -1882,6 +1900,10 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
             if (Config.DirtyImmediate())
                 writeOp->SetForceDirtyFlag();
         }
+    }
+
+    if (writeTx->IsReadOnlyPrepare(Self->GetSysLocks())) {
+        writeOp->SetFlag(TTxFlags::ReadOnlyPrepare);
     }
 
     return writeOp;
@@ -2675,4 +2697,3 @@ void TPipeline::ProvideGlobalTxId(const TOperation::TPtr& op, ui64 globalTxId) {
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

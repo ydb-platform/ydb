@@ -5,6 +5,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_nested.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/dictionary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
@@ -50,24 +51,25 @@ namespace {
 
 Y_UNIT_TEST_SUITE(VectorWorkloadFileImport) {
 
-    Y_UNIT_TEST_TWIN(CsvFloatListsPreserveLegacyFormat, Directory) {
+    Y_UNIT_TEST_QUAD(CsvFloatListsUseSelectedFormat, Directory, Tsv) {
         TTempDir directory;
-        auto file = TTempFileHandle::InDir(directory.Path(), "vectors", "csv");
+        const char* format = Tsv ? "tsv" : "csv";
+        auto file = TTempFileHandle::InDir(directory.Path(), "vectors", format);
         {
             TFileOutput output(file.Name());
-            output << "1,\"[1 0 2.5]\"\n";
+            output << (Tsv ? "1\t[1, 0, 2.5]\n" : "1,\"[1 0 2.5]\"\n");
         }
 
         for (const auto& vector : VectorCases) {
             TVectorWorkloadParams params;
             params.KeyColumns = {"id"};
             params.EmbeddingColumn = "embedding";
-            params.VectorOpts.VectorType = vector.Type;
-            params.VectorOpts.VectorDimension = 3;
             TWorkloadVectorFilesDataInitializer initializer(params);
             NLastGetopt::TOpts opts;
             initializer.ConfigureOpts(opts);
-            const char* argv[] = {"files", "--input", Directory ? directory.Name().c_str() : file.Name().c_str(), "--format", "csv"};
+            params.ConfigureOpts(opts, TWorkloadParams::ECommandType::Import, 0);
+            const char* argv[] = {"files", "--input", Directory ? directory.Name().c_str() : file.Name().c_str(), "--format", format,
+                "--vector-type", vector.Type, "--vector-dimension", "3"};
             NLastGetopt::TOptsParseResultException parsed(&opts, Y_ARRAY_SIZE(argv), argv);
             const auto generators = initializer.GetBulkInitialData();
             UNIT_ASSERT_VALUES_EQUAL(generators.size(), 1);
@@ -75,7 +77,18 @@ Y_UNIT_TEST_SUITE(VectorWorkloadFileImport) {
             UNIT_ASSERT_VALUES_EQUAL(portions.size(), 1);
             auto* csv = std::get_if<IBulkDataGenerator::TDataPortion::TCsv>(&portions.front()->MutableData());
             UNIT_ASSERT(csv);
-            UNIT_ASSERT_C(csv->Data.Contains(FloatEmbedding), vector.Type);
+            const auto input = std::make_shared<arrow::io::BufferReader>(arrow::util::string_view(csv->Data.data(), csv->Data.size()));
+            auto convertOptions = arrow::csv::ConvertOptions::Defaults();
+            convertOptions.column_types["embedding"] = arrow::binary();
+            auto parseOptions = arrow::csv::ParseOptions::Defaults();
+            parseOptions.newlines_in_values = true;
+            const auto reader = arrow::csv::TableReader::Make(arrow::io::default_io_context(), input,
+                arrow::csv::ReadOptions::Defaults(), parseOptions, convertOptions).ValueOrDie();
+            const auto table = reader->Read().ValueOrDie();
+            UNIT_ASSERT_VALUES_EQUAL(table->num_rows(), 1);
+            const auto column = std::static_pointer_cast<arrow::BinaryArray>(table->GetColumnByName("embedding")->chunk(0));
+            const auto bytes = column->GetView(0);
+            UNIT_ASSERT_VALUES_EQUAL_C(TStringBuf(bytes.data(), bytes.size()), vector.Bytes, vector.Type);
             UNIT_ASSERT(generators.front()->GenerateDataPortion().empty());
         }
     }
@@ -114,12 +127,11 @@ Y_UNIT_TEST_SUITE(VectorWorkloadFileImport) {
             TVectorWorkloadParams params;
             params.KeyColumns = {"id"};
             params.EmbeddingColumn = "embedding";
-            params.VectorOpts.VectorType = vector.Type;
-            params.VectorOpts.VectorDimension = 3;
             TWorkloadVectorFilesDataInitializer initializer(params);
             NLastGetopt::TOpts opts;
             initializer.ConfigureOpts(opts);
-            const char* argv[] = {"files", "--input", file.Name().c_str()};
+            params.ConfigureOpts(opts, TWorkloadParams::ECommandType::Import, 0);
+            const char* argv[] = {"files", "--input", file.Name().c_str(), "--vector-type", vector.Type, "--vector-dimension", "3"};
             NLastGetopt::TOptsParseResultException parsed(&opts, Y_ARRAY_SIZE(argv), argv);
             const auto generators = initializer.GetBulkInitialData();
             UNIT_ASSERT_VALUES_EQUAL(generators.size(), 1);
@@ -136,8 +148,7 @@ Y_UNIT_TEST_SUITE(VectorWorkloadFileImport) {
             const auto column = std::static_pointer_cast<arrow::BinaryArray>(batch->GetColumnByName("embedding"));
             UNIT_ASSERT(column);
             const auto bytes = column->GetView(0);
-            const auto& expected = Binary ? vector.Bytes : FloatEmbedding;
-            UNIT_ASSERT_VALUES_EQUAL_C(TStringBuf(bytes.data(), bytes.size()), expected, vector.Type);
+            UNIT_ASSERT_VALUES_EQUAL_C(TStringBuf(bytes.data(), bytes.size()), vector.Bytes, vector.Type);
             UNIT_ASSERT(generators.front()->GenerateDataPortion().empty());
         }
     }

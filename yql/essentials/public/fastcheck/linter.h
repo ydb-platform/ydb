@@ -6,6 +6,7 @@
 #include <util/generic/set.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/public/sql_meta/statement_kind.h>
 #include <yql/essentials/public/udf_meta/udf_meta.h>
 
 #include <cstddef>
@@ -47,11 +48,13 @@ struct TChecksRequest {
     TLangVersion LangVer = MinLangVersion;
     bool IsAnsiLexer = false;
     EMode Mode = EMode::Default;
-    const IUdfMeta* UdfMeta = nullptr;
+    const TUdfMeta* UdfMeta = nullptr;
     TMaybe<TVector<TCheckFilter>> Filters;
     TString IssueReportTarget;
     bool SuppressPrerequisiteIssues = false;
     ui32 LimitStrictnessFactor = 1;
+    // Unset allows all kinds; an empty set allows only unclassified statements (queries, pragmas, etc.).
+    TMaybe<TSet<EStatementKind>> AllowedStatementKinds;
 };
 
 struct TCheckResponse {
@@ -63,6 +66,9 @@ struct TCheckResponse {
 struct TChecksResponse {
     TVector<TCheckResponse> Checks;
 };
+
+void PreloadIssues();
+TUdfMeta LoadUdfMeta(TStringBuf json);
 
 TVector<TCheckFilter> ParseChecks(const TString& checks);
 TSet<TString> ListChecks(const TMaybe<TVector<TCheckFilter>>& filters = Nothing());

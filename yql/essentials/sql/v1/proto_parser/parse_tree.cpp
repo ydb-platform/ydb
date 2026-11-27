@@ -35,7 +35,7 @@ TVector<const TRule_sql_stmt_core*> Statements(const TRule_sql_query& rule) {
 bool IsEmptyQuery(google::protobuf::Message* message) {
     YQL_ENSURE(message);
 
-    auto ast = static_cast<const TSQLv1ParserAST&>(*message);
+    const auto& ast = static_cast<const TSQLv1ParserAST&>(*message);
     const auto& sqlQuery = ast.GetRule_sql_query();
 
     return sqlQuery.GetAltCase() == NSQLv1Generated::TRule_sql_query::kAltSqlQuery1 &&

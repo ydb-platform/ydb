@@ -2,6 +2,7 @@
 #include "distconf_quorum.h"
 #include "node_warden_impl.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/config/validation/validators.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 
@@ -14,6 +15,8 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
@@ -21,6 +24,25 @@ namespace NKikimr::NStorage {
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
     namespace {
+        bool IsDisablingDistconf(const NKikimrBlobStorage::TStorageConfig& config) {
+            return !config.GetSelfManagementConfig().GetEnabled()
+                && config.GetPrevConfig().GetSelfManagementConfig().GetEnabled();
+        }
+
+        bool IsGenerationOnlySuccessor(const NKikimrBlobStorage::TStorageConfig& config, const TStorageConfigMeta& parent) {
+            if (config.GetGeneration() <= parent.GetGeneration() || !config.HasPrevConfig()
+                    || TStorageConfigMeta(config.GetPrevConfig()) != parent) {
+                return false;
+            }
+            using TConfig = NKikimrBlobStorage::TStorageConfig;
+            google::protobuf::util::MessageDifferencer diff;
+            for (int field : {TConfig::kGenerationFieldNumber, TConfig::kFingerprintFieldNumber,
+                    TConfig::kPrevConfigFieldNumber}) {
+                diff.IgnoreField(TConfig::descriptor()->FindFieldByNumber(field));
+            }
+            return diff.Compare(config, config.GetPrevConfig());
+        }
+
         YAML::Node Json2Yaml(const NJson::TJsonValue& json) {
             YAML::Node res;
 
@@ -264,8 +286,26 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup(STFUNC_SIG) {
+        if (ev->Cookie == DataCenterRetryCookie) {
+            if (DataCenterReconciliationDeadline) {
+                SendDataCenterSnapshot();
+            }
+            return;
+        }
+        if (ev->Cookie == DataCenterTimeoutCookie) {
+            if (DataCenterReconciliationDeadline && TActivationContext::Monotonic() >= DataCenterReconciliationDeadline) {
+                if (DataCenterPreflight) {
+                    throw TExError() << "Timed out waiting for BSC to acknowledge the previous DC state snapshot";
+                }
+                throw TExError() << "Timed out waiting for BSC to acknowledge the committed DC state snapshot";
+            }
+            return;
+        }
         if (ev->Cookie == VStatusTimeoutCookie) {
             if (!PendingVDiskIds.empty()) {
+                if (DropAllDonorsBase) {
+                    throw TExRace() << "Timed out waiting for the donor recipient status";
+                }
                 throw TExError() << "Timed out waiting for VDisk status before group reassignment";
             }
             return;
@@ -285,8 +325,20 @@ namespace NKikimr::NStorage {
             return;
         }
         if (ConfigAwaitingCommit) {
-            if (TActivationContext::Monotonic() >= CommitConfirmationDeadline) {
-                throw TExNoQuorum() << "Committed configuration quorum was not confirmed; replace may already be applied";
+            const auto now = TActivationContext::Monotonic();
+            if (now >= CommitConfirmationDeadline) {
+                if (!ScatterTasks.empty()) {
+                    return;
+                }
+                return RetrySelfHealConfirmationOrFinish(TResult::NO_QUORUM,
+                    "Committed configuration quorum was not confirmed; update may already be applied");
+            }
+            if (Self->Scepter && IsDisablingDistconf(*ConfigAwaitingCommit)
+                    && now >= CommitConfirmationDeadline - CommitConfirmationTimeout + NextDisableRetryOffset
+                    && Self->StorageConfig == ConfigAwaitingCommit && Self->CommittedStorageConfig
+                    && TStorageConfigMeta(*Self->CommittedStorageConfig) == TStorageConfigMeta(*ConfigAwaitingCommit)) {
+                NextDisableRetryOffset *= 2;
+                InvokeOtherActor(*Self, &TDistributedConfigKeeper::FanOutReversePush, Self->CommittedStorageConfig.get(), true);
             }
             if (ScatterTasks.empty()) {
                 CollectCommittedConfig();
@@ -367,7 +419,8 @@ namespace NKikimr::NStorage {
         if (!NewYaml && !NewStorageYaml) {
             if (request.HasSwitchDedicatedStorageSection()) {
                 throw TExError() << "Switching dedicated storage section mode without providing any new config";
-            } else if (!IsDryRun && Self->SelfManagementEnabled && Self->StorageConfig->GetGeneration()) {
+            } else if (!IsDryRun && Self->StorageConfig->GetGeneration()
+                    && (Self->SelfManagementEnabled || IsDisablingDistconf(*Self->StorageConfig))) {
                 return StartCommitConfirmation();
             } else { // finish this request prematurely: no configs are actually changed
                 return Finish(TResult::OK, std::nullopt);
@@ -633,14 +686,36 @@ namespace NKikimr::NStorage {
             /*fromBootstrap=*/ EnablingDistconf);
     }
 
-    void TInvokeRequestHandlerActor::StartCommitConfirmation() {
+    void TInvokeRequestHandlerActor::StartCommitConfirmation(const std::optional<TStorageConfigMeta>& expected) {
+        if (!Self->StorageConfig || !Self->StorageConfig->GetGeneration()) {
+            throw TExNoQuorum() << "No initialized configuration to confirm committed quorum";
+        }
+        const TStorageConfigMeta current(*Self->StorageConfig);
+        if (expected && *expected != current) {
+            auto& op = std::get<TInvokeExternalOperation>(Query);
+            if (!Self->IsCurrentStateStorageSelfHealActor(op.Sender)
+                    || (op.ObservedNewerCommit && *op.ObservedNewerCommit != current)
+                    || !IsGenerationOnlySuccessor(*Self->StorageConfig, *expected)) {
+                throw TExRace() << "Configuration changed before confirming the proposed configuration";
+            }
+            op.ObservedNewerCommit.reset();
+        }
         if (ControllerPipeId) {
             NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
         }
         ConfigAwaitingCommit = Self->StorageConfig;
-        FullCommitConfirmationNeeded = false;
-        CommitConfirmationDeadline = TActivationContext::Monotonic() + TDuration::Seconds(30);
+        CommitConfirmationDeadline = TActivationContext::Monotonic() + CommitConfirmationTimeout;
         HandleWakeup();
+    }
+
+    void TInvokeRequestHandlerActor::RetrySelfHealConfirmationOrFinish(TResult::EStatus status, TStringBuf reason) {
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        const bool retry = ConfigAwaitingCommit && op && Self->IsCurrentStateStorageSelfHealActor(op->Sender);
+        if (retry) {
+            op->SelfHealCommitToConfirm.emplace(*ConfigAwaitingCommit);
+            InvokeOtherActor(*Self, &TDistributedConfigKeeper::Invoke, TInvokeQuery{std::move(*op)});
+        }
+        Finish(status, reason, {}, !retry);
     }
 
     void TInvokeRequestHandlerActor::CollectCommittedConfig() {
@@ -648,79 +723,116 @@ namespace NKikimr::NStorage {
             return !Self->IsBridged() && (Self->ConfigRecoveryRequired
                 || Self->IsBelowKnownAppliedConfig(*ConfigAwaitingCommit));
         };
-        const bool metadataOnly = !FullCommitConfirmationNeeded && !needsRecovery();
+        auto& op = std::get<TInvokeExternalOperation>(Query);
+        op.FullCommitConfirmationNeeded |= needsRecovery();
+        const bool metadataOnly = !std::exchange(StartWithFullCommitRead, false) && !op.FullCommitConfirmationNeeded;
         TEvScatter task;
         task.MutableCollectConfigs()->SetMetadataOnly(metadataOnly);
         const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
-        IssueScatterTask(std::move(task), [this, recoveryGeneration, metadataOnly, needsRecovery](TEvGather *res) {
+        IssueScatterTask(std::move(task), [this, &op, recoveryGeneration, metadataOnly, needsRecovery](TEvGather *res) {
+            if (TActivationContext::Monotonic() >= CommitConfirmationDeadline) {
+                Send(SelfId(), new TEvents::TEvWakeup);
+            }
             if (!res->HasCollectConfigs() || res->GetCollectConfigs().GetMetadataOnly() != metadataOnly) {
                 throw TExError() << "Incorrect CollectConfigs response";
             }
-            if (TStorageConfigMeta(*Self->StorageConfig) != TStorageConfigMeta(*ConfigAwaitingCommit)) {
-                throw TExRace() << "Configuration changed while confirming committed quorum; replace may already be applied";
-            }
-            if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
-                return;
-            }
-
-            bool needFullConfig = needsRecovery();
-            for (const auto *configs : {&res->GetCollectConfigs().GetCommittedConfigs(),
-                                       &res->GetCollectConfigs().GetProposedConfigs()}) {
-                for (const auto& item : *configs) {
+            const TStorageConfigMeta expected(*ConfigAwaitingCommit);
+            op.FullCommitConfirmationNeeded |= needsRecovery();
+            const auto& committedConfigs = res->GetCollectConfigs().GetCommittedConfigs();
+            const auto& proposedConfigs = res->GetCollectConfigs().GetProposedConfigs();
+            auto observe = [&](const auto& configs) {
+                bool conflict = false;
+                for (const auto& item : configs) {
                     const auto& config = item.GetConfig();
-                    if (!metadataOnly && !Self->CheckFingerprint(config)) {
-                        throw TExError() << "Persistent configuration fingerprint mismatch";
-                    }
                     Self->MaxObservedConfigGeneration = Max(Self->MaxObservedConfigGeneration, config.GetGeneration());
-                    needFullConfig |= config.GetGeneration() > ConfigAwaitingCommit->GetGeneration()
-                        || (config.GetGeneration() == ConfigAwaitingCommit->GetGeneration()
-                            && config.GetFingerprint() != ConfigAwaitingCommit->GetFingerprint());
+                    conflict |= config.GetGeneration() == expected.GetGeneration()
+                        && config.GetFingerprint() != expected.GetFingerprint();
+                    op.FullCommitConfirmationNeeded |= config.GetGeneration() > expected.GetGeneration();
                 }
-            }
-            if (metadataOnly && needFullConfig) {
-                FullCommitConfirmationNeeded = true;
-                return;
+                op.FullCommitConfirmationNeeded |= conflict;
+                return conflict;
+            };
+            observe(proposedConfigs);
+            if (observe(committedConfigs)) {
+                throw TExError() << "Conflicting committed configurations of generation " << expected.GetGeneration();
             }
 
-            std::vector<TSuccessfulDisk> successfulDisks;
-            for (const auto& item : res->GetCollectConfigs().GetCommittedConfigs()) {
+            const bool selfHeal = Self->IsCurrentStateStorageSelfHealActor(op.Sender);
+            auto& newerCommit = op.ObservedNewerCommit;
+            auto extendsStep = [&](const auto& item) { return IsGenerationOnlySuccessor(item.GetConfig(), expected); };
+            for (const auto& item : committedConfigs) {
                 const auto& config = item.GetConfig();
-                if (config.GetGeneration() > ConfigAwaitingCommit->GetGeneration()) {
-                    throw TExRace() << "Newer committed configuration found; replace may already be applied";
-                }
-                if (config.GetGeneration() != ConfigAwaitingCommit->GetGeneration()) {
+                if (config.GetGeneration() <= expected.GetGeneration()) {
                     continue;
                 }
-                if (config.GetFingerprint() != ConfigAwaitingCommit->GetFingerprint()) {
+                if (newerCommit && newerCommit->GetGeneration() == config.GetGeneration()
+                        && newerCommit->GetFingerprint() != config.GetFingerprint()) {
                     throw TExError() << "Conflicting committed configurations of generation " << config.GetGeneration();
                 }
-                for (const auto& disk : item.GetDisks()) {
-                    successfulDisks.emplace_back(disk.GetNodeId(), disk.GetPath(),
-                                                 disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
+                if (!selfHeal || (newerCommit && *newerCommit != TStorageConfigMeta(config))
+                        || (!metadataOnly && !extendsStep(item))) {
+                    throw TExRace() << "Newer committed configuration found; update may already be applied";
+                }
+                if (!newerCommit) {
+                    newerCommit.emplace(config);
                 }
             }
-
+            if (newerCommit && !selfHeal) {
+                throw TExRace() << "State Storage self-heal was superseded";
+            }
+            if (TStorageConfigMeta(*Self->StorageConfig) != expected) {
+                return RetrySelfHealConfirmationOrFinish(TResult::RACE,
+                    "Configuration changed while confirming committed quorum; update may already be applied");
+            }
+            if (recoveryGeneration != Self->ConfigRecoveryGeneration || (metadataOnly && op.FullCommitConfirmationNeeded)) {
+                return;
+            }
+            std::vector<TSuccessfulDisk> successfulDisks;
+            for (const auto& item : committedConfigs) {
+                if (item.GetConfig().GetGeneration() == expected.GetGeneration()) {
+                    for (const auto& disk : item.GetDisks()) {
+                        successfulDisks.emplace_back(disk.GetNodeId(), disk.GetPath(),
+                            disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
+                    }
+                }
+            }
             const bool committedQuorum = HasConfigQuorum(*ConfigAwaitingCommit, successfulDisks,
                 TBridgePileId(), *Self->Cfg, false);
-            if (!Self->IsBridged() && !metadataOnly && (committedQuorum || Self->ConfigRecoveryRequired)) {
+            const bool checkRecovery = !Self->IsBridged() && op.FullCommitConfirmationNeeded
+                && (committedQuorum || Self->ConfigRecoveryRequired);
+            if (checkRecovery || newerCommit || (selfHeal && !metadataOnly && std::ranges::any_of(proposedConfigs, extendsStep))) {
                 auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true);
                 if (result.ErrorReason || !result.RecoveredConfig) {
                     return;
                 }
+                if (!checkRecovery || newerCommit) {
+                    const auto& selected = result.RequiresRecoveryProposition ? *result.ConfigToPropose : *result.RecoveredConfig;
+                    if (newerCommit && selected.GetGeneration() < newerCommit->GetGeneration()) {
+                        return;
+                    }
+                    if ((newerCommit && *newerCommit != TStorageConfigMeta(selected))
+                            || (TStorageConfigMeta(selected) != expected && !IsGenerationOnlySuccessor(selected, expected))) {
+                        throw TExRace() << "Recovered configuration does not preserve the State Storage self-heal step";
+                    }
+                }
                 if (result.RequiresRecoveryProposition) {
                     return StartRecoveryProposition(result);
                 }
-                Self->ConfigRecoveryRequired = false;
-                InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
-                if (TStorageConfigMeta(*result.RecoveredConfig) != TStorageConfigMeta(*ConfigAwaitingCommit)) {
-                    throw TExRace() << "Configuration changed while confirming committed quorum; replace may already be applied";
+                op.FullCommitConfirmationNeeded = false;
+                const bool targetChanged = TStorageConfigMeta(*result.RecoveredConfig) != expected;
+                if (checkRecovery || targetChanged) {
+                    Self->ConfigRecoveryRequired = false;
+                    InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
                 }
-                FullCommitConfirmationNeeded = false;
+                if (targetChanged) {
+                    return RetrySelfHealConfirmationOrFinish(TResult::RACE,
+                        "Configuration changed while confirming committed quorum; update may already be applied");
+                }
             }
             if (committedQuorum) {
-                Finish(TResult::OK, std::nullopt);
+                FinishConfigChange();
             }
-        });
+        }, CommitConfirmationDeadline);
     }
 
     void TInvokeRequestHandlerActor::TryEnableDistconf() {
@@ -746,6 +858,26 @@ namespace NKikimr::NStorage {
                 ConnectToController();
             }
         });
+    }
+
+    void TInvokeRequestHandlerActor::StartDataCenterReconciliation(TStorageConfigMeta config) {
+        DataCenterConfigToConfirm = std::move(config);
+        DataCenterReconciliationDeadline = TActivationContext::Monotonic() + TDuration::Minutes(10);
+        TActivationContext::Schedule(DataCenterReconciliationDeadline, new IEventHandle(TEvents::TSystem::Wakeup, 0,
+            SelfId(), {}, nullptr, DataCenterTimeoutCookie));
+        ControllerPipeId = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(),
+            NTabletPipe::TClientRetryPolicy::WithRetries()));
+        SendDataCenterSnapshot();
+    }
+
+    void TInvokeRequestHandlerActor::SendDataCenterSnapshot() {
+        if (*DataCenterConfigToConfirm != TStorageConfigMeta(*Self->StorageConfig)) {
+            throw TExRace() << "Configuration changed while reconciling DC state with BSC";
+        }
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto *command = request->Record.MutableRequest()->AddCommand()->MutableDefineDataCenterStates();
+        command->MutableDataCenter()->CopyFrom(Self->StorageConfig->GetDataCenterStates().GetDataCenter());
+        NTabletPipe::SendData(SelfId(), ControllerPipeId, request.release());
     }
 
     void TInvokeRequestHandlerActor::ConnectToController() {
@@ -792,8 +924,53 @@ namespace NKikimr::NStorage {
         throw TExError() << "Pipe to BSC disconnected";
     }
 
+    std::optional<TInvokeRequestHandlerActor::TBridgePileControllerOp>
+            TInvokeRequestHandlerActor::GetBridgePileControllerOp() const {
+        using T = NKikimrBlobStorage::TEvControllerDistconfRequest;
+        switch (ControllerOp) {
+            case EControllerOp::ADD_BRIDGE_PILE:
+                return TBridgePileControllerOp(BSC_INTERFACE_BRIDGE_PILE_OPS, T::ValidateAddBridgePile, "add piles");
+            case EControllerOp::REMOVE_BRIDGE_PILE:
+                return TBridgePileControllerOp(BSC_INTERFACE_REMOVE_BRIDGE_PILE, T::ValidateRemoveBridgePile,
+                    "remove piles");
+            case EControllerOp::BRIDGE_ROLLBACK:
+                return TBridgePileControllerOp(BSC_INTERFACE_BRIDGE_ROLLBACK, T::ValidateBridgeRollback,
+                    "roll the bridged cluster back");
+            case EControllerOp::UNSET:
+            case EControllerOp::ENABLE_DISTCONF:
+            case EControllerOp::DISABLE_DISTCONF:
+            case EControllerOp::OTHER:
+                return std::nullopt;
+        }
+        Y_UNREACHABLE();
+    }
+
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
         const auto& response = ev->Get()->Record.GetResponse();
+        if (DataCenterReconciliationDeadline) {
+            if (!response.GetSuccess()) {
+                TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+                    SelfId(), {}, nullptr, DataCenterRetryCookie));
+                return;
+            }
+            if (*DataCenterConfigToConfirm != TStorageConfigMeta(*Self->StorageConfig)) {
+                throw TExRace() << "Configuration changed while reconciling DC state with BSC";
+            }
+            std::expected<TDataCenterStates, TString> applied = ParseDataCenterStates(response.GetAppliedDataCenterStates());
+            std::expected<TDataCenterStates, TString> desired = ParseDataCenterStates(Self->StorageConfig->GetDataCenterStates());
+            if (!response.HasAppliedDataCenterStates() || !applied || !desired || *applied != *desired) {
+                throw TExError() << "BSC did not acknowledge the current DC state snapshot";
+            }
+            DataCenterReconciliationDeadline = {};
+            if (DataCenterPreflight) {
+                DataCenterPreflight = false;
+                NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
+                return StartProposition(&ProposedStorageConfig);
+            }
+            AppliedDataCenterStates.emplace(response.GetAppliedDataCenterStates());
+            return StartCommitConfirmation(DataCenterConfigToConfirm);
+        }
+
         YDB_LOG_DEBUG("Received TEvControllerConfigResponse",
             {"marker", "NWDC80"},
             {"selfId", SelfId()},
@@ -805,17 +982,14 @@ namespace NKikimr::NStorage {
         auto request = std::make_unique<TEvBlobStorage::TEvControllerDistconfRequest>();
         auto& record = request->Record;
 
-        if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE || ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE) {
-            const bool adding = ControllerOp == EControllerOp::ADD_BRIDGE_PILE;
-            if (response.GetStatus(0).GetInterfaceVersion() < (adding ? BSC_INTERFACE_BRIDGE_PILE_OPS :
-                    BSC_INTERFACE_REMOVE_BRIDGE_PILE)) {
-                throw TExError() << "BS_CONTROLLER is way too old to " << (adding ? "add" : "remove") << " piles";
+        if (const auto bridgeOp = GetBridgePileControllerOp()) {
+            const auto& [minInterfaceVersion, operation, what] = *bridgeOp;
+            if (response.GetStatus(0).GetInterfaceVersion() < minInterfaceVersion) {
+                throw TExError() << "BS_CONTROLLER is way too old to " << what;
             }
-            record.SetOperation(adding
-                ? NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateAddBridgePile
-                : NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateRemoveBridgePile);
+            record.SetOperation(operation);
             BridgePileOpPileId.CopyToProto(&record, &NKikimrBlobStorage::TEvControllerDistconfRequest::SetBridgePileId);
-            if (adding) {
+            if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE) {
                 record.MutableStorageConfig()->PackFrom(ProposedStorageConfig); // with static VDisks in the pile
             }
             NTabletPipe::SendData(SelfId(), ControllerPipeId, request.release());
@@ -868,6 +1042,7 @@ namespace NKikimr::NStorage {
 
             case EControllerOp::ADD_BRIDGE_PILE:
             case EControllerOp::REMOVE_BRIDGE_PILE:
+            case EControllerOp::BRIDGE_ROLLBACK:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }
@@ -903,13 +1078,16 @@ namespace NKikimr::NStorage {
             {"selfId", SelfId()},
             {"record", getRecord()});
 
-        if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE || ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE) {
+        if (GetBridgePileControllerOp()) {
             if (record.GetStatus() != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
                 throw TExError() << (ControllerOp == EControllerOp::ADD_BRIDGE_PILE
                     ? "Can't add pile to the cluster: BSC can't add parts of its groups to the pile: "
-                    : "Can't remove pile from the cluster: BSC can't delete parts of its groups in the pile: ")
+                    : ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE
+                    ? "Can't remove pile from the cluster: BSC can't delete parts of its groups in the pile: "
+                    : "Can't roll the bridged cluster back: BSC can't make its groups ordinary ones: ")
                     << record.GetErrorReason();
             }
+            WaitingForConfigValidation = false;
             NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId); // BSC is not needed anymore
             return StartProposition(&ProposedStorageConfig);
         }
@@ -946,6 +1124,7 @@ namespace NKikimr::NStorage {
 
             case EControllerOp::ADD_BRIDGE_PILE:
             case EControllerOp::REMOVE_BRIDGE_PILE:
+            case EControllerOp::BRIDGE_ROLLBACK:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }
@@ -986,7 +1165,8 @@ namespace NKikimr::NStorage {
         const auto& selfAssemblyUUID = request.GetSelfAssemblyUUID();
         if (Self->StorageConfig->GetGeneration()) {
             if (Self->StorageConfig->GetSelfAssemblyUUID() == selfAssemblyUUID) { // repeated command, it's ok
-                return Finish(TResult::OK, std::nullopt);
+                StartWithFullCommitRead = true;
+                return StartCommitConfirmation();
             } else {
                 throw TExError() << "Bootstrap on already bootstrapped cluster";
             }
@@ -1010,6 +1190,9 @@ namespace NKikimr::NStorage {
                 throw TExError() << *r.ErrorReason;
             } else if (r.RequiresRecoveryProposition) {
                 return StartRecoveryProposition(r);
+            } else if (r.RecoveredConfig && r.RecoveredConfig->GetGeneration()
+                    && r.RecoveredConfig->GetSelfAssemblyUUID() != selfAssemblyUUID) {
+                throw TExError() << "Bootstrap on already bootstrapped cluster";
             } else if (r.ConfigToPropose) {
                 // config validation, which is basically done in Console
                 TString mainYaml;
@@ -1023,7 +1206,7 @@ namespace NKikimr::NStorage {
                 StartProposition(&r.ConfigToPropose.value(), /*mindPrev=*/ true, /*propositionBase=*/ nullptr,
                     /*fromBootstrap=*/ true);
             } else { // no new proposition has been made
-                Finish(TResult::OK, std::nullopt);
+                StartCommitConfirmation();
             }
         };
 

@@ -1,0 +1,16 @@
+TString::end() is const; use vend() for the mutable end, as util itself
+does (std::fill(begin(), vend(), ch) in util/generic/string.h).
+
+--- contrib/libs/grpc/src/compiler/python_generator.cc	(index)
++++ contrib/libs/grpc/src/compiler/python_generator.cc	(working tree)
+@@ -764,8 +764,8 @@
+         {
+           IndentScope raii_warning_string_indent(out);
+           TString filename_without_ext = file->filename_without_ext();
+-          std::replace(filename_without_ext.begin(), filename_without_ext.end(),
+-                       '-', '_');
++          std::replace(filename_without_ext.begin(),
++                       filename_without_ext.vend(), '-', '_');
+           var["Pb2GrpcFileName"] = filename_without_ext;
+           out->Print(
+               var,

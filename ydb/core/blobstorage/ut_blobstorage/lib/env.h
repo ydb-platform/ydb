@@ -8,6 +8,7 @@
 
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
 #include <ydb/core/tablet/resource_broker.h>
 
@@ -72,6 +73,11 @@ struct TEnvironmentSetup {
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
         const bool ReportVDiskMetricsInPDiskMock = false;
+        // Mock PDisks lay data chunks out in encrypted sectors and hand out the format context, as a real PDisk does.
+        // Off: plain data chunks with whole-sector append blocks.
+        const bool SectorFormatInPDiskMock = true;
+        // VDiskControls.EnableVDiskSectorPreparation: VDisks build and open data sectors themselves.
+        const bool EnableVDiskSectorPreparation = false;
         const bool SelfManagementConfig = false;
         const bool EnableDeepScrubbing = false;
         const ui32 NumPiles = 0;
@@ -303,7 +309,8 @@ struct TEnvironmentSetup {
                         metadata = std::make_shared<TPDiskMockState::TMetadata>();
                     }
                     auto state = MakeIntrusive<TPDiskMockState>(nodeId, pdiskId, cfg.PDiskGuid,
-                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy, metadata);
+                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy, metadata,
+                        Settings.SectorFormatInPDiskMock);
                     state->SetReportVDiskMetrics(Settings.ReportVDiskMetricsInPDiskMock);
                     return state;
                 },
@@ -647,6 +654,8 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes, 1'000'000, 1, 10'000'000, Settings.VolatilePhantomFlagStorageBlobSizeLimitBytes);
                 ADD_ICB_CONTROL(VDiskControls.EnableChecksumReadValidationOnVDisk, false, false, true, false);
                 ADD_ICB_CONTROL(VDiskControls.EnableChecksumWriteValidationOnVDisk, false, false, true, false);
+                ADD_ICB_CONTROL(VDiskControls.EnableVDiskSectorPreparation, false, false, true,
+                    Settings.EnableVDiskSectorPreparation);
                 ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
                 ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
                 ADD_ICB_CONTROL(VDiskControls.HullCompEmergencyMaxSsts, 8, 0, 64, 8);
@@ -919,6 +928,14 @@ config:
                     TBlobStorageGroupType::ErasureSpeciesByName(group.GetErasureSpecies())),
                     numFailRealms, numFailDomainsPerFailRealm, numVDisksPerFailDomain);
                 TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromProto(&group, &NKikimrBlobStorage::TBaseConfig::TGroup::GetGroupId), group.GetGroupGeneration());
+                if (group.HasMirror3dcState()) {
+                    dyn.Mirror3dcState.State = group.GetMirror3dcState();
+                }
+                auto& realmStates = dyn.Mirror3dcState.FailRealmStates;
+                const auto numRealmStates = std::min<size_t>(group.FailRealmsSize(), realmStates.size());
+                for (ui32 realm = 0; realm < numRealmStates; ++realm) {
+                    realmStates[realm] = group.GetFailRealms(realm).GetState();
+                }
                 for (const auto& [vdiskId, vdiskActorId] : vdisks) {
                     dyn.PushBackActorId(vdiskActorId);
                 }
@@ -986,6 +1003,23 @@ config:
     void Sim(TDuration delta = TDuration::Zero()) {
         TInstant barrier = Runtime->GetClock() + delta;
         Runtime->Sim([&] { return Runtime->GetClock() <= barrier; });
+    }
+
+    // Stops the tablet and makes the resolver forget it, so that it starts anew. The time runs on for settlingTime then.
+    void RebootTablet(ui64 tabletId, TDuration settlingTime = TDuration::Zero()) {
+        const TActorId sender = Runtime->AllocateEdgeActor(Settings.ControllerNodeId, __FILE__, __LINE__);
+        Runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(tabletId,
+            new IEventHandle(TActorId(), sender, new TEvents::TEvPoison), {}, TEvTabletResolver::TEvForward::EActor::Tablet)),
+            sender.NodeId());
+        const auto res = WaitForEdgeActorEvent<TEvTabletResolver::TEvForwardResult>(sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        Sim(TDuration::Seconds(5));
+        Runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId,
+            TActorId())), sender.NodeId());
+        if (settlingTime) {
+            Sim(settlingTime);
+        }
+        Runtime->DestroyActor(sender);
     }
 
     TString Dump(const TActorId& vdiskActorId, const TVDiskID& vdiskId) {

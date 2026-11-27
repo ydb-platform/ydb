@@ -1,7 +1,5 @@
 UNITTEST()
 
-FORK_SUBTESTS()
-
 SRCS(
     grpc_client_low_ut.cpp
 )

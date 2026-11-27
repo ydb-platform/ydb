@@ -919,42 +919,42 @@ class TableClientSettings(object):
         self._allow_truncated_result = convert._default_allow_truncated_result
 
     def with_native_timestamp_in_result_sets(self, enabled):
-        # type:(bool) -> ydb.TableClientSettings
+        # type: (bool) -> ydb.TableClientSettings
         self._native_timestamp_in_result_sets = enabled
         return self
 
     def with_native_interval_in_result_sets(self, enabled):
-        # type:(bool) -> ydb.TableClientSettings
+        # type: (bool) -> ydb.TableClientSettings
         self._native_interval_in_result_sets = enabled
         return self
 
     def with_native_json_in_result_sets(self, enabled):
-        # type:(bool) -> ydb.TableClientSettings
+        # type: (bool) -> ydb.TableClientSettings
         self._native_json_in_result_sets = enabled
         return self
 
     def with_native_date_in_result_sets(self, enabled):
-        # type:(bool) -> ydb.TableClientSettings
+        # type: (bool) -> ydb.TableClientSettings
         self._native_date_in_result_sets = enabled
         return self
 
     def with_native_datetime_in_result_sets(self, enabled):
-        # type:(bool) -> ydb.TableClientSettings
+        # type: (bool) -> ydb.TableClientSettings
         self._native_datetime_in_result_sets = enabled
         return self
 
     def with_client_query_cache(self, enabled):
-        # type:(bool) -> ydb.TableClientSettings
+        # type: (bool) -> ydb.TableClientSettings
         self._client_query_cache_enabled = enabled
         return self
 
     def with_lazy_result_sets(self, enabled):
-        # type:(bool) -> ydb.TableClientSettings
+        # type: (bool) -> ydb.TableClientSettings
         self._make_result_sets_lazy = enabled
         return self
 
     def with_allow_truncated_result(self, enabled):
-        # type:(bool) -> ydb.TableClientSettings
+        # type: (bool) -> ydb.TableClientSettings
         self._allow_truncated_result = enabled
         return self
 

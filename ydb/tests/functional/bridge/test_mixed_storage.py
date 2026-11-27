@@ -5,6 +5,7 @@ import ydb
 
 from common import BridgeKiKiMRTest
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
+from ydb.tests.library.common.wait_for import retry_assertions
 
 
 class TestMixedStorageDatabases(BridgeKiKiMRTest):
@@ -112,7 +113,7 @@ class TestMixedStorageDatabases(BridgeKiKiMRTest):
             rows = self.execute(kind, "SELECT id, value FROM data ORDER BY id;")[0].rows
             assert [(row.id, row.value) for row in rows] == [(1, "before-promotion"), (2, "after-promotion")]
             self.cluster.alter_database(f"/Root/{kind}", storage_units_to_add={kind: 1})
-        self.check_pools(2)
+        retry_assertions(lambda: self.check_pools(2), timeout_seconds=120)
 
     def test_database_bridge_mode(self):
         self.execute("bridged", "CREATE TABLE data (id Uint64, value Utf8, PRIMARY KEY(id));", scheme=True)
@@ -122,11 +123,11 @@ class TestMixedStorageDatabases(BridgeKiKiMRTest):
         env['YDB_TOKEN'] = 'root@builtin'
         cli = [self.configurator.get_ydb_cli_path(), '-e', f'grpc://{node.host}:{node.port}', '-y']
         operation = ['admin', 'cluster', 'bridge', 'set-database-mode']
-        missing_target = subprocess.run(cli + ['-d', '/Root'] + operation + ['bridged'],
-                                        capture_output=True, env=env, timeout=10)
-        assert missing_target.returncode != 0
-        assert b'target-database' in missing_target.stderr, missing_target.stderr
-        operation += ['--target-database', '/Root/bridged']
+        missing_path = subprocess.run(cli + ['-d', '/Root'] + operation + ['bridged'],
+                                      capture_output=True, env=env, timeout=10)
+        assert missing_path.returncode != 0
+        assert b'database-path' in missing_path.stderr, missing_path.stderr
+        operation += ['--database-path', '/Root/bridged']
         original = {pool.Name: pool for pool in self.cluster.client.read_storage_pools()}
         untouched = original['/Root/ordinary:ordinary']
         pool_id = original['/Root/bridged:bridged'].StoragePoolId

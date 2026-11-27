@@ -1,4 +1,4 @@
-Y_BENCHMARK(jsonpath-benchmark)
+G_BENCHMARK(jsonpath-benchmark)
 
 PEERDIR(
     library/cpp/json

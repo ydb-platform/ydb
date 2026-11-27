@@ -9,13 +9,13 @@
 namespace NKikimr::NOlap::NExport {
 
 NKikimr::TConclusion<std::unique_ptr<NActors::IActor>> TSession::DoCreateActor(const NBackground::TStartContext &context) const {
-    AFL_VERIFY(IsConfirmed());
+    YDB_LOG_VERIFY(IsConfirmed());
     Status = EStatus::Started;
     return std::make_unique<TActor>(context.GetSessionSelfPtr(), context.GetAdapter());
 }
 
 void TSession::Finish() {
-    AFL_VERIFY(Status == EStatus::Started);
+    YDB_LOG_VERIFY(Status == EStatus::Started);
     Status = EStatus::Finished;
 }
 
@@ -48,7 +48,7 @@ void TSession::Abort(const TString &errorMessage) {
 }
 
 void TSession::Confirm() {
-    AFL_VERIFY(IsDraft());
+    YDB_LOG_VERIFY(IsDraft());
     Status = EStatus::Confirmed;
 }
 
@@ -75,7 +75,7 @@ bool TSession::IsConfirmed() const {
 TSession::TSession(const std::shared_ptr<TExportTask> &task)
     : Task(task)
 {
-    AFL_VERIFY(Task);
+    YDB_LOG_VERIFY(Task);
 }
 
 TString TSession::GetClassName() const {
@@ -87,7 +87,11 @@ bool TSession::IsReadyForRemoveOnFinished() const {
 }
 
 TSession::TStatus TSession::GetStatus() const {
-    return TStatus{ Status == EStatus::Finished, ErrorMessage };
+    const bool success = Status == EStatus::Finished;
+    if (!success && !ErrorMessage) {
+        return TStatus{ false, TStringBuilder() << "export session is not finished, status: " << Status };
+    }
+    return TStatus{ success, ErrorMessage };
 }
 
 bool TSession::IsFinished() const {
@@ -120,6 +124,9 @@ TSession::TProtoState TSession::DoSerializeStateToProto() const {
     } else {
         result.SetStatus(::ToString(Status));
     }
+    if (ErrorMessage) {
+        result.SetErrorMessage(ErrorMessage);
+    }
     return result;
 }
 
@@ -127,6 +134,7 @@ TConclusionStatus TSession::DoDeserializeStateFromProto(const TProtoState &proto
     if (!TryFromString(proto.GetStatus(), Status)) {
         return TConclusionStatus::Fail("cannot read status from proto: " + proto.GetStatus());
     }
+    ErrorMessage = proto.GetErrorMessage();
     return TConclusionStatus::Success();
 }
 

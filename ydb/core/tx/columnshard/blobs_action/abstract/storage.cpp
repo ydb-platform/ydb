@@ -34,8 +34,10 @@ bool TCommonBlobsTracker::DoUseBlob(const TUnifiedBlobId& blobId) {
 
 bool TCommonBlobsTracker::DoFreeBlob(const TUnifiedBlobId& blobId) {
     auto useIt = BlobsUseCount.find(blobId);
-    AFL_VERIFY(useIt != BlobsUseCount.end())("reason", "Unknown blob")("blob_id", blobId.ToStringNew());
-    AFL_VERIFY(useIt->second);
+    YDB_LOG_VERIFY(useIt != BlobsUseCount.end(),
+        {"reason", "Unknown blob"},
+        {"blobId", blobId.ToStringNew()});
+    YDB_LOG_VERIFY(useIt->second);
     --useIt->second;
     YDB_LOG_TRACE("",
         {"method", "DoFreeBlob"},
@@ -54,7 +56,7 @@ void IBlobsStorageOperator::Stop() {
     if (CurrentGCAction && CurrentGCAction->IsInProgress()) {
         CurrentGCAction->Abort();
     }
-    AFL_VERIFY(DoStop());
+    YDB_LOG_VERIFY(DoStop());
     Stopped = true;
 }
 

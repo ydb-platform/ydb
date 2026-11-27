@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.34.8)
+VERSION(1.34.9)
 
-ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/v1.34.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/v1.34.9.tar.gz)
 
 PEERDIR(
     contrib/libs/libc_compat
@@ -27,6 +27,8 @@ ADDINCL(
 )
 
 NO_COMPILER_WARNINGS()
+
+NO_RUNTIME()
 
 CFLAGS(
     -DCARES_BUILDING_LIBRARY
@@ -88,7 +90,7 @@ SRCS(
     src/lib/ares_timeout.c
     src/lib/ares_update_servers.c
     src/lib/ares_version.c
-    src/lib/atomic.cpp
+    src/lib/atomic.c
     src/lib/dsa/ares_array.c
     src/lib/dsa/ares_htable.c
     src/lib/dsa/ares_htable_asvp.c

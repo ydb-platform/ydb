@@ -7,9 +7,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/kqp/common
+    ydb/core/kqp/common/simple
     ydb/core/scheme
-    ydb/core/tablet_flat
     ydb/library/aclib
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/comp_nodes

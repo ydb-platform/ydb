@@ -37,6 +37,117 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TKesusTest) {
+    Y_UNIT_TEST(TestSemaphoresBackupDefinitions) {
+        TTestContext ctx;
+        ctx.Setup();
+        VerifySemaphoreDescriptions(ctx.DescribeSemaphores(), {});
+        const TString data("a\0\xffz", 4);
+        ctx.CreateSemaphore("../persistent", 2, data);
+        const auto proxy = ctx.Runtime->AllocateEdgeActor();
+        ctx.MustRegisterProxy(proxy, 1);
+        ctx.MustAttachSession(proxy, 1, 0, 30000);
+        ctx.MustAttachSession(proxy, 1, 0, 30000);
+        ctx.SendAcquireSemaphore(1, proxy, 1, 1, "../persistent", 2);
+        ctx.ExpectAcquireSemaphoreResult(1, proxy, 1);
+        ctx.SendAcquireSemaphore(2, proxy, 1, 2, "../persistent", 1, 60000);
+        ctx.ExpectAcquireSemaphorePending(2, proxy, 1);
+        ctx.SendAcquireLock(3, proxy, 1, 1, "ephemeral", LOCK_MODE_EXCLUSIVE);
+        ctx.ExpectAcquireLockResult(3, proxy, 1);
+
+        const auto result = ctx.DescribeSemaphores();
+        VerifySemaphoreDescriptions(result, {MakeSemaphoreDescription("../persistent", 2, data, 2)});
+        const auto& semaphore = result.GetSemaphores(0);
+
+        // Replaying a definition creates a free semaphore, despite active owners/waiters at the source.
+        ctx.CreateSemaphore("restored", semaphore.GetLimit(), semaphore.GetData());
+        const auto restored = ctx.DescribeSemaphore("restored", true);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Data, data);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Limit, 2);
+        UNIT_ASSERT(!restored.Ephemeral);
+        UNIT_ASSERT(restored.Owners.empty());
+        UNIT_ASSERT(restored.Waiters.empty());
+    }
+
+    Y_UNIT_TEST(TestSemaphoresBackupAllDefinitions) {
+        TTestContext ctx;
+        ctx.Setup();
+        // Verify that a single response includes a large set of descriptions.
+        const TString data(32 * 1024, 'x');
+        constexpr ui32 count = 160;
+        TVector<NKikimrKesus::TSemaphoreDescription> expected;
+        expected.reserve(count);
+        for (ui32 i = 0; i < count; ++i) {
+            ctx.CreateSemaphore(ToString(i), i + 1, data);
+            expected.push_back(MakeSemaphoreDescription(ToString(i), i + 1, data));
+        }
+        VerifySemaphoreDescriptions(ctx.DescribeSemaphores(), expected);
+    }
+
+    Y_UNIT_TEST(TestSemaphoresBackupResponseSizeLimit) {
+        TTestContext ctx;
+        ctx.Setup();
+        const TString data(1024 * 1024, 'x');
+        const ui32 count = NActors::EventMaxByteSize / data.size();
+        TString boundaryData;
+        {
+            TEvKesus::TEvDescribeSemaphoresResult expected;
+            expected.Record.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
+            for (ui32 i = 0; i + 1 < count; ++i) {
+                const TString name = ToString(i);
+                ctx.CreateSemaphore(name, 1, data);
+                *expected.Record.AddSemaphores() = MakeSemaphoreDescription(name, 1, data);
+            }
+
+            auto* boundary = expected.Record.AddSemaphores();
+            *boundary = MakeSemaphoreDescription("boundary", Max<ui64>(), data);
+            const size_t size = expected.CalculateSerializedSize();
+            UNIT_ASSERT(size > NActors::EventMaxByteSize);
+            const size_t excess = size - NActors::EventMaxByteSize;
+            UNIT_ASSERT(excess < data.size());
+            boundaryData = data.substr(0, data.size() - excess);
+            boundary->SetData(boundaryData);
+            UNIT_ASSERT_VALUES_EQUAL(expected.CalculateSerializedSize(), NActors::EventMaxByteSize);
+        }
+
+        ctx.CreateSemaphore("boundary", Max<ui64>(), boundaryData);
+        {
+            TEvKesus::TEvDescribeSemaphoresResult response;
+            response.Record = ctx.DescribeSemaphores();
+            UNIT_ASSERT_VALUES_EQUAL(response.Record.SemaphoresSize(), count);
+            UNIT_ASSERT_VALUES_EQUAL(response.CalculateSerializedSize(), NActors::EventMaxByteSize);
+        }
+
+        boundaryData += 'x';
+        ctx.UpdateSemaphore("boundary", boundaryData);
+        const auto result = ctx.DescribeSemaphores(Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), 0);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetError().ShortDebugString(), "response size limit");
+    }
+
+    Y_UNIT_TEST(TestSemaphoresBackupLatestDefinitions) {
+        TTestContext ctx;
+        ctx.Setup();
+        ctx.CreateSemaphore("A", 1);
+        ctx.CreateSemaphore("B", 2, "old");
+        VerifySemaphoreDescriptions(ctx.DescribeSemaphores(), {
+            MakeSemaphoreDescription("A", 1),
+            MakeSemaphoreDescription("B", 2, "old"),
+        });
+        ctx.DeleteSemaphore("A");
+        ctx.UpdateSemaphore("B", "changed");
+        ctx.CreateSemaphore("C", 3, "new");
+
+        for (bool reboot : {false, true}) {
+            if (reboot) {
+                ctx.RebootTablet();
+            }
+            VerifySemaphoreDescriptions(ctx.DescribeSemaphores(), {
+                MakeSemaphoreDescription("B", 2, "changed"),
+                MakeSemaphoreDescription("C", 3, "new"),
+            });
+        }
+    }
+
     Y_UNIT_TEST(TestKesusConfig) {
         TTestContext ctx;
         ctx.Setup();
@@ -1470,6 +1581,17 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         testDescribe();
         ctx.RebootTablet();
         testDescribe();
+    }
+
+    Y_UNIT_TEST(TestQuoterResourceDescribeCounter) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        ctx.AddQuoterResource("/Root", 10.0);
+        ctx.DescribeQuoterResources({}, {}, true);
+        ctx.DescribeQuoterResources({}, {"/Root"}, false);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetTabletCumulativeCounter(*ctx.Runtime, ctx.TabletId, "Kesus/Requests/QuoterResourceDescribe"), 2);
     }
 
     Y_UNIT_TEST(TestQuoterResourceCreation) {

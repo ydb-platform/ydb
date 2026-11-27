@@ -59,11 +59,10 @@ class TestDiscovery(BridgeKiKiMRTest):
             PileState(pile_name="r2", state=PileState.PROMOTED),
         ]
         self.update_cluster_state(self.bridge_client, updates)
+        # PROMOTED is transient: promotion may finish before either RPC observes it.
+        # Check that discovery publishes the completed transition.
+        expected_states = {"r1": PileState.SYNCHRONIZED, "r2": PileState.PRIMARY}
         self.wait_for_cluster_state(
-            self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.PROMOTED}, timeout_seconds=120,
+            self.bridge_client, expected_states, timeout_seconds=120,
         )
-
-        self.wait_for_discovery({
-            "r1": PileState.PRIMARY,
-            "r2": PileState.PROMOTED,
-        })
+        self.wait_for_discovery(expected_states)

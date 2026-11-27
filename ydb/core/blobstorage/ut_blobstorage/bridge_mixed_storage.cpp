@@ -262,11 +262,16 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         UNIT_ASSERT(!response.GetSuccess());
         UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "enable_non_uniform_storage");
 
-        const auto activation = ReplaceMainConfig(env, [](YAML::Node& config) {
-            config["bridge_config"]["enable_non_uniform_storage"] = true;
-        });
-        UNIT_ASSERT_EQUAL_C(activation.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
-            activation.GetErrorReason());
+        WaitUntil(env, [&] {
+            const auto activation = ReplaceMainConfig(env, [](YAML::Node& config) {
+                config["bridge_config"]["enable_non_uniform_storage"] = true;
+            });
+            if (activation.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                return true;
+            }
+            UNIT_ASSERT_STRING_CONTAINS(activation.GetErrorReason(), "Some static nodes did not report their BridgeConfig");
+            return false;
+        }, "all static nodes report bridge capability");
         env.Sim(TDuration::Seconds(10));
         const auto config = QueryStorageConfig(env);
         UNIT_ASSERT_VALUES_EQUAL(NStorage::GetRequiredBridgeFeatureLevel(config),

@@ -1,9 +1,5 @@
 UNITTEST_FOR(ydb/services/metadata/initializer)
 
-FORK_SUBTESTS()
-
-SPLIT_FACTOR(60)
-
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -13,12 +9,19 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/getopt
-    library/cpp/regex/pcre
-    library/cpp/svnversion
+    library/cpp/protobuf/json
+    ydb/core/cms/console
     ydb/core/testlib/default
+    ydb/core/tx/schemeshard
+    ydb/core/tx/tx_proxy
+    ydb/core/wrappers
+    ydb/library/accessor
+    ydb/library/actors/core
+    ydb/public/sdk/cpp/src/client/table
     ydb/services/metadata
-    ydb/public/lib/yson_value
+    ydb/services/metadata/abstract
+    ydb/services/metadata/manager
+    ydb/services/metadata/secret
 )
 
 YQL_LAST_ABI_VERSION()

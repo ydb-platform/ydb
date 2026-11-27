@@ -12,8 +12,49 @@ from ydb.public.api.protos.ydb_keyvalue_pb2 import ReadResult
 from hamcrest import assert_that, is_, has_entries
 
 import copy
+import grpc
 import logging
 import time
+import yaml
+
+import ydb.public.api.protos.ydb_config_pb2 as config_pb2
+from ydb.tests.library.common.wait_for import wait_for
+
+
+def fetch_main_config(cluster):
+    """The main YAML config of the cluster (with its metadata section), as parsed dict."""
+    response = cluster.config_client.fetch_all_configs()
+    assert_that(response.operation.status == StatusIds.SUCCESS)
+    result = config_pb2.FetchConfigResult()
+    response.operation.result.Unpack(result)
+    assert_that(len(result.config) == 1)
+    return yaml.safe_load(result.config[0].config)
+
+
+def try_replace_main_config(cluster, change):
+    """Apply change() to the config section of the main YAML config and replace it; returns the operation."""
+    cfg = fetch_main_config(cluster)
+    cfg["metadata"]["version"] += 1
+    change(cfg["config"])
+    response = cluster.config_client.replace_config(yaml.dump(cfg))
+    return response.operation, cfg["metadata"]["version"]
+
+
+def replace_main_config(cluster, change, logger=logging.getLogger(__name__)):
+    """Replace the main YAML config and wait until every node has stored it; nodes pick it up when restarted."""
+    operation, expected_version = try_replace_main_config(cluster, change)
+    logger.debug("replace_config operation: %s", operation)
+    assert_that(operation.status == StatusIds.SUCCESS, str(operation))
+
+    def config_is_applied():
+        for node in cluster.nodes.values():
+            try:
+                if node.read_node_config()["metadata"]["version"] != expected_version:
+                    return False
+            except (KeyError, OSError, TypeError, yaml.YAMLError):
+                return False
+        return True
+    assert_that(wait_for(config_is_applied, timeout_seconds=60))
 
 
 def value_for(key, tablet_id):
@@ -46,6 +87,7 @@ class BridgeKiKiMRTest(object):
     use_config_store = True
     separate_node_configs = True
     nodes_count = 16
+    use_in_memory_pdisks = False
     pile_names = ("r1", "r2")
     bridge_rpc_timeout = 10
     cms_config = None
@@ -77,7 +119,7 @@ class BridgeKiKiMRTest(object):
         self.configurator = KikimrConfigGenerator(
             self.erasure,
             nodes=self.nodes_count,
-            use_in_memory_pdisks=False,
+            use_in_memory_pdisks=self.use_in_memory_pdisks,
             use_config_store=self.use_config_store,
             metadata_section=self.metadata_section,
             separate_node_configs=self.separate_node_configs,
@@ -148,11 +190,13 @@ class BridgeKiKiMRTest(object):
         while True:
             response = client.update_cluster_state(updates, quorum_piles=quorum_piles)
             self.logger.debug("Update cluster state response: %s", response)
-            transient = response.operation.status == StatusIds.INTERNAL_ERROR and any(
-                issue in str(response.operation.issues) for issue in (
-                    "No quorum to start propose/commit configuration", "Hop node disconnected",
-                    # nodes are still rebinding after another pile has been disconnected
-                    "No quorum for bridge configuration collection",
+            transient = response.operation.status in (StatusIds.ABORTED, StatusIds.UNAVAILABLE) or (
+                response.operation.status == StatusIds.INTERNAL_ERROR and any(
+                    issue in str(response.operation.issues) for issue in (
+                        "No quorum to start propose/commit configuration", "Hop node disconnected",
+                        # nodes are still rebinding after another pile has been disconnected
+                        "No quorum for bridge configuration collection",
+                    )
                 )
             )
             if expected_status != StatusIds.SUCCESS or not transient or time.monotonic() >= deadline:
@@ -174,6 +218,46 @@ class BridgeKiKiMRTest(object):
             return result
         else:
             return response
+
+    def update_and_confirm_failover(self, client, surviving_client, updates, expected_generation):
+        expected = {pile.pile_name: pile.state for pile in updates}
+        may_have_applied = False
+        can_retry = True
+        last_observation = None
+
+        def confirmed():
+            nonlocal may_have_applied, can_retry, last_observation
+            try:
+                if may_have_applied:
+                    response = surviving_client.get_cluster_state()
+                    last_observation = response
+                    if response.operation.status in (StatusIds.UNAVAILABLE, StatusIds.TIMEOUT):
+                        return False
+                    assert_that(response.operation.status, is_(StatusIds.SUCCESS), str(response))
+                    state = bridge.GetClusterStateResult()
+                    assert_that(response.operation.result.Unpack(state), str(response))
+                    last_observation = {pile.pile_name: pile.state for pile in state.pile_states}
+                    if state.generation > expected_generation:
+                        return last_observation == expected
+                    if not can_retry or state.generation < expected_generation:
+                        return False
+
+                response = client.update_cluster_state(updates, expected_generation=expected_generation)
+                last_observation = response
+                status = response.operation.status
+                can_retry = status in (StatusIds.INTERNAL_ERROR, StatusIds.UNAVAILABLE, StatusIds.TIMEOUT)
+                assert_that(can_retry or status == StatusIds.SUCCESS or (status == StatusIds.ABORTED and may_have_applied),
+                            str(response))
+                may_have_applied |= status in (StatusIds.SUCCESS, StatusIds.TIMEOUT, StatusIds.INTERNAL_ERROR)
+            except grpc.RpcError as error:
+                if error.code() not in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED):
+                    raise
+                may_have_applied = True
+                last_observation = error
+            return False
+
+        applied = wait_for(confirmed, timeout_seconds=120, max_step_seconds=1)
+        assert_that(applied, f"Failover was not observed on the surviving pile: {last_observation}")
 
     def get_cluster_state(self, client):
         response = client.get_cluster_state()

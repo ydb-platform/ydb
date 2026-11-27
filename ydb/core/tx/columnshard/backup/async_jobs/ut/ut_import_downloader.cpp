@@ -253,6 +253,9 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
+        // The S3 recipe answers over real HTTP: keep the real waits so replies arrive before
+        // simulated timers exhaust the scheduled-event limit.
+        runtime->SetFastSimulatedTime(false);
         runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
         runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
 
@@ -327,6 +330,9 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
+        // The S3 recipe answers over real HTTP: keep the real waits so replies arrive before
+        // simulated timers exhaust the scheduled-event limit.
+        runtime->SetFastSimulatedTime(false);
         runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
         runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
 
@@ -398,6 +404,9 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
 
         TRuntimePtr runtime(new TTestBasicRuntime());
         SetupTabletServices(*runtime);
+        // The S3 recipe answers over real HTTP: keep the real waits so replies arrive before
+        // simulated timers exhaust the scheduled-event limit.
+        runtime->SetFastSimulatedTime(false);
         runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
         runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
 

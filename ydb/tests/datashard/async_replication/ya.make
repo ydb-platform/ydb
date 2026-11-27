@@ -1,5 +1,6 @@
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 FORK_SUBTESTS()
 SPLIT_FACTOR(20)
@@ -14,6 +15,7 @@ TEST_SRCS(
 )
 
 PEERDIR(
+    contrib/python/boto3
     ydb/tests/datashard/lib
     ydb/tests/library
     ydb/tests/sql/lib

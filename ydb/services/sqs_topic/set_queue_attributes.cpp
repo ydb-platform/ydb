@@ -28,7 +28,6 @@
 
 #include <ydb/public/api/grpc/draft/ydb_ymq_v1.pb.h>
 
-#include <ydb/core/client/server/grpc_base.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
@@ -192,13 +191,7 @@ namespace NKikimr::NSqsTopic::V1 {
                     ->set_dead_letter_queue(*NewQueueAttributes.DeadLetterQueue);
             }
 
-            // should we increase global limit?
             if (NewQueueAttributes.MessageRetentionPeriod.Defined()) {
-                ui64 requestedRetentionSeconds = NewQueueAttributes.MessageRetentionPeriod->Seconds();
-                ui64 currentRetentionSeconds = PQGroup.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds();
-                if (requestedRetentionSeconds > currentRetentionSeconds) {
-                    SetDuration(*NewQueueAttributes.MessageRetentionPeriod, *topicRequest.mutable_set_retention_period());
-                }
                 SetDuration(*NewQueueAttributes.MessageRetentionPeriod, *consumer->mutable_set_availability_period());
             }
 

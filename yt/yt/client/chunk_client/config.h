@@ -256,10 +256,6 @@ struct TReplicationReaderConfig
     //! beforehand if this timeout is reached and this number of peers have responded.
     std::vector<std::pair<int, TDuration>> PartialPeerProbingTimeouts;
 
-    //! Sliding window over which the job's recently consumed I/O is reported to
-    //! data nodes via the io_consumed request field.
-    TDuration IoConsumedReportWindow;
-
     //! If set, reported to data nodes via the io_fair_share_weight request field.
     //! Not reported when an attached job I/O meter has reporting disabled.
     std::optional<double> IoFairShareWeight;
@@ -302,6 +298,8 @@ struct TErasureReaderConfig
     , public virtual TBlockFetcherConfig
 {
     bool EnableAutoRepair;
+    //! Retain failed and slow parts across attempts of an adaptive repair operation while they remain repairable.
+    bool EnableSessionFailureHistory;
     double ReplicationReaderSpeedLimitPerSec;
     TDuration SlowReaderExpirationTimeout;
     TDuration ReplicationReaderTimeout;
@@ -398,10 +396,6 @@ struct TReplicationWriterConfig
 
     //! If |true| data node will preallocate disk space before writing.
     bool PreallocateDiskSpace;
-
-    //! Sliding window over which the job's recently consumed I/O is reported to
-    //! data nodes via the io_consumed request field.
-    TDuration IoConsumedReportWindow;
 
     //! If set, reported to data nodes via the io_fair_share_weight request field.
     //! Not reported when an attached job I/O meter has reporting disabled.

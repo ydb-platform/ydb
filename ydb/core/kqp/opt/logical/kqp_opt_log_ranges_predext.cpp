@@ -133,6 +133,23 @@ bool IsIdLambda(TExprBase body) {
 
 } // anonymous namespace
 
+TPredicateExtractorSettings MakeKqpExtractorSettings(const TKqpOptimizeContext& kqpCtx) {
+    TPredicateExtractorSettings settings;
+    settings.MergeAdjacentPointRanges = true;
+    settings.HaveNextValueCallable = true;
+    settings.BuildLiteralRange = true;
+    settings.IsValidForRange = IsValidForRange;
+    settings.MaxRanges = kqpCtx.Config->GetExtractPredicateRangesLimit()
+        ? TMaybe<size_t>(kqpCtx.Config->GetExtractPredicateRangesLimit()) : Nothing();
+
+    if (kqpCtx.QueryCtx->RuntimeParameterSizeLimitSatisfied &&
+        kqpCtx.QueryCtx->RuntimeParameterSizeLimit > 0)
+    {
+        settings.ExternalParameterMaxSize = kqpCtx.QueryCtx->RuntimeParameterSizeLimit;
+    }
+    return settings;
+}
+
 TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
     if (!node.Maybe<TCoTopBase>()) {
@@ -317,24 +334,7 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
     const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
 
     THashSet<TString> possibleKeys;
-    TPredicateExtractorSettings settings;
-    settings.MergeAdjacentPointRanges = true;
-    settings.HaveNextValueCallable = true;
-    settings.BuildLiteralRange = true;
-    settings.IsValidForRange = IsValidForRange;
-
-    if (kqpCtx.Config->GetExtractPredicateRangesLimit() != 0) {
-        settings.MaxRanges = kqpCtx.Config->GetExtractPredicateRangesLimit();
-    } else {
-        settings.MaxRanges = Nothing();
-    }
-
-    if (kqpCtx.QueryCtx->RuntimeParameterSizeLimitSatisfied &&
-        kqpCtx.QueryCtx->RuntimeParameterSizeLimit > 0)
-    {
-        settings.ExternalParameterMaxSize = kqpCtx.QueryCtx->RuntimeParameterSizeLimit;
-    }
-
+    auto settings = MakeKqpExtractorSettings(kqpCtx);
     auto extractor = MakePredicateRangeExtractor(settings);
     YQL_ENSURE(mainTableDesc.SchemeNode);
 

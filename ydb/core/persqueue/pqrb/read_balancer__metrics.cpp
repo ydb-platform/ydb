@@ -4,6 +4,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/events/topic_sqs_action_metrics.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/actors/core/actor.h>
@@ -227,7 +229,21 @@ const absl::flat_hash_map<ui32, TPartitionMetrics>& TTopicMetricsHandler::GetPar
 }
 
 void TTopicMetricsHandler::Initialize(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx) {
-    if (DynamicCounters) {
+    if (tabletConfig.HasMetricsLevel() && tabletConfig.GetMetricsLevel() == METRICS_LEVEL_DISABLED) {
+        // Releasing expiring counters removes them from monitoring on the next scrape.
+        ActivePartitionCountCounter.Reset();
+        InactivePartitionCountCounter.Reset();
+        PartitionLabeledCounters = {};
+        PartitionExtendedLabeledCounters = {};
+        PartitionKeyCompactionLabeledCounters = {};
+        ConsumerCounters.clear();
+        SqsMetricsHandler_.reset();
+        DynamicCounters.Reset();
+        return;
+    }
+
+    // UpdateConfig can run before the database metadata arrives from SchemeCache.
+    if (DynamicCounters || database.DatabasePath.empty()) {
         return;
     }
 
@@ -250,13 +266,13 @@ void TTopicMetricsHandler::Initialize(const NKikimrPQ::TPQTabletConfig& tabletCo
     PartitionLabeledCounters = InitializeCounters<EPartitionLabeledCounters_descriptor>(DynamicCounters);
     PartitionExtendedLabeledCounters = InitializeCounters<EPartitionExtendedLabeledCounters_descriptor>(DynamicCounters, {}, true);
     InitializeKeyCompactionCounters(tabletConfig);
-    InitializeConsumerCounters(tabletConfig, ctx);
+    InitializeConsumerCounters(tabletConfig);
     InitializeSqsQueueMetrics(tabletConfig, ctx);
 }
 
-void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
+void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig) {
     for (const auto& consumer : tabletConfig.GetConsumers()) {
-        auto metricsConsumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx);
+        auto metricsConsumerName = MetricsConsumerName(consumer);
 
         auto& counters = ConsumerCounters[consumer.GetName()];
         counters.ClientLabeledCounters = InitializeCounters<EClientLabeledCounters_descriptor>(DynamicCounters, {{"consumer", metricsConsumerName}});
@@ -300,15 +316,13 @@ void TTopicMetricsHandler::InitializeKeyCompactionCounters(const NKikimrPQ::TPQT
 }
 
 void TTopicMetricsHandler::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx) {
-    Y_UNUSED(database);
-    Y_UNUSED(topicPath);
-
+    Initialize(tabletConfig, database, topicPath, ctx);
     if (!DynamicCounters) {
         return;
     }
 
     InitializeKeyCompactionCounters(tabletConfig);
-    InitializeConsumerCounters(tabletConfig, ctx);
+    InitializeConsumerCounters(tabletConfig);
     InitializeSqsQueueMetrics(tabletConfig, ctx);
 
     size_t inactiveCount = std::count_if(tabletConfig.GetAllPartitions().begin(), tabletConfig.GetAllPartitions().end(), [](auto& p) {
@@ -334,7 +348,7 @@ void TTopicMetricsHandler::Handle(NKikimrPQ::TStatusResponse_TPartResult&& parti
 }
 
 void TTopicMetricsHandler::UpdateMetrics() {
-    if (!DynamicCounters || PartitionStatuses.empty()) {
+    if (PartitionStatuses.empty()) {
         return;
     }
 
@@ -347,6 +361,11 @@ void TTopicMetricsHandler::UpdateMetrics() {
     PartitionStatuses.erase(PartitionStatuses.begin(), PartitionStatuses.end());
 
     TopicMetrics = collector.TopicMetrics;
+
+    // Internal statistics are also used by SchemeShard when monitoring is disabled.
+    if (!DynamicCounters) {
+        return;
+    }
 
     SetCounters(PartitionLabeledCounters, collector.PartitionLabeledCounters);
     SetCounters(PartitionExtendedLabeledCounters, collector.PartitionExtendedLabeledCounters);

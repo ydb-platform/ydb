@@ -4,18 +4,7 @@
 
 namespace NKikimr::NReplication::NController {
 
-class TTargetTableBase: public TTargetWithStream {
-public:
-    explicit TTargetTableBase(TReplication* replication, ETargetKind finalKind,
-        ui64 id, const IConfig::TPtr& config);
-
-    TString GetStreamPath() const override;
-
-protected:
-    virtual TString BuildStreamPath() const = 0;
-};
-
-class TTargetTable: public TTargetTableBase {
+class TTargetTable: public TTargetWithStream {
 public:
     struct TTableConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TTableConfig>;
@@ -32,21 +21,32 @@ protected:
     TString BuildStreamPath() const override;
 };
 
-class TTargetIndexTable: public TTargetTableBase {
+class TTargetIndexTable: public TTargetWithStream {
 public:
     struct TIndexTableConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TIndexTableConfig>;
 
-        TIndexTableConfig(const TString& srcPath, const TString& dstPath)
+        TIndexTableConfig(const TString& srcPath, const TString& dstPath, bool srcIsImpl)
             : TConfigBase(ETargetKind::IndexTable, srcPath, dstPath)
+            , SrcIsImpl(srcIsImpl)
         {}
+
+        bool GetSrcIsImpl() const {
+            return SrcIsImpl;
+        }
+
+        bool SrcIsImpl = false;
     };
 
     explicit TTargetIndexTable(TReplication* replication,
         ui64 id, const IConfig::TPtr& config);
 
+    TString GetSrcIndexPath() const override;
+
 protected:
     TString BuildStreamPath() const override;
+
+    bool SrcIsImpl = false;
 };
 
 }

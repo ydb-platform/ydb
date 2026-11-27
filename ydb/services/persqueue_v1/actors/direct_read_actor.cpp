@@ -6,6 +6,7 @@
 
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
@@ -273,12 +274,13 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
                 "unauthenticated access is forbidden, please provide credentials");
         }
     } else {
-        AFL_ENSURE(Request->GetYdbToken());
+        YDB_LOG_ENSURE(Request->GetYdbToken());
         Auth = *(Request->GetYdbToken());
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
-    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, true, database);
+    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, true, database,
+        AppData()->FeatureFlags.GetEnableRelativePaths());
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason);
@@ -302,7 +304,8 @@ void TDirectReadSessionActor::SetupCounters() {
     }
 
     auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
-    subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", ClientPath);
+    subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup(
+        "ConsumerPath", ReadWithoutConsumer ? ClientPath : NPQ::MetricsConsumerName(ClientId));
     const TString name = "sensor";
 
     Errors = subGroup->GetExpiringNamedCounter(name, "Errors", true);
@@ -336,7 +339,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, cons
         }
 
         if (IsQuotaRequired()) {
-            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
+            YDB_LOG_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
         } else {
             InitSession(ctx);
         }
@@ -452,7 +455,7 @@ void TDirectReadSessionActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorC
             }
             if (PendingQuota) {
                 auto res = MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx);
-                AFL_ENSURE(res);
+                YDB_LOG_ENSURE(res);
             }
 
             break;
@@ -461,7 +464,7 @@ void TDirectReadSessionActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorC
         case EWakeupTag::RlInitNoResource:
             if (PendingQuota) {
                 auto res = MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx);
-                AFL_ENSURE(res);
+                YDB_LOG_ENSURE(res);
             } else {
                 return CloseSession(PersQueue::ErrorCode::OVERLOAD, "throughput limit exceeded");
             }
@@ -487,9 +490,9 @@ void TDirectReadSessionActor::RecheckACL(const TActorContext& ctx) {
 
 
 void TDirectReadSessionActor::RunAuthActor(const TActorContext& ctx) {
-    AFL_ENSURE(!AuthInitActor);
+    YDB_LOG_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
-        ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
+        ctx, ctx.SelfID, ClientId, Cookie, Session, Request->GetDatabaseName().GetOrElse(TString()), NewSchemeCache, Counters, Token, TopicsList,
         TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
 }
 

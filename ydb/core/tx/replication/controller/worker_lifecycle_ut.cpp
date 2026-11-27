@@ -414,6 +414,65 @@ Y_UNIT_TEST_SUITE(WorkerLifecycle) {
         }
     };
 
+    Y_UNIT_TEST(CommitOffsetOnReadOnlySource) {
+        TSetup s(false);
+        auto& runtime = s.Env.GetRuntime();
+        auto session = s.Session();
+        const auto replicationPathId = s.Env.GetPathId("/Root/replication");
+        const auto waitFor = [](auto&& predicate) {
+            const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+            while (TInstant::Now() < deadline) {
+                if (predicate()) {
+                    return;
+                }
+                Sleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_FAIL("Timed out waiting for replication state or committed offset");
+        };
+        const auto alterState = [&](const TString& state) {
+            auto result = session.ExecuteSchemeQuery(TStringBuilder()
+                << "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = '" << state << "');").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            waitFor([&] {
+                auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+                replicationPathId.ToProto(request->Record.MutablePathId());
+                auto description = s.Env.Send<TEvController::TEvDescribeReplicationResult>(s.ControllerId, std::move(request));
+                const auto& record = description->Get()->Record;
+                UNIT_ASSERT_C(record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS,
+                    record.ShortDebugString());
+                const auto& actual = record.GetState();
+                UNIT_ASSERT_C(!actual.HasError(), actual.DebugString());
+                return state == "PAUSED" ? actual.HasPaused() : actual.HasStandBy();
+            });
+        };
+        NYdb::NTopic::TTopicClient topics(s.Env.GetDriver());
+        const auto consumerOffsets = [&] {
+            auto result = topics.DescribeConsumer(s.StreamPath, "replicationConsumer",
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& partitions = result.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            UNIT_ASSERT(partitions.front().GetPartitionConsumerStats());
+            UNIT_ASSERT(partitions.front().GetPartitionStats());
+            return std::make_pair(partitions.front().GetPartitionConsumerStats()->GetCommittedOffset(),
+                partitions.front().GetPartitionStats()->GetEndOffset());
+        };
+
+        // Drain the initial 100 rows before pausing, so an old commit cannot satisfy the final check.
+        waitFor([&] {
+            const auto [committed, end] = consumerOffsets();
+            return committed >= 100 && committed == end;
+        });
+        alterState("PAUSED");
+        const auto before = consumerOffsets().first;
+        s.Upsert(101, 101);
+        runtime.GetAppData().FeatureFlags.SetEnableClientModifications(false);
+        alterState("STANDBY");
+
+        UNIT_ASSERT_VALUES_EQUAL(s.WaitReplicated(101, TDuration::Seconds(60)), 101);
+        waitFor([&] { return consumerOffsets().first > before; });
+    }
+
     Y_UNIT_TEST(ChildrenStartOnDataEnd) {
         TSetup s;
         const auto children = s.SplitRoot();

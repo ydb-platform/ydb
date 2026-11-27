@@ -25,6 +25,7 @@ public:
     void Bootstrap() {
         NPQ::NDescriber::TDescribeSettings settings = {
             .AccessRights = NACLib::EAccessRights::DescribeSchema,
+            .EnableRelativePaths = false,
         };
         DescriberActorId_ = RegisterWithSameMailbox(
             NPQ::NDescriber::CreateDescriberActor(SelfId(), DatabasePath_, {TopicPath_}, settings)

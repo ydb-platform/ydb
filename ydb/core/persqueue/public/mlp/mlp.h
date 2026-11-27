@@ -37,6 +37,11 @@ struct TMessageId {
 
 struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, static_cast<ui32>(EEv::EvWriteResponse)> {
 
+    // Not SUCCESS when the topic write mode rejected the whole request before any tablet call.
+    // Then Messages is empty: UNAVAILABLE is retryable, BAD_REQUEST is not.
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+    TString ErrorDescription;
+
     NDescriber::EStatus DescribeStatus;
     ui64 BalancerTabletId = 0;
 

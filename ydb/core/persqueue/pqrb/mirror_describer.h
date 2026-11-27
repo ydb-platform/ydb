@@ -70,7 +70,9 @@ public:
         ui64 tabletId,
         TActorId readBalancerActorId,
         TString topicName,
-        const NKikimrPQ::TMirrorPartitionConfig& config
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        const TString& database,
+        const TString& topicPath
     );
     void Bootstrap(const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
@@ -82,9 +84,11 @@ public:
 private:
     TString TopicName;
     NKikimrPQ::TMirrorPartitionConfig Config;
-
+    TString Database;
+    TString TopicPath;
 
     NYdb::TCredentialsProviderFactoryPtr CredentialsProvider;
+    TActorId CredentialsInitializer;
 
     TDuration CredentialsInitInterval = INIT_INTERVAL_START;
     TDuration DescribeRetryTimeout = DESCRIBE_RETRY_TIMEOUT_START;

@@ -32,7 +32,6 @@ public:
 
 class TWorkloadVectorGenerateDataInitializer : public TWorkloadVectorDataInitializerBase {
 private:
-    const NVector::TVectorOpts& VectorOpts;
     size_t RowCount = 10000;
     size_t PrefixCount = 100;
     uint32_t RandomSeed = 42;

@@ -17,6 +17,7 @@
 #include "skeleton_capturevdisklayout.h"
 #include "skeleton_compactionstate.h"
 #include "skeleton_block_and_get.h"
+#include "skeleton_burst_counter_publisher.h"
 #include "skeleton_shred.h"
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/base/blobstorage_checksum.h>
@@ -35,6 +36,7 @@
 #include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_actor.h>
 #include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_ctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
@@ -58,6 +60,7 @@
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/util/light.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/intrlist.h>
@@ -1373,6 +1376,9 @@ namespace NKikimr {
                     auto requiredTabletGeneration = ev->Get()->Record.GetForceBlockTabletData().GetGeneration();
                     ui32 blockedTabletGeneration = 0;
                     if (!Hull->GetBlocked(tabletId, &blockedTabletGeneration) || blockedTabletGeneration < requiredTabletGeneration) {
+                        if (Config->BaseInfo.ReadOnly || !GInfo->IsWriteTargetRealm(SelfVDiskId.FailRealm)) {
+                            return ReplyError(NKikimrProto::ERROR, "VDisk cannot advance the tablet block", ev, ctx, now);
+                        }
                         // block vdisk and do a get from it
                         auto actor = CreateBlockAndGetActor(
                             std::move(ev),
@@ -2238,7 +2244,7 @@ namespace NKikimr {
         void TryRepeatRecovery(const TActorContext& ctx) {
             if (CurrentStateFunc() != &TThis::StateNormal
                     || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !DurabilityReplDone
-                    || Config->BaseInfo.ReadOnly || GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)) {
+                    || Config->BaseInfo.ReadOnly || GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
                 return;
             }
             RepeatRecoveryPending = false;
@@ -2655,6 +2661,11 @@ namespace NKikimr {
             Db->DskSpaceTrackerID.Set(ctx.Register(CreateDskSpaceTracker(VCtx, PDiskCtx,
                 Config->DskTrackerInterval)));
             ActiveActors.Insert(Db->DskSpaceTrackerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
+
+            if (VCtx->CostTracker) {
+                const TActorId publisher = Register(CreateBurstCounterPublisher(VCtx, Config->StatsUpdateInterval));
+                ActiveActors.Insert(publisher, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+            }
 
             // run LogCutter in the same mailbox
             TLogCutterCtx logCutterCtx = {VCtx, PDiskCtx, Db->LsnMngr, Config,
@@ -3199,12 +3210,8 @@ namespace NKikimr {
             if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
                 return std::nullopt;
             }
-            const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(
-                info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2));
-            if (!state) {
-                return std::nullopt;
-            }
-            return GetMirror3dcGroupLayouts(*state)->Durability;
+            std::optional<TMirror3dcGroupLayouts> layouts = GetMirror3dcGroupLayouts(info.GetMirror3dcState().State);
+            return layouts ? std::optional(layouts->Durability) : std::nullopt;
         }
 
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
@@ -3266,11 +3273,20 @@ namespace NKikimr {
             if (ev->Sender != Db->ReplID || RepeatOsirisId) {
                 return;
             }
-            if (ev->Cookie) { // semi-finished replication, only phantom blobs
-                ReplOnlyPhantomsRemain = true;
-            } else {
-                ReplDone = true;
-                DurabilityReplDone = true;
+            switch (static_cast<EReplDone>(ev->Cookie)) {
+                case EReplDone::Finished:
+                    ReplDone = true;
+                    DurabilityReplDone = true;
+                    ReplOnlyPhantomsRemain = false;
+                    break;
+
+                case EReplDone::OnlyPhantomsRemain: // semi-finished replication, only phantom blobs
+                    ReplOnlyPhantomsRemain = true;
+                    break;
+
+                case EReplDone::NonPhantomsRemain:
+                    ReplOnlyPhantomsRemain = false;
+                    break;
             }
             TryRepeatRecovery(TActivationContext::AsActorContext());
             UpdateReplState();
@@ -3281,8 +3297,14 @@ namespace NKikimr {
 
         void UpdateVDiskStatus(NKikimrBlobStorage::EVDiskStatus status) {
             const auto& base = Db->Config->BaseInfo;
+            // unreadable blobs found by scrubbing are not phantoms, so they also keep the disk replicating
+            const bool onlyPhantomsRemain = status == NKikimrBlobStorage::REPLICATING && ReplOnlyPhantomsRemain &&
+                !HasUnreadableBlobs;
             Send(NodeWardenServiceId, new TEvStatusUpdate(SelfId().NodeId(), base.PDiskId, base.VDiskSlotId, status,
-                ReplOnlyPhantomsRemain));
+                onlyPhantomsRemain));
+            // Skeleton Front reports the same state to Whiteboard
+            Send(*SkeletonFrontIDPtr, new TEvStatusUpdate(SelfId().NodeId(), base.PDiskId, base.VDiskSlotId, status,
+                onlyPhantomsRemain));
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -3298,7 +3320,7 @@ namespace NKikimr {
                 {"marker", "BSVS37"});
             Become(&TThis::StateLocalRecovery);
             Db->SkeletonID.Set(ctx.SelfID);
-            if (GInfo->GetFailRealmState(SelfVDiskId.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+            if (GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
                 // An excluded realm must answer requests, but must not start recovery or background work.
                 SkeletonErrorState(ctx, TEvFrontRecoveryStatus::LocalRecoveryDone,
                     NKikimrWhiteboard::EVDiskState::LocalRecoveryError);

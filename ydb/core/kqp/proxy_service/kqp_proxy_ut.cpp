@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service_impl.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 #include <ydb/services/workload_manager/actors/actors.h>
@@ -835,6 +836,45 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             }
             Sleep(TDuration::MilliSeconds(10));
         } while (!allSuccess);
+    }
+
+    Y_UNIT_TEST_TWIN(FetchScriptResultsInitializesTables, UnknownDatabase) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(true);
+        NYdb::TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto& runtime = *server.Server_->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        const TString database = UnknownDatabase ? "/Root/missing" : "/Root";
+        runtime.Send(new IEventHandle(MakeKqpProxyID(runtime.GetNodeId()), edgeActor,
+            new TEvFetchScriptResultsRequest(database, "missing-execution", BUILTIN_ACL_ROOT, 0, 0, 1, 0, TInstant::Max())));
+
+        const auto result = runtime.GrabEdgeEvent<TEvFetchScriptResultsResponse>(edgeActor, TDuration::Seconds(10));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, Ydb::StatusIds::NOT_FOUND, result->Get()->Issues.ToString());
+        UNIT_ASSERT(!result->Get()->ResultSet);
+        if (UnknownDatabase) {
+            UNIT_ASSERT(!result->Get()->HasMoreResults);
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Issues.ToString(), "Failed to describe database");
+        } else {
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Issues.ToString(), "Script execution not found");
+        }
+    }
+
+    Y_UNIT_TEST(FetchScriptResultsFailsWithoutFeatureFlag) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(false);
+        NYdb::TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto& runtime = *server.Server_->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeKqpProxyID(runtime.GetNodeId()), edgeActor,
+            new TEvFetchScriptResultsRequest("/Root", "missing-execution", BUILTIN_ACL_ROOT, 0, 0, 1, 0, TInstant::Max())));
+
+        const auto result = runtime.GrabEdgeEvent<TEvFetchScriptResultsResponse>(edgeActor, TDuration::Seconds(10));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, Ydb::StatusIds::UNSUPPORTED, result->Get()->Issues.ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Issues.ToString(), "ExecuteScript feature is not enabled");
+        UNIT_ASSERT(!result->Get()->ResultSet);
+        UNIT_ASSERT(!result->Get()->HasMoreResults);
     }
 
     Y_UNIT_TEST(NoUserAccessToScriptExecutionsTable) {

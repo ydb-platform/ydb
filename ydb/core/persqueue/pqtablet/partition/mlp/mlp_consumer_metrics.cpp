@@ -1,11 +1,10 @@
 #include "mlp_consumer.h"
 #include "mlp_storage.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/common/percentiles.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 
 namespace NKikimr::NPQ::NMLP {
@@ -56,7 +55,7 @@ void TConsumerActor::UpdateMetrics() {
 TDetailedMetrics::TDetailedMetrics(const NKikimrPQ::TPQTabletConfig::TConsumer& consumerConfig, ::NMonitoring::TDynamicCounterPtr& root) {
     auto consumerGroup = root->GetSubgroup(
         "consumer",
-        NPersQueue::ConvertOldConsumerName(consumerConfig.GetName(), AppData()->PQConfig));
+        MetricsConsumerName(consumerConfig));
 
     InflightCommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.committed_messages", false);
     InflightLockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.locked_messages", false);

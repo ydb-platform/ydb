@@ -11,6 +11,9 @@
     "test_blobsan.TestBlobSan.test_stdout_dump": {
         "uri": "file://test_blobsan.TestBlobSan.test_stdout_dump/output.txt"
     },
+    "test_blobsan.TestBlobSan.test_stdout_dump_full_memrec": {
+        "uri": "file://test_blobsan.TestBlobSan.test_stdout_dump_full_memrec/output.txt"
+    },
     "test_blobsan.TestBlobSan.test_write2x2_candidates": {
         "uri": "file://test_blobsan.TestBlobSan.test_write2x2_candidates/output.txt"
     }

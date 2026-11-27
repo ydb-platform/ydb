@@ -11,10 +11,12 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/public/dataplane/dataplane.h>
 #include <ydb/core/persqueue/public/codecs/pqv1.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/deferred_publish/constants.h>
@@ -209,7 +211,7 @@ TWriteSessionActor<Protocol>::TWriteSessionActor(
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Bootstrap(const TActorContext& ctx) {
-    AFL_ENSURE(Request);
+    YDB_LOG_ENSURE(Request);
 
     Span = NWilson::TSpan(TWilsonTopic::TopicTopLevel, Request->GetWilsonTraceId(), Protocol == EProtocol::PQv1 ? "Topic.WriteSession[migration]" : "Topic.WriteSession");
 
@@ -364,7 +366,7 @@ void TWriteSessionActor<Protocol>::CheckACL(const TActorContext& ctx) {
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
 
-    AFL_ENSURE(ACL);
+    YDB_LOG_ENSURE(ACL);
     if (ACL->CheckAccess(rights, *Token)) {
         ACLCheckInProgress = false;
         if (FirstACLCheck) {
@@ -451,7 +453,8 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
         }
     }
 
-    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"));
+    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"),
+        Protocol == EProtocol::Topic && AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
     if (!DiscoveryConverter->IsValid()) {
         CloseSession(
                 TStringBuilder() << "topic " << topic_path << " could not be recognized: " << DiscoveryConverter->GetReason(),
@@ -615,7 +618,7 @@ void TWriteSessionActor<Protocol>::InitCheckSchema(const TActorContext& ctx, boo
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     auto& res = ev->Get()->Result;
-    AFL_ENSURE(res->ResultSet.size() == 1);
+    YDB_LOG_ENSURE(res->ResultSet.size() == 1);
 
     auto& entry = res->ResultSet[0];
     TString errorReason;
@@ -624,16 +627,16 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
         CloseSession(processResult.Reason, processResult.ErrorCode, ctx);
         return;
     }
-    AFL_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
+    YDB_LOG_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     PQGroupInfo = entry.PQGroupInfo;
     const auto& config = PQGroupInfo->Description;
     Chooser = PQGroupInfo->PartitionChooser;
-    AFL_ENSURE(Chooser);
+    YDB_LOG_ENSURE(Chooser);
     PartitionGraph = PQGroupInfo->PartitionGraph;
-    AFL_ENSURE(PartitionGraph);
+    YDB_LOG_ENSURE(PartitionGraph);
 
-    AFL_ENSURE(config.PartitionsSize() > 0);
-    AFL_ENSURE(config.HasPQTabletConfig());
+    YDB_LOG_ENSURE(config.PartitionsSize() > 0);
+    YDB_LOG_ENSURE(config.HasPQTabletConfig());
     InitialPQTabletConfig = config.GetPQTabletConfig();
     if (!DiscoveryConverter->IsValid()) {
         errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", DiscoveryConverter->GetPrintableString().c_str());
@@ -661,7 +664,7 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
         SetupCounters();
     }
 
-    AFL_ENSURE(entry.SecurityObject);
+    YDB_LOG_ENSURE(entry.SecurityObject);
     ACL.Reset(new TAclWrapper(entry.SecurityObject));
     LOG_I("Session v1 describe result for acl check");
 
@@ -678,16 +681,16 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
             Die(ctx);
             return;
         }
-        AFL_ENSURE(FirstACLCheck);
+        YDB_LOG_ENSURE(FirstACLCheck);
         FirstACLCheck = false;
         DiscoverPartition(ctx);
     } else {
-        AFL_ENSURE(Request->GetYdbToken());
+        YDB_LOG_ENSURE(Request->GetYdbToken());
         Auth = *Request->GetYdbToken();
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
 
         if (FirstACLCheck && IsQuotaRequired()) {
-            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx, InitSpan.GetTraceId()));
+            YDB_LOG_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx, InitSpan.GetTraceId()));
         } else {
             CheckACL(ctx);
         }
@@ -696,14 +699,62 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::DiscoverPartition(const NActors::TActorContext& ctx) {
+    if (const auto error = GetWriteModeError(InitialPQTabletConfig)) {
+        CloseSession(error->Reason, ConvertOldCode(error->Code), ctx);
+        return;
+    }
+
     State = ES_WAIT_PARTITION;
 
     if (PartitionChooser) {
         ctx.Send(PartitionChooser,  new TEvents::TEvPoison());
     }
 
+    if (ExpectedGeneration && AppData(ctx)->FeatureFlags.GetEnableTopicWriteSessionsInitQuoting()) {
+        State = ES_WAIT_WRITE_SESSION_QUOTA;
+        ctx.Send(
+            NPQ::MakeWriteSessionsQuoterId(),
+            new TEvWriteSessionsQuoter::TEvAcquireQuota(
+                InitialPQTabletConfig.GetYdbDatabasePath(),
+                FullConverter->GetClientsideName(),
+                PreferedPartition,
+                *ExpectedGeneration),
+            0,
+            0,
+            InitSpan.GetTraceId()
+        );
+        return;
+    }
+
+    CreatePartitionChooser(ctx);
+}
+
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaAcquired::TPtr& ev, const TActorContext& ctx) {
+    if (State != ES_WAIT_WRITE_SESSION_QUOTA) {
+        return;
+    }
+    WriteSessionQuotaWaitTime = ev->Get()->QuotaWaitTime;
+    CreatePartitionChooser(ctx);
+}
+
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaDeclined::TPtr&, const TActorContext& ctx) {
+    if (State != ES_WAIT_WRITE_SESSION_QUOTA) {
+        return;
+    }
+
+    LOG_E("Write session quota declined");
+
+    CloseSession("Write session quota declined: partition or generation is unavailable",
+                 PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
+}
+
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::CreatePartitionChooser(const TActorContext& ctx) {
+    State = ES_WAIT_PARTITION;
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
-    AFL_ENSURE(PQGroupInfo);
+    YDB_LOG_ENSURE(PQGroupInfo);
     const auto& config = PQGroupInfo->Description;
     PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID,
                                                                                     config,
@@ -775,6 +826,7 @@ bool TWriteSessionActor<Protocol>::CreatePartitionWriterCache(const TActorContex
     opts.WithSourceId(SourceId);
     opts.WithInitialSeqNo(InitialSeqNo);
     opts.WithExpectedGeneration(ExpectedGeneration);
+    opts.WithWriteSessionQuotaWaitTime(WriteSessionQuotaWaitTime);
 
     if constexpr (Protocol == EProtocol::Topic) {
         for (const auto& item : InitRequest.write_session_meta()) {
@@ -971,7 +1023,7 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvInitResult
         return CloseSession("got init result but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    AFL_ENSURE(!result.SessionId && !result.TxId);
+    YDB_LOG_ENSURE(!result.SessionId && !result.TxId);
 
     if (!result.IsSuccess()) {
         const auto& error = result.GetError();
@@ -1004,7 +1056,7 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteAccep
         return CloseSession("got write permission but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    AFL_ENSURE(!SentRequests.empty());
+    YDB_LOG_ENSURE(!SentRequests.empty());
     auto writeRequest = std::move(SentRequests.front());
 
     if (ev->Get()->Cookie != writeRequest->Cookie) {
@@ -1052,7 +1104,7 @@ void TWriteSessionActor<Protocol>::ProcessWriteResponse(
         batchWriteResponse->add_sequence_numbers(res.GetSeqNo());
         batchWriteResponse->add_offsets(res.GetOffset());
         if (!UseDeduplication) {
-            AFL_ENSURE(!res.GetAlreadyWritten());
+            YDB_LOG_ENSURE(!res.GetAlreadyWritten());
         }
         batchWriteResponse->add_already_written(res.GetAlreadyWritten());
         stat->set_queued_in_partition_duration_ms(
@@ -1071,7 +1123,7 @@ void TWriteSessionActor<Protocol>::ProcessWriteResponse(
         // TODO (ildar-khisam@): validate res before filling ack fields
         ack->set_seq_no(res.GetSeqNo());
         if (res.GetAlreadyWritten()) {
-            AFL_ENSURE(UseDeduplication);
+            YDB_LOG_ENSURE(UseDeduplication);
             ack->mutable_skipped()->set_reason(Topic::StreamWriteMessage::WriteResponse::WriteAck::Skipped::REASON_ALREADY_WRITTEN);
         } else if (res.HasWrittenInTx() && res.GetWrittenInTx()) {
             ack->mutable_written_in_tx();
@@ -1239,7 +1291,7 @@ void TWriteSessionActor<Protocol>::PrepareRequest(THolder<TEvWrite>&& ev, const 
     if (PendingRequests.empty()) {
         PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
     } else if constexpr (Protocol == EProtocol::Topic) {
-        AFL_ENSURE(!PendingRequests.back()->UserWriteRequests.empty());
+        YDB_LOG_ENSURE(!PendingRequests.back()->UserWriteRequests.empty());
 
         auto& last = PendingRequests.back()->UserWriteRequests.back().Write->Request.write_request();
 
@@ -1362,14 +1414,14 @@ void TWriteSessionActor<Protocol>::PrepareRequest(THolder<TEvWrite>&& ev, const 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::SendWriteRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx)
 {
-    AFL_ENSURE(request->PartitionWriteRequest);
+    YDB_LOG_ENSURE(request->PartitionWriteRequest);
 
     i64 diff = 0;
     for (const auto& [w] : request->UserWriteRequests) {
         diff -= w->Request.ByteSize();
     }
 
-    AFL_ENSURE(-diff <= (i64)BytesInflight_);
+    YDB_LOG_ENSURE(-diff <= (i64)BytesInflight_);
     const auto byteSize = request->PartitionWriteRequest->Record.ByteSize();
     diff += byteSize;
     request->Span.Attribute("bytes", byteSize);
@@ -1651,7 +1703,7 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWrite::TPtr& ev, const TAc
     }
 
     if (BytesInflight_ < AppData(ctx)->PQConfig.GetMaxWriteSessionBytesInflight()) { //allow only one big request to be readed but not sended
-        AFL_ENSURE(NextRequestInited);
+        YDB_LOG_ENSURE(NextRequestInited);
         if (!Request->Read()) {
             LOG_I("Session v1 grpc read failed");
             Die(ctx);
@@ -1723,7 +1775,7 @@ void TWriteSessionActor<Protocol>::Handle(TEvents::TEvWakeup::TPtr& ev, const TA
                 PendingQuotaRequest->QuotaSpan.EndError("Timeout");
                 PendingQuotaRequest->StartQuotaSpan(); // Start new quota span for second request
                 PendingQuotaRequest->SetSpanParamRequestedQuota();
-                AFL_ENSURE(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
+                YDB_LOG_ENSURE(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
             } else {
                 return CloseSession("Throughput limit exceeded", PersQueue::ErrorCode::OVERLOAD, ctx);
             }

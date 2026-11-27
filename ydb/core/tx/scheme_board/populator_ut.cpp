@@ -15,6 +15,8 @@
 
 #include <util/generic/map.h>
 
+#include <algorithm>
+
 namespace NKikimr {
 namespace NSchemeBoard {
 
@@ -366,6 +368,266 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
 
     Y_UNIT_TEST(NonzeroCookiePublicationAckDoesNotAdvanceFullSync) {
         TestPublicationAckDoesNotAdvanceFullSync(12345);
+    }
+
+    void AssertPendingPublications(TTestBasicRuntime& runtime, TActorId child, TActorId edge, const TPathId& pathId,
+            const TSet<std::pair<ui64, ui64>>& expected, size_t expectedPaths = Max<size_t>()) {
+        runtime.Send(new IEventHandle(child, edge, new TSchemeBoardMonEvents::TEvInfoRequest(100)));
+        auto response = runtime.GrabEdgeEvent<TSchemeBoardMonEvents::TEvInfoResponse>(edge);
+        const auto& state = response->Get()->Record.GetReplicaPopulatorResponse();
+        TSet<std::pair<ui64, ui64>> publications;
+        size_t paths = 0;
+        size_t cookies = 0;
+        for (const auto* updates : {&state.GetUpdates(), &state.GetUpdatesRequested(), &state.GetUpdatesInFlight()}) {
+            for (const auto& update : *updates) {
+                ++paths;
+                UNIT_ASSERT_VALUES_EQUAL(TPathId(update.GetPathId().GetOwnerId(), update.GetPathId().GetLocalPathId()), pathId);
+                for (const auto& version : update.GetVersions()) {
+                    for (ui64 cookie : version.GetTxIds()) {
+                        ++cookies;
+                        publications.emplace(version.GetVersion(), cookie);
+                    }
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(cookies, expected.size(), state.ShortDebugString());
+        UNIT_ASSERT_C(publications == expected, state.ShortDebugString());
+        if (expectedPaths != Max<size_t>()) {
+            UNIT_ASSERT_VALUES_EQUAL_C(paths, expectedPaths, state.ShortDebugString());
+        }
+    }
+
+    void TestCompletedPublicationsDoNotAccumulate(bool offline) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({{}}, ReplicasInRingGroup));
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto monEdge = runtime.AllocateEdgeActor();
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+        const TPathId pathId(owner, 100);
+        const auto info = GetStateStorageInfo(runtime);
+        const auto replica = runtime.GetLocalServiceId(info->RingGroups.front().Rings.front().Replicas.front());
+        TActorId child;
+        size_t committed = 0;
+        auto commits = runtime.AddObserver<NInternalEvents::TEvCommitResponse>([&](auto&) { ++committed; });
+        bool holdHandshake = offline;
+        TBlockEvents<NInternalEvents::TEvHandshakeResponse> reconnect(runtime, [&](const auto& ev) {
+            if (ev->Sender != replica) {
+                return false;
+            }
+            child = ev->Recipient;
+            return holdHandshake;
+        });
+        TBlockEvents<TUpdateAck> replicaAcks(runtime, [&](const auto& ev) {
+            return ev->Sender == replica && ev->Recipient == child && ev->Get()->GetPathId() == pathId;
+        });
+        THashMap<ui64, ui64> completed;
+        auto completions = runtime.AddObserver<TUpdateAck>([&](auto& ev) {
+            if (ev->Recipient == edge) {
+                UNIT_ASSERT_C(completed.emplace(ev->Cookie, ev->Get()->Record.GetVersion()).second,
+                    "a publication must complete only once");
+                ev.Reset();
+            }
+        });
+        const auto populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
+        runtime.WaitFor("healthy replica children initialized", [&] {
+            return committed == (offline ? 2 : 3) && (!offline || reconnect.size() == 1);
+        }, TDuration::Seconds(10));
+        UNIT_ASSERT(child);
+        auto publish = [&](ui64 version, ui64 cookie, bool deletion = false) {
+            auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+            desc->Record = GenerateDescribe("/Root/TestPath", pathId, version);
+            desc->Record.SetStatus(deletion ? NKikimrScheme::StatusPathDoesNotExist : NKikimrScheme::StatusSuccess);
+            runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
+        };
+        constexpr ui64 publicationsPerBatch = 256;
+        TBlockEvents<TUpdateAck> quorumAcks(runtime, [&](const auto& ev) {
+            return ev->Recipient == populator && ev->Cookie < publicationsPerBatch;
+        });
+        TSet<std::pair<ui64, ui64>> pending;
+        for (ui64 cookie = 0; cookie < publicationsPerBatch; ++cookie) {
+            publish(cookie + 1, cookie);
+            pending.emplace(cookie + 1, cookie);
+            runtime.WaitFor("blocked publication quorum", [&] { return quorumAcks.size() == 2 * (cookie + 1); }, TDuration::Seconds(10));
+        }
+        UNIT_ASSERT(completed.empty());
+        AssertPendingPublications(runtime, child, monEdge, pathId, pending, 1);
+        std::reverse(quorumAcks.begin(), quorumAcks.end());
+        quorumAcks.Unblock(2);
+        runtime.WaitFor("newest publication completed first", [&] { return completed.size() == 1; }, TDuration::Seconds(10));
+        UNIT_ASSERT(completed.contains(publicationsPerBatch - 1));
+        pending.erase({publicationsPerBatch, publicationsPerBatch - 1});
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        AssertPendingPublications(runtime, child, monEdge, pathId, pending, 1);
+        quorumAcks.Stop().Unblock();
+        runtime.WaitFor("all publication quorums", [&] { return completed.size() == publicationsPerBatch; }, TDuration::Seconds(10));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        AssertPendingPublications(runtime, child, monEdge, pathId, {}, 1);
+        if (!offline) {
+            UNIT_ASSERT_VALUES_EQUAL(replicaAcks.front()->Get()->Record.GetVersion(), 1);
+            replicaAcks.Unblock(1);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            AssertPendingPublications(runtime, child, monEdge, pathId, {}, 1);
+        }
+
+        constexpr ui64 unfinishedCookie = Max<ui64>();
+        constexpr ui64 unfinishedVersion = publicationsPerBatch + 1;
+        TBlockEvents<TUpdateAck> unfinishedAcks(runtime, [&](const auto& ev) {
+            return ev->Recipient == populator && ev->Cookie == unfinishedCookie;
+        });
+        publish(unfinishedVersion, unfinishedCookie);
+        runtime.WaitFor("unfinished publication ACKs", [&] { return unfinishedAcks.size() == 2; }, TDuration::Seconds(10));
+        constexpr ui64 totalPublications = publicationsPerBatch + 4;
+        for (ui64 cookie = publicationsPerBatch; cookie < totalPublications; ++cookie) {
+            publish(cookie + 2, cookie, !offline && cookie + 1 == totalPublications);
+            runtime.WaitFor("publication quorum", [&] { return completed.size() == cookie + 1; }, TDuration::Seconds(10));
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        AssertPendingPublications(runtime, child, monEdge, pathId, {{unfinishedVersion, unfinishedCookie}}, 1);
+        unfinishedAcks.Stop();
+        runtime.Send(unfinishedAcks.front().Release(), 0, true);
+        if (!offline) {
+            holdHandshake = true;
+            runtime.EnableScheduleForActor(child, true);
+            runtime.Send(new IEventHandle(child, replica, new TEvInterconnect::TEvNodeDisconnected(replica.NodeId())));
+            runtime.WaitFor("reconnect handshake", [&] { return reconnect.size() == 1; }, TDuration::Seconds(10));
+        }
+        replicaAcks.clear();
+        reconnect.Stop().Unblock();
+        runtime.WaitFor("catch-up ACKs", [&] { return !replicaAcks.empty(); }, TDuration::Seconds(10));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(!completed.contains(unfinishedCookie));
+        AssertPendingPublications(runtime, child, monEdge, pathId, {{unfinishedVersion, unfinishedCookie}}, 1);
+        replicaAcks.Stop().Unblock();
+        runtime.WaitFor("unfinished publication completed by the recovered child", [&] {
+            return completed.contains(unfinishedCookie);
+        }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(completed.at(unfinishedCookie), unfinishedVersion);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        AssertPendingPublications(runtime, child, monEdge, pathId, {}, 0);
+        const auto subscriber = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(replica, subscriber, new NInternalEvents::TEvSubscribe(pathId, owner)));
+        auto notify = runtime.GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber);
+        UNIT_ASSERT_VALUES_EQUAL(notify->Get()->GetRecord().GetIsDeletion(), !offline);
+        if (offline) {
+            UNIT_ASSERT_VALUES_EQUAL(notify->Get()->GetRecord().GetVersion(), totalPublications + 1);
+        }
+    }
+
+    Y_UNIT_TEST(CompletedPublicationsDoNotAccumulateDuringHandshake) {
+        TestCompletedPublicationsDoNotAccumulate(true);
+    }
+
+    Y_UNIT_TEST(CompletedPublicationsDoNotAccumulateWithoutReplicaAcks) {
+        TestCompletedPublicationsDoNotAccumulate(false);
+    }
+
+    Y_UNIT_TEST(ReplayedPublicationCleansPreviousRecipientsAndVersions) {
+        TTestBasicRuntime runtime;
+        TStateStorageInfo::TRingGroup group{};
+        group.NToSelect = 3;
+        constexpr size_t replicaCount = 7;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({group}, replicaCount));
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto monEdge = runtime.AllocateEdgeActor();
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+        const TPathId pathId(owner, 100);
+        const auto original = GetStateStorageInfo(runtime);
+        auto current = MakeIntrusive<TStateStorageInfo>();
+        current->RingGroups = original->RingGroups;
+        auto& rings = current->RingGroups.front().Rings;
+        std::rotate(rings.begin(), rings.begin() + 1, rings.end());
+        auto select = [&](const TStateStorageInfo& config, ui64 key) {
+            TStateStorageInfo::TSelection selection;
+            config.SelectReplicas(key, &selection, 0);
+            return THashSet<TActorId>(selection.begin(), selection.end());
+        };
+        const auto oldSelection = select(*original, GetSchemeBoardSelectionKey(pathId));
+        const auto newSelection = select(*current, GetSchemeBoardSelectionKey(pathId));
+        UNIT_ASSERT(oldSelection != newSelection);
+        TString path;
+        for (size_t i = 0; i != 1000; ++i) {
+            path = TStringBuilder() << "/Root/TestPath" << i;
+            if (select(*original, GetSchemeBoardSelectionKey(path)) == oldSelection) {
+                break;
+            }
+        }
+        UNIT_ASSERT(select(*original, GetSchemeBoardSelectionKey(path)) == oldSelection);
+        UNIT_ASSERT(select(*current, GetSchemeBoardSelectionKey(path)) == newSelection);
+        THashMap<TActorId, TActorId> actorToService;
+        for (const auto& ring : original->RingGroups.front().Rings) {
+            for (const auto& replica : ring.Replicas) {
+                actorToService[runtime.GetLocalServiceId(replica)] = replica;
+            }
+        }
+        THashMap<TActorId, TActorId> childToService;
+        auto handshakes = runtime.AddObserver<NInternalEvents::TEvHandshakeResponse>([&](auto& ev) {
+            childToService[ev->Recipient] = actorToService.at(ev->Sender);
+        });
+        size_t committed = 0;
+        auto commits = runtime.AddObserver<NInternalEvents::TEvCommitResponse>([&](auto&) { ++committed; });
+        const auto populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
+        runtime.WaitFor("all replica children initialized", [&] { return committed == replicaCount; }, TDuration::Seconds(10));
+        TBlockEvents<TUpdateAck> replicaAcks(runtime, [&](const auto& ev) {
+            return actorToService.contains(ev->Sender) && ev->Get()->GetPathId() == pathId;
+        });
+        TSet<std::pair<ui64, ui64>> completed;
+        auto completions = runtime.AddObserver<TUpdateAck>([&](auto& ev) {
+            if (ev->Recipient == edge) {
+                UNIT_ASSERT_C(completed.emplace(ev->Cookie, ev->Get()->Record.GetVersion()).second,
+                    "each version of a publication must complete only once");
+                ev.Reset();
+            }
+        });
+        auto publish = [&](ui64 version, ui64 cookie) {
+            auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+            desc->Record = GenerateDescribe(path, pathId, version);
+            desc->Record.SetStatus(NKikimrScheme::StatusSuccess);
+            runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
+        };
+        constexpr ui64 cookie = 12345;
+        publish(1, cookie);
+        runtime.WaitFor("first version ACKs", [&] { return replicaAcks.size() == 3; }, TDuration::Seconds(10));
+        publish(2, cookie);
+        runtime.WaitFor("second version ACKs", [&] { return replicaAcks.size() == 6; }, TDuration::Seconds(10));
+        replicaAcks.Unblock(2);
+        runtime.WaitFor("first version quorum", [&] { return completed.size() == 1; }, TDuration::Seconds(10));
+        UNIT_ASSERT(completed.contains({cookie, 1}));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        for (const auto& [child, replica] : childToService) {
+            if (oldSelection.contains(replica)) {
+                AssertPendingPublications(runtime, child, monEdge, pathId, {{2, cookie}}, 1);
+            }
+        }
+        publish(3, cookie + 1);
+        runtime.WaitFor("latest description ACKs", [&] { return replicaAcks.size() == 7; }, TDuration::Seconds(10));
+        size_t replayed = 0;
+        auto updates = runtime.AddObserver<NInternalEvents::TEvUpdate>([&](auto& ev) {
+            if (ev->Sender == populator) {
+                ++replayed;
+                UNIT_ASSERT_VALUES_EQUAL(NSchemeBoard::GetPathVersion(ev->Get()->GetRecord()), 3);
+            }
+        });
+        runtime.Send(new IEventHandle(populator, edge, new TEvStateStorage::TEvListSchemeBoardResult(current)));
+        runtime.WaitFor("both pending cookies replayed to the new selection", [&] {
+            return replayed == 2 * newSelection.size();
+        }, TDuration::Seconds(10));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        replicaAcks.Stop();
+        size_t released = 0;
+        for (auto& ack : replicaAcks) {
+            if (ack->Get()->Record.GetVersion() == 3 && newSelection.contains(actorToService.at(ack->Sender)) && released < 2) {
+                runtime.Send(ack.Release(), 0, true);
+                ++released;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(released, 2);
+        runtime.WaitFor("remaining publication versions completed", [&] { return completed.size() == 3; }, TDuration::Seconds(10));
+        UNIT_ASSERT(completed.contains({cookie, 2}));
+        UNIT_ASSERT(completed.contains({cookie + 1, 3}));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        for (const auto& [child, _] : childToService) {
+            AssertPendingPublications(runtime, child, monEdge, pathId, {});
+        }
     }
 
     Y_UNIT_TEST(PublicationCookiesSurviveReconnectMerge) {
@@ -801,6 +1063,41 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         runtime.Send(idAcks[1].Release());
         auto mainAck = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL(mainAck->Get()->GetPathId(), pathId);
+    }
+
+    // The owner has paths 1 and 3, path 2 is deleted. The full sync of every replica must tell it to delete path 2,
+    // the interval [2; 2] holding the one path.
+    Y_UNIT_TEST(FullSyncDeletesOneIdGap) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+        const auto info = GetStateStorageInfo(runtime);
+        size_t replicaCount = 0;
+        for (const auto& ring : info->RingGroups.front().Rings) {
+            replicaCount += ring.Replicas.size();
+        }
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+
+        size_t coveringGap = 0; // full sync updates deleting path 2
+        auto updates = runtime.AddObserver<NInternalEvents::TEvUpdate>([&](auto& ev) {
+            const auto& record = ev->Get()->GetRecord();
+            if (record.HasDeletedLocalPathIds()) {
+                const auto& deleted = record.GetDeletedLocalPathIds();
+                coveringGap += deleted.GetBegin() <= 2 && 2 <= deleted.GetEnd();
+            }
+        });
+        size_t committed = 0;
+        auto commits = runtime.AddObserver<NInternalEvents::TEvCommitResponse>([&](auto&) { ++committed; });
+
+        std::vector<std::pair<TPathId, TTwoPartDescription>> descriptions;
+        for (ui64 id : {1, 3}) {
+            const TPathId pathId(owner, id);
+            auto desc = GenerateDescribe(TStringBuilder() << "/Root/Path" << id, pathId, 1);
+            desc.SetStatus(NKikimrScheme::StatusSuccess);
+            descriptions.emplace_back(pathId, TTwoPartDescription("", std::move(desc)));
+        }
+        runtime.Register(CreateSchemeBoardPopulator(owner, 1, std::move(descriptions), 4));
+        runtime.WaitFor("full sync of every replica", [&] { return committed == replicaCount; }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(coveringGap, replicaCount, "the full sync didn't delete path 2 on every replica");
     }
 
     void TestColdDeletionWithPathWaitsForReplicaQuorum(bool subscribeBeforeDeletion) {

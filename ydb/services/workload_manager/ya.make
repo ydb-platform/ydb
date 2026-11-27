@@ -11,14 +11,18 @@ SRCS(
 PEERDIR(
     library/cpp/threading/atomic_shared_ptr
     ydb/core/base
-    ydb/core/cms/console
-    ydb/core/kqp/common
+    ydb/core/kqp/common/simple
     ydb/core/kqp/query_data
-    ydb/core/mind
     ydb/core/protos
     ydb/core/resource_pools
+    ydb/core/scheme
     ydb/library/aclib
+    ydb/library/actors/core
     ydb/library/yql/providers/pq/common
+    ydb/library/yql/providers/pq/proto
+    ydb/public/api/protos
+    yql/essentials/core/issue
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

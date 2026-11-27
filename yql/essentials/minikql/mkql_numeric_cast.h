@@ -4,8 +4,7 @@
 
 #include <type_traits>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 // TMakeUnsigned - a safe alternative to std::make_unsigned that avoids UB
 // when specializing for custom types like NYql::TWide
@@ -58,5 +57,4 @@ struct TMakeUnsigned<NYql::TWide<ui64>> {
     using type = NYql::TWide<ui64>;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -40,10 +40,10 @@ bool RetryPausedBootstrap(
     // Restrict config-only recovery to source preparation. An ordinary PAUSE
     // can retain attached destinations and unrelated errors that must survive.
     for (const auto* target : replication.GetTargets()) {
-        if (target->GetDstState() != TReplication::EDstState::Creating
-            || target->GetDstPathId()
-            || target->GetPendingDstPathId()
-            || !target->GetWorkers().empty())
+        const bool creating = target->GetDstState() == TReplication::EDstState::Creating
+            && !target->GetDstPathId();
+        const bool waitingImport = target->GetDstState() == TReplication::EDstState::WaitingImport;
+        if ((!creating && !waitingImport) || !target->GetWorkers().empty())
         {
             return false;
         }
@@ -113,8 +113,12 @@ class TController::TTxAlterReplication: public TTxBase {
             // The DDL may already be committed, so this barrier must survive
             // the lifecycle request. Let its unfinished workers recover.
             target->SetDstState(TReplication::EDstState::Ready);
+            if (target->GetStreamState() != TReplication::EStreamState::Error) {
+                target->SetIssue({});
+            }
             db.Table<Schema::Targets>().Key(key.first, key.second).Update(
-                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
+                NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue()));
         }
 
         // A failure in any target can stop workers across the replication.
@@ -210,8 +214,12 @@ class TController::TTxAlterReplication: public TTxBase {
         for (const auto targetId : targetsToRecover) {
             auto* target = Replication->FindTarget(targetId);
             target->SetDstState(TReplication::EDstState::Ready);
+            if (target->GetStreamState() != TReplication::EStreamState::Error) {
+                target->SetIssue({});
+            }
             db.Table<Schema::Targets>().Key(Replication->GetId(), targetId).Update(
-                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
+                NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue()));
         }
     }
 
@@ -358,12 +366,22 @@ public:
                 continue;
             }
 
-            // An attachment may already be submitted to SchemeShard; let it finish before DONE.
-            // Progress notifies its creator to stop source revalidation and reconcile locally.
-            if (target->GetDstState() != TReplication::EDstState::Attaching) {
-                target->Shutdown(ctx);
-                target->SetDstState(TReplication::EDstState::Alter);
+            if (target->GetDstState() == TReplication::EDstState::WaitingImport
+                    && desiredState == TReplication::EState::Paused) {
+                continue;
             }
+
+            if (target->GetDstState() == TReplication::EDstState::WaitingImport
+                    && desiredState == TReplication::EState::Ready) {
+                // Import replaces the placeholder, so resolve its new path id on attachment.
+                target->SetDstPathId({});
+                db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                    NIceDb::TUpdate<Schema::Targets::DstPathOwnerId>(InvalidOwnerId),
+                    NIceDb::TUpdate<Schema::Targets::DstPathLocalId>(InvalidLocalPathId));
+            }
+
+            target->Shutdown(ctx);
+            target->SetDstState(TReplication::EDstState::Alter);
             if (target->GetStreamState() == TReplication::EStreamState::Error && desiredState == TReplication::EState::Ready) {
                 target->SetStreamState(TReplication::EStreamState::Creating);
                 db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(

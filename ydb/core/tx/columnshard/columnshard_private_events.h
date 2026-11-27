@@ -8,7 +8,6 @@
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/columnshard/engines/storage/granule/loaded_key_ranges.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
@@ -96,30 +95,15 @@ struct TEvPrivate {
         EvRetryConfigSubscription,
         EvUpdateChannelApproximateFreeSpace,
 
-        EvContinueFindEmptyHistoryIntervals,
-        EvFindEmptyHistoryIntervalsPortionsReady,
         EvPrefetchPortionsMetadata,
-        EvSetLoadedKeyRanges,
 
         EvBackupExportReset,
 
+        EvPassWriteGate,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-    struct TEvContinueFindEmptyHistoryIntervals
-        : NActors::TEventLocal<TEvContinueFindEmptyHistoryIntervals, EvContinueFindEmptyHistoryIntervals> {};
-
-    struct TEvFindEmptyHistoryIntervalsPortionsReady
-        : NActors::TEventLocal<TEvFindEmptyHistoryIntervalsPortionsReady, EvFindEmptyHistoryIntervalsPortionsReady> {
-        std::vector<std::pair<TInternalPathId, ui64>> Portions;
-
-        explicit TEvFindEmptyHistoryIntervalsPortionsReady(std::vector<std::pair<TInternalPathId, ui64>>&& portions)
-            : Portions(std::move(portions))
-        {
-        }
-    };
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
     private:
@@ -137,7 +121,7 @@ struct TEvPrivate {
         }
 
         NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult> ExtractResult() {
-            AFL_VERIFY(Result);
+            YDB_LOG_VERIFY(Result);
             auto result = std::move(*Result);
             Result.reset();
             return result;
@@ -208,8 +192,8 @@ struct TEvPrivate {
             : Requests(std::move(requests))
             , Callback(callback)
         {
-            AFL_VERIFY(Callback);
-            AFL_VERIFY(Requests.size());
+            YDB_LOG_VERIFY(Callback);
+            YDB_LOG_VERIFY(Requests.size());
         }
     };
 
@@ -386,18 +370,6 @@ struct TEvPrivate {
     };
 
     struct TEvPrefetchPortionsMetadata: public TEventLocal<TEvPrefetchPortionsMetadata, EvPrefetchPortionsMetadata> {};
-
-    // only tests move the loaded key ranges until portions are loaded after the start
-    struct TEvSetLoadedKeyRanges: public TEventLocal<TEvSetLoadedKeyRanges, EvSetLoadedKeyRanges> {
-        const TInternalPathId PathId;
-        NOlap::TLoadedKeyRanges LoadedKeyRanges;
-
-        TEvSetLoadedKeyRanges(const TInternalPathId pathId, NOlap::TLoadedKeyRanges&& loadedKeyRanges)
-            : PathId(pathId)
-            , LoadedKeyRanges(std::move(loadedKeyRanges))
-        {
-        }
-    };
 
     struct TEvUpdateChannelApproximateFreeSpace: public TEventLocal<TEvUpdateChannelApproximateFreeSpace, EvUpdateChannelApproximateFreeSpace> {
         const ui32 Channel;

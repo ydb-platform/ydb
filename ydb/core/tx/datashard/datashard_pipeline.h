@@ -149,7 +149,7 @@ public:
     ui64 OutdatedReadSetStep() const;
     ui64 OutdatedCleanupStep() const;
     ui64 AllowedDataStep() const;
-    ui64 AllowedSchemaStep() const { return LastPlannedTx.Step + 1; }
+    ui64 AllowedSchemaStep() const;
     ui64 VacantSchemaStep() const { return KeepSchemaStep + 1; }
 
     TStepOrder GetLastPlannedTx() const { return LastPlannedTx; }
@@ -201,7 +201,8 @@ public:
 
     // TTransQueue wrappers
 
-    void ProposeTx(TOperation::TPtr op, const TStringBuf &txBody, TTransactionContext &txc, const TActorContext &ctx);
+    void ProposeTx(TActiveTransaction& op, TTransactionContext& txc, const TActorContext& ctx);
+    void ProposeTx(TWriteOperation& op, TTransactionContext& txc, const TActorContext& ctx);
     void ProposeComplete(const TOperation::TPtr &op, const TActorContext &ctx);
     void PersistTxFlags(TOperation::TPtr op, TTransactionContext &txc);
     void UpdateSchemeTxBody(ui64 txId, const TStringBuf &txBody, TTransactionContext &txc);
@@ -441,6 +442,9 @@ public:
     void ProvideGlobalTxId(const TOperation::TPtr& op, ui64 globalTxId);
 
 private:
+    template <typename TOp>
+    void ProposeTxImpl(TOp& op, TTransactionContext& txc, const TActorContext& ctx);
+
     struct TStoredExecutionProfile {
         TBasicOpInfo OpInfo;
         TVector<std::pair<EExecutionUnitKind, TExecutionProfile::TUnitProfile>> UnitProfiles;

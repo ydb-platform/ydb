@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
-#include <ydb/core/sys_view/scan.h>
+#include <ydb/core/sys_view/scan_factory/scan_factory.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/protos/kqp_physical.pb.h>

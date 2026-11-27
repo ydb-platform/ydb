@@ -11,6 +11,7 @@ PY_SRCS(
     lockfile.py
     package_json.py
     package_manager.py
+    platform.py
     timeit.py
     utils.py
 )

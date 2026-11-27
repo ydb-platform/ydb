@@ -20,6 +20,9 @@ TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* c
         if (callable.GetType()->GetName() == "KqpStreamingAggregation") {
             return WrapKqpStreamingAggregation(callable, ctx, *computeCtx);
         }
+        if (callable.GetType()->GetName() == "FulltextAnalyze") {
+            return WrapFulltextAnalyze(callable, ctx);
+        }
         return baseFactory(callable, ctx);
     };
 }

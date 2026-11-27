@@ -5,7 +5,8 @@
 
 namespace NKikimr::NOlap {
 class TGranuleMeta;
-}
+class TColumnEngineForLogs;
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NLoading {
 
@@ -35,7 +36,7 @@ private:
 
     TPortionDataAccessors& MutableConstructorVerified(const ui64 portionId) {
         auto it = Constructors.find(portionId);
-        AFL_VERIFY(it != Constructors.end());
+        YDB_LOG_VERIFY(it != Constructors.end());
         return it->second;
     }
 
@@ -54,7 +55,7 @@ public:
     }
 
     void Add(TColumnChunkLoadContextV2&& chunk) {
-        AFL_VERIFY(Constructors.emplace(chunk.GetPortionId(), chunk.CreateBuildInfo()).second);
+        YDB_LOG_VERIFY(Constructors.emplace(chunk.GetPortionId(), chunk.CreateBuildInfo()).second);
     }
 };
 
@@ -64,43 +65,22 @@ private:
 
     const std::shared_ptr<IBlobGroupSelector> DsGroupSelector;
     TGranuleMeta* Self = nullptr;
-    const TVersionedIndex* VersionedIndex;
+    TColumnEngineForLogs* Engine = nullptr;
 
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
 
 public:
-    TGranuleOnlyPortionsReader(const TString& name, const TVersionedIndex* versionedIndex, TGranuleMeta* self,
-        const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector)
+    TGranuleOnlyPortionsReader(
+        const TString& name, TGranuleMeta* self, TColumnEngineForLogs* engine, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector)
         : TBase(name)
         , DsGroupSelector(dsGroupSelector)
         , Self(self)
-        , VersionedIndex(versionedIndex)
+        , Engine(engine)
     {
-        AFL_VERIFY(!!DsGroupSelector);
-        AFL_VERIFY(VersionedIndex);
-        AFL_VERIFY(Self);
-    }
-};
-
-class TGranuleFinishCommonLoading: public ITxReader {
-private:
-    using TBase = ITxReader;
-    TGranuleMeta* Self = nullptr;
-    bool Started = false;
-
-    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
-        return true;
-    }
-
-    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override;
-
-public:
-    TGranuleFinishCommonLoading(const TString& name, TGranuleMeta* self)
-        : TBase(name)
-        , Self(self)
-    {
-        AFL_VERIFY(Self);
+        YDB_LOG_VERIFY(!!DsGroupSelector);
+        YDB_LOG_VERIFY(Self);
+        YDB_LOG_VERIFY(Engine);
     }
 };
 
@@ -120,7 +100,7 @@ public:
         : TBase(name)
         , Self(self)
     {
-        AFL_VERIFY(Self);
+        YDB_LOG_VERIFY(Self);
     }
 };
 
@@ -143,10 +123,10 @@ public:
         , VersionedIndex(versionedIndex)
         , Context(context)
     {
-        AFL_VERIFY(!!DsGroupSelector);
-        AFL_VERIFY(VersionedIndex);
-        AFL_VERIFY(Self);
-        AFL_VERIFY(Context);
+        YDB_LOG_VERIFY(!!DsGroupSelector);
+        YDB_LOG_VERIFY(VersionedIndex);
+        YDB_LOG_VERIFY(Self);
+        YDB_LOG_VERIFY(Context);
     }
 };
 

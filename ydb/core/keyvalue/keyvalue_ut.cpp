@@ -3,11 +3,13 @@
 #include "keyvalue_flat_impl.h"
 #include "keyvalue_intermediate.h"
 #include "keyvalue_state.h"
+#include "ut/keyvalue_test_enums.h"
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
+#include <util/generic/serialized_enum.h>
 #include <ydb/core/base/blobstorage.h>
 #include <array>
 #include <bitset>
@@ -3700,6 +3702,221 @@ void ExpectContents(TTestContext& tc, const TDeque<TKeyValuePair>& expectedPairs
         ExecuteRead(tc, pair.Key, pair.Value, 0, 0, 0);
     }
 }
+
+void CheckOverwriteWhileReading(EOverwriteReader kind, bool fresh = false, bool failStorage = false) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    std::optional<TActorId> tabletActor;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, TrackTabletActor(tabletActor), activeZone, true);
+    tc.Runtime->SetScheduledLimit(10'000);
+    const TString original(1024, 'a');
+    const TString replacement(1024, 'b');
+    CmdWrite("key", original, NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    // Advance the GC barrier while retaining key, so its later deletion needs
+    // DoNotKeep rather than merely advancing a barrier over a fresh blob.
+    if (!fresh) {
+        CmdWrite("warmup", original, NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdDeleteRange("warmup", true, "warmup", true, tc);
+        tc.Runtime->WaitFor("initial trash collected", [&] {
+            return GetTabletState(tc, tabletActor).GetTrashCount() == 0;
+        }, TDuration::Seconds(5));
+    }
+
+    TAutoPtr<IEventHandle> pending;
+    TLogoBlobID originalId;
+    bool captured = false;
+    bool keptOriginal = false;
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvBlobStorage::TEvCollectGarbage::EventType) {
+            const auto* gc = event->Get<TEvBlobStorage::TEvCollectGarbage>();
+            if (gc->Keep) {
+                for (const auto& id : *gc->Keep) {
+                    keptOriginal |= id == originalId;
+                }
+            }
+        }
+        if (!captured && kind == EOverwriteReader::Patch
+                && event->GetTypeRewrite() == TEvBlobStorage::TEvPatch::EventType) {
+            originalId = event->Get<TEvBlobStorage::TEvPatch>()->OriginalId;
+        } else if (!captured && kind != EOverwriteReader::Patch
+                && event->GetTypeRewrite() == TEvBlobStorage::TEvGet::EventType
+                && event->Get<TEvBlobStorage::TEvGet>()->Queries[0].Id.Channel() >= 2) {
+            originalId = event->Get<TEvBlobStorage::TEvGet>()->Queries[0].Id;
+        } else {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        captured = true;
+        pending = event;
+        return TTestActorRuntime::EEventAction::DROP;
+    });
+    if (kind == EOverwriteReader::NewRead) {
+        auto request = std::make_unique<TEvKeyValue::TEvRead>();
+        request->Record.set_key("key");
+        SendRequestEvent(std::move(request), tc);
+    } else if (kind == EOverwriteReader::NewRange) {
+        auto request = std::make_unique<TEvKeyValue::TEvReadRange>();
+        request->Record.mutable_range();
+        request->Record.set_include_data(true);
+        SendRequestEvent(std::move(request), tc);
+    } else {
+        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+        if (kind == EOverwriteReader::Read) {
+            request->Record.AddCmdRead()->SetKey("key");
+        } else if (kind == EOverwriteReader::Range) {
+            auto* range = request->Record.AddCmdReadRange();
+            range->MutableRange();
+            range->SetIncludeData(true);
+        } else {
+            auto* patch = request->Record.AddCmdPatch();
+            patch->SetOriginalKey("key");
+            patch->SetPatchedKey("patched");
+            patch->SetStorageChannel(NKikimrClient::TKeyValueRequest::MAIN);
+            auto* diff = patch->AddDiffs();
+            diff->SetOffset(0);
+            diff->SetValue("c");
+        }
+        SendRequestEvent(std::move(request), tc);
+    }
+    tc.Runtime->WaitFor("storage request delayed", [&] { return captured; }, TDuration::Seconds(5));
+    UNIT_ASSERT(pending);
+    TIntrusivePtr<NFake::TProxyDS> source;
+    for (auto& proxy : tc.DsProxies) {
+        if (proxy->AllMyBlobs().contains(originalId)) {
+            UNIT_ASSERT(!source);
+            source = proxy;
+        }
+    }
+    UNIT_ASSERT(source);
+    CmdWrite("key", replacement, NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    if (fresh) {
+        CmdWrite("garbage", original, NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+        CmdDeleteRange("garbage", true, "garbage", true, tc);
+    }
+    // Let any GC commands already queued by the overwrite reach storage.
+    CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, {replacement}, {}, tc);
+    source->DeleteDoNotKeepBlobs();
+    UNIT_ASSERT_C(source->AllMyBlobs().contains(originalId),
+        "GC deleted the source of an unfinished read/patch: " << originalId);
+    if (fresh) {
+        UNIT_ASSERT_C(keptOriginal, "Advancing GC must explicitly keep the unfinished read's source");
+    }
+    if (failStorage) {
+        auto error = pending->Get<TEvBlobStorage::TEvGet>()->MakeErrorResponse(
+            NKikimrProto::ERROR, "injected read failure", source->GetGroupId());
+        tc.Runtime->Send(new IEventHandle(pending->Sender, pending->Recipient, error.release(), 0, pending->Cookie));
+        pending.Reset();
+    } else {
+        tc.Runtime->Send(pending.Release());
+    }
+
+    if (failStorage) {
+        const auto result = ReceiveKeyValueResponse(tc);
+        UNIT_ASSERT(result.GetStatus() != NMsgBusProxy::MSTATUS_OK);
+    } else if (kind == EOverwriteReader::NewRead) {
+        const auto result = ReceiveResponse<TEvKeyValue::TEvReadResponse>(tc);
+        UNIT_ASSERT_VALUES_EQUAL(int(result.status()), int(NKikimrKeyValue::Statuses::RSTATUS_OK));
+        UNIT_ASSERT_VALUES_EQUAL(result.value(), original);
+    } else if (kind == EOverwriteReader::NewRange) {
+        const auto result = ReceiveResponse<TEvKeyValue::TEvReadRangeResponse>(tc);
+        UNIT_ASSERT_VALUES_EQUAL(int(result.status()), int(NKikimrKeyValue::Statuses::RSTATUS_OK));
+        UNIT_ASSERT_VALUES_EQUAL(result.pair_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.pair(0).value(), original);
+    } else {
+        const auto result = ReceiveKeyValueResponse(tc);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        if (kind == EOverwriteReader::Read) {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult(0).GetStatus(), ui32(NKikimrProto::OK));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult(0).GetValue(), original);
+        } else if (kind == EOverwriteReader::Range) {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadRangeResult(0).GetPair(0).GetValue(), original);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPatchResult(0).GetStatus(), ui32(NKikimrProto::OK));
+            TString patched = original;
+            patched[0] = 'c';
+            CmdRead({"patched"}, NKikimrClient::TKeyValueRequest::REALTIME, {patched}, {}, tc);
+        }
+    }
+    tc.Runtime->WaitFor("source released after read/patch", [&] {
+        return GetTabletState(tc, tabletActor).GetTrashCount() == 0;
+    }, TDuration::Seconds(5));
+    source->DeleteDoNotKeepBlobs();
+    UNIT_ASSERT(!source->AllMyBlobs().contains(originalId));
+    CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, {replacement}, {}, tc);
+}
+
+Y_UNIT_TEST(SurvivesOverwriteAndGC, EOverwriteReader) {
+    CheckOverwriteWhileReading(Arg<0>());
+}
+
+Y_UNIT_TEST(ReadSurvivesOverwriteAndGCAdvancingBarrier) {
+    CheckOverwriteWhileReading(EOverwriteReader::Read, true);
+}
+
+Y_UNIT_TEST(ReadSurvivesOverwriteAndGCReleasesOnError) {
+    CheckOverwriteWhileReading(EOverwriteReader::Read, false, true);
+}
+
+void CheckReadersSurviveOverwriteAndGC(bool queued) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    std::optional<TActorId> tabletActor;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, TrackTabletActor(tabletActor), activeZone, true);
+    tc.Runtime->SetScheduledLimit(10'000);
+    TControlWrapper limit(queued ? 1 : 2, 1, 4096);
+    TControlBoard::RegisterSharedControl(limit,
+        tc.Runtime->GetAppData().Icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
+    limit = queued ? 1 : 2;
+    const TString original(1024, 'a');
+    const TString replacement(1024, 'b');
+    CmdWrite("key", original, NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("warmup", original, NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdDeleteRange("warmup", true, "warmup", true, tc);
+    tc.Runtime->WaitFor("initial GC", [&] {
+        return GetTabletState(tc, tabletActor).GetTrashCount() == 0;
+    }, TDuration::Seconds(5));
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(2);
+    SendRequestEvent(MakeReadRequest(1, {"key"}), tc);
+    tc.Runtime->WaitFor("first reader blocked", [&] { return gets.BlockedSize() == 1; }, TDuration::Seconds(5));
+    SendRequestEvent(MakeReadRequest(2, {"key"}), tc);
+    // A completed write is a barrier after the second read's preparation.
+    CmdWrite("key", replacement, NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+    UNIT_ASSERT_VALUES_EQUAL(gets.TotalSeen(), queued ? 1u : 2u);
+    for (auto& proxy : tc.DsProxies) {
+        proxy->DeleteDoNotKeepBlobs();
+    }
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {original});
+    tc.Runtime->WaitFor("remaining reader blocked", [&] {
+        return gets.TotalSeen() == 2 && gets.BlockedSize() == 1;
+    }, TDuration::Seconds(5));
+    tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+    for (auto& proxy : tc.DsProxies) {
+        proxy->DeleteDoNotKeepBlobs();
+    }
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 2, {original});
+    tc.Runtime->WaitFor("last reader releases trash", [&] {
+        return GetTabletState(tc, tabletActor).GetTrashCount() == 0;
+    }, TDuration::Seconds(5));
+    for (auto& proxy : tc.DsProxies) {
+        proxy->DeleteDoNotKeepBlobs();
+    }
+}
+
+Y_UNIT_TEST(QueuedReadSurvivesOverwriteAndGC) { CheckReadersSurviveOverwriteAndGC(true); }
+Y_UNIT_TEST(ConcurrentReadsSurviveOverwriteAndGC) { CheckReadersSurviveOverwriteAndGC(false); }
 
 void RestartTablet(TTestContext& tc, std::optional<TActorId>& tabletActor) {
     const TActorId oldActor = *tabletActor;

@@ -252,6 +252,10 @@ public:
     {
     }
 
+    bool AcceptsProjectSetting(const TProjectSettings::TPragma& pragma) const override {
+        return Tables_->AcceptsProjectSetting(pragma);
+    }
+
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
         Streams_->AddCluster(name, properties);
         Tables_->AddCluster(name, properties);

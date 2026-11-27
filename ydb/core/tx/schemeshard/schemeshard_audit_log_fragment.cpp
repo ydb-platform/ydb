@@ -133,6 +133,10 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER TABLE BUILD INDEX INIT";
     case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
         return "ALTER TABLE BUILD INDEX PUBLISH SHADOW";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRepairIndexShadowData:
+        return "REPAIR INDEX SHADOW DATA";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareVectorIndex:
+        return "ALTER TABLE BUILD VECTOR INDEX PREPARE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
         return "ALTER TABLE BUILD INDEX APPLY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
@@ -448,6 +452,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetPrepareIndexValidation().GetTableName()}));
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareVectorIndex:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetPrepareVectorIndex().GetIndexName()}));
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetLockConfig().GetName()}));
         break;
@@ -468,6 +475,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterTable().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRepairIndexShadowData:
+        // Repair requests identify the table by PathId and carry no name.
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateTable().GetName()}));

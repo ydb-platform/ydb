@@ -20,11 +20,11 @@ SELECT
             Sum(ws_net_paid) DESC
     ) AS rank_within_parent
 FROM
-    `/Root/test/ds/web_sales`
+    `web_sales`
 ,
-    `/Root/test/ds/date_dim` AS d1
+    `date_dim` AS d1
 ,
-    `/Root/test/ds/item`
+    `item`
 WHERE
     d1.d_month_seq BETWEEN 1212 AND 1212 + 11
     AND d1.d_date_sk == ws_sold_date_sk

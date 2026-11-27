@@ -5,7 +5,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/tablet_flat/flat_part_slice.h>
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include <ydb/core/tx/locks/locks.h>
 
 #include <util/digest/multi.h>
@@ -174,6 +174,9 @@ public:
     std::vector<NTable::TTag> Columns;
     TRowVersion ReadVersion;
     bool IsHeadRead;
+    // Set after admission with snapshot retention enabled. The iterator keeps
+    // this version alive even while waiting for quota or after registry release.
+    bool SnapshotAcquired = false;
     ui64 LockId = 0;
     ui32 LockNodeId = 0;
     ui64 QuerySpanId = 0;

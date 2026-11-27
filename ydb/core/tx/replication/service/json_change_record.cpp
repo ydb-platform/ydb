@@ -7,9 +7,11 @@
 #include <ydb/core/tx/replication/common/family_settings.h>
 
 #include <contrib/libs/rapidjson/include/rapidjson/reader.h>
+#include <contrib/libs/zstd/include/zstd.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/rapidjson_helpers.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
@@ -18,6 +20,13 @@
 namespace NKikimr::NReplication::NService {
 
 namespace {
+
+bool IsSupportedSetting(TStringBuf setting) {
+    return setting == "data"
+        || setting == "compression"
+        || setting == "compressionLevel"
+        || setting == "cacheMode";
+}
 
 // NJson::ReadJson does not expose kParseFullPrecisionFlag, and its RapidJSON
 // callback adapter is private to the JSON library. This local bridge lets
@@ -146,6 +155,44 @@ private:
 
 } // namespace
 
+static bool ValidateYsonMetadata(const NJson::TJsonValue& json, TString& error) {
+    if (!json.Has("yson")) {
+        return true;
+    }
+
+    error = "invalid YSON metadata";
+    if (!json["yson"].IsMap()) {
+        return false;
+    }
+
+    for (const auto& [section, columns] : json["yson"].GetMap()) {
+        const bool knownSection = section == "update" || section == "reset"
+            || section == "oldImage" || section == "newImage";
+        if (!knownSection || !columns.IsMap() || !json[section].IsMap()) {
+            return false;
+        }
+
+        for (const auto& [column, value] : columns.GetMap()) {
+            if (!json[section].Has(column) || !value.IsString()) {
+                return false;
+            }
+
+            try {
+                const auto bytes = Base64StrictDecode(value.GetString());
+                const TCell cell(bytes.data(), bytes.size());
+                if (bytes.empty() || !NFormats::CheckCellValue(cell, NScheme::TTypeInfo(NScheme::NTypeIds::Yson))) {
+                    return false;
+                }
+            } catch (const yexception&) {
+                return false;
+            }
+        }
+    }
+
+    error.clear();
+    return true;
+}
+
 bool TChangeRecordBuilder::ParseJsonBody(TStringBuf body, NJson::TJsonValue& json, TString& error) {
     NJson::TStringBufStreamWrapper input(body);
     TSchemaKeyParser parser(json);
@@ -154,7 +201,7 @@ bool TChangeRecordBuilder::ParseJsonBody(TStringBuf body, NJson::TJsonValue& jso
     // CDC emits enough digits to recover the original double exactly.
     constexpr auto flags = rapidjson::kParseValidateEncodingFlag | rapidjson::kParseFullPrecisionFlag;
     if (reader.Parse<flags>(input, callbacks) && parser.OnEnd()) {
-        return true;
+        return ValidateYsonMetadata(json, error);
     }
 
     if (parser.DuplicateName) {
@@ -268,7 +315,8 @@ static bool TransformKey(T& to,
 }
 
 static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
-        const NJson::TJsonValue::TMapType& value, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
+        const NJson::TJsonValue::TMapType& value, const NJson::TJsonValue& ysonValues,
+        TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
 {
     tags.reserve(value.size());
     cells.reserve(value.size());
@@ -278,6 +326,14 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
         Y_ABORT_UNLESS(it != schema->ValueColumns.end());
 
         tags.push_back(it->second.Tag);
+        if (it->second.Type.GetTypeId() == NScheme::NTypeIds::Yson && ysonValues.Has(column)) {
+            // ParseJsonBody validated the base64 and YSON before the writer
+            // accepted this record. An absent entry uses the legacy format.
+            const auto bytes = Base64StrictDecode(ysonValues[column].GetString());
+            cells.emplace_back(pool.Append(bytes.data(), bytes.size()), bytes.size());
+            continue;
+        }
+
         if (!NFormats::MakeCell(cells.emplace_back(), value, it->second.Type, pool, error)) {
             return false;
         }
@@ -287,11 +343,12 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
 }
 
 static bool TransformValue(NKikimrTxDataShard::TEvApplyReplicationChanges::TUpdates& to,
-        const NJson::TJsonValue::TMapType& from, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
+        const NJson::TJsonValue::TMapType& from, const NJson::TJsonValue& ysonValues,
+        TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
 {
     TVector<NTable::TTag> tags;
     TVector<TCell> cells;
-    if (!ParseValue(tags, cells, from, schema, pool, error)) {
+    if (!ParseValue(tags, cells, from, ysonValues, schema, pool, error)) {
         return false;
     }
 
@@ -318,10 +375,10 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TCh
     }
 
     if (JsonBody.Has("update") && JsonBody["update"].IsMap()) {
-        auto res = TransformValue(*record.MutableUpsert(), JsonBody["update"].GetMap(), Schema, pool, error);
+        auto res = TransformValue(*record.MutableUpsert(), JsonBody["update"].GetMap(), JsonBody["yson"]["update"], Schema, pool, error);
         Y_ABORT_UNLESS(res, "Cannot transform value: %s", error.c_str());
     } else if (JsonBody.Has("reset") && JsonBody["reset"].IsMap()) {
-        auto res = TransformValue(*record.MutableReset(), JsonBody["reset"].GetMap(), Schema, pool, error);
+        auto res = TransformValue(*record.MutableReset(), JsonBody["reset"].GetMap(), JsonBody["yson"]["reset"], Schema, pool, error);
         Y_ABORT_UNLESS(res, "Cannot transform value: %s", error.c_str());
     } else if (JsonBody.Has("erase")) {
         record.MutableErase();
@@ -430,8 +487,27 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
                 return false;
             }
 
+            if (definition.Has("compressionLevel")) {
+                if (compression != NKikimrReplication::TSchemaChange::TFamily::COMPRESSION_ZSTD) {
+                    error = TStringBuilder() << "compression level in column family " << name
+                        << " is only supported for ZSTD";
+                    return false;
+                }
+                const auto& level = definition["compressionLevel"];
+                if (!level.IsInteger() && !level.IsUInteger()) {
+                    error = TStringBuilder() << "compression level in column family " << name << " must be an integer";
+                    return false;
+                }
+                const auto maxLevel = static_cast<ui64>(ZSTD_maxCLevel());
+                if (!level.IsUInteger() || level.GetUInteger() > maxLevel) {
+                    error = TStringBuilder() << "compression level in column family " << name
+                        << " must be between 0 and " << maxLevel << ": " << level.GetStringRobust();
+                    return false;
+                }
+            }
+
             for (const auto& [setting, value] : definition.GetMap()) {
-                if (setting != "data" && setting != "compression" && setting != "cacheMode") {
+                if (!IsSupportedSetting(setting)) {
                     error = TStringBuilder() << "unsupported setting '" << setting << "' in column family " << name;
                     return false;
                 }
@@ -458,6 +534,9 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
             family->SetName(name);
             family->SetCompression(CompressionFromString(definition["compression"].GetString()));
             family->SetCacheMode(CacheModeFromString(definition["cacheMode"].GetString()));
+            if (definition.Has("compressionLevel")) {
+                family->SetCompressionLevel(definition["compressionLevel"].GetUInteger());
+            }
             if (definition.Has("data")) {
                 family->SetMedia(definition["data"]["media"].GetString());
             }

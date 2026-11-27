@@ -57,12 +57,15 @@ SRCS(
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
+    reassign_tablets.h
     request_types.h
+    resource_profile.cpp
     resource_profile.h
     row_version.cpp
     row_version.h
     runtime_feature_flags.h
     services_assert.cpp
+    scan_admission.h
     shared_quota.h
     statestorage.cpp
     statestorage.h
@@ -167,6 +170,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    ut_hnsw_settings
     ut_auth
     ut_backtrace
     ut_board_subscriber

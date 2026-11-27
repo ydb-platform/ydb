@@ -578,9 +578,14 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
     }
 
     auto& newParts = result->Parts;
+    Y_ENSURE(result->PartOutputIds.size() == newParts.size(),
+        "Compaction output ids do not cover the resulting parts");
 
     TStats newStats;
     for (const auto& partView : newParts) {
+        Y_ENSURE(result->PartOutputIds.contains(partView->Label), "Missing compaction output id");
+        // All outputs still share the same target level. Tier-aware placement
+        // will use PartOutputIds when tier compaction is introduced.
         Y_DEBUG_ABORT_UNLESS(partView->Epoch == result->Epoch);
         Y_DEBUG_ABORT_UNLESS(!KnownParts.contains(partView->Label),
             "New part %s is already known", partView->Label.ToString().data());

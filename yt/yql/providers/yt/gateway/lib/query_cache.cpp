@@ -205,12 +205,13 @@ TYtQueryCacheItem::TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCac
 }
 
 void TYtQueryCacheItem::SetProgressData(IOperationTracker::TPtr tracker, TMaybe<ui32> publicId,
-    const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter
+    const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter, bool enableProgressDataStatistics
 ) {
     Tracker_ = tracker;
     PublicId_ = publicId;
     ProgressWriter_ = progressWriter;
     StatWriter_ = statWriter;
+    EnableProgressDataStatistics_ = enableProgressDataStatistics;
 }
 
 TString TYtQueryCacheItem::GetCachePath(const TString& userName, const TString& tmpFolder) {
@@ -251,7 +252,8 @@ NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TWeak
         for (const auto& sortedEntry : SortedCachedPaths) {
             futureLock = futureLock.Apply([
                 cachedPath = CachedPaths[sortedEntry.second], logCtx = LogCtx, lockTx = LockTx, tracker = Tracker_,
-                progressWriter = ProgressWriter_, statWriter = StatWriter_, publicId = PublicId_, entry = Entry
+                progressWriter = ProgressWriter_, statWriter = StatWriter_, publicId = PublicId_, entry = Entry,
+                enableProgressDataStatistics = EnableProgressDataStatistics_
             ] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 if (f.HasException()) {
@@ -270,7 +272,7 @@ NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TWeak
                                 if (auto operation = GetBlockingOperation(entry->Client, lockTx, cachedPath)) {
                                     tracker->MakeOperationWaiter(*operation.Get(), publicId, entry->Server,
                                         entry->Cluster, progressWriter, statWriter,
-                                        [] (TOperationId) {}, true);
+                                        [] (TOperationId) {}, true, enableProgressDataStatistics);
                                     return lockFuture;
                                 }
                             }

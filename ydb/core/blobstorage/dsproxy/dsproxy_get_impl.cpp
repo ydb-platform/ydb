@@ -37,6 +37,20 @@ bool ValidateVDiskGetResponseChecksum(NKikimrProto::EReplyStatus replyStatus,
 
 } // namespace NDsProxyGetImpl
 
+bool TGetImpl::CheckVDiskReadFailure(const TVDiskID& vdisk, NKikimrProto::EReplyStatus status) {
+    if (Info->Type.GetErasure() != TErasureType::ErasureMirror3dc || PhantomCheck) {
+        return true;
+    }
+    if (status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE) {
+        FailedReadDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
+        return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, FailedReadDisks);
+    }
+    if (status == NKikimrProto::OK && FailedReadDisks) {
+        FailedReadDisks -= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
+    }
+    return true;
+}
+
 void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReason, TLogContext &logCtx,
         TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) {
     outGetResult.Reset(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));
@@ -66,12 +80,14 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             outResponse.Id = query.Id;
             outResponse.PartMap = blobState.PartMap;
             outResponse.LooksLikePhantom = PhantomCheck
-                ? std::make_optional(blobState.WholeSituation == TBlobState::ESituation::Absent)
+                ? std::make_optional(blobState.LooksLikePhantom.value_or(
+                    blobState.WholeSituation == TBlobState::ESituation::Absent))
                 : std::nullopt;
 
-            // fill in keep/doNotKeep flags
-            const auto it = BlobFlags.find(query.Id);
-            std::tie(outResponse.Keep, outResponse.DoNotKeep) = it != BlobFlags.end() ? it->second : std::make_tuple(false, false);
+            if (const auto it = BlobFlags.find(query.Id); it != BlobFlags.end()) {
+                const auto& [keep, doNotKeep] = it->second;
+                outResponse.MergeKeepFlags(keep, doNotKeep);
+            }
 
             if (blobState.WholeSituation == TBlobState::ESituation::Absent) {
                 bool okay = true;
@@ -82,9 +98,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {
                         const auto& disk = blobState.Disks[idxInSubgroup];
-                        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-                        const auto realmState = Info->GetFailRealmState(Info->GetVDiskId(disk.OrderNumber).FailRealm);
-                        if (realmState == R::F) {
+                        if (!Info->IsFailRealmReadable(Info->GetVDiskId(disk.OrderNumber).FailRealm)) {
                             continue;
                         }
                         for (ui32 partIdx = 0; partIdx < disk.DiskParts.size(); ++partIdx) {

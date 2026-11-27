@@ -12,21 +12,21 @@ SELECT
     Sum(sr_return_quantity) AS store_returns_quantity,
     Sum(cs_quantity) AS catalog_sales_quantity
 FROM
-    `/Root/test/ds/store_sales`
+    `store_sales`
 ,
-    `/Root/test/ds/store_returns`
+    `store_returns`
 ,
-    `/Root/test/ds/catalog_sales`
+    `catalog_sales`
 ,
-    `/Root/test/ds/date_dim` AS d1
+    `date_dim` AS d1
 ,
-    `/Root/test/ds/date_dim` AS d2
+    `date_dim` AS d2
 ,
-    `/Root/test/ds/date_dim` AS d3
+    `date_dim` AS d3
 ,
-    `/Root/test/ds/store`
+    `store`
 ,
-    `/Root/test/ds/item`
+    `item`
 WHERE
     d1.d_moy == 4
     AND d1.d_year == 1999

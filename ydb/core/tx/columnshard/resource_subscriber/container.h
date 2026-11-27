@@ -17,19 +17,19 @@ private:
 
 public:
     const T& GetValue() const {
-        AFL_VERIFY(Value);
+        YDB_LOG_VERIFY(Value);
         return *Value;
     }
 
     T ExtractValue() {
-        AFL_VERIFY(Value);
+        YDB_LOG_VERIFY(Value);
         T value = std::move(*Value);
         Value.reset();
         return value;
     }
 
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ExtractResourcesGuard() {
-        AFL_VERIFY(ResourcesGuard);
+        YDB_LOG_VERIFY(ResourcesGuard);
         return std::move(ResourcesGuard);
     }
 
@@ -49,12 +49,12 @@ public:
         : Value(std::move(value))
         , ResourcesGuard(std::move(guard))
     {
-        AFL_VERIFY(ResourcesGuard);
+        YDB_LOG_VERIFY(ResourcesGuard);
     }
 
     ~TResourceContainer() {
         if (!Value) {
-            AFL_VERIFY(!ResourcesGuard);
+            YDB_LOG_VERIFY(!ResourcesGuard);
         }
     }
 

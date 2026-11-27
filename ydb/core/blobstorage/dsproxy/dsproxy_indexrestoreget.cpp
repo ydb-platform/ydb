@@ -22,6 +22,52 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
 
     THashMap<ui64, TGroupQuorumTracker> QuorumTracker;
     TVector<TBlobStatusTracker> BlobStatus;
+    struct TKeepFlagVotes {
+        ui32 Expected = 0;
+        ui32 Keep = 0;
+        ui32 DoNotKeep = 0;
+        ui32 ReleasedOrEmpty = 0;
+
+        void Observe(ui32 bit, const NKikimrBlobStorage::TQueryResult& r, const TBlobStorageGroupInfo& info,
+                bool gcRecipient) {
+            if (r.GetStatus() != NKikimrProto::OK && r.GetStatus() != NKikimrProto::NODATA &&
+                    r.GetStatus() != NKikimrProto::NOT_YET) {
+                return;
+            }
+            const ui32 vote = gcRecipient ? bit : 0;
+            if (r.GetDoNotKeep()) {
+                DoNotKeep |= vote;
+                ReleasedOrEmpty |= bit;
+            } else if (r.GetKeep()) {
+                Keep |= vote;
+            } else if (r.GetStatus() == NKikimrProto::NODATA && TIngress(r.GetIngress()).LocalParts(info.Type).Empty()) {
+                ReleasedOrEmpty |= bit;
+            }
+        }
+
+        void Finish(TEvBlobStorage::TEvGetResult::TResponse& r, const TBlobStorageGroupInfo& info) const {
+            const auto mirror = TMirror3dcWriteQuorumChecker::TryCreate(info, r.Id.Hash());
+            using TDisks = TBlobStorageGroupInfo::TSubgroupVDisks;
+            const auto canCompleteGCWithout = [&](const TDisks& missing) {
+                return mirror ? mirror->CheckFailModelForSubgroup(missing)
+                    : info.GetQuorumChecker().CheckFailModelForSubgroup(missing);
+            };
+            if (canCompleteGCWithout(~TDisks::CreateFromMask(&info.GetTopology(), DoNotKeep))) {
+                r.Status = NKikimrProto::OK;
+                r.DoNotKeep = true;
+            } else if (Expected && ReleasedOrEmpty == Expected) {
+                r.Status = NKikimrProto::NODATA;
+            } else if (Keep && !canCompleteGCWithout(TDisks::CreateFromMask(&info.GetTopology(), Keep))) {
+                // Every GC quorum intersects these Keep replies.
+                r.Status = NKikimrProto::OK;
+                r.Keep = true;
+            } else {
+                // A lone Keep among empty replicas can be either an arriving Keep or a compacted release.
+                r.Status = NKikimrProto::UNKNOWN;
+            }
+        }
+    };
+    TVector<TKeepFlagVotes> FlagVotes;
     ui32 VGetsInFlight;
 
     NKikimrBlobStorage::EGetHandleClass GetHandleClass;
@@ -48,6 +94,12 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
                 item.RequestedSize = Queries[i].Size;
             }
             PendingResult->ErrorReason = ErrorReason;
+        } else if (FlagVotes.empty()) {
+            for (ui32 i = 0; i < PendingResult->ResponseSz; ++i) {
+                auto& response = PendingResult->Responses[i];
+                const auto& [keep, doNotKeep] = KeepFlags.at(response.Id);
+                response.MergeKeepFlags(keep, doNotKeep);
+            }
         }
         Y_ABORT_UNLESS(PendingResult);
         Mon->CountIndexRestoreGetResponseTime(TActivationContext::Monotonic() - RequestStartTime);
@@ -97,25 +149,21 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         const ui64 queueId = record.GetCookie();
         Y_ABORT_UNLESS(queueId > 0);
 
-        auto it = QuorumTracker.find(queueId);
-        Y_ABORT_UNLESS(it != QuorumTracker.end());
-
-        switch (NKikimrProto::EReplyStatus newStatus = it->second.ProcessReply(vdisk, status)) {
-            case NKikimrProto::ERROR:
-                return ReplyAndDie(NKikimrProto::ERROR);
-
-            case NKikimrProto::OK:
-            case NKikimrProto::UNKNOWN:
-                break;
-
-            default:
-                Y_ABORT("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
+        if (FlagVotes.empty() && QuorumTracker.at(queueId).ProcessReply(vdisk, status) == NKikimrProto::ERROR) {
+            return ReplyAndDie(NKikimrProto::ERROR);
         }
 
         for (const auto& result : record.GetResult()) {
             const TLogoBlobID& blobId = LogoBlobIDFromLogoBlobID(result.GetBlobID());
             const ui32 queryIdx = result.GetCookie();
             Y_ABORT_UNLESS(queryIdx < QuerySize && blobId == Queries[queryIdx].Id);
+            if (!FlagVotes.empty()) {
+                if (status == NKikimrProto::OK) {
+                    const ui32 bit = 1u << Info->GetIdxInSubgroup(vdisk, blobId.Hash());
+                    FlagVotes[queryIdx].Observe(bit, result, *Info, Info->IsWriteTargetRealm(vdisk.FailRealm));
+                }
+                continue;
+            }
             BlobStatus[queryIdx].UpdateFromResponseData(result, vdisk, Info.Get());
             auto& [keep, doNotKeep] = KeepFlags[blobId];
             keep |= result.GetKeep();
@@ -130,6 +178,12 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     void OnEnoughVGetResults() {
         PendingResult.reset(new TEvBlobStorage::TEvGetResult(NKikimrProto::OK, QuerySize, Info->GroupID));
         for (ui32 idx = 0; idx < QuerySize; ++idx) {
+            if (!FlagVotes.empty()) {
+                auto& response = PendingResult->Responses[idx];
+                response.Id = Queries[idx].Id;
+                FlagVotes[idx].Finish(response, *Info);
+                continue;
+            }
             const TBlobStatusTracker& blobTracker = BlobStatus[idx];
             bool lostByIngress;
             TBlobStorageGroupInfo::EBlobState blobState = blobTracker.GetBlobState(Info.Get(), &lostByIngress);
@@ -137,10 +191,6 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
             auto &q = Queries[idx];
             auto &a = PendingResult->Responses[idx];
             a.Id = q.Id;
-
-            const auto it = KeepFlags.find(q.Id);
-            Y_ABORT_UNLESS(it != KeepFlags.end());
-            std::tie(a.Keep, a.DoNotKeep) = it->second;
 
             DSP_LOG_DEBUG_S("DSPI11", "OnEnoughVGetResults Id# " << q.Id << " BlobStatus# " << DumpBlobStatus(idx));
 
@@ -210,6 +260,9 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         Y_ABORT_UNLESS(PendingResult);
         for (ui32 i = 0; i < getResult.ResponseSz; ++i) {
             TEvBlobStorage::TEvGetResult::TResponse &response = getResult.Responses[i];
+            auto& [keep, doNotKeep] = KeepFlags.at(response.Id);
+            keep |= response.Keep;
+            doNotKeep |= response.DoNotKeep;
             if (response.Status != NKikimrProto::OK) {
                 if (!DoNotReportIndexRestoreGetMissingBlobs) {
                     DSP_LOG_ERROR_S("DSPI07", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status)
@@ -245,7 +298,8 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartIndexRestoreGet;
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, QuerySize, Deadline, GetHandleClass,
-            true /*mustRestoreFirst*/, true /*isIndexOnly*/, std::nullopt /*forceBlockTabletData*/, IsInternal);
+            true /*mustRestoreFirst*/, true /*isIndexOnly*/, ForceBlockTabletData, IsInternal);
+        ev->VerifyKeepFlags = !FlagVotes.empty();
         ev->RestartCounter = counter;
         ev->Decommission = Decommission;
         ev->DoNotReportIndexRestoreGetMissingBlobs = DoNotReportIndexRestoreGetMissingBlobs;
@@ -281,9 +335,13 @@ public:
             TabletId = 0;
         }
 
-        BlobStatus.reserve(QuerySize);
-        for (ui32 idx = 0; idx < QuerySize; ++idx) {
-            BlobStatus.emplace_back(Queries[idx].Id, Info.Get());
+        if (params.Common.Event->VerifyKeepFlags) {
+            FlagVotes.resize(QuerySize);
+        } else {
+            BlobStatus.reserve(QuerySize);
+            for (ui32 idx = 0; idx < QuerySize; ++idx) {
+                BlobStatus.emplace_back(Queries[idx].Id, Info.Get());
+            }
         }
 
         // phantom checks are for non-index queries only
@@ -311,9 +369,12 @@ public:
             << " ForceBlockTabletId# " << (ForceBlockTabletData ? ToString(ForceBlockTabletData->Id) : "")
             << " ForceBlockTabletGeneration# " << (ForceBlockTabletData ? ToString(ForceBlockTabletData->Generation) : ""));
 
+        using EQuorum = TGroupQuorumTracker::EQuorum;
+        const EQuorum quorum = ForceBlockTabletData && ForceBlockTabletData->Generation
+            ? EQuorum::Startup : EQuorum::Read;
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            if (Info->GetFailRealmState(vd.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+            if (!Info->IsFailRealmReadable(vd.FailRealm) && (FlagVotes.empty() || !Info->IsWriteTargetRealm(vd.FailRealm))) {
                 continue;
             }
             std::unique_ptr<TEvBlobStorage::TEvVGet> vget;
@@ -331,11 +392,16 @@ public:
             //   Loop through the queries
             for (ui32 queryIdx = 0; queryIdx < QuerySize; ++queryIdx) {
                 const TLogoBlobID &id = Queries[queryIdx].Id;
-                //     If the disk is a replica for the query logoblobid, add it to the vquerry
-                if (Info->BelongsToSubgroup(vd, id.Hash())) {
+                const ui32 disk = Info->GetIdxInSubgroup(vd, id.Hash());
+                if (disk < Info->Type.BlobSubgroupSize()) {
+                    if (!FlagVotes.empty()) {
+                        FlagVotes[queryIdx].Expected |= 1u << disk;
+                    }
                     if (!vget) {
                         const ui64 cookie = queueId++;
-                        QuorumTracker.try_emplace(cookie, Info.Get());
+                        if (FlagVotes.empty()) {
+                            QuorumTracker.try_emplace(cookie, Info.Get(), quorum);
+                        }
 
                         vget = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
                                     vd,

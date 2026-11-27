@@ -44,6 +44,8 @@ struct TEvPrivate {
         EvStartRequestResponse,
         EvCleanupRequestsResponse,
 
+        EvRetryPoolSubscription,
+
         EvEnd
     };
 
@@ -90,6 +92,19 @@ struct TEvPrivate {
         const NResourcePool::TPoolSettings PoolConfig;
         const TPathId PathId;
         const NYql::TIssues Issues;
+    };
+
+    struct TEvRetryPoolSubscription: public NActors::TEventLocal<TEvRetryPoolSubscription, EvRetryPoolSubscription> {
+        TEvRetryPoolSubscription(const TString& databaseId, const TString& poolId, TActorId fetcher)
+            : DatabaseId(databaseId)
+            , PoolId(poolId)
+            , Fetcher(fetcher)
+        {
+        }
+
+        const TString DatabaseId;
+        const TString PoolId;
+        const TActorId Fetcher;
     };
 
     struct TEvCreatePoolResponse: public NActors::TEventLocal<TEvCreatePoolResponse, EvCreatePoolResponse> {

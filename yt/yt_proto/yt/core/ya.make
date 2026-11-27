@@ -40,4 +40,9 @@ INCLUDE_TAGS(
     DOCS_PROTO
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    "library/.*/(n)?yt"
+)
+
 END()

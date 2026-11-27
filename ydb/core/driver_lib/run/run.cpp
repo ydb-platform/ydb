@@ -4,8 +4,8 @@
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
-#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
-#include <ydb/core/kqp/common/dynamic_function_registry.h>
+#include <ydb/core/kqp/common/warmup/warmup.h>
+#include <ydb/core/kqp/common/dynamic_function_registry/dynamic_function_registry.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
@@ -90,6 +90,7 @@
 
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/security/login_page.h>
+#include <ydb/core/sys_view/factory.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
@@ -193,6 +194,9 @@
 #include <ydb/library/signal_backtrace/signal_backtrace.h>
 #endif
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+
+#include <arrow/memory_pool.h>
 
 #include <util/charset/wide.h>
 #include <util/folder/dirut.h>
@@ -1586,9 +1590,9 @@ void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
 
     if (allocConfig.GetEnableDefaultAllocator()) {
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
+        NKikimr::SetArrowAllocator(arrow::default_memory_pool());
         NKikimr::UseDefaultAllocator();
 #endif
-        NKikimr::UseDefaultArrowAllocator();
     }
 
 }
@@ -1633,6 +1637,15 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
+    // TODO: Remove this backward-compatible initialization once all applications
+    // explicitly configure their system-view scan factory.
+    if (!ModuleFactories) {
+        ModuleFactories = std::make_shared<TModuleFactories>();
+    }
+    if (!ModuleFactories->SystemViewScanFactory) {
+        ModuleFactories->SystemViewScanFactory.reset(NSysView::CreateSystemViewScanFactory());
+    }
+    AppData->SystemViewScanFactory = ModuleFactories->SystemViewScanFactory.get();
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
 
     AppData->TransferWriterFactory = ModuleFactories && ModuleFactories->TransferWriterFactory
@@ -2218,6 +2231,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
     }
 
+    sil->AddServiceInitializer(new TWriteSessionsQuoterInitializer(runConfig));
     sil->AddServiceInitializer(new TTopicDeferredPublishRegistryInitializer(runConfig));
 
     if (serviceMask.EnablePersQueueDirectReadCache) {

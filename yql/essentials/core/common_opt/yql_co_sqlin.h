@@ -8,6 +8,6 @@ namespace NYql {
 using TShouldConvertSqlInToJoinPredicate = std::function<bool(const NNodes::TCoSqlIn&, bool /* negated */)>;
 
 TExprNode::TPtr TryConvertSqlInPredicatesToJoins(const NNodes::TCoFlatMapBase& flatMap,
-    TShouldConvertSqlInToJoinPredicate shouldConvertSqlInToJoin, TExprContext& ctx, bool prefixOnly = false);
+                                                 TShouldConvertSqlInToJoinPredicate shouldConvertSqlInToJoin, TExprContext& ctx, bool prefixOnly = false);
 
 } // namespace NYql

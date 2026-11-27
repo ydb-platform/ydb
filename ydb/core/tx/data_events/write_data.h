@@ -121,7 +121,7 @@ public:
         const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction);
 
     const NArrow::TSchemaSubset& GetSchemaSubsetVerified() const {
-        AFL_VERIFY(SchemaSubset);
+        YDB_LOG_VERIFY(SchemaSubset);
         return *SchemaSubset;
     }
 

@@ -1,25 +1,31 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(16)
+SPLIT_FACTOR(5)
 
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
+    kqp_rbo_effects_guards_fallback_ut.cpp
+    kqp_rbo_generated_sources_fallback_ut.cpp
+    kqp_rbo_index_returning_fallback_ut.cpp
+    kqp_rbo_index_writes_fallback_ut.cpp
+    kqp_rbo_shared_effects_fallback_ut.cpp
     kqp_rbo_yql_fallback_ut.cpp
 )
 
 PEERDIR(
+    ydb/core/kqp/common/simple
     ydb/core/kqp/ut/common
-    yql/essentials/public/udf/service/exception_policy
-    yql/essentials/sql/pg
-    yql/essentials/parser/pg_wrapper
-    ydb/library/plan2svg
-    ydb/public/lib/ut_helpers
-    ydb/library/yql/udfs/statistics_internal
     ydb/core/kqp/ut/olap/helpers
     ydb/core/statistics/ut_common
+    ydb/library/plan2svg
+    ydb/library/yql/udfs/statistics_internal
+    ydb/public/lib/ut_helpers
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/hyperloglog
     yql/essentials/udfs/common/url_base

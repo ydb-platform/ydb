@@ -9,10 +9,18 @@
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
+#include <util/system/env.h>
 
 namespace NKikimr {
 namespace NWrappers {
 namespace NTestHelpers {
+
+namespace {
+
+// Enable HTTP traffic diagnostics without rebuilding the tests.
+const bool ENABLE_S3_MOCK_LOG = GetEnv("ENABLE_S3_MOCK_LOG") == "1";
+
+}
 
 TS3Mock::TSettings::TSettings()
     : CorruptETags(false)
@@ -117,7 +125,9 @@ void TS3Mock::TRequest::MaybeContinue(const TReplyParams& params) {
 
 bool TS3Mock::TRequest::HttpServeRead(const TReplyParams& params, EMethod method, const TStringBuf path) {
     const TStringBuf content = Parent->Data.at(path);
-    Cerr << "S3_MOCK::HttpServeRead: " << path << " / " << content.size() << Endl;
+    if (ENABLE_S3_MOCK_LOG) {
+        Cerr << "S3_MOCK::HttpServeRead: " << path << " / " << content.size() << Endl;
+    }
     std::pair<ui32, ui32> range(0, content.size() ? content.size() - 1 : 0);
     const auto* rangeHeader = params.Input.Headers().FindHeader("Range");
     if (rangeHeader) {
@@ -201,7 +211,9 @@ TString BuildListObjectsXML(const TVector<std::pair<TString, size_t>>& objects, 
 }
 
 bool TS3Mock::TRequest::HttpServeList(const TReplyParams& params, TStringBuf bucketName, const TString& prefix) {
-    Cerr << "S3_MOCK::HttpServeList: " << prefix << Endl;
+    if (ENABLE_S3_MOCK_LOG) {
+        Cerr << "S3_MOCK::HttpServeList: " << prefix << Endl;
+    }
     params.Output << "HTTP/1.1 200 Ok\r\n";
     THttpHeaders headers;
 
@@ -240,7 +252,9 @@ bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf pa
     } else {
         content = params.Input.ReadAll();
     }
-    Cerr << "S3_MOCK::HttpServeWrite: " << path << " / " << queryParams.Print() << " / " << length << Endl;
+    if (ENABLE_S3_MOCK_LOG) {
+        Cerr << "S3_MOCK::HttpServeWrite: " << path << " / " << queryParams.Print() << " / " << length << Endl;
+    }
 
     TString etag = MD5::Data(content);
 
@@ -329,8 +343,35 @@ bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf pa
 }
 
 bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod method, TStringBuf path, const TCgiParameters& queryParams) {
-    Cerr << "S3_MOCK::HttpServeAction: " << (ui32)method << " / " << path << " / " << queryParams.Print() << Endl;
-    if (queryParams.Has("uploads")) {
+    if (ENABLE_S3_MOCK_LOG) {
+        Cerr << "S3_MOCK::HttpServeAction: " << (ui32)method << " / " << path << " / " << queryParams.Print() << Endl;
+    }
+    if (method == EMethod::Post && queryParams.Has("delete")) {
+        const NXml::TDocument request(params.Input.ReadAll(), NXml::TDocument::String);
+        NXml::TDocument response("DeleteResult", NXml::TDocument::RootName);
+        const auto quiet = request.Root().FirstChild("Quiet");
+        const bool reportDeleted = quiet.IsNull() || quiet.Value<TString>() != "true";
+        const TString bucketPath = path.EndsWith('/') ? TString(path) : TStringBuilder() << path << '/';
+        for (auto object = request.Root().FirstChild("Object"); !object.IsNull(); object = object.NextSibling("Object")) {
+            const auto keyNode = object.FirstChild("Key");
+            if (keyNode.IsNull()) {
+                return HttpBadRequest(params, "Missing object key");
+            }
+            const TString key = keyNode.Value<TString>();
+            Parent->Data.erase(bucketPath + key);
+            if (reportDeleted) {
+                response.Root().AddChild("Deleted").AddChild("Key", key);
+            }
+        }
+        const TString body = response.ToString();
+        THttpHeaders headers;
+        headers.AddHeader("Content-Type", "application/xml");
+        headers.AddHeader("Content-Length", body.size());
+        params.Output << "HTTP/1.1 200 Ok\r\n";
+        headers.OutTo(&params.Output);
+        params.Output << "\r\n" << body;
+        params.Output.Flush();
+    } else if (queryParams.Has("uploads")) {
         const int uploadId = Parent->NextUploadId++;
         Parent->MultipartUploads[std::make_pair(path, ToString(uploadId))] = {};
 
@@ -424,10 +465,12 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     TStringBuf methodStr = requestString.NextTok(' ');
     TStringBuf uriStr = requestString.NextTok(' ');
 
-    Cerr << "REQUEST: " << params.Input.FirstLine() << Endl;
-    Cerr << "HEADERS: " << Endl;
-    for (auto&& i : params.Input.Headers()) {
-        Cerr << i.Name() << ": " << i.Value() << Endl;
+    if (ENABLE_S3_MOCK_LOG) {
+        Cerr << "REQUEST: " << params.Input.FirstLine() << Endl;
+        Cerr << "HEADERS: " << Endl;
+        for (auto&& i : params.Input.Headers()) {
+            Cerr << i.Name() << ": " << i.Value() << Endl;
+        }
     }
 
     if (!methodStr.IsInited() || !uriStr.IsInited()) {

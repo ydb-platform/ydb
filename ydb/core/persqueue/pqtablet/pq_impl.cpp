@@ -209,6 +209,9 @@ public:
         Response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
         Response->Record.SetErrorCode(ev->ErrorCode);
         Response->Record.SetErrorReason(ev->Error);
+        if (ev->CloseSession) {
+            Response->Record.MutablePartitionResponse()->SetCloseSession(true);
+        }
         ctx.Send(Sender, Response.Release());
         return true;
     }
@@ -356,11 +359,19 @@ bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
     return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
 }
 
-void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
+bool TPersQueue::IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const {
+    if (!ReplicationEnabled(Config) || AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
+        return false;
+    }
+    const auto* consumer = GetConsumer(Config, consumerName);
+    return !consumer || consumer->GetReplicateOffsets();
+}
+
+void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool closeSession)
 {
     ReplyPersQueueError(
         ctx.SelfID, ctx, TabletID(), TopicName, Nothing(), *Counters, NKikimrServices::PERSQUEUE,
-        responseCookie, errorCode, error
+        responseCookie, errorCode, error, /*logDebug=*/false, /*isInternal=*/false, closeSession
     );
 }
 
@@ -1720,6 +1731,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "empty SourceId";
         } else if (cmd.GetPartitionKey().size() > 256) {
             errorStr = "too long partition key";
+        } else if (cmd.GetExplicitHash().size() > Max<ui8>()) {
+            errorStr = "too long explicit hash";
         } else if (cmd.GetSeqNo() < 0) {
             errorStr = "SeqNo must be >= 0";
         } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
@@ -2007,6 +2020,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::T
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
     THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
             req.GetCmdGetOwnership().GetForce(), req.GetCmdGetOwnership().GetRegisterIfNotExists());
+    event->WriteSessionQuotaWaitTime = TDuration::MilliSeconds(Max<i64>(0, req.GetCmdGetOwnership().GetQuotaWaitTimeMs()));
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -2326,6 +2340,26 @@ void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, NWilson::TT
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SPLIT_MESSAGE_GROUP);
     ctx.Send(partActor, new TEvPQ::TEvSplitMessageGroup(responseCookie, std::move(deregistrations), std::move(registrations)), 0, 0, std::move(traceId));
+}
+
+void TPersQueue::HandleEmitHeartbeatRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
+    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
+{
+    PQ_ENSURE(req.HasCmdEmitHeartbeat());
+    const auto& cmd = req.GetCmdEmitHeartbeat();
+
+    if (!cmd.HasHeartbeat()) {
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "no Heartbeat");
+    }
+    if (cmd.GetHeartbeat().GetData().empty()) {
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "empty Heartbeat");
+    }
+    if (cmd.GetHeartbeat().GetData().size() > MAX_HEARTBEAT_SIZE) {
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "Too big Heartbeat");
+    }
+
+    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_WRITE);
+    ctx.Send(partActor, new TEvPQ::TEvEmitHeartbeat(responseCookie, THeartbeat::Parse(cmd.GetHeartbeat())), 0, 0, std::move(traceId));
 }
 
 const TPartitionInfo& TPersQueue::GetPartitionInfo(const NKikimrClient::TPersQueuePartitionRequest& req) const
@@ -2657,7 +2691,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         + req.HasCmdPublishRead()
         + req.HasCmdForgetRead()
         + req.HasCmdUpdateReadMetrics()
-        + req.HasCmdAbortDeferredStaging();
+        + req.HasCmdAbortDeferredStaging()
+        + req.HasCmdEmitHeartbeat();
 
     if (count != 1) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -2665,12 +2700,46 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
+    // Enforce the topic mode for reads and writes, including late writes and
+    // protocols without an earlier check (e.g. kafka_proxy).
+    // MLP consumer operations fetch and enrich messages through CmdRead.
+    // Those reads do not write and stay allowed in unavailable/prohibited mode.
+    const bool mlpRead = req.HasCmdRead() && [&] {
+        const auto* consumer = GetConsumer(Config, req.GetCmdRead().GetClientId());
+        return consumer && consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
+    }();
+    if (req.CmdWriteSize() > 0 || (req.HasCmdRead() && !mlpRead)) {
+        if (const auto error = GetWriteModeError(Config)) {
+            ReplyError(ctx, responseCookie, error->Code, error->Reason, /*closeSession=*/true);
+            return;
+        }
+    }
+
     if (IsTopicMutateDisabled(ctx)
-        && (req.CmdWriteSize() > 0 || req.HasCmdSetClientOffset()))
+        && (req.CmdWriteSize() > 0 || req.HasCmdEmitHeartbeat()))
     {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::OVERLOAD,
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
                    "Topic mutations are temporarily disabled");
         return;
+    }
+
+    if (req.HasCmdSetClientOffset()
+        && IsConsumerOffsetCommitDisabled(req.GetCmdSetClientOffset().GetClientId(), ctx)) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                   "Commits for consumer are disabled");
+        return;
+    }
+
+    if (const auto error = GetWriteModeError(Config);
+        (IsTopicMutateDisabled(ctx) || error)
+        && req.HasCmdSetClientOffset())
+    {
+        const auto* consumer = GetConsumer(Config, req.GetCmdSetClientOffset().GetClientId());
+        if (!consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            ReplyError(ctx, responseCookie, error ? error->Code : NPersQueue::NErrorCode::ERROR,
+                       error ? error->Reason : "Topic mutations are temporarily disabled", /*closeSession=*/error.has_value());
+            return;
+        }
     }
 
     if (req.HasWriteId()) {
@@ -2711,6 +2780,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         HandleSplitMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdUpdateReadMetrics()) {
         HandleUpdateReadMetricsRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
+    } else if (req.HasCmdEmitHeartbeat()) {
+        HandleEmitHeartbeatRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else {
         PQ_LOG_ERROR_AND_DIE("unknown or empty command");
         return;
@@ -3147,14 +3218,15 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
     switch (event.GetTxBodyCase()) {
     case NKikimrPQ::TEvProposeTransaction::kData:
-        if (IsTopicMutateDisabled(ctx)
+        if (const auto error = GetWriteModeError(Config);
+            (IsTopicMutateDisabled(ctx) || error)
             && !Txs.contains(event.GetTxId())
             && !AnyOf(EvProposeTransactionQueue, [&](const auto& pending) {
                 return pending->GetRecord().GetTxId() == event.GetTxId();
             }))
         {
             // Retries of accepted proposals must continue the transaction protocol.
-            const TString reason = "Topic mutations are temporarily disabled";
+            const TString reason = error ? error->Reason : "Topic mutations are temporarily disabled";
             ev->Get()->ExecuteSpan.EndError(reason);
             SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                        event.GetTxId(),
@@ -3323,6 +3395,21 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     }
 
     EnsureCanonical(txBody);
+
+    if (txBody.GetImmediate()) {
+        for (const auto& operation : txBody.GetOperations()) {
+            if ((HasKafkaReadCommit(operation)
+                    || (HasTopicReadCommit(operation) && !GetReadOnlyCheckCommitedToFinish(operation)))
+                && IsConsumerOffsetCommitDisabled(GetReadConsumer(operation), ctx)) {
+                SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                           event.GetTxId(),
+                                           NKikimrPQ::TError::BAD_REQUEST,
+                                           "Commits for consumer are disabled",
+                                           ctx);
+                return;
+            }
+        }
+    }
 
     const bool hasDeferredFinalize = HasDeferredPublicationFinalizeOperation(txBody);
     if (hasDeferredFinalize) {
@@ -4211,36 +4298,6 @@ void TPersQueue::AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
     range->SetIncludeTo(false);
 }
 
-void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
-                                   const NKikimrPQ::TPQTabletConfig& cfg,
-                                   const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
-                                   const NKikimrPQ::TPartitions& partitionsData,
-                                   const TActorContext& ctx)
-{
-    PQ_ENSURE(request);
-
-    TString str;
-    PQ_ENSURE(cfg.SerializeToString(&str));
-
-    auto write = request->Record.AddCmdWrite();
-    write->SetKey(KeyConfig());
-    write->SetValue(str);
-    write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
-    write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-
-    auto graph = MakePartitionGraph(cfg);
-    for (const auto& partition : cfg.GetPartitions()) {
-        auto explicitMessageGroups = CreateExplicitMessageGroups(bootstrapCfg, partitionsData, graph, partition.GetPartitionId());
-
-        TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
-        for (const auto& [id, mg] : *explicitMessageGroups) {
-            sourceIdWriter.RegisterSourceId(id, mg.SeqNo, 0, ctx.Now(), std::move(mg.KeyRange), false);
-        }
-
-        sourceIdWriter.FillRequest(request, TPartitionId(partition.GetPartitionId()));
-    }
-}
-
 void TPersQueue::AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& request)
 {
     NKikimrPQ::TTabletTxInfo info;
@@ -4425,6 +4482,11 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
         }
 
         if (HasTopicReadCommit(operation)) {
+            if (!GetReadOnlyCheckCommitedToFinish(operation)
+                && IsConsumerOffsetCommitDisabled(GetReadConsumer(operation), ctx)) {
+                forcePredicateFalse = true;
+            }
+
             event->AddOperation(GetReadConsumer(operation),
                                 GetReadCommitOffsetsBegin(operation),
                                 GetReadCommitOffsetsEnd(operation),
@@ -4434,6 +4496,9 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                                 GetReadSessionId(operation));
         }
         if (HasKafkaReadCommit(operation)) {
+            if (IsConsumerOffsetCommitDisabled(GetReadConsumer(operation), ctx)) {
+                forcePredicateFalse = true;
+            }
             Y_VALIDATE(operation.GetRead().GetKafka().HasCommitOffsetsEnd(),
                 "kafka read commit operation without CommitOffsetsEnd");
             event->AddKafkaOffsetCommitOperation(GetReadConsumer(operation), GetReadCommitOffsetsEnd(operation));
@@ -5197,14 +5262,11 @@ void TPersQueue::SendProposeTransactionOverloaded(const TActorId& target,
 void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
                                               TDistributedTransaction& tx)
 {
-    auto graph = MakePartitionGraph(tx.TabletConfig);
-
     for (auto& [partitionId, partition] : Partitions) {
         if (partitionId.IsSupportivePartition()) {
             continue;
         }
 
-        auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, graph, partitionId.OriginalPartitionId);
         auto event = std::make_unique<TEvPQ::TEvProposePartitionConfig>(tx.Step, tx.TxId);
 
         event->TopicConverter = tx.TopicConverter;

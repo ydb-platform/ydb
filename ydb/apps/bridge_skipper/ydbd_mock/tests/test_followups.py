@@ -31,6 +31,9 @@ class DueTest(unittest.TestCase):
     def test_suspend_to_disconnected(self):
         self.assertEqual(due(st([S, X])), [Due("suspend", 1)])
 
+    def test_suspend_waits_for_the_suspended_piles_static_quorum(self):
+        self.assertEqual(due(st([S, X]), connected=lambda p: p != 1), [])
+
     def test_connect_needs_connectivity(self):
         s = st([S, N1], sync={1: 2})
         self.assertEqual(due(s), [Due("connect", 1)])

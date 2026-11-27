@@ -62,6 +62,15 @@ class ReachabilityTest(unittest.TestCase):
         self.r.record_ok(2, True, 9)
         self.assertEqual(self.r.last_generation[2], 9)
 
+    def test_missing_node_count_is_not_zero_and_clears_an_older_count(self):
+        self.r.record_ok(1, True, 5)
+        self.assertNotIn(1, self.r.last_static_up)
+        self.r.record_ok(1, True, 5, static_up=2)
+        self.assertEqual(self.r.last_static_up[1], 2)
+        self.r.record_ok(1, True, 6)
+        self.assertNotIn(1, self.r.last_static_up)
+        self.assertTrue(self.r.connected(1), "node count absence does not change the legacy reachability model")
+
     def test_evaluate_reports_transitions_once(self):
         self.r.record_ok(1, True, 1)
         self.r.record_ok(2, True, 1)

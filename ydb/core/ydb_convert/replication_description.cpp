@@ -3,6 +3,7 @@
 
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/issue/yql_issue.h>
 
 #include <google/protobuf/util/time_util.h>
 
@@ -109,6 +110,7 @@ void ConvertItem(
     if (from.HasInitialScanProgress()) {
         to.mutable_stats()->set_initial_scan_progress(from.GetInitialScanProgress());
     }
+    to.mutable_issues()->CopyFrom(from.GetIssues());
 }
 
 void ConvertStats(
@@ -180,8 +182,8 @@ bool CheckConfig(
             return true;
         default:
             error = TStringBuilder() << "wrong config: "
-                << CorrectTargetCase << " expected, "
-                << config.GetTargetCase() << " provided";
+                << static_cast<int>(CorrectTargetCase) << " expected, "
+                << static_cast<int>(config.GetTargetCase()) << " provided";
             break;
     }
 
@@ -205,6 +207,9 @@ void FillReplicationDescription(
         out.clear_availability_period();
     }
     ConvertState(inDesc.GetState(), out);
+    if (inDesc.HasTransactions()) {
+        out.mutable_transactions()->CopyFrom(inDesc.GetTransactions());
+    }
 
     for (const auto& target : inDesc.GetTargets()) {
         ConvertItem(target, *out.add_items());

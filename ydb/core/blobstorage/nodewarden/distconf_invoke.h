@@ -87,13 +87,14 @@ namespace NKikimr::NStorage {
         // Query execution logic
 
         void ExecuteQuery();
-        void IssueScatterTask(TEvScatter&& task, TGatherCallback callback);
+        void IssueScatterTask(TEvScatter&& task, TGatherCallback callback, TMonotonic gatherDeadline = TMonotonic::Max());
         void Handle(TEvNodeConfigGather::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration update
 
         void UpdateConfig(TQuery::TUpdateConfig *request);
+        void CheckStaticGroupStateUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) const;
         void DescendCommittedStorageConfig(const TQuery::TDescendCommittedStorageConfig& request);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -109,6 +110,7 @@ namespace NKikimr::NStorage {
         std::optional<TResult::TReassignGroupDisk> ReassignGroupDiskResult;
 
         void ReassignGroupDisk(const TQuery::TReassignGroupDisk& cmd);
+        void IssueVStatusQuery(TActorId actorId, TVDiskID vdiskId);
         void IssueVStatusQueries(const NKikimrBlobStorage::TGroupInfo& group);
         void SendVStatusQuery(TActorId actorId, TVDiskID vdiskId, TActorId sessionId = {});
         void SendPendingVStatusQueries(ui32 nodeId, TActorId sessionId);
@@ -124,6 +126,8 @@ namespace NKikimr::NStorage {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // VDiskSlain/DropDonor logic
+
+        TStorageConfigPtr DropAllDonorsBase;
 
         void StaticVDiskSlain(const TQuery::TStaticVDiskSlain& cmd);
         void DropDonor(const TQuery::TDropDonor& cmd);
@@ -156,11 +160,19 @@ namespace NKikimr::NStorage {
         std::optional<ui64> StorageYamlVersion;
         bool IsDryRun = false;
 
+        static constexpr TDuration CommitConfirmationTimeout = TDuration::Seconds(30);
+        TDuration NextDisableRetryOffset = TDuration::Seconds(1);
         TStorageConfigPtr ConfigAwaitingCommit;
         TMonotonic CommitConfirmationDeadline;
-        bool FullCommitConfirmationNeeded = false;
+        bool StartWithFullCommitRead = false;
         static constexpr ui64 ConfigValidationTimeoutCookie = 1;
         static constexpr ui64 VStatusTimeoutCookie = 2;
+        static constexpr ui64 DataCenterRetryCookie = 3;
+        static constexpr ui64 DataCenterTimeoutCookie = 4;
+        TMonotonic DataCenterReconciliationDeadline;
+        std::optional<TStorageConfigMeta> DataCenterConfigToConfirm;
+        std::optional<NKikimrBlobStorage::TDataCenterStates> AppliedDataCenterStates;
+        bool DataCenterPreflight = false;
         bool WaitingForConfigValidation = false;
 
         TActorId ControllerPipeId;
@@ -172,7 +184,14 @@ namespace NKikimr::NStorage {
             OTHER,
             ADD_BRIDGE_PILE, // BSC validates addition of the pile, then ProposedStorageConfig gets proposed
             REMOVE_BRIDGE_PILE, // BSC validates removal of the pile, then ProposedStorageConfig gets proposed
+            BRIDGE_ROLLBACK, // BSC validates the rollback of the bridged cluster, then ProposedStorageConfig gets proposed
         } ControllerOp = EControllerOp::UNSET;
+
+        // for the operations BSC validates before ProposedStorageConfig gets proposed: the interface version BSC needs,
+        // the validation request, and what is being done (for the error message)
+        using TBridgePileControllerOp = std::tuple<ui32, NKikimrBlobStorage::TEvControllerDistconfRequest::EOperation,
+            const char*>;
+        std::optional<TBridgePileControllerOp> GetBridgePileControllerOp() const;
 
         void FetchStorageConfig(const TQuery::TFetchStorageConfig& request);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
@@ -186,7 +205,9 @@ namespace NKikimr::NStorage {
         void ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
                 ui64 expectedStorageYamlVersion, bool enablingDistconf);
         void ReplaceStorageConfigExecute();
-        void StartCommitConfirmation();
+        void StartCommitConfirmation(const std::optional<TStorageConfigMeta>& expected = {});
+        void RetrySelfHealConfirmationOrFinish(TResult::EStatus status, TStringBuf reason);
+        void FinishConfigChange();
         void CollectCommittedConfig();
         void TryEnableDistconf();
         void ConnectToController();
@@ -209,6 +230,7 @@ namespace NKikimr::NStorage {
         void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
 
         void ConvertToBridge(const TQuery::TConvertToBridge& cmd);
+        void RollbackBridge(const TQuery::TRollbackBridge& cmd);
 
         // check that every node runs with BridgeConfig (and supports bridge features of minFeatureLevel, when it is set),
         // then invoke the callback; every static node listed in requiredNodeIds must report it, while nodes listed in
@@ -224,7 +246,7 @@ namespace NKikimr::NStorage {
         TBridgePileId CheckPileOperation(const TString& pileName, NKikimrBridge::TClusterState::EPileState expectedState,
             bool adding);
         // every node remaining in the cluster has to support pile operations (see RequireBridgeCapability)
-        void RequirePileOperationCapability(TBridgePileId leavingPileId, std::function<void()> callback);
+        void RequireConnectedNodesCapability(ui32 featureLevel, TBridgePileId leavingPileId, std::function<void()> callback);
 
         void AddBridgePile(const TQuery::TAddBridgePile& cmd);
         void AddBridgePileWithBaseConfig();
@@ -240,6 +262,10 @@ namespace NKikimr::NStorage {
         // Configuration proposition
 
         void AdvanceGeneration();
+        void StartDataCenterReconciliation(TStorageConfigMeta config);
+        void SendDataCenterSnapshot();
+        void ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command);
+        void PromoteStaticGroup(const TPromoteStaticGroup& op);
         void QueryConfig(const TQuery::TQueryConfig& request);
         void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);
         void StartRecoveryProposition(TProcessCollectConfigsResult& result);

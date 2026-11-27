@@ -103,7 +103,8 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 // deleteIndexKeys are already correct
                 break;
             }
-            case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+            case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+            case TIndexDescription::EType::GlobalSyncHnsw: {
                 if (indexDesc->KeyColumns.size() > 1) {
                     const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
                         << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
@@ -200,6 +201,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
             case TIndexDescription::EType::GlobalJsonCompact:
                 return false;
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+            case TIndexDescription::EType::GlobalSyncHnsw:
             case TIndexDescription::EType::GlobalFulltextPlain:
             case TIndexDescription::EType::GlobalFulltextRelevance:
             case TIndexDescription::EType::GlobalJson:
@@ -228,7 +230,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
         }, ctx, kqpCtx);
     }
 
-    AFL_ENSURE(!useStreamIndex || needsKqpEffect);
+    YDB_LOG_ENSURE(!useStreamIndex || needsKqpEffect);
 
     auto payloadSelector = Build<TCoLambda>(ctx, del.Pos())
         .Args({"stub"})

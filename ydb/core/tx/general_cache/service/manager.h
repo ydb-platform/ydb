@@ -1,5 +1,6 @@
 #pragma once
 #include "counters.h"
+#include "request_queues.h"
 
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
@@ -12,7 +13,30 @@
 
 #include <library/cpp/cache/cache.h>
 
+#include <algorithm>
+#include <vector>
+
 namespace NKikimr::NGeneralCache::NPrivate {
+
+template <class EConsumer>
+class TConsumerClasses {
+private:
+    const NPublic::TConfig& Config;
+    mutable THashMap<EConsumer, NPublic::TCacheRequestClass> Known;
+
+public:
+    explicit TConsumerClasses(const NPublic::TConfig& config)
+        : Config(config) {
+    }
+
+    NPublic::TCacheRequestClass Get(const EConsumer consumer) const {
+        auto it = Known.find(consumer);
+        if (it == Known.end()) {
+            it = Known.emplace(consumer, Config.Classify(::ToString(consumer))).first;
+        }
+        return it->second;
+    }
+};
 
 template <class TPolicy>
 class TRequest: public NColumnShard::TMonitoringObjectsCounter<TRequest<TPolicy>>, public TNonCopyable {
@@ -139,12 +163,14 @@ private:
     const TSourceId SourceId;
     static inline TAtomicCounter Counter = 0;
     const ui64 Cookie = Counter.Inc();
+
     THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> RequestedObjects;
-    YDB_READONLY_DEF(std::deque<std::shared_ptr<TRequest>>, RequestsQueue);
+    TRequestQueues<TAddress, std::shared_ptr<TRequest>> Queues;
     YDB_READONLY_DEF(THashSet<ui64>, RequestsInProgress);
     THashMap<ui64, std::vector<std::shared_ptr<TRequest>>> RequestsByCookies;
     const std::shared_ptr<TManagerCounters> Counters;
     const std::shared_ptr<NSource::IObjectsProcessor<TPolicy>> ObjectsProcessor;
+    const std::shared_ptr<TConsumerClasses<EConsumer>> ConsumerClasses;
 
 public:
     ui64 GetCookie() const {
@@ -152,15 +178,34 @@ public:
     }
 
     TSourceInfo(const std::shared_ptr<TManagerCounters>& counters, const TSourceId& sourceId,
-        const std::shared_ptr<NSource::IObjectsProcessor<TPolicy>>& objectsProcessor)
+        const std::shared_ptr<NSource::IObjectsProcessor<TPolicy>>& objectsProcessor,
+        const std::shared_ptr<TConsumerClasses<EConsumer>>& consumerClasses)
         : SourceId(sourceId)
         , Counters(counters)
-        , ObjectsProcessor(objectsProcessor) {
+        , ObjectsProcessor(objectsProcessor)
+        , ConsumerClasses(consumerClasses) {
+    }
+
+    bool IsRequestAttached(const TAddress& address, const std::shared_ptr<TRequest>& request) const {
+        const auto it = RequestedObjects.find(address);
+        if (it == RequestedObjects.end()) {
+            return false;
+        }
+        for (const auto& queued : it->second) {
+            if (queued.get() == request.get()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     void EnqueueRequest(const std::shared_ptr<TRequest>& request) {
         Counters->GetQueueObjectsCount()->Add(request->GetWaitBySource(SourceId).size());
-        RequestsQueue.emplace_back(request);
+        Queues.Enqueue(ConsumerClasses->Get(request->GetConsumer()), request);
+    }
+
+    void ReleaseInflight(const TAddress& address) {
+        Queues.OnFinished(address);
     }
 
     void AddObjects(THashMap<TAddress, TObject>&& add, const bool isAdditional, const TMonotonic now) {
@@ -181,6 +226,7 @@ public:
                     Counters->FetchedObject->Inc();
                 }
             }
+            ReleaseInflight(i.first);
             RequestedObjects.erase(it);
             Counters->GetTotalInFlight()->Dec();
         }
@@ -199,6 +245,7 @@ public:
                     Counters->OnMissCacheRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 }
             }
+            ReleaseInflight(i.first);
             RequestedObjects.erase(it);
             Counters->GetTotalInFlight()->Dec();
         }
@@ -222,6 +269,7 @@ public:
                     Counters->NoExistsObject->Inc();
                 }
             }
+            ReleaseInflight(i);
             RequestedObjects.erase(it);
             Counters->GetTotalInFlight()->Dec();
         }
@@ -229,14 +277,26 @@ public:
 
     void Abort() {
         const TMonotonic now = TMonotonic::Now();
-        for (auto&& i : RequestsQueue) {
-            auto addresses = i->GetWaitBySource(SourceId);
-            Counters->GetQueueObjectsCount()->Sub(addresses.size());
-            for (auto&& objAddr : addresses) {
-                Y_UNUSED(i->AddError(objAddr, "source broken: " + ::ToString(SourceId)));
+        const TString error = "source broken: " + ::ToString(SourceId);
+        auto abortQueue = [&](std::deque<std::shared_ptr<TRequest>>& queue) {
+            for (auto&& request : queue) {
+                const auto addresses = request->GetWaitBySource(SourceId);
+                ui64 queued = 0;
+                bool finished = false;
+                for (const auto& objAddr : addresses) {
+                    if (IsRequestAttached(objAddr, request)) {
+                        continue;
+                    }
+                    ++queued;
+                    finished = request->AddError(objAddr, error) || finished;
+                }
+                Counters->GetQueueObjectsCount()->Sub(queued);
+                if (finished && RequestsInProgress.erase(request->GetRequestId())) {
+                    Counters->OnMissCacheRequestFinished(request->GetStartRequest(), request->GetCreated(), now);
+                }
             }
-        }
-        RequestsQueue.clear();
+        };
+        Queues.Abort(abortQueue);
         for (auto&& [objAddr, requests] : RequestedObjects) {
             for (auto&& r : requests) {
                 Counters->FailedObject->Inc();
@@ -255,36 +315,95 @@ public:
         AFL_VERIFY(RequestedObjects.empty() || NActors::TActorSystem::IsStopped());
     }
 
-    void DrainQueue() {
-        THashMap<EConsumer, THashSet<TAddress>> requestedAddresses;
-        THashSet<TAddress>* consumerAddresses = nullptr;
-        std::optional<EConsumer> currentConsumer;
-        while (RequestsQueue.size() && RequestedObjects.size() < Counters->GetConfig().GetDirectInflightSourceLimit() &&
-               Counters->CheckTotalLimit()) {
-            auto request = std::move(RequestsQueue.front());
-            RequestsQueue.pop_front();
-            auto& sourceWaitObjects = request->GetWaitBySource(SourceId);
-            Counters->GetQueueObjectsCount()->Sub(sourceWaitObjects.size());
-            if (request->IsAborted()) {
-                Counters->AbortedRequests->Inc();
+    struct TDispatchResult {
+        ui64 NewAddresses = 0;
+        bool PutBack = false;
+    };
+
+    TDispatchResult DispatchFront(std::deque<std::shared_ptr<TRequest>>& queue, const ui64 newAddressLimit,
+        const std::optional<ui64> weightedQueueId, THashMap<EConsumer, THashSet<TAddress>>& requestedAddresses,
+        const TMonotonic now) {
+        if (queue.empty() || newAddressLimit == 0) {
+            return {};
+        }
+        auto request = queue.front();
+        queue.pop_front();
+        const auto& sourceWaitObjects = request->GetWaitBySource(SourceId);
+        if (request->IsAborted()) {
+            const bool started = RequestsInProgress.contains(request->GetRequestId());
+            const auto addresses = sourceWaitObjects;
+            ui64 queuedLeft = 0;
+            bool finished = false;
+            for (const auto& addr : addresses) {
+                if (IsRequestAttached(addr, request)) {
+                    continue;
+                }
+                ++queuedLeft;
+                if (started) {
+                    finished = request->AddError(addr, "request aborted") || finished;
+                }
+            }
+            Counters->GetQueueObjectsCount()->Sub(queuedLeft);
+            Counters->AbortedRequests->Inc();
+            if (finished) {
+                AFL_VERIFY(RequestsInProgress.erase(request->GetRequestId()));
+                Counters->OnMissCacheRequestFinished(request->GetStartRequest(), request->GetCreated(), now);
+            }
+            return {};
+        }
+
+        const bool firstDispatch = RequestsInProgress.emplace(request->GetRequestId()).second;
+        if (firstDispatch) {
+            Counters->DirectRequests->Inc();
+        }
+        auto& consumerAddresses = requestedAddresses[request->GetConsumer()];
+        ui64 newAddresses = 0;
+        ui64 leftQueue = 0;
+        bool partial = false;
+        for (const auto& addr : sourceWaitObjects) {
+            if (!firstDispatch && IsRequestAttached(addr, request)) {
                 continue;
             }
-            AFL_VERIFY(RequestsInProgress.emplace(request->GetRequestId()).second);
-            if (!currentConsumer || *currentConsumer != request->GetConsumer()) {
-                consumerAddresses = &requestedAddresses[request->GetConsumer()];
-            }
-            Counters->DirectRequests->Inc();
-            for (auto&& i : sourceWaitObjects) {
-                auto it = RequestedObjects.find(i);
-                if (it == RequestedObjects.end()) {
-                    it = RequestedObjects.emplace(i, std::vector<std::shared_ptr<TRequest>>()).first;
-                    Counters->GetTotalInFlight()->Inc();
-                    AFL_VERIFY(consumerAddresses->emplace(i).second);
-                    Counters->DirectObjects->Inc();
+            auto itAddress = RequestedObjects.find(addr);
+            if (itAddress == RequestedObjects.end()) {
+                if (newAddresses >= newAddressLimit) {
+                    partial = true;
+                    break;
                 }
-                it->second.emplace_back(request);
+                itAddress = RequestedObjects.emplace(addr, std::vector<std::shared_ptr<TRequest>>()).first;
+                Counters->GetTotalInFlight()->Inc();
+                AFL_VERIFY(consumerAddresses.emplace(addr).second);
+                Counters->DirectObjects->Inc();
+                ++newAddresses;
+                if (weightedQueueId) {
+                    Queues.OnSent(*weightedQueueId, addr);
+                }
             }
+            itAddress->second.emplace_back(request);
+            ++leftQueue;
         }
+        Counters->GetQueueObjectsCount()->Sub(leftQueue);
+        if (partial) {
+            queue.emplace_front(std::move(request));
+        }
+        return TDispatchResult{ newAddresses, partial };
+    }
+
+    void DrainQueue() {
+        THashMap<EConsumer, THashSet<TAddress>> requestedAddresses;
+        const ui64 sourceLimit = Counters->GetConfig().GetDirectInflightSourceLimit();
+        const TMonotonic now = TMonotonic::Now();
+        Queues.Drain(
+            sourceLimit, Counters->GetConfig().GetHasWeights(),
+            [&]() -> ui64 {
+                if (RequestedObjects.size() >= sourceLimit || !Counters->CheckTotalLimit()) {
+                    return 0;
+                }
+                return sourceLimit - RequestedObjects.size();
+            },
+            [&](std::deque<std::shared_ptr<TRequest>>& requests, const ui64 budget, const std::optional<ui64> weightedQueueId) {
+                return DispatchFront(requests, budget, weightedQueueId, requestedAddresses, now);
+            });
         ObjectsProcessor->AskData(std::move(requestedAddresses), ObjectsProcessor, Cookie);
         Counters->ObjectsQueueSize->Set(Counters->GetQueueObjectsCount()->Val());
         Counters->ObjectsInFlight->Set(Counters->GetTotalInFlight()->Val());
@@ -304,6 +423,7 @@ private:
     const TString CacheName = TPolicy::GetCacheName();
     const std::shared_ptr<TManagerCounters> Counters;
     std::shared_ptr<NSource::IObjectsProcessor<TPolicy>> ObjectsProcessor;
+    const std::shared_ptr<TConsumerClasses<EConsumer>> ConsumerClasses;
     TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer> Cache;
     const bool UseCacheSizeFromConfig;
     static constexpr ui64 DEFAULT_CACHE_SIZE = (ui64)1 << 30;
@@ -342,7 +462,7 @@ private:
     TSourceInfo& UpsertSourceInfo(const TSourceId sourceId) {
         auto it = SourcesInfo.find(sourceId);
         if (it == SourcesInfo.end()) {
-            it = SourcesInfo.emplace(sourceId, TSourceInfo(Counters, sourceId, ObjectsProcessor)).first;
+            it = SourcesInfo.emplace(sourceId, TSourceInfo(Counters, sourceId, ObjectsProcessor, ConsumerClasses)).first;
         }
         return it->second;
     }
@@ -380,6 +500,7 @@ public:
     TManager(const NActors::TActorId& ownerActorId, const std::shared_ptr<TManagerCounters>& counters)
         : Counters(counters)
         , ObjectsProcessor(TPolicy::BuildObjectsProcessor(ownerActorId))
+        , ConsumerClasses(std::make_shared<TConsumerClasses<EConsumer>>(Counters->GetConfig()))
         , Cache(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE))
         , UseCacheSizeFromConfig(Counters->GetConfig().GetMemoryLimit().has_value()) {
         YDB_LOG_NOTICE_COMP(NKikimrServices::GENERAL_CACHE, "",

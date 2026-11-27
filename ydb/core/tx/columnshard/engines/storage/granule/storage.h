@@ -9,105 +9,6 @@
 
 namespace NKikimr::NOlap {
 
-class TGranulesStat {
-private:
-    i64 MetadataMemoryPortionsSize = 0;
-    const NColumnShard::TEngineLogsCounters Counters;
-    bool PackModificationFlag = false;
-    THashMap<TInternalPathId, const TGranuleMeta*> PackModifiedGranules;
-    std::map<ui64, TPositiveControlInteger> SchemaVersionsControl;
-
-    static inline TAtomicCounter SumMetadataMemoryPortionsSize = 0;
-
-    void StartModificationImpl() {
-        Y_ABORT_UNLESS(!PackModificationFlag);
-        PackModificationFlag = true;
-    }
-
-    void FinishModificationImpl() {
-        Y_ABORT_UNLESS(PackModificationFlag);
-        PackModificationFlag = false;
-        for (auto&& i : PackModifiedGranules) {
-            UpdateGranuleInfo(*i.second);
-        }
-        PackModifiedGranules.clear();
-    }
-
-public:
-    TGranulesStat(const NColumnShard::TEngineLogsCounters& counters)
-        : Counters(counters)
-    {
-    }
-
-    bool HasSchemaVersion(const ui64 fromVersion, const ui64 version) const {
-        AFL_VERIFY(fromVersion <= version);
-        auto it = SchemaVersionsControl.lower_bound(fromVersion);
-        return (it != SchemaVersionsControl.end() && it->first <= version);
-    }
-
-    const NColumnShard::TEngineLogsCounters& GetCounters() const {
-        return Counters;
-    }
-
-    class TModificationGuard: TNonCopyable {
-    private:
-        TGranulesStat& Owner;
-
-    public:
-        TModificationGuard(TGranulesStat& storage)
-            : Owner(storage)
-        {
-            Owner.StartModificationImpl();
-        }
-
-        ~TModificationGuard() {
-            Owner.FinishModificationImpl();
-        }
-    };
-
-    TModificationGuard StartPackModification() {
-        return TModificationGuard(*this);
-    }
-
-    static ui64 GetSumMetadataMemoryPortionsSize() {
-        return SumMetadataMemoryPortionsSize.Val();
-    }
-
-    i64 GetMetadataMemoryPortionsSize() const {
-        return MetadataMemoryPortionsSize;
-    }
-
-    ~TGranulesStat() {
-        SumMetadataMemoryPortionsSize.Sub(MetadataMemoryPortionsSize);
-    }
-
-    void UpdateGranuleInfo(const TGranuleMeta& granule) {
-        if (PackModificationFlag) {
-            PackModifiedGranules[granule.GetPathId()] = &granule;
-            return;
-        }
-    }
-
-    void OnRemovePortion(const TPortionInfo& portion) {
-        auto it = SchemaVersionsControl.find(portion.GetSchemaVersionVerified());
-        AFL_VERIFY(it != SchemaVersionsControl.end());
-        if (it->second.Dec() == 0) {
-            SchemaVersionsControl.erase(it);
-        }
-        MetadataMemoryPortionsSize -= portion.GetMetadataMemorySize();
-        AFL_VERIFY(MetadataMemoryPortionsSize >= 0);
-        const i64 value = SumMetadataMemoryPortionsSize.Sub(portion.GetMetadataMemorySize());
-        Counters.OnIndexMetadataUsageBytes(value);
-    }
-
-    void OnAddPortion(const TPortionInfo& portion) {
-        SchemaVersionsControl[portion.GetSchemaVersionVerified()].Inc();
-        MetadataMemoryPortionsSize += portion.GetMetadataMemorySize();
-        const i64 value = SumMetadataMemoryPortionsSize.Add(portion.GetMetadataMemorySize());
-        Counters.OnIndexMetadataUsageBytes(value);
-    }
-};
-
 class TGranuleOrdered {
 private:
     NStorageOptimizer::TOptimizationPriority Priority;
@@ -135,7 +36,7 @@ private:
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::shared_ptr<IStoragesManager> StoragesManager;
     THashMap<TInternalPathId, std::shared_ptr<TGranuleMeta>> Tables;   // pathId into Granule that equal to Table
-    std::shared_ptr<TGranulesStat> Stats;
+    const std::shared_ptr<NColumnShard::TShardDataStats> DataStats;
     std::shared_ptr<NStorageOptimizer::TOptimizerRuntimeSettings> OptimizerRuntimeSettings =
         NStorageOptimizer::TOptimizerRuntimeSettings::MakeDefault();
 
@@ -162,28 +63,29 @@ public:
 
     TGranulesStorage(const NColumnShard::TEngineLogsCounters counters,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<IStoragesManager>& storagesManager)
+        const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TShardDataStats>& dataStats)
         : Counters(counters)
         , DataAccessorsManager(dataAccessorsManager)
         , StoragesManager(storagesManager)
-        , Stats(std::make_shared<TGranulesStat>(Counters))
+        , DataStats(dataStats)
     {
-        AFL_VERIFY(DataAccessorsManager);
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(DataAccessorsManager);
+        YDB_LOG_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(DataStats);
     }
 
     void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
         DataAccessorsManager->AskData(request);
     }
 
-    const std::shared_ptr<TGranulesStat>& GetStats() const {
-        return Stats;
+    const std::shared_ptr<NColumnShard::TShardDataStats>& GetDataStats() const {
+        return DataStats;
     }
 
     std::shared_ptr<TGranuleMeta> RegisterTable(
         const TInternalPathId pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
         auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
-        AFL_VERIFY(infoEmplace.second);
+        YDB_LOG_VERIFY(infoEmplace.second);
         return infoEmplace.first->second;
     }
 
@@ -206,7 +108,7 @@ public:
     void ReturnToIndexes(const THashMap<TInternalPathId, THashSet<ui64>>& portions) const {
         for (auto&& [g, portionIds] : portions) {
             auto it = Tables.find(g);
-            AFL_VERIFY(it != Tables.end());
+            YDB_LOG_VERIFY(it != Tables.end());
             it->second->ReturnToIndexes(portionIds);
         }
     }
@@ -229,7 +131,7 @@ public:
 
     std::shared_ptr<TGranuleMeta> GetGranuleVerified(const TInternalPathId pathId) const {
         auto it = Tables.find(pathId);
-        AFL_VERIFY(it != Tables.end());
+        YDB_LOG_VERIFY(it != Tables.end());
         return it->second;
     }
 

@@ -12,7 +12,7 @@ void TWrittenPortionInfo::DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     const auto removeSnapshot = GetRemoveSnapshotOptional();
     const auto commitSnapshot = GetCommitSnapshotOptional();
-    AFL_VERIFY(InsertWriteId);
+    YDB_LOG_VERIFY(InsertWriteId);
     db.Table<IndexPortions>()
         .Key(GetPathId().GetRawValue(), GetPortionId())
         .Update(NIceDb::TUpdate<IndexPortions::SchemaVersion>(GetSchemaVersionVerified()),
@@ -51,8 +51,9 @@ void TWrittenPortionInfo::FillDefaultColumn(NAssembling::TColumnAssemblingInfo& 
             TPortionDataAccessor::TAssembleBlobInfo(GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>((ui64)GetInsertWriteId())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG) {
-        AFL_VERIFY(GetRecordsCount() == GetMeta().GetDeletionsCount() || GetMeta().GetDeletionsCount() == 0)("deletes", GetMeta().GetDeletionsCount())(
-                                                                         "count", GetRecordsCount());
+        YDB_LOG_VERIFY(GetRecordsCount() == GetMeta().GetDeletionsCount() || GetMeta().GetDeletionsCount() == 0,
+            {"deletes", GetMeta().GetDeletionsCount()},
+            {"count", GetRecordsCount()});
         column.AddBlobInfo(0, GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(GetRecordsCount(),
                                                      std::make_shared<arrow::BooleanScalar>((bool)GetMeta().GetDeletionsCount())));
     }
@@ -79,7 +80,7 @@ bool TWrittenPortionInfo::MayGetForScanAt(const TSnapshot& snapshot) const {
 }
 
 void TWrittenPortionInfo::CommitToDatabase(IDbWrapper& wrapper) {
-    AFL_VERIFY(HasCommitSnapshot());
+    YDB_LOG_VERIFY(HasCommitSnapshot());
     wrapper.CommitPortion(*this, CommitSnapshot.Get());
 }
 

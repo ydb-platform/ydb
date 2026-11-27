@@ -11,7 +11,7 @@
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
@@ -95,23 +95,23 @@ public:
         : Batch(HandleBatch(mode, batch))
         , DataIndexes(std::move(dataIndexes))
     {
-        AFL_VERIFY(Batch);
-        AFL_VERIFY(Batch->num_rows());
+        YDB_LOG_VERIFY(Batch);
+        YDB_LOG_VERIFY(Batch->num_rows());
     }
 
     TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch,
         EBlockTrackingMode mode = NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE)
         : Batch(HandleBatch(mode, batch)) {
-        AFL_VERIFY(Batch);
-        AFL_VERIFY(Batch->num_rows());
+        YDB_LOG_VERIFY(Batch);
+        YDB_LOG_VERIFY(Batch->num_rows());
 
     }
 
     TBatchDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch,
         EBlockTrackingMode mode = NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE)
         : Batch(HandleBatch(mode, NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({batch})))) {
-        AFL_VERIFY(Batch);
-        AFL_VERIFY(Batch->num_rows());
+        YDB_LOG_VERIFY(Batch);
+        YDB_LOG_VERIFY(Batch->num_rows());
 
     }
 

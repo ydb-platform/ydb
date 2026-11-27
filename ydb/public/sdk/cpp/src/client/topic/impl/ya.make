@@ -16,6 +16,7 @@ SRCS(
     read_session.cpp
     topic_impl.h
     topic_impl.cpp
+    topic_path.h
     producer.h
     producer.cpp
     topic.cpp

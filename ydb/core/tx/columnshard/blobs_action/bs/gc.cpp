@@ -21,8 +21,11 @@ void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, T
     Manager->OnGCFinishedOnExecute(CollectGenStepInFlight, dbBlobs);
 }
 
-bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
+bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
     Manager->OnGCFinishedOnComplete(CollectGenStepInFlight);
+    if (FirstGC && CollectGenStepInFlight) {
+        self.OnFirstGC(CollectGenStepInFlight->Generation(), TActivationContext::AsActorContext());
+    }
     return true;
 }
 
@@ -37,10 +40,11 @@ bool TGCTask::DoOnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& /*self*/,
 
 TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const std::optional<TGenStep>& collectGenStepInFlight,
     std::deque<TUnifiedBlobId>&& keepsToErase, const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove,
-    const std::shared_ptr<TRemoveGCCounters>& counters, const ui64 tabletId, const ui64 currentGen)
+    const std::shared_ptr<TRemoveGCCounters>& counters, const ui64 tabletId, const ui64 currentGen, const bool firstGC)
     : TBase(storageId, std::move(blobsToRemove), counters)
     , ListsByGroupId(std::move(listsByGroupId))
     , CollectGenStepInFlight(collectGenStepInFlight)
+    , FirstGC(firstGC)
     , TabletId(tabletId)
     , CurrentGen(currentGen)
     , KeepsToErase(std::move(keepsToErase))
@@ -54,7 +58,8 @@ void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
     }
     TBlobAddress bAddress(ev->Cookie, ev->Get()->Channel);
     auto itGroup = ListsByGroupId.find(bAddress);
-    AFL_VERIFY(itGroup != ListsByGroupId.end())("address", bAddress.DebugString());
+    YDB_LOG_VERIFY(itGroup != ListsByGroupId.end(),
+        {"address", bAddress.DebugString()});
     ListsByGroupId.erase(itGroup);
 }
 
@@ -64,7 +69,7 @@ static TAtomicCounter PerGenerationCounter = 1;
 
 std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const TBlobAddress& address) const {
     auto it = ListsByGroupId.find(address);
-    AFL_VERIFY(it != ListsByGroupId.end());
+    YDB_LOG_VERIFY(it != ListsByGroupId.end());
     if (++it->second.RequestsCount >= TGCLists::RequestsLimit) {
         YDB_LOG_CRIT("",
             {"event", "build_gc_request"},

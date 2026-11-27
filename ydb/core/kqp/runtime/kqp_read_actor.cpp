@@ -1,4 +1,5 @@
 #include "kqp_read_actor.h"
+#include "kqp_lock_logging.h"
 
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_shard_rendering.h>
@@ -978,6 +979,9 @@ public:
         record.SetMaxBytes(Min<ui64>(record.GetMaxBytes(), BufSize));
 
         record.SetResultFormat(Settings->GetDataFormat());
+        if (Settings->GetReadHints()) {
+            record.SetHints(Settings->GetReadHints());
+        }
 
         if (Settings->HasLockTxId() && LockInfo.BrokenLocks.empty()) {
             record.SetLockTxId(Settings->GetLockTxId());
@@ -1080,15 +1084,6 @@ public:
         ShardReadTrace.ReadResult(ReadActorSpan, Reads[id].Shard->TabletId,
             ev->Sender.NodeId(), id, msg.GetRowsCount(), record.GetStatus().GetCode(), record.GetFinished());
 
-        TStringBuilder txLocks;
-        for (const auto& lock : record.GetTxLocks()) {
-            txLocks << lock.ShortDebugString();
-        }
-        TStringBuilder brokenTxlocks;
-        for (const auto& lock : record.GetBrokenTxLocks()) {
-            brokenTxlocks << lock.ShortDebugString();
-        }
-
         YDB_LOG_DEBUG("Received TEvReadResult from data shard",
             {"logPrefix", this->LogPrefix},
             {"shardId", Reads[id].Shard->TabletId},
@@ -1096,8 +1091,8 @@ public:
             {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
             {"finished", record.GetFinished()},
             {"rowCount", record.GetRowCount()},
-            {"txLocks", txLocks},
-            {"brokenTxLocks", brokenTxlocks});
+            {"txLocks", FormatLocksForLog(record.GetTxLocks())},
+            {"brokenTxLocks", FormatLocksForLog(record.GetBrokenTxLocks())});
 
         if (!record.HasNodeId()) {
             Counters->ReadActorAbsentNodeId->Inc();
@@ -1137,7 +1132,10 @@ public:
         auto replyError = [&](auto message, auto status) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
-            return RuntimeError(message, status, issues);
+            // Preserve the reason so explicit-snapshot queries can fail without retrying the same lost snapshot.
+            const auto issueCode = record.GetStatus().GetCode() == Ydb::StatusIds::PRECONDITION_FAILED
+                ? NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED : 0;
+            return RuntimeError(message, status, issues, issueCode);
         };
 
         // Preserve schema errors so the session can invalidate a stale query plan.
@@ -1678,8 +1676,11 @@ public:
         TBase::PassAway();
     }
 
-    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {},
+        NYql::TIssueCode issueCode = 0)
+    {
         NYql::TIssue issue(message);
+        issue.SetCode(issueCode, NYql::TSeverityIds::S_ERROR);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
         }

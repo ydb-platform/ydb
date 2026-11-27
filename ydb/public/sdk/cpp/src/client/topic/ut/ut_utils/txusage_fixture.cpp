@@ -557,7 +557,8 @@ std::vector<std::string> TFixture::ReadFromTopic(const std::string& topicPath,
                                          const std::string& consumerName,
                                          const TDuration& duration,
                                          TTransactionBase* tx,
-                                         std::optional<std::uint32_t> partitionId)
+                                         std::optional<std::uint32_t> partitionId,
+                                         std::optional<std::size_t> expectedMessages)
 {
     std::vector<std::string> messages;
 
@@ -587,6 +588,12 @@ std::vector<std::string> TFixture::ReadFromTopic(const std::string& topicPath,
                     e->Commit();
                 }
             }
+        }
+
+        // Consume the whole batch so the caller can still detect extra messages.
+        // Absence checks omit expectedMessages and retain the full observation window.
+        if (expectedMessages && messages.size() >= *expectedMessages) {
+            return messages;
         }
 
         remain = end - TInstant::Now();
@@ -790,7 +797,8 @@ std::vector<std::string> TFixture::Read_Exactly_N_Messages_From_Topic(const std:
     std::vector<std::string> result;
 
     while (result.size() < limit) {
-        auto messages = ReadFromTopic(topicPath, consumerName, TDuration::Seconds(2));
+        auto messages = ReadFromTopic(topicPath, consumerName, TDuration::Seconds(2),
+                                      nullptr, std::nullopt, limit - result.size());
         for (auto& m : messages) {
             result.push_back(std::move(m));
         }
@@ -1532,7 +1540,8 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
 
     std::vector<std::string> messages;
     for (size_t i = 0; (i < 10) && (messages.size() < (oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount)); ++i) {
-        auto block = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        auto block = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2),
+                                   nullptr, std::nullopt, oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount - messages.size());
         for (auto& m : block) {
             messages.push_back(std::move(m));
         }

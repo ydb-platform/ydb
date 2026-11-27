@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/services/dynamic_config)
 
-FORK_SUBTESTS()
-
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ENDIF()
@@ -11,12 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/getopt
-    ydb/public/sdk/cpp/src/library/grpc/client
-    library/cpp/regex/pcre
-    library/cpp/svnversion
     ydb/core/testlib/default
-    ydb/services/cms
 )
 
 YQL_LAST_ABI_VERSION()

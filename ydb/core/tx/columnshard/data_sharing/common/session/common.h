@@ -63,7 +63,7 @@ public:
         , Info(info)
         , TransferContext(transferContext)
     {
-        AFL_VERIFY(!!SessionId);
+        YDB_LOG_VERIFY(!!SessionId);
     }
 
     const TTransferContext& GetTransferContext() const {
@@ -102,7 +102,7 @@ public:
 
     template <class TProto>
     void SerializeToProto(TProto& proto) const {
-        AFL_VERIFY(SessionId);
+        YDB_LOG_VERIFY(SessionId);
         *proto.MutableSessionId() = SessionId;
         *proto.MutableTransferContext() = TransferContext.SerializeToProto();
     }

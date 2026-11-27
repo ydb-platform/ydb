@@ -163,7 +163,7 @@ public:
         OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
 
         const auto& embedding = request.GetEmbeddingColumn();
-        const auto& data = request.GetDataColumns();
+        const auto data = MakeUploadDataColumns(table, embedding, request.GetDataColumns(), request.GetIndexType());
         ScanTags = MakeScanTags(table, embedding, data, toBuild,
             EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
@@ -726,7 +726,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         if (request.GetTabletId() != TabletID()) {
             badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
         }
-        if (!IsStateActive()) {
+        if (!IsStateActive() || IsUserTableWriteBlocked()) {
             badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
         }
         const auto pathId = TPathId::FromProto(request.GetPathId());
@@ -756,8 +756,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             badRequest("Wrong upload");
         }
 
-        if (request.GetK() < 2) {
-            badRequest("Should be requested partition on at least two rows");
+        if (request.GetK() == 0) {
+            badRequest("At least one cluster should be requested");
         }
 
         const auto parentFrom = request.GetParentFrom();
@@ -850,4 +850,3 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

@@ -17,8 +17,6 @@ Y_NO_INLINE TBacktrace GetBacktrace(
     TBacktraceBuffer buffer,
     int framesToSkip)
 {
-    // Account for the current frame.
-    ++framesToSkip;
     size_t frameCount = 0;
     while (frameCount < buffer.size() && !cursor->IsFinished()) {
         if (framesToSkip > 0) {

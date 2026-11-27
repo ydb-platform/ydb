@@ -622,12 +622,18 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         //switch off the node
         env.GetTenants().FreeNode("/dc-1/USER_0", nodeId);
 
-        //wait while datashards shutdown and wake up at second node
-        env.GetClient().WaitForTabletDown(&env.GetRuntime(), somedatashard, true, WaitTimeOut);
-        UNIT_ASSERT(env.GetClient().WaitForTabletAlive(&env.GetRuntime(), somedatashard, true, WaitTimeOut));
-
+        // The pipe can miss the transient shutdown, so wait for Hive to report the new leader.
+        const auto leaderDeadline = TInstant::Now() + WaitTimeOut;
         ui32 newNodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard);
+        while (newNodeId == Max<ui32>() || newNodeId == nodeId) {
+            UNIT_ASSERT_C(TInstant::Now() < leaderDeadline,
+                "Datashard " << somedatashard << " has not moved from node " << nodeId);
+            newNodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard);
+        }
+
+        UNIT_ASSERT_VALUES_UNEQUAL(newNodeId, nodeId);
         UNIT_ASSERT(env.GetTenants().IsActive("/dc-1/USER_0", newNodeId));
+        UNIT_ASSERT(env.GetClient().WaitForTabletAlive(&env.GetRuntime(), somedatashard, true, WaitTimeOut));
     }
 
     Y_UNIT_TEST(CoordinatorRunAtSubdomainNodeWhenAvailable) {

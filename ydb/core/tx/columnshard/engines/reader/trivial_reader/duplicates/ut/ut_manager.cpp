@@ -70,7 +70,7 @@ std::shared_ptr<arrow::Schema> GetTestPKSchema() {
 
 std::shared_ptr<arrow::RecordBatch> MakePKBatch(const std::vector<ui64>& keys) {
     arrow::UInt64Builder builder;
-    AFL_VERIFY(builder.AppendValues(reinterpret_cast<const uint64_t*>(keys.data()), static_cast<int64_t>(keys.size())).ok());
+    YDB_LOG_VERIFY(builder.AppendValues(reinterpret_cast<const uint64_t*>(keys.data()), static_cast<int64_t>(keys.size())).ok());
     auto array = builder.Finish().ValueOrDie();
     return arrow::RecordBatch::Make(GetTestPKSchema(), keys.size(), { array });
 }
@@ -235,7 +235,7 @@ public:
 
     void Handle(NConveyorComposite::TEvExecution::TEvNewTask::TPtr& ev) {
         auto task = ev->Get()->GetTask();
-        AFL_VERIFY(!!task);
+        YDB_LOG_VERIFY(!!task);
         task->Execute(nullptr, task);
     }
 };
@@ -255,7 +255,7 @@ void EnsureInlineDeduplicationConveyor(NActors::TTestActorRuntimeBase& runtime) 
 
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> MakeUInt64Column(const std::vector<ui64>& values) {
     arrow::UInt64Builder builder;
-    AFL_VERIFY(builder.AppendValues(reinterpret_cast<const uint64_t*>(values.data()), static_cast<int64_t>(values.size())).ok());
+    YDB_LOG_VERIFY(builder.AppendValues(reinterpret_cast<const uint64_t*>(values.data()), static_cast<int64_t>(values.size())).ok());
     return std::make_shared<NArrow::NAccessor::TTrivialArray>(builder.Finish().ValueOrDie());
 }
 
@@ -334,7 +334,7 @@ NActors::TActorId SetupDuplicateManager(NActors::TTestActorRuntimeBase& runtime,
         return !!result.ManagerId;
     };
     runtime.DispatchEvents(options, TDuration::Seconds(1));
-    AFL_VERIFY(result.ManagerId);
+    YDB_LOG_VERIFY(result.ManagerId);
     runtime.EnableScheduleForActor(result.ManagerId);
     return result.ManagerId;
 }
@@ -776,6 +776,12 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         auto actorId = SetupDuplicateManager(runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup);
         NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
 
+        const auto counters = setup.Context->GetCommonContext()->GetCounters().GetDuplicateFilteringCounters();
+        const auto hits = counters->GetDeriviative("DuplicateFiltering/Request/CacheHits");
+        const auto misses = counters->GetDeriviative("DuplicateFiltering/Request/CacheMisses");
+        const auto hitsBefore = hits->Val();
+        const auto missesBefore = misses->Val();
+
         auto sub1 = std::make_shared<TTestFilterSubscriber>();
         auto sub2 = std::make_shared<TTestFilterSubscriber>();
 
@@ -785,6 +791,8 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             return sub1->FilterReady || sub1->Failed;
         };
         runtime.DispatchEvents(opt1, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(hits->Val(), hitsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), missesBefore + 1);
 
         runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 2, 3, sub2));
         NActors::TDispatchOptions opt2;
@@ -792,6 +800,9 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             return sub2->FilterReady || sub2->Failed;
         };
         runtime.DispatchEvents(opt2, TDuration::Seconds(5));
+        // The first merge also built P2's filter; the second request consumes it without a new miss.
+        UNIT_ASSERT_VALUES_EQUAL(hits->Val(), hitsBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), missesBefore + 1);
 
         UNIT_ASSERT_C(sub1->FilterReady && !sub1->Failed, sub1->FailureReason);
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);

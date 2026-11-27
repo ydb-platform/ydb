@@ -47,6 +47,7 @@ SRCS(
     node_warden_resource.cpp
     node_warden_scrub.cpp
     node_warden_stat_aggr.cpp
+    node_warden_syncer.cpp
     node_warden_vdisk.cpp
 )
 
@@ -60,10 +61,12 @@ PEERDIR(
     ydb/core/blob_depot/agent
     ydb/core/blobstorage/base
     ydb/core/blobstorage/bridge/proxy
-    ydb/core/blobstorage/bridge/syncer
+    ydb/core/blobstorage/syncer
     ydb/core/blobstorage/common
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/ddisk
+    ydb/core/blobstorage/dsproxy
+    ydb/core/blobstorage/dsproxy/mock
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk
     ydb/core/blobstorage/vdisk/localrecovery

@@ -236,6 +236,8 @@ bool TParallelFileInputState::NextValue() {
             InnerState_->WaitPromise = NYT::NewPromise<void>();
         }
         CurrentInput_ = result.Input_;
+        Settings_->RecordReadPayload(result.Value_.Size());
+        Settings_->ReportReadStats(Spec_->JobStats_);
         CurrentReader_ = MakeIntrusive<TPayloadRPCReader>(std::move(result.Value_));
         MkqlReader_.SetReader(*CurrentReader_, 1, BlockSize_, ui32(OriginalIndexes_[CurrentInput_]), true, StateByReader_[CurrentInput_].CurrentRow, StateByReader_[CurrentInput_].CurrentRange);
         MkqlReader_.Next();

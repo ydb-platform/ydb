@@ -5,8 +5,33 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/system/mutex.h>
 #include <deque>
+#include <mutex>
 
 namespace NKikimr::NColumnShard {
+
+// Registered on the first Collect, so an unused histogram is not exported.
+class TLazyHistogram {
+private:
+    NMonitoring::THistogramPtr Histogram;
+    std::once_flag Registered;
+    ::NMonitoring::TDynamicCounterPtr Group;
+    TString Name;
+    NMonitoring::IHistogramCollectorPtr Collector;
+
+public:
+    TLazyHistogram(::NMonitoring::TDynamicCounterPtr group, TString name, NMonitoring::IHistogramCollectorPtr&& collector)
+        : Group(std::move(group))
+        , Name(std::move(name))
+        , Collector(std::move(collector)) {
+    }
+
+    void Collect(const double value) {
+        std::call_once(Registered, [this] {
+            Histogram = Group->GetHistogram(Name, std::move(Collector));
+        });
+        Histogram->Collect(value);
+    }
+};
 
 class TCommonCountersOwner {
 private:
@@ -14,6 +39,7 @@ private:
     const TString ModuleId;
     std::map<TString, TString> SignalKeys;
     TString NormalizeSignalName(const TString& name) const;
+    TString GetHistogramName(const TString& name) const;
 protected:
     std::shared_ptr<TValueAggregationAgent> GetValueAutoAggregations(const TString& name) const;
     std::shared_ptr<TValueAggregationClient> GetValueAutoAggregationsClient(const TString& name) const;
@@ -54,6 +80,7 @@ public:
         return TCommonCountersOwner(*this, param, value);
     }
     NMonitoring::THistogramPtr GetHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const;
+    TLazyHistogram GetLazyHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const;
 
     TCommonCountersOwner(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr);
 

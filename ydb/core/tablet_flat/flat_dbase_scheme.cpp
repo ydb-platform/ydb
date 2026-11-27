@@ -31,7 +31,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             auto &family = it.second;
 
             delta.AddFamily(table, it.first, family.Room);
-            delta.SetFamilyCompression(table, it.first, family.Codec);
+            delta.SetFamilyCompression(table, it.first, family.Codec, family.CodecLevel);
             delta.SetFamilyCacheMode(table, it.first, family.CacheMode);
             delta.SetFamilyCache(table, it.first, family.Cache);
             delta.SetFamilyBlobs(table, it.first, family.Small, family.Large);
@@ -221,12 +221,15 @@ TAlter& TAlter::AddColumnToKey(ui32 table, ui32 column)
     return ApplyLastRecord();
 }
 
-TAlter& TAlter::SetFamilyCompression(ui32 table, ui32 family, ECodec codec) {
+TAlter& TAlter::SetFamilyCompression(ui32 table, ui32 family, ECodec codec, ui32 codecLevel) {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::SetFamily);
     delta.SetTableId(table);
     delta.SetFamilyId(family);
     delta.SetCodec(ui32(codec));
+    if (codecLevel != 1) {
+        delta.SetCodecLevel(codecLevel);
+    }
 
     return ApplyLastRecord();
 }

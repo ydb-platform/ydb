@@ -18,6 +18,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     library/cpp/testing/gtest
+    library/cpp/yt/backtrace/absl_unwinder
     library/cpp/yt/backtrace/symbolizers/dwarf
     library/cpp/yt/backtrace/cursors/libunwind
 )

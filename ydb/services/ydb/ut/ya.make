@@ -31,6 +31,7 @@ SRCS(
     ydb_query_ut.cpp
     ydb_read_rows_ut.cpp
     ydb_relative_database_ut.cpp
+    ydb_relative_resource_ut.cpp
     ydb_relative_database_isolation_ut.cpp
     ydb_ldap_login_ut.cpp
     ydb_login_ut.cpp
@@ -40,39 +41,78 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
-    library/cpp/getopt
-    ydb/public/sdk/cpp/src/library/grpc/client
-    library/cpp/regex/pcre
-    library/cpp/svnversion
-    ydb/core/kqp/ut/common
-    ydb/core/testlib/pg
-    ydb/core/tx/datashard/ut_common
+    library/cpp/monlib/encode
+    library/cpp/monlib/encode/json
+    library/cpp/string_utils/base64
+    library/cpp/threading/future
+    ydb/core/base
+    ydb/core/client
+    ydb/core/cms/console
+    ydb/core/driver_lib/cli_config_base
+    ydb/core/formats/arrow
+    ydb/core/grpc_services
     ydb/core/grpc_services/base
-    ydb/core/testlib
-    ydb/core/security
-    ydb/core/security/ldap_auth_provider/test_utils
-    yql/essentials/minikql/dom
-    yql/essentials/minikql/jsonpath
-    ydb/library/testlib/service_mocks/ldap_mock
-    ydb/public/lib/experimental
-    ydb/public/lib/json_value
-    ydb/public/lib/yson_value
-    ydb/public/lib/ut_helpers
-    ydb/public/lib/ydb_cli/commands
     ydb/core/kqp/common/events
     ydb/core/kqp/common/shutdown
     ydb/core/kqp/common/simple
+    ydb/core/kqp/ut/common
+    ydb/core/node_whiteboard
+    ydb/core/path_aliasing
+    ydb/core/protos
+    ydb/core/protos/schemeshard
+    ydb/core/scheme
+    ydb/core/security
+    ydb/core/security/certificate_check/test_utils
+    ydb/core/security/ldap_auth_provider/test_utils
+    ydb/core/testlib
+    ydb/core/testlib/pg
+    ydb/core/tx/datashard
+    ydb/core/tx/datashard/ut_common
+    ydb/core/tx/scheme_cache
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
+    ydb/library/formats/arrow/switch
+    ydb/library/testlib/service_mocks/ldap_mock
+    ydb/library/ydb_issue/proto
+    ydb/public/api/grpc
+    ydb/public/api/grpc/draft
+    ydb/public/api/protos
+    ydb/public/lib/deprecated/kicli
+    ydb/public/lib/experimental
+    ydb/public/lib/json_value
+    ydb/public/lib/ut_helpers
+    ydb/public/lib/ydb_cli/commands
+    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/src/client/common_client/impl
+    ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/draft
-    ydb/public/sdk/cpp/src/client/coordination
+    ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/export
     ydb/public/sdk/cpp/src/client/extension_common
-    ydb/public/sdk/cpp/src/client/operation
-    ydb/public/sdk/cpp/src/client/query
-    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/impl/internal/retry
+    ydb/public/sdk/cpp/src/client/import
     ydb/public/sdk/cpp/src/client/monitoring
-    ydb/services/ydb
+    ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/params
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/rate_limiter
+    ydb/public/sdk/cpp/src/client/resources
+    ydb/public/sdk/cpp/src/client/result
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/types
+    ydb/public/sdk/cpp/src/client/value
+    ydb/public/sdk/cpp/src/library/grpc/client
+    ydb/public/sdk/cpp/src/library/issue
     ydb/services/keyvalue
+    yql/essentials/core/issue
+    yql/essentials/minikql/invoke_builtins
+    yql/essentials/public/issue
+    yql/essentials/public/issue/protos
+    yql/essentials/public/udf
 )
 
 YQL_LAST_ABI_VERSION()

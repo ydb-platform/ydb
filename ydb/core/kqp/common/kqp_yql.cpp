@@ -178,6 +178,8 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
             if (settings.GetSorting() == ERequestSorting::NONE) {
                 settings.SetSorting(ERequestSorting::ASC);
             }
+        } else if (name == TKqpReadTableSettings::RequireSortedReadSettingName) {
+            settings.RequireSortedRead = true;
         } else if (name == TKqpReadTableSettings::SequentialSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.SequentialInFlight = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
@@ -418,6 +420,10 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Name()
                     .Build(SortedSettingName)
                 .Done());
+    }
+
+    if (RequireSortedRead) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos).Name().Build(RequireSortedReadSettingName).Done());
     }
 
     if (SequentialInFlight) {
@@ -854,6 +860,13 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
         .Done()
     );
 
+    if (LookupJoinUniqueKeys) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build("LookupJoinUniqueKeys")
+            .Value<TCoAtom>().Build("true")
+            .Done());
+    }
+
     if (AllowNullKeysPrefixSize) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
@@ -949,6 +962,8 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
         if (name == StrategySettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.Strategy = getLookupStrategyType(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == "LookupJoinUniqueKeys") {
+            settings.LookupJoinUniqueKeys = FromString<bool>(tuple.Value().Cast<TCoAtom>().Value());
         } else if (name == AllowNullKeysSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.AllowNullKeysPrefixSize = FromString<ui32>(tuple.Value().Cast<TCoAtom>().Value());

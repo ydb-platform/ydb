@@ -45,23 +45,23 @@ namespace NTabletFlatExecutor {
     XX(GC_BLOBS_CREATED, "GcBlobsCreated") \
     XX(GC_BLOBS_DELETED, "GcBlobsDeleted") \
     XX(GC_BARRIERS_ACTIVE, "GcBarriersActive") \
-    XX(CACHE_FRESH_SIZE, "CacheFreshSize") \
-    XX(CACHE_STAGING_SIZE, "CacheStagingSize") \
-    XX(CACHE_WARM_SIZE, "CacheWarmSize") \
-    XX(CACHE_PINNED_SET, "CachePinned") \
-    XX(CACHE_PINNED_LOAD, "CachePinnedLoad") \
+    XX(CACHE_FRESH_SIZE_DEPRECATED, nullptr) \
+    XX(CACHE_STAGING_SIZE_DEPRECATED, nullptr) \
+    XX(CACHE_WARM_SIZE_DEPRECATED, nullptr) \
+    XX(CACHE_PINNED_SET_DEPRECATED, nullptr) \
+    XX(CACHE_PINNED_LOAD_DEPRECATED, nullptr) \
     XX(CACHE_TOTAL_COLLECTIONS, "CacheTotalCollections") \
     XX(CACHE_TOTAL_SHARED_BODY, "CacheTotalSharedBody") \
-    XX(CACHE_TOTAL_PINNED_BODY, "CacheTotalPinnedBody") \
-    XX(CACHE_TOTAL_EXCLUSIVE, "CacheTotalExclusive") \
-    XX(CACHE_TOTAL_SHARED_PENDING, "CacheTotalSharedPending") \
+    XX(CACHE_TOTAL_PINNED_BODY_DEPRECATED, nullptr) \
+    XX(CACHE_TOTAL_EXCLUSIVE_DEPRECATED, nullptr) \
+    XX(CACHE_TOTAL_SHARED_PENDING_DEPRECATED, nullptr) \
     XX(CACHE_TOTAL_STICKY, "CacheTotalSticky") \
     XX(USED_TABLET_MEMORY, "UsedTabletMemory") \
     XX(USED_TABLET_TX_MEMORY, "UsedTabletTxMemory") \
     XX(USED_DYNAMIC_TX_MEMORY, "UsedDynamicTxMemory") \
     XX(CONSUMED_STORAGE, "ConsumedStorage") \
     XX(CONSUMED_MEMORY, "ConsumedMemory") \
-    XX(COMPACTION_READ_IN_FLY, "CompactionReadInFly") \
+    XX(COMPACTION_READ_IN_FLY_DEPRECATED, nullptr) \
     XX(DB_FLAT_INDEX_BYTES, "DbFlatIndexBytes") \
     XX(DB_B_TREE_INDEX_BYTES, "DbBTreeIndexBytes") \
     XX(CACHE_TOTAL_USED, "CacheTotalUsed") \
@@ -116,19 +116,19 @@ namespace NTabletFlatExecutor {
     XX(TX_BYTES_READ, "TxReadBytes") \
     XX(TX_CACHE_HITS, "TxPageCacheHits") \
     XX(TX_CACHE_MISSES, "TxPageCacheMisses") \
-    XX(GC_DISCOVERED, "GcBlobsDiscovered") \
-    XX(GC_DISCARDED, "GcBlobsDiscarded") \
-    XX(GC_FORGOTTEN, "GcBlobsForgotten") \
-    XX(GC_KEEPSET, "GcKeepFlagsSet") \
-    XX(GC_NOTKEEPSET, "GcNotKeepFlagsSet") \
+    XX(GC_DISCOVERED_DEPRECATED, nullptr) \
+    XX(GC_DISCARDED_DEPRECATED, nullptr) \
+    XX(GC_FORGOTTEN_DEPRECATED, nullptr) \
+    XX(GC_KEEPSET_DEPRECATED, nullptr) \
+    XX(GC_NOTKEEPSET_DEPRECATED, nullptr) \
     XX(CONSUMED_CPU, "ConsumedCPU") \
-    XX(COMPACTION_READ_POSTPONED, "CompactionReadPostponed") \
-    XX(COMPACTION_READ_CACHE_HITS, "CompactionReadCacheHits") \
-    XX(COMPACTION_READ_CACHE_MISSES, "CompactionReadCacheMisses") \
-    XX(COMPACTION_READ_LOAD_BYTES, "CompactionReadLoadBytes") \
-    XX(COMPACTION_READ_LOAD_PAGES, "CompactionReadLoadPages") \
+    XX(COMPACTION_READ_POSTPONED_DEPRECATED, nullptr) \
+    XX(COMPACTION_READ_CACHE_HITS_DEPRECATED, nullptr) \
+    XX(COMPACTION_READ_CACHE_MISSES_DEPRECATED, nullptr) \
+    XX(COMPACTION_READ_LOAD_BYTES_DEPRECATED, nullptr) \
+    XX(COMPACTION_READ_LOAD_PAGES_DEPRECATED, nullptr) \
     XX(TX_BYTES_CACHED, "TxCachedBytes") \
-    XX(TX_BYTES_WASTED, "TxWastedBytes") \
+    XX(TX_BYTES_WASTED_DEPRECATED, nullptr) \
     XX(BACKUP_SNAPSHOT_ERRORS, "BackupSnapshotErrors") \
     XX(BACKUP_CHANGELOG_ERRORS, "BackupChangelogErrors") \
     XX(BACKUP_SNAPSHOT_BYTES_WRITTEN, "BackupSnapshotBytesWritten") \

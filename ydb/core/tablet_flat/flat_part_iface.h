@@ -3,7 +3,7 @@
 #include "flat_page_iface.h"
 #include "flat_sausage_solid.h"
 #include "flat_table_stats.h"
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include "util_basics.h"
 
 #include <ydb/library/actors/util/shared_data.h>
@@ -73,6 +73,9 @@ namespace NTable {
 
         virtual TResult Locate(const TMemTable*, ui64 ref, ui32 tag) = 0;
         virtual TResult Locate(const TPart*, ui64 ref, ELargeObj lob) = 0;
+
+        // The scan has finished the current key and no longer needs its history.
+        virtual void ReleaseRowHistory() {}
 
         /**
          * Returns a data page of the column group, or nullptr if it is not loaded yet

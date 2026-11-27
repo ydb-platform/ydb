@@ -150,6 +150,8 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RootWithStoragePools, 2, 1, true) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -189,6 +191,8 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RootWithStoragePoolsAndTable, 2, 1, false) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -886,6 +890,8 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DoNotLostDeletedTablets, 2, 1, false) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -956,6 +962,8 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(PathsAndShardsCountersSimultaneousAlterSubDomain, 2, 1, false) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

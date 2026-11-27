@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/library/ycloud/impl)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 IF (SANITIZER_TYPE)

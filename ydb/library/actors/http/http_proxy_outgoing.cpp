@@ -22,6 +22,7 @@ public:
     SocketAddressType Address;
     TString Destination;
     TActorId RequestOwner;
+    ui64 RequestCookie = 0;
     THttpOutgoingRequestPtr Request;
     THttpIncomingResponsePtr Response;
     TInstant LastActivity;
@@ -44,6 +45,7 @@ public:
         struct TPendingRequest {
             THttpOutgoingRequestPtr Request;
             TActorId RequestOwner;
+            ui64 RequestCookie = 0;
             uint32_t StreamId;
         };
         THashMap<uint32_t, TPendingRequest> PendingRequests;
@@ -81,11 +83,11 @@ public:
                     FlushH2Output(); // best-effort, may fail silently
                 }
                 for (auto& [streamId, pending] : H2->PendingRequests) {
-                    Send(pending.RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(pending.Request, nullptr, "Connection closed"));
+                    Send(pending.RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(pending.Request, nullptr, "Connection closed"), 0, pending.RequestCookie);
                 }
                 H2->PendingRequests.clear();
                 for (auto& event : H2->RequestQueue) {
-                    Send(event->Sender, new TEvHttpProxy::TEvHttpIncomingResponse(event->Get()->Request, nullptr, "Connection closed"));
+                    Send(event->Sender, new TEvHttpProxy::TEvHttpIncomingResponse(event->Get()->Request, nullptr, "Connection closed"), 0, event->Cookie);
                 }
                 H2->RequestQueue.clear();
             }
@@ -137,7 +139,7 @@ public:
                     {"socketName", GetSocketName()});
                 auto dataChunk = std::make_unique<TEvHttpProxy::TEvHttpIncomingDataChunk>(Response);
                 dataChunk->SetEndOfData();
-                Send(RequestOwner, dataChunk.release());
+                Send(RequestOwner, dataChunk.release(), 0, RequestCookie);
             } else {
                 YDB_LOG_DEBUG("->",
                     {"socketName", GetSocketName()},
@@ -145,7 +147,7 @@ public:
                 YDB_LOG_TRACE("Response:\n",
                     {"socketName", GetSocketName()},
                     {"obfuscatedData", Response->GetObfuscatedData()});
-                Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
+                Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response), 0, RequestCookie);
                 RequestOwner = TActorId();
             }
             THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
@@ -180,12 +182,12 @@ public:
             if (StreamState == EStreamState::Approved) {
                 auto dataChunk = std::make_unique<TEvHttpProxy::TEvHttpIncomingDataChunk>(Response);
                 dataChunk->Error = error ? error : "ConnectionClosed";
-                Send(RequestOwner, dataChunk.release());
+                Send(RequestOwner, dataChunk.release(), 0, RequestCookie);
             } else {
                 if (!error && Response && !Response->IsReady()) {
-                    Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, "ConnectionClosed")); // connection closed prematurely
+                    Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, "ConnectionClosed"), 0, RequestCookie); // connection closed prematurely
                 } else {
-                    Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, error));
+                    Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, error), 0, RequestCookie);
                 }
             }
             RequestOwner = TActorId();
@@ -216,6 +218,7 @@ protected:
         Destination = Request->GetDestination();
         Response = nullptr;
         RequestOwner = event->Sender;
+        RequestCookie = event->Cookie;
         if (event->Get()->Timeout) {
             ConnectionTimeout = event->Get()->Timeout;
         }
@@ -311,7 +314,7 @@ protected:
                             YDB_LOG_DEBUG("-> (incomplete)",
                                 {"socketName", GetSocketName()},
                                 {"responseDebugText", GetResponseDebugText()});
-                            Send(RequestOwner, new TEvHttpProxy::TEvHttpIncompleteIncomingResponse(Request, Response));
+                            Send(RequestOwner, new TEvHttpProxy::TEvHttpIncompleteIncomingResponse(Request, Response), 0, RequestCookie);
                             StreamState = EStreamState::Approved;
                             Response->SwitchToStreaming();
                         } else {
@@ -326,7 +329,7 @@ protected:
                             {"chunkLength", Response->ChunkLength});
                         auto dataChunk = std::make_unique<TEvHttpProxy::TEvHttpIncomingDataChunk>(Response);
                         dataChunk->SetData(Response->ExtractDataChunk());
-                        Send(RequestOwner, dataChunk.release());
+                        Send(RequestOwner, dataChunk.release(), 0, RequestCookie);
                         if (res == 0) {
                             // when we finish reading at the end of a chunk we could remove processed chunks to save memory and allocations very easily
                             Response->TruncateToHeaders();
@@ -427,7 +430,7 @@ protected:
 
         // Move the initial request to HTTP/2 flow
         if (Request) {
-            SendH2Request(std::move(Request), RequestOwner);
+            SendH2Request(std::move(Request), RequestOwner, RequestCookie);
             Request = nullptr;
             RequestOwner = {};
         }
@@ -479,7 +482,7 @@ protected:
             {"streamId", streamId},
             {"status", response->Status},
             {"message", response->Message});
-        Send(pending.RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(pending.Request, response));
+        Send(pending.RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(pending.Request, response), 0, pending.RequestCookie);
 
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(pending.Request, response));
         Send(Owner, sensors.Release());
@@ -487,7 +490,7 @@ protected:
         H2->PendingRequests.erase(it);
     }
 
-    void SendH2Request(THttpOutgoingRequestPtr request, TActorId requestOwner) {
+    void SendH2Request(THttpOutgoingRequestPtr request, TActorId requestOwner, ui64 requestCookie) {
         TString method, path, authority, scheme;
         TVector<std::pair<TString, TString>> headers;
         TString body;
@@ -504,6 +507,7 @@ protected:
         typename THttp2State::TPendingRequest pending;
         pending.Request = request;
         pending.RequestOwner = requestOwner;
+        pending.RequestCookie = requestCookie;
         pending.StreamId = streamId;
         H2->PendingRequests[streamId] = std::move(pending);
     }
@@ -691,6 +695,7 @@ protected:
     void HandleFailed(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
         Request = std::move(event->Get()->Request);
         RequestOwner = event->Sender;
+        RequestCookie = event->Cookie;
         ReplyErrorAndPassAway("Failed");
     }
 
@@ -763,7 +768,7 @@ protected:
 
     void HandleConnectedHttp2(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
         LastActivity = NActors::TActivationContext::Now();
-        SendH2Request(std::move(event->Get()->Request), event->Sender);
+        SendH2Request(std::move(event->Get()->Request), event->Sender, event->Cookie);
         if (!FlushH2Output()) {
             PassAway();
         }

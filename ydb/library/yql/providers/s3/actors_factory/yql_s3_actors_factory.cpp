@@ -31,7 +31,8 @@ public:
 
     void RegisterS3ReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy, const TS3ReadActorFactoryConfig& factoryConfig = {},
-        ::NMonitoring::TDynamicCounterPtr counters = nullptr, bool allowLocalFiles = false) override {
+        ::NMonitoring::TDynamicCounterPtr counters = nullptr, bool allowLocalFiles = false,
+        ::NMonitoring::TDynamicCounterPtr cpuCounters = nullptr) override {
         Y_UNUSED(factory);
         Y_UNUSED(credentialsFactory);
         Y_UNUSED(gateway);
@@ -39,6 +40,7 @@ public:
         Y_UNUSED(factoryConfig);
         Y_UNUSED(counters);
         Y_UNUSED(allowLocalFiles);
+        Y_UNUSED(cpuCounters);
     }
 };
 

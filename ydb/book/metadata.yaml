@@ -1,0 +1,77 @@
+title: "YDB: устройство распределённой базы данных"
+author: "Cthulhu"
+date: "2026. Версия 1.8"
+lang: ru
+
+documentclass: report
+classoption:
+  - oneside
+fontsize: 12pt
+geometry: "a4paper, left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm"
+
+mainfont: "PT Serif"
+sansfont: "PT Sans"
+monofont: "PT Mono"
+mathfont: "STIX Two Math"
+
+toc: true
+toc-depth: 3
+numbersections: false
+colorlinks: true
+hyperrefoptions:
+  - hypertexnames=false
+
+header-includes:
+  - |
+    \usepackage{xcolor}
+    \usepackage{framed}
+    \usepackage{fancyhdr}
+    \pagestyle{fancy}
+    \fancyhf{}
+    \fancyhead[L]{\leftmark}
+    \fancyhead[R]{\thepage}
+    \fancyfoot{}
+    \renewcommand{\headrulewidth}{0.4pt}
+
+    \usepackage{graphicx}
+    \usepackage{float}
+    \usepackage{adjustbox}
+    \usepackage{flafter}
+    \usepackage[section]{placeins}
+    \floatplacement{figure}{htbp}
+    \renewcommand{\topfraction}{0.95}
+    \renewcommand{\bottomfraction}{0.85}
+    \renewcommand{\textfraction}{0.05}
+    \renewcommand{\floatpagefraction}{0.8}
+    \setlength{\textfloatsep}{14pt plus 2pt minus 2pt}
+    \setlength{\intextsep}{12pt plus 2pt minus 2pt}
+    \renewcommand{\pandocbounded}[1]{%
+      \adjustbox{width=\linewidth, max height=0.95\textheight, keepaspectratio}{#1}%
+    }
+
+    \usepackage{fvextra}
+    \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\},fontsize=\small}
+
+    \usepackage{indentfirst}
+    \makeatletter
+    \setlength{\@fptop}{0pt}
+    \setlength{\@fpsep}{20pt plus 2pt minus 2pt}
+    \setlength{\@fpbot}{0pt plus 1fil}
+    \renewcommand{\@pnumwidth}{2em}
+    \renewcommand{\@tocrmarg}{3em}
+    \renewcommand{\@makechapterhead}[1]{%
+      \vspace*{30pt}%
+      {\raggedright\hspace{1.25cm}\huge\bfseries #1\par\nobreak\vskip 20pt}%
+      \@afterindenttrue}
+    \renewcommand{\@makeschapterhead}[1]{%
+      \vspace*{30pt}%
+      {\raggedright\hspace{1.25cm}\huge\bfseries #1\par\nobreak\vskip 20pt}%
+      \@afterindenttrue}
+    \renewcommand{\section}{\@startsection{section}{1}{1.25cm}{-3.5ex plus -1ex minus -.2ex}{2.3ex plus .2ex}{\Large\bfseries}}
+    \renewcommand{\subsection}{\@startsection{subsection}{2}{1.25cm}{-3.25ex plus -1ex minus -.2ex}{1.5ex plus .2ex}{\large\bfseries}}
+    \renewcommand{\subsubsection}{\@startsection{subsubsection}{3}{1.25cm}{-3.25ex plus -1ex minus -.2ex}{1.5ex plus .2ex}{\normalsize\bfseries}}
+    \makeatother
+    \tolerance=2000
+    \emergencystretch=3em
+    \setlength{\parskip}{0.3em}
+    \setlength{\parindent}{1.25cm}

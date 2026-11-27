@@ -1,0 +1,35 @@
+Adapt the lazy SIGPIPE handling from upstream commit
+9703dabd77b5fbfda26944462afcc84242eaa486 to curl 8.17.0.
+https://github.com/curl/curl/issues/20326
+
+Keep the 8.17.0 shutdown and socket state machines unchanged. Both admin
+call sites are no-ops when the shutdown list is empty, so avoid applying
+its default NOSIGNAL=0 in that case. Real transfers and pending shutdowns
+retain the existing signal protection and restoration.
+
+--- a/lib/multi.c
++++ b/lib/multi.c
+@@ -2805,8 +2805,12 @@
+     while(Curl_uint_bset_next(&multi->process, mid, &mid));
+   }
+ 
+-  sigpipe_apply(multi->admin, &pipe_st);
+-  Curl_cshutdn_perform(&multi->cshutdn, multi->admin, CURL_SOCKET_TIMEOUT);
++  /* Applying SIGPIPE settings is only needed for actual shutdown work.
++   * The admin handle defaults to NOSIGNAL=0 before the first transfer. */
++  if(Curl_cshutdn_count(multi->admin)) {
++    sigpipe_apply(multi->admin, &pipe_st);
++    Curl_cshutdn_perform(&multi->cshutdn, multi->admin, CURL_SOCKET_TIMEOUT);
++  }
+   sigpipe_restore(&pipe_st);
+ 
+   if(multi_ischanged(m, TRUE))
+@@ -3204,7 +3208,7 @@
+   }
+ 
+ out:
+-  if(mrc.run_cpool) {
++  if(mrc.run_cpool && Curl_cshutdn_count(multi->admin)) {
+     sigpipe_apply(multi->admin, &mrc.pipe_st);
+     Curl_cshutdn_perform(&multi->cshutdn, multi->admin, s);
+   }

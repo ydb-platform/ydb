@@ -278,13 +278,12 @@ private:
             HFunc(TEvCms::TEvRemoveWalleTask, Handle);
             // public api begin
             HFunc(TEvCms::TEvDDiskInfoListRequest, Handle);
-            HFunc(TEvCms::TEvDDiskInfoGetRequest, Handle);
+            HFunc(TEvCms::TEvDDiskInfoGetRequest, HandleDDiskInfoGet);
             // Route through EnqueueRequest (like EvClusterStateRequest) so that
             // a fresh ClusterInfo collection is triggered before the request is
             // actually processed -- otherwise the DDisk viewer (which relies on
-            // ClusterInfo for availability/state via IsDDiskAvailable() /
-            // GetDDiskStateName()) could serve up to a minute of stale PDisk
-            // state on every page load.
+            // ClusterInfo for PDisk and node state) could serve up to a minute
+            // of stale state on every page load.
             FFunc(TEvCms::EvDDiskTabletListRequest, EnqueueRequest);
             FFunc(TEvCms::EvDDiskDiskListRequest, EnqueueRequest);
             HFunc(TEvCms::TEvListClusterNodesRequest, Handle);
@@ -395,6 +394,13 @@ private:
         const TNodeInfo &node,
         TErrorInfo &error,
         const TActorContext &ctx) const;
+    bool CheckStateStorageRingGroup(ui32 ringGroupId,
+        ui32 currentRing,
+        const TActionOptions& options,
+        TInstant now,
+        TDuration duration,
+        TInstant defaultDeadline,
+        TErrorInfo& error) const;
     void AcceptPermissions(NKikimrCms::TPermissionResponse &resp, const TString &requestId,
         const TString &owner, i32 priority, const TActorContext &ctx, bool check = false);
     void ScheduleUpdateClusterInfo(const TActorContext &ctx, bool now = false);
@@ -453,10 +459,9 @@ private:
 
     void Handle(TEvCms::TEvDDiskInfoListRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr &ev, const TActorContext &ctx);
+    void HandleDDiskInfoGet(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCms::TEvDDiskTabletListRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvDDiskDiskListRequest::TPtr &ev, const TActorContext &ctx);
-    bool IsDDiskAvailable(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
-    TString GetDDiskStateName(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr &ev, const TActorContext &ctx);

@@ -27,9 +27,6 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/datastreams/codes/datastreams_codes.h>
 
-#include <ydb/services/lib/sharding/sharding.h>
-#include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
-
 #include <ydb/library/http_proxy/error/error.h>
 
 using namespace NActors;

@@ -146,9 +146,9 @@ public:
     };
 
     void FullValidation() const {
-        AFL_VERIFY(PathId);
-        AFL_VERIFY(PortionId);
-        AFL_VERIFY(SchemaVersion);
+        YDB_LOG_VERIFY(PathId);
+        YDB_LOG_VERIFY(PortionId);
+        YDB_LOG_VERIFY(SchemaVersion);
         Meta.FullValidation();
     }
 
@@ -225,7 +225,7 @@ public:
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
-        AFL_VERIFY(!HasRemoveSnapshot());
+        YDB_LOG_VERIFY(!HasRemoveSnapshot());
         RemoveSnapshot.Set(snap);
     }
 
@@ -390,7 +390,7 @@ public:
     }
 
     const TSnapshot& GetRemoveSnapshotVerified() const {
-        AFL_VERIFY(HasRemoveSnapshot());
+        YDB_LOG_VERIFY(HasRemoveSnapshot());
         return RemoveSnapshot.Get();
     }
 
@@ -407,7 +407,7 @@ public:
     }
 
     ui64 GetSchemaVersionVerified() const {
-        AFL_VERIFY(SchemaVersion);
+        YDB_LOG_VERIFY(SchemaVersion);
         return SchemaVersion;
     }
 
@@ -443,6 +443,12 @@ public:
 
     ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
 
+    // schema actualization: the stored version is below the index's threshold (not the resolved schema's version: with
+    // schema collapsing a collapsed version resolves to its surviving successor)
+    bool NeedSchemeActualization(const TVersionedIndex& index) const;
+    // the schema a rewrite of the portion writes: the latest when the portion needs actualization, its own otherwise
+    ISnapshotSchema::TPtr GetRewriteSchema(const TVersionedIndex& index) const;
+
     ui32 GetRecordsCount() const {
         return GetMeta().GetRecordsCount();
     }
@@ -457,6 +463,8 @@ public:
 
     ui64 GetColumnRawBytes() const;
     ui64 GetColumnBlobBytes() const;
+
+    bool HasBlobsInBlobStorage(const TIndexInfo& indexInfo) const;
 
     ui64 GetTotalBlobBytes() const noexcept {
         return GetIndexBlobBytes() + GetColumnBlobBytes();

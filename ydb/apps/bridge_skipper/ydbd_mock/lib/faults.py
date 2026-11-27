@@ -26,6 +26,9 @@ class NodeFaults:
     blame_storage: typing.Set[str] = dataclasses.field(default_factory=set)
     blame_connectivity: typing.Set[str] = dataclasses.field(default_factory=set)
     self_check: typing.Optional[str] = None
+    healthcheck_status: typing.Optional[str] = None   # YELLOW, ORANGE or RED: append the server's size issue; RED also drops VDISK issues
+    binding_flap: bool = False              # connectivity reports flap binding_in_progress while global quorum is lost
+    binding_flap_duty: float = 0.625        # fraction of each flap period spent binding; 1.0 = every report
     failpoints: typing.Dict[str, dict] = dataclasses.field(default_factory=dict)
     response_overrides: typing.Dict[str, dict] = dataclasses.field(default_factory=dict)
     rpc_overrides: typing.Dict[str, dict] = dataclasses.field(default_factory=dict)
@@ -44,6 +47,9 @@ class NodeFaults:
         self.blame_storage = set()
         self.blame_connectivity = set()
         self.self_check = None
+        self.healthcheck_status = None
+        self.binding_flap = False
+        self.binding_flap_duty = 0.625
         self.failpoints.clear()
         self.response_overrides.clear()
         self.rpc_overrides.clear()
@@ -70,6 +76,12 @@ class NodeFaults:
             out["connectivity"] = sorted(self.blame_connectivity)
         if self.self_check is not None:
             out["self_check"] = self.self_check
+        if self.healthcheck_status is not None:
+            out["healthcheck_status"] = self.healthcheck_status
+        if self.binding_flap:
+            out["binding_flap"] = True
+            if self.binding_flap_duty != 0.625:
+                out["binding_flap_duty"] = self.binding_flap_duty
         if self.failpoints:
             out["failpoints"] = copy.deepcopy(list(self.failpoints.values()))
         if self.response_overrides:

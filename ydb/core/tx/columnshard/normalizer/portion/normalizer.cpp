@@ -25,8 +25,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    NColumnShard::TTablesManager tablesManager(
-        controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), 0);
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), controller.GetDataAccessorsManager(),
+        std::make_shared<TShardDataStats>(controller.GetStoragesManager(), 0), 0);
     if (!tablesManager.InitFromDB(db, nullptr)) {
         YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
             {"normalizer", "TPortionsNormalizer"},
@@ -102,9 +102,9 @@ TConclusionStatus TPortionsNormalizerBase::InitPortions(
     if (!wrapper.LoadPortions([&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo =
                 portion->GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
-            AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
+            YDB_LOG_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
             const ui64 portionId = portion->GetPortionIdVerified();
-            AFL_VERIFY(constructors.emplace(portionId, TPortionAccessorConstructor(std::move(portion))).second);
+            YDB_LOG_VERIFY(constructors.emplace(portionId, TPortionAccessorConstructor(std::move(portion))).second);
             return true;
         })) {
         return TConclusionStatus::Fail("repeated read db");
@@ -124,7 +124,7 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
     while (!rowset.EndOfSet()) {
         NOlap::TColumnChunkLoadContextV2 chunkLoadContext(rowset, DsGroupSelector);
         auto it = portions.find(chunkLoadContext.GetPortionId());
-        AFL_VERIFY(it != portions.end());
+        YDB_LOG_VERIFY(it != portions.end());
         it->second.AddBuildInfo(chunkLoadContext.CreateBuildInfo());
 
         if (!rowset.Next()) {
@@ -145,7 +145,7 @@ TConclusionStatus TPortionsNormalizerBase::InitIndexes(NIceDb::TNiceDb& db, THas
         NOlap::TIndexChunkLoadContext chunkLoadContext(rowset, &DsGroupSelector);
 
         auto it = portions.find(rowset.GetValue<IndexIndexes::PortionId>());
-        AFL_VERIFY(it != portions.end());
+        YDB_LOG_VERIFY(it != portions.end());
         it->second.LoadIndex(std::move(chunkLoadContext));
 
         if (!rowset.Next()) {

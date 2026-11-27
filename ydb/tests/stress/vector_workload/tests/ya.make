@@ -13,7 +13,6 @@ REQUIREMENTS(ram:32 cpu:4)
 TAG(ya:external)
 
 SIZE(LARGE)
-TAG(ya:fat)
 TIMEOUT(1200)
 
 DEPENDS(
@@ -25,5 +24,7 @@ PEERDIR(
     ydb/tests/library
     ydb/tests/library/stress
 )
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 END()

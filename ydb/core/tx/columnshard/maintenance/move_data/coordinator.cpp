@@ -1,4 +1,5 @@
-#include "move_data.h"
+#include "coordinator.h"
+#include "scan.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "scan.h"
+#include "events.h"
 
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/queue_sizes.h>
 

@@ -25,7 +25,7 @@
 #include "loading/deferred_portion_loader.h"
 #include "local_db_backup/events.h"
 #include "maintenance/cut_history/find_empty_history_intervals.h"
-#include "maintenance/move_data/scan.h"
+#include "maintenance/move_data/events.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"

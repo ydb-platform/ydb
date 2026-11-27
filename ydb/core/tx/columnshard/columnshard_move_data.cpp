@@ -1,6 +1,6 @@
 #include "columnshard_impl.h"
 
-#include "maintenance/move_data/move_data.h"
+#include "maintenance/move_data/coordinator.h"
 
 #include <util/generic/algorithm.h>
 

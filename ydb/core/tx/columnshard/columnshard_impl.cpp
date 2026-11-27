@@ -6,7 +6,7 @@
 #include "blobs_action/bs/storage.h"
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
-#include "maintenance/move_data/move_data.h"
+#include "maintenance/move_data/coordinator.h"
 #include "resource_subscriber/task.h"
 
 #ifndef KIKIMR_DISABLE_S3_OPS

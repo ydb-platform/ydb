@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    move_data.cpp
+    coordinator.cpp
     scan.cpp
 )
 

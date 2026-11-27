@@ -6,7 +6,7 @@
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor2.h"
 #include "hooks/abstract/abstract.h"
-#include "maintenance/move_data/move_data.h"
+#include "maintenance/move_data/coordinator.h"
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
 

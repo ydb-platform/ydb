@@ -27,8 +27,8 @@ public:
         , Header(JoinSeq(",", columns) + "\n")
         , Input(OpenOwnedMaybeCompressedInput(MakeHolder<TFileInput>(path)))
     {
-        if (State && State->GetState().contains(Source)) {
-            const auto resume = State->GetState().at(Source).Position;
+        if (State) {
+            const auto resume = State->GetPosition(Source).value_or(0);
             while (Position < resume) {
                 const auto skipped = Input->Skip(resume - Position);
                 Y_ENSURE(skipped, "IMDb CSV file is shorter than its saved import position: " << Source);

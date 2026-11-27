@@ -32,6 +32,19 @@ void TGeneratorStateProcessor::FinishPortion(const TString& source, ui64 from, u
     }
 }
 
+TGeneratorStateProcessor::TState TGeneratorStateProcessor::GetState() const {
+    auto g = Guard(Lock);
+    return State;
+}
+
+std::optional<ui64> TGeneratorStateProcessor::GetPosition(const TString& source) const {
+    auto g = Guard(Lock);
+    if (const auto it = State.find(source); it != State.end()) {
+        return it->second.Position;
+    }
+    return std::nullopt;
+}
+
 bool TGeneratorStateProcessor::TSourceStateImpl::FinishPortion(ui64 from, ui64 size, ui64& position) {
     auto i = FinishedPortions.begin();
     while (i != FinishedPortions.end() && i->first < from) {

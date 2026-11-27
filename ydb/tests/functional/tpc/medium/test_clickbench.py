@@ -1,6 +1,7 @@
 import ydb.tests.olap.load.lib.clickbench as clickbench
 import pytest
 import yatest.common
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 
@@ -60,3 +61,24 @@ class TestClickbenchParallel(SharedClickbench, clickbench.TestClickbenchParallel
 class TestClickbenchPg(SharedClickbench, clickbench.TestClickbenchPg):
     verify_data: bool = False
     iterations: int = 1
+
+
+class TestClickbenchFileImport:
+    def test_rejects_unsupported_file(self, clickbench_cluster, tmp_path):
+        input_dir = tmp_path / 'input'
+        input_dir.mkdir()
+        (input_dir / 'hits.csv').symlink_to(yatest.common.source_path('ydb/tests/functional/clickbench/data/hits.csv'))
+        (input_dir / 'README').write_text('Not benchmark data')
+
+        result = yatest.common.execute(
+            YdbCliHelper.get_cli_command() + [
+                'workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits',
+                'import', 'files', '--input', str(input_dir), '--state', str(tmp_path / 'checkpoint.json'),
+            ],
+            check_exit_code=False,
+            timeout=30,
+        )
+
+        assert result.returncode != 0
+        assert 'Unsupported import file:' in result.stderr.decode()
+        assert 'README' in result.stderr.decode()

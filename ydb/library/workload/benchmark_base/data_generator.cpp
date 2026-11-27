@@ -7,6 +7,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
 
+#include <util/generic/yexception.h>
 #include <util/stream/file.h>
 
 namespace NYdbWorkload {
@@ -98,17 +99,17 @@ public:
         ui64 readBytes = 0;
         with_lock(Lock) {
             TString line;
-            if (Owner.Owner.StateProcessor && Owner.Owner.StateProcessor->GetState().contains(Path)) {
-                auto position = Owner.Owner.StateProcessor->GetState().at(Path).Position;
+            const auto position = Owner.Owner.StateProcessor ? Owner.Owner.StateProcessor->GetPosition(Path) : std::nullopt;
+            if (position) {
                 switch (Owner.SizeUnit) {
                     case EPortionSizeUnit::Byte:
-                        while(position > ReadBytes) {
-                            ReadBytes += Decompressor->Skip(position - ReadBytes);
+                        while (*position > ReadBytes) {
+                            ReadBytes += Decompressor->Skip(*position - ReadBytes);
                         }
                         break;
                     case EPortionSizeUnit::Line:
                         TString line;
-                        while (position > ReadLines) {
+                        while (*position > ReadLines) {
                             if (auto read = Decompressor->ReadLine(line)) {
                                 ReadBytes += read;
                             } else {
@@ -210,8 +211,9 @@ public:
         std::shared_ptr<arrow::RecordBatch> batchToSend;
         ui64 position = 0;
         with_lock(Lock) {
-            if (Owner.Owner.StateProcessor && Owner.Owner.StateProcessor->GetState().contains(Path)) {
-                auto positionInState = Owner.Owner.StateProcessor->GetState().at(Path).Position;
+            const auto savedPosition = Owner.Owner.StateProcessor ? Owner.Owner.StateProcessor->GetPosition(Path) : std::nullopt;
+            if (savedPosition) {
+                const auto positionInState = *savedPosition;
                 if (positionInState >= Size) {
                     return {};
                 }
@@ -269,6 +271,9 @@ private:
 
 void TWorkloadDataInitializerBase::TDataGenerator::AddFile(const TFsPath& path) {
     const auto name = path.GetName();
+    if (!path.IsFile()) {
+        throw yexception() << "Expected an import file: " << path;
+    }
     if (name.EndsWith(".tsv") || name.EndsWith(".tsv.gz")) {
         Files.push_back(MakeIntrusive<TTsvFile>(*this, path));
     } else if (name.EndsWith(".csv") || name.EndsWith(".csv.gz")) {
@@ -277,6 +282,8 @@ void TWorkloadDataInitializerBase::TDataGenerator::AddFile(const TFsPath& path) 
     } else if (name.EndsWith(".parquet")) {
         Files.push_back(MakeIntrusive<TParquetFile>(*this, path));
 #endif
+    } else {
+        throw yexception() << "Unsupported import file: " << path;
     }
     ++FilesCount;
 }

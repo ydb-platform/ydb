@@ -21,6 +21,17 @@ Y_UNIT_TEST_SUITE(DataGeneratorState) {
         UNIT_ASSERT_EQUAL(proccessor.GetState().at("test1").Position, 60);
     };
 
+    Y_UNIT_TEST(SnapshotDoesNotChangeAfterUpdate) {
+        NYdbWorkload::TGeneratorStateProcessor processor(TFsPath{}, true);
+        UNIT_ASSERT(!processor.GetPosition("file"));
+        processor.FinishPortion("file", 0, 10);
+        const auto& snapshot = processor.GetState();
+        processor.FinishPortion("file", 10, 20);
+
+        UNIT_ASSERT_EQUAL(snapshot.at("file").Position, 10);
+        UNIT_ASSERT_EQUAL(processor.GetPosition("file").value(), 30);
+    }
+
     Y_UNIT_TEST(SaveLoad) {
         TFsPath path("test_state.json");
         path.DeleteIfExists();

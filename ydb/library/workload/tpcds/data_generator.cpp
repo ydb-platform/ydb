@@ -123,8 +123,8 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(c
         ++rowsCount;
     }
     if (owner.StateProcessor) {
-        if (const auto* state = MapFindPtr(Owner.StateProcessor->GetState(), tdef->name)) {
-            StartPosition = state->Position;
+        if (const auto position = Owner.StateProcessor->GetPosition(tdef->name)) {
+            StartPosition = *position;
 
             //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
             while (StartPosition && !allowedModules.contains((1 + StartPosition) % 6)) {

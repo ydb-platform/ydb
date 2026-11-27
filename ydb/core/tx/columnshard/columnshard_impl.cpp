@@ -2076,6 +2076,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvDataShard::TEvCancelBackup, Handle);
         HFunc(TEvDataShard::TEvCancelRestore, Handle);
         HFunc(TEvDataShard::TEvCompactTable, Handle);
+        HFunc(TEvTablet::TEvMoveData, Handle);
 
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);

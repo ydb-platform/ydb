@@ -36,7 +36,6 @@ ydb/services/persqueue_v1/actors/schema/topic/ut SchemaOps_TopicAPI.DescribeRepl
 ydb/services/persqueue_v1/actors/schema/topic/ut unittest.sole chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-True]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
-ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/functional/audit test_canonical_records.py.test_create_drop_and_alter_database
 ydb/tests/functional/config test_distconf.py.TestDistConfWithAuth.test_auth_v2_initialization
 ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHealParallelCall2.test

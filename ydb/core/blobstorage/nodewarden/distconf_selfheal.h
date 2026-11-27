@@ -9,6 +9,20 @@ namespace NKikimr::NStorage {
     std::optional<ui32> ChooseStateStorageSelfHealSource(const NKikimrConfig::TStateStorageConfig& config,
         ui32 pileId, const std::unordered_map<ui32, ui32>& nodeStates);
 
+    class TStateStorageSelfHealStep {
+        const TDuration WaitForConfigStep;
+        ui64 Cookie = 0;
+        bool Committed = false;
+
+    public:
+        explicit TStateStorageSelfHealStep(TDuration waitForConfigStep);
+        void Send(const TActorIdentity& self, std::unique_ptr<TEvNodeConfigInvokeOnRoot> request);
+        void OnCommit(const TActorIdentity& self);
+
+        bool IsCurrent(ui64 cookie) const { return cookie == Cookie; }
+        bool IsCommitted() const { return Committed; }
+    };
+
     class TStateStorageSelfhealActor : public TActorBootstrapped<TStateStorageSelfhealActor> {
         enum EReconfigurationStep {
             NONE = 0,
@@ -20,18 +34,17 @@ namespace NKikimr::NStorage {
             INVALID_RECONFIGURATION_STEP
         };
 
-        const TDuration WaitForConfigStep;
+        TStateStorageSelfHealStep Step;
         EReconfigurationStep StateStorageReconfigurationStep;
         const TActorId Sender;
         const ui64 Cookie;
         NKikimrBlobStorage::TStateStorageConfig CurrentConfig;
         NKikimrBlobStorage::TStateStorageConfig TargetConfig;
-        bool AllowNextStep = true;
         const bool PrepareCurrentConfig;
 
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
-        void HandleWakeup();
+        void HandleWakeup(TEvents::TEvWakeup::TPtr& ev);
         void Finish(TResult::EStatus result, const TString& errorReason = "");
         void RequestChangeStateStorage();
         void PassAway();
@@ -49,10 +62,9 @@ namespace NKikimr::NStorage {
     };
 
     class TStateStorageReassignNodeSelfhealActor : public TActorBootstrapped<TStateStorageReassignNodeSelfhealActor> {
-        const TDuration WaitForConfigStep;
+        TStateStorageSelfHealStep Step;
         const TActorId Sender;
         const ui64 Cookie;
-        bool AllowNextStep = false;
         bool FinishReassign = false;
         ui32 NodeFrom;
         ui32 NodeTo;
@@ -62,7 +74,7 @@ namespace NKikimr::NStorage {
 
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
-        void HandleWakeup();
+        void HandleWakeup(TEvents::TEvWakeup::TPtr& ev);
         void Finish(TResult::EStatus result, const TString& errorReason = "");
         void RequestChangeStateStorage(bool disable);
         void HandleResult(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev);

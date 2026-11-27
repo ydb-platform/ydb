@@ -1,14 +1,14 @@
 #pragma once
 
 #include "kqp_compute_actor.h"
+#include "kqp_schedulable_compute_actor.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_actor.h>
-#include <ydb/core/sys_view/scan.h>
+#include <ydb/core/sys_view/scan_factory/scan_factory.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 

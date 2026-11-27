@@ -181,6 +181,10 @@ namespace NPQ {
     class IPersQueueMirrorReaderFactory;
 }
 
+namespace NSysView {
+    class ISystemViewScanFactory;
+}
+
 namespace NSchemeShard {
     class IOperationFactory;
 }
@@ -224,6 +228,7 @@ struct TAppData {
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
     const NYamlConfig::IConfigSwissKnife *ConfigSwissKnife = nullptr;
+    const NSysView::ISystemViewScanFactory* SystemViewScanFactory = nullptr;
 
     using TPathNormalizerPtr = std::shared_ptr<const NPathAliasing::TPathNormalizer>;
     // Publish immutable snapshots without changing their ownership type in consumers.

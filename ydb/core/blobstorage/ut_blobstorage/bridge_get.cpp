@@ -1,10 +1,12 @@
 #include "bridge_common.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <span>
 
 using NBridgeTest::GetBridgedLocation;
+using NBridgeTest::MakeLocalPileFirstSettings;
 using NBridgeTest::PutToPileGroup;
 
 namespace {
@@ -139,20 +141,6 @@ namespace {
         }
     }
 
-    TEnvironmentSetup::TSettings MakeLocalPileFirstSettings(bool enabled = true, ui32 numPiles = 2) {
-        TFeatureFlags featureFlags;
-        featureFlags.SetEnableBridgeProxyLocalPileFirstGet(enabled);
-        return {
-            .NodeCount = 8 * numPiles,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetBridgedLocation,
-            .FeatureFlags = featureFlags,
-            .SelfManagementConfig = true,
-            .NumPiles = numPiles,
-            .AutomaticBootstrap = true,
-        };
-    }
-
     void CheckLocalPileFirstGet(bool localHasBlob, bool mustRestoreFirst = false, bool isIndexOnly = false) {
         TEnvironmentSetup env{MakeLocalPileFirstSettings()};
         const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
@@ -220,6 +208,57 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(BridgeGet) {
+
+    Y_UNIT_TEST_TWIN(TrustedFullReplyPreservesObservedFlags, doNotKeep) {
+        TEnvironmentSetup env{MakeLocalPileFirstSettings(false)};
+        const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto pileGroups = NBridgeTest::GetPileGroups(env, groupId);
+        const TActorId bridgeProxy = GetBridgeProxyActor(env, groupId);
+        const TString data = "blob from trusted pile";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        PutToPileGroup(env, pileGroups[0], 1, id, data, doNotKeep);
+
+        std::unique_ptr<IEventHandle> held;
+        ui32 heldNodeId = 0;
+        bool missingReplied = false;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvBlobStorage::EvGetResult || !ev->HasEvent() ||
+                    ev->GetRecipientRewrite() != bridgeProxy) {
+                return true;
+            }
+            auto& result = *ev->Get<TEvBlobStorage::TEvGetResult>();
+            UNIT_ASSERT_VALUES_EQUAL(result.ResponseSz, 1);
+            auto& response = result.Responses[0];
+            UNIT_ASSERT_VALUES_EQUAL(response.Id, id);
+            if (result.GroupId == pileGroups[0]) {
+                UNIT_ASSERT_VALUES_EQUAL(response.Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(response.Keep, doNotKeep);
+                UNIT_ASSERT(!response.DoNotKeep);
+                UNIT_ASSERT(!held);
+                held = std::move(ev);
+                heldNodeId = nodeId;
+                return false;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GroupId, pileGroups[1]);
+            UNIT_ASSERT_VALUES_EQUAL(response.Status, NKikimrProto::NODATA);
+            response.Keep = !doNotKeep;
+            response.DoNotKeep = doNotKeep;
+            missingReplied = true;
+            return true;
+        };
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        SendGet(env, edge, groupId, std::span<const TLogoBlobID>(&id, 1));
+        NBridgeTest::WaitUntil(env, [&] { return held && missingReplied; }, "both pile replies");
+        env.Sim(TDuration::MilliSeconds(10));
+        env.Runtime->FilterFunction = {};
+        env.Runtime->Send(held.release(), heldNodeId);
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        NBridgeTest::CheckGetResult(*result->Get(), data);
+        const auto& response = result->Get()->Responses[0];
+        UNIT_ASSERT_VALUES_EQUAL(response.Keep, !doNotKeep);
+        UNIT_ASSERT_VALUES_EQUAL(response.DoNotKeep, doNotKeep);
+    }
 
     Y_UNIT_TEST(LocalPileFirst) {
         CheckLocalPileFirstGet(true);
@@ -365,7 +404,7 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
             UNIT_ASSERT_VALUES_EQUAL(res->Responses[i].Buffer.ConvertToString(), data[i]);
         }
         UNIT_ASSERT_VALUES_EQUAL_C(res->Responses[1].Status, NKikimrProto::ERROR, res->ToString());
-        UNIT_ASSERT(res->Responses[1].Keep);
+        UNIT_ASSERT(!res->Responses[1].Keep);
         UNIT_ASSERT(res->Responses[1].DoNotKeep);
     }
 
@@ -426,7 +465,7 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
 
         NBridgeTest::CheckGetResult(*result->Get<TEvBlobStorage::TEvGetResult>(), data);
         const auto& response = result->Get<TEvBlobStorage::TEvGetResult>()->Responses[0];
-        UNIT_ASSERT(response.Keep);
+        UNIT_ASSERT(!response.Keep);
         UNIT_ASSERT(response.DoNotKeep);
     }
 

@@ -79,6 +79,7 @@ PEERDIR(
     ydb/core/kqp/event_log
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/rm_service
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/script_executions/finalization
     ydb/core/load_test
     ydb/core/log_backend
@@ -86,6 +87,7 @@ PEERDIR(
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification
+    ydb/core/mind/bootstrapper
     ydb/core/mind/bscontroller
     ydb/core/mind/hive
     ydb/core/mon
@@ -110,6 +112,7 @@ PEERDIR(
     ydb/core/subsystems/actor_system_monitoring
     ydb/core/subsystems/inmemory_metrics_monitoring
     ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart
+    ydb/core/sys_view
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet

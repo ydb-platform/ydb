@@ -96,10 +96,10 @@ public:
         RequestEv.reset(ev->Release().Release());
 
         if (!RequestEv->GetYdbParameters().empty()) {
-            QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
+            auto queryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
 
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
-                QueryParameterTypes->insert({name, typedValue.Gettype()});
+                queryParameterTypes->insert({name, typedValue.Gettype()});
 
                 if ((typedValue.type().has_list_type() || typedValue.type().has_tuple_type()) &&
                     typedValue.value().items().size() > static_cast<i32>(runtimeParameterSizeLimit))
@@ -107,6 +107,8 @@ public:
                     RuntimeParameterSizeLimitSatisfied = false;
                 }
             }
+
+            QueryParameterTypes = std::move(queryParameterTypes);
         }
 
         YQL_ENSURE(RequestEv->HasAction());
@@ -225,7 +227,7 @@ public:
     TDuration CpuTime;
     std::optional<NCpuTime::TCpuTimer> CurrentTimer;
 
-    std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
+    std::shared_ptr<const std::map<TString, Ydb::Type>> QueryParameterTypes;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     TMaybe<TActorId> PoolHandlerActor;
@@ -300,7 +302,7 @@ public:
         return RequestEv->GetRequestType();
     }
 
-    std::shared_ptr<std::map<TString, Ydb::Type>> GetQueryParameterTypes() const {
+    std::shared_ptr<const std::map<TString, Ydb::Type>> GetQueryParameterTypes() const {
         return QueryParameterTypes;
     }
 
@@ -460,7 +462,7 @@ public:
     TString ExtractQueryText() const {
         if (CompileResult) {
             if (CompileResult->Query) {
-                return CompileResult->Query->Text;
+                return CompileResult->Query->Text();
             }
             return {};
         }
@@ -627,6 +629,7 @@ public:
     }
 
     NKqpProto::EIsolationLevel GetIsolationLevel(TKqpTransactionContext* txCtx = nullptr) const;
+    bool UsePessimisticLocks(TKqpTransactionContext* txCtx) const;
 
     // validate the compiled query response and ensure that all table versions are not
     // changed since the last compilation.
@@ -639,22 +642,32 @@ public:
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
     bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
 
+    // A physical graph and a prepared query are served without a key.
+    bool NeedQueryId() const;
+    TMaybe<TKqpQueryId> BuildQueryId(const TKqpEncodedGUC& encodedGUCSettings, TKqpTransactionContext* txCtx) const;
+
+    struct TCacheLookup {
+        TMaybe<TString> Uid;
+        bool KeepInCache = false;
+    };
+    TCacheLookup GetCacheLookup(const TMaybe<TKqpQueryId>& query) const;
+
     bool TryGetFromCache(
         TKqpQueryCache& cache,
-        const TGUCSettings::TPtr& gUCSettingsPtr,
+        TMaybe<TKqpQueryId>& query,
         TIntrusivePtr<TKqpCounters>& counters,
         const TActorId& sender,
-        TKqpTransactionContext* txCtx = nullptr,
         EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
 
     // build the compilation request.
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie,
+        const TGUCSettings::TPtr& gUCSettingsPtr, TMaybe<TKqpQueryId> query, TKqpTransactionContext* txCtx = nullptr);
     // TODO(gvit): get rid of code duplication in these requests,
     // use only one of these requests.
-    std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);
+    std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TMaybe<TKqpQueryId> query, TKqpTransactionContext* txCtx = nullptr);
 
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, const TKqpEncodedGUC& encodedGUCSettings);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, const TKqpEncodedGUC& encodedGUCSettings, TKqpTransactionContext* txCtx = nullptr);
 
     bool ProcessingLastStatementPart();
     bool PrepareNextStatementPart();

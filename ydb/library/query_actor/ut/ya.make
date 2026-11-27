@@ -1,5 +1,10 @@
 UNITTEST_FOR(ydb/library/query_actor)
 
+# Discard .debug_aranges to avoid DWARF32 relocation overflow
+IF (OS_LINUX)
+    LINKER_SCRIPT(${ARCADIA_ROOT}/ydb/apps/ydbd/strip_debug.ld)
+ENDIF()
+
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
     SIZE(MEDIUM)

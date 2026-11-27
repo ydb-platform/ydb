@@ -21,17 +21,18 @@ void CheckReassignCancellation(ui32 phase) {
     auto disable = runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRoot>(edge, false);
     UNIT_ASSERT(disable->Get()->Record.GetReassignStateStorageNode().GetDisableRing());
 
+    ui64 stepCookie = disable->Cookie;
     auto acknowledge = [&] {
         auto reply = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
         reply->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
-        runtime.Send(new IEventHandle(actor, edge, reply.release()), 1);
+        runtime.Send(new IEventHandle(actor, edge, reply.release(), 0, stepCookie), 1);
     };
     if (phase >= 1) {
         acknowledge();
     }
     if (phase >= 2) {
-        runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvWakeup), 1);
         auto replace = runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRoot>(edge, false);
+        stepCookie = replace->Cookie;
         UNIT_ASSERT(!replace->Get()->Record.GetReassignStateStorageNode().GetDisableRing());
     }
     if (phase >= 3) {
@@ -196,8 +197,7 @@ Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecovery) {
 
         auto reply = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
         reply->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
-        runtime.Send(new IEventHandle(actor, edge, reply.release()), 1);
-        runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvWakeup), 1);
+        runtime.Send(new IEventHandle(actor, edge, reply.release(), 0, request->Cookie), 1);
         request = runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRoot>(edge, false);
         const auto& introduced = request->Get()->Record.GetReconfigStateStorage().GetStateStorageBoardConfig();
         UNIT_ASSERT_VALUES_EQUAL(introduced.RingGroupsSize(), 2);
@@ -233,6 +233,7 @@ Y_UNIT_TEST_SUITE(TDistconfStateStorageSelfhealTest) {
         TActorId Client;
         TActorId NodeWarden;
         TActorId Selfheal;
+        ui64 StepCookie = 0;
 
         TSetup() {
             Runtime.Start();
@@ -249,6 +250,7 @@ Y_UNIT_TEST_SUITE(TDistconfStateStorageSelfhealTest) {
 
         void ExpectRequest(bool disableRing) {
             auto request = Runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRoot>(NodeWarden, false);
+            StepCookie = request->Cookie;
             UNIT_ASSERT_VALUES_EQUAL(request->Sender, Selfheal);
             UNIT_ASSERT(request->Get()->Record.HasReassignStateStorageNode());
             const auto& command = request->Get()->Record.GetReassignStateStorageNode();
@@ -263,7 +265,7 @@ Y_UNIT_TEST_SUITE(TDistconfStateStorageSelfhealTest) {
         void ReplyOK() {
             auto result = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
             result->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
-            Runtime.Send(new IEventHandle(Selfheal, NodeWarden, result.release()), 1);
+            Runtime.Send(new IEventHandle(Selfheal, NodeWarden, result.release(), 0, StepCookie), 1);
             Runtime.Sim([&] { return Runtime.HasImmediateEvents(); });
         }
     };
@@ -278,6 +280,19 @@ Y_UNIT_TEST_SUITE(TDistconfStateStorageSelfhealTest) {
         UNIT_ASSERT_C(result->Get()->Record.GetStatus() ==
             NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, result->Get()->Record.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 42);
+    }
+
+    Y_UNIT_TEST(WaitsForSettlingIntervalAfterDelayedCommit) {
+        TSetup setup;
+        setup.ExpectRequest(true);
+        const TActorId timer = setup.Runtime.AllocateEdgeActor(1);
+        setup.Runtime.Schedule(TDuration::Seconds(3), new IEventHandle(timer, {}, new TEvents::TEvWakeup), nullptr, 1);
+        setup.Runtime.WaitForEdgeActorEvent<TEvents::TEvWakeup>(timer);
+        UNIT_ASSERT(setup.Runtime.GetActor(setup.Selfheal));
+        const TInstant committed = setup.Runtime.GetClock();
+        setup.ReplyOK();
+        setup.ExpectRequest(false);
+        UNIT_ASSERT(setup.Runtime.GetClock() >= committed + TDuration::Seconds(1));
     }
 
     Y_UNIT_TEST(CancelledReassignmentDoesNotResume) {

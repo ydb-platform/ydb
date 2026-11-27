@@ -21,8 +21,11 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobDepot::TEvCommitBlobSeq CommitBlobSeq;
             TBlobSeqId BlobSeqId;
             std::optional<TS3Locator> LocatorInFlight;
-            ui64 ConnectionInstanceOnStart;
+            ui64 ConnectionInstanceOnStart = 0;
+            ui64 PrepareS3RequestId = 0;
+            bool S3PutMayArriveLate = false;
             ui32 S3SlowDownRetries = 0;
+            ui64 ReservedHotWriteBytes = 0;
 
             NWilson::TSpan PrepareWriteS3Span;
             NWilson::TSpan WriteS3Span;
@@ -47,26 +50,45 @@ namespace NKikimr::NBlobDepot {
                 if (returnBlobSeqId) {
                     BlobSeqId.ToProto(msg.AddItems());
                 }
-                if (LocatorInFlight) {
+                if (LocatorInFlight && ConnectionInstanceOnStart == Agent.ConnectionInstance) {
                     LocatorInFlight->ToProto(msg.AddS3Locators());
+                    msg.SetS3PutMayArriveLate(S3PutMayArriveLate);
                     if (s3SlowDown) {
                         msg.SetS3SlowDown(true);
                     }
                 }
                 LocatorInFlight.reset();
-                Agent.Issue(std::move(msg), this, nullptr);
+                S3PutMayArriveLate = false;
+                if (msg.ItemsSize() || msg.S3LocatorsSize()) {
+                    Agent.Issue(std::move(msg), nullptr, nullptr);
+                }
             }
 
             void OnDestroy(bool success) override {
+                if (PrepareS3RequestId) {
+                    Agent.TakeOverS3Preparation(PrepareS3RequestId);
+                }
                 if (IsInFlight || LocatorInFlight) {
                     Y_ABORT_UNLESS(!success);
                     SendDiscardSpoiled(false);
+                }
+
+                if (ReservedHotWriteBytes && Agent.IsConnected && ConnectionInstanceOnStart == Agent.ConnectionInstance) {
+                    Y_DEBUG_ABORT_UNLESS((TIntrusiveListItem<TQuery, TPendingHotWriteCredit>::Empty()));
+                    Agent.HotWriteCreditAvailable += std::exchange(ReservedHotWriteBytes, 0);
+                    Agent.ProcessHotWriteCreditQueue();
                 }
 
                 TBlobStorageQuery::OnDestroy(success);
             }
 
             void Initiate() override {
+                if (Agent.S3BackendSettings && Agent.S3BackendSettings->HasSyncMode()) {
+                    LimitS3Deadline(Request.Deadline);
+                    if (CheckDeadline(TActivationContext::Monotonic())) {
+                        return;
+                    }
+                }
                 if (Request.Buffer.size() > MaxBlobSize) {
                     return EndWithError(NKikimrProto::ERROR, "blob is way too big");
                 } else if (Request.Buffer.size() != Request.Id.BlobSize()) {
@@ -101,6 +123,9 @@ namespace NKikimr::NBlobDepot {
 
             void IssuePuts() {
                 Y_ABORT_UNLESS(!PutsIssued);
+                if (CheckDeadline(TActivationContext::Monotonic())) {
+                    return;
+                }
 
                 auto prepare = [&] {
                     Y_ABORT_UNLESS(CommitBlobSeq.ItemsSize() == 0);
@@ -132,6 +157,11 @@ namespace NKikimr::NBlobDepot {
                 }
                 auto& kind = it->second;
 
+                const ui64 charge = Request.Buffer.size() + (SuppressFooter ? 0 : sizeof(TVirtualGroupBlobFooter));
+                if (!Agent.EnsureHotWriteCredit(this, charge, Request.FailOnSlowDown)) {
+                    return;
+                }
+
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
                 YDB_LOG_DEBUG("Allocated BlobSeqId",
                     {"marker", "BDA21"},
@@ -161,6 +191,13 @@ namespace NKikimr::NBlobDepot {
                     {"U.HandleClass", Request.HandleClass});
 
                 auto *commitItem = prepare();
+                if (Agent.HotWriteCreditEpoch) {
+                    Y_ABORT_UNLESS(charge <= Agent.HotWriteCreditAvailable);
+                    Agent.HotWriteCreditAvailable -= charge;
+                    ReservedHotWriteBytes = charge;
+                    ConnectionInstanceOnStart = Agent.ConnectionInstance;
+                    commitItem->SetHotWriteCreditEpoch(Agent.HotWriteCreditEpoch);
+                }
                 auto *locator = commitItem->MutableBlobLocator();
                 BlobSeqId.ToProto(locator->MutableBlobSeqId());
                 //locator->SetChecksum(Crc32c(Request.Buffer.data(), Request.Buffer.size()));
@@ -247,6 +284,7 @@ namespace NKikimr::NBlobDepot {
                     "BlobDepotAgent.CommitBlobSeq", NWilson::EFlags::AUTO_END);
 
                 Agent.Issue(CommitBlobSeq, this, nullptr, CommitBlobSeqSpan.GetTraceId());
+                ReservedHotWriteBytes = 0; // The commit now owns the credit, including on failure.
 
                 Y_ABORT_UNLESS(!WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = true;
@@ -285,6 +323,10 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
+            void OnHotWriteCredit() override {
+                IssuePuts();
+            }
+
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
                 std::visit(TOverloaded{
                     [&](TEvBlobStorage::TEvPutResult *ev) {
@@ -294,6 +336,7 @@ namespace NKikimr::NBlobDepot {
                         HandleCommitBlobSeqResult(std::move(context), ev->Record);
                     },
                     [&](TS3PutResult& result) {
+                        S3PutMayArriveLate = result.MayArriveLate;
                         OnPutS3ObjectResponse(std::move(result.Error), result.SlowDown);
                     },
                     [&](TTabletDisconnected) {
@@ -344,6 +387,8 @@ namespace NKikimr::NBlobDepot {
                     // however, if it did not, we can't try to commit this records as it may be already scheduled for
                     // garbage collection by the tablet
                     EndWithError(NKikimrProto::ERROR, "BlobDepot tablet was restarting during write");
+                } else if (ReservedHotWriteBytes && ConnectionInstanceOnStart != Agent.ConnectionInstance) {
+                    EndWithError(NKikimrProto::ERROR, "hot write credit was reclaimed after disconnect");
                 } else if (Agent.IsBlobSeqIdExpired(BlobSeqId)) {
                     // we were disconnected long enough for the tablet to reclaim this id and it may already have
                     // collected the blob we have just written, so this put cannot be committed
@@ -436,6 +481,10 @@ namespace NKikimr::NBlobDepot {
             // writing directly to S3
 
             void IssueS3Put() {
+                LimitS3Deadline(Request.Deadline);
+                if (CheckDeadline(TActivationContext::Monotonic())) {
+                    return;
+                }
                 NKikimrBlobDepot::TEvPrepareWriteS3 query;
                 auto *item = query.AddItems();
                 item->SetKey(Request.Id.AsBinaryString());
@@ -452,13 +501,21 @@ namespace NKikimr::NBlobDepot {
                     PrepareWriteS3Span.Attribute("slow_down_retry", S3SlowDownRetries);
                 }
 
-                Agent.Issue(query, this, nullptr, PrepareWriteS3Span.GetTraceId());
+                ConnectionInstanceOnStart = Agent.ConnectionInstance;
+                PrepareS3RequestId = Agent.Issue(query, this, nullptr, PrepareWriteS3Span.GetTraceId());
             }
 
             void HandlePrepareWriteS3Result(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvPrepareWriteS3Result& msg) {
 #ifndef KIKIMR_DISABLE_S3_OPS
+                PrepareS3RequestId = 0;
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 const auto& item = msg.GetItems(0);
+                if (item.GetStatus() == NKikimrProto::OK) {
+                    LocatorInFlight = TS3Locator::FromProto(item.GetS3Locator());
+                }
+                if (CheckDeadline(TActivationContext::Monotonic())) {
+                    return;
+                }
                 if (item.GetStatus() != NKikimrProto::OK) {
                     if (PrepareWriteS3Span) {
                         PrepareWriteS3Span.EndError(item.GetErrorReason());
@@ -474,10 +531,7 @@ namespace NKikimr::NBlobDepot {
                 auto *locator = commitItem->MutableS3Locator();
                 locator->CopyFrom(item.GetS3Locator());
 
-                LocatorInFlight.emplace(TS3Locator::FromProto(*locator));
-
-                const TS3Locator temp = TS3Locator::FromProto(*locator);
-                TString key = temp.MakeObjectName(Agent.S3BasePath);
+                TString key = LocatorInFlight->MakeObjectName(Agent.S3BasePath);
 
                 YDB_LOG_DEBUG("Starting WriteActor",
                     {"marker", "BDA54"},
@@ -492,9 +546,8 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 // Pass a copy so Request.Buffer remains intact for potential SlowDown-driven retries.
-                IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
-
-                ConnectionInstanceOnStart = Agent.ConnectionInstance;
+                S3PutMayArriveLate = true;
+                IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, *LocatorInFlight);
 #else
                 Y_UNUSED(msg);
                 Y_ABORT("S3 is not supported");
@@ -534,11 +587,15 @@ namespace NKikimr::NBlobDepot {
                     slowDown = false;
                     LocatorInFlight.reset(); // prevent discarding this locator
                 }
+                if (CheckDeadline(TActivationContext::Monotonic())) {
+                    return;
+                }
 
                 if (!error) {
                     ++*Agent.S3PutsOk;
                     *Agent.S3PutBytesOk += LocatorInFlight->Len;
 
+                    CommitBlobSeq.MutableItems(0)->SetS3PutMayArriveLate(S3PutMayArriveLate);
                     LocatorInFlight.reset();
                     IssueCommitBlobSeq(false);
                     return;

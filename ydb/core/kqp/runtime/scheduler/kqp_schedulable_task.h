@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "fwd.h"
 
 #include <ydb/library/actors/core/actorid.h>
@@ -14,7 +16,8 @@ struct TSchedulableTask : public std::enable_shared_from_this<TSchedulableTask> 
     ~TSchedulableTask();
 
     void RegisterForResume(const NActors::TActorId& actorId);
-    void Resume();
+    void RegisterForResume(std::function<void()> resume);
+    bool TryResume();
 
     using TResumeEventType = NActors::TEvents::TEvWakeup;
     static bool IsResumeEvent(const TResumeEventType::TPtr& ev) {
@@ -48,6 +51,7 @@ private:
 
     std::optional<TSchedulableTaskList::iterator> Iterator; // TODO: improve iterator to not allow access to adjacent values in list.
     NActors::TActorId ActorId;
+    std::function<void()> ResumeCallback;
 };
 
 } // namespace NKikimr::NKqp::NScheduler

@@ -90,6 +90,7 @@
 
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/security/login_page.h>
+#include <ydb/core/sys_view/factory.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
@@ -181,7 +182,6 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <ydb/core/util/sig.h>
-#include <ydb/core/util/stlog.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
@@ -1636,6 +1636,15 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
+    // TODO: Remove this backward-compatible initialization once all applications
+    // explicitly configure their system-view scan factory.
+    if (!ModuleFactories) {
+        ModuleFactories = std::make_shared<TModuleFactories>();
+    }
+    if (!ModuleFactories->SystemViewScanFactory) {
+        ModuleFactories->SystemViewScanFactory.reset(NSysView::CreateSystemViewScanFactory());
+    }
+    AppData->SystemViewScanFactory = ModuleFactories->SystemViewScanFactory.get();
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
 
     AppData->TransferWriterFactory = ModuleFactories && ModuleFactories->TransferWriterFactory
@@ -1904,7 +1913,6 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         LogSettings->Format = NLog::TSettings::PLAIN_SHORT_FORMAT;
     } else if (logConfig.GetFormat() == "json") {
         LogSettings->Format = NLog::TSettings::JSON_FORMAT;
-        NKikimr::NStLog::OutputLogJson = true;
     } else {
         Y_ABORT("Unknown log format: \"%s\"", logConfig.GetFormat().data());
     }

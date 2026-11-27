@@ -116,6 +116,7 @@ message TReplicationConfig {
             optional uint64 Id = 4;
             optional uint32 LagMilliSeconds = 5;
             optional float InitialScanProgress = 6; // pencentage
+            repeated Ydb.Issue.IssueMessage Issues = 7;
         }
 
         repeated TTarget Targets = 1;

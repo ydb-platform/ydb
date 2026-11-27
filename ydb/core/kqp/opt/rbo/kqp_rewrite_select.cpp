@@ -520,6 +520,52 @@ TExprNode::TPtr GetTableSourceType(const NYql::TKikimrTableDescription& desc, TE
     // clang-format on
 }
 
+// The settings of a table read that the relational optimizer keeps: ForcePrimary, set by VIEW PRIMARY KEY or when
+// automatic index selection is disabled, so that the read is not redirected to an index.
+TExprNode::TPtr BuildOpReadSettings(const TKqlReadTableRangesBase& read, TExprContext& ctx, TPositionHandle pos) {
+    TKqpReadTableSettings settings;
+    settings.ForcePrimary = TKqpReadTableSettings::Parse(read).ForcePrimary;
+    return settings.BuildNode(ctx, pos).Ptr();
+}
+
+// Imports a read of the index named by VIEW as a read of the main table which carries the index name. The rules read
+// the index then, as the old optimizer does: with the ranges of the predicate and the columns the query needs, or by a
+// lookup join. Null for an index which only the expansion of the read here reads.
+TExprNode::TPtr BuildViewIndexOpRead(const TKqlReadTableIndexRanges& read, TStringBuf alias, const TKqpOptimizeContext& kqpCtx,
+                                     ui64& uniqueSourceIdCounter, TExprContext& ctx, TPositionHandle pos) {
+    if (!read.Ranges().Maybe<TCoVoid>()) {
+        return nullptr;
+    }
+    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+    if (tableDesc.Metadata->Kind != EKikimrTableKind::Datashard) {
+        return nullptr;
+    }
+    const auto [indexMeta, index] = tableDesc.Metadata->GetIndex(read.Index().Value());
+    if (!indexMeta || !index) {
+        return nullptr;
+    }
+    switch (index->Type) {
+        case TIndexDescription::EType::GlobalSync:
+        case TIndexDescription::EType::GlobalSyncUnique:
+        case TIndexDescription::EType::GlobalAsync:
+            break;
+        default:
+            return nullptr;
+    }
+
+    // clang-format off
+    return Build<TKqpOpRead>(ctx, pos)
+        .Table(read.Table())
+        .Alias().Build(alias)
+        .Columns(read.Columns())
+        .SourceType(GetTableSourceType(tableDesc, ctx, pos))
+        .UniqueId().Value(ToString(uniqueSourceIdCounter++)).Build()
+        .Settings(BuildOpReadSettings(read, ctx, pos))
+        .Index(read.Index())
+    .Done().Ptr();
+    // clang-format on
+}
+
 TExprNode::TPtr GetMember(TExprNode::TPtr node) {
     TExprNode::TPtr member = node;
     return member->IsCallable("Member") ? member : nullptr;
@@ -1629,6 +1675,9 @@ TExprNode::TPtr RewriteReadOrEffectInput(const TExprNode::TPtr& node, TExprConte
             .Done().Ptr();
     }
     if (TKqlReadTableIndexRanges::Match(node.Get())) {
+        if (auto read = BuildViewIndexOpRead(TKqlReadTableIndexRanges(node), "", kqpCtx, uniqueSourceIdCounter, ctx, node->Pos())) {
+            return read;
+        }
         // Reuse index metadata/covering expansion, then import its read and
         // optional main-table lookup into the relational plan.
         auto expanded = NOpt::KqpRewriteIndexRead(TExprBase(node), ctx, kqpCtx).Ptr();
@@ -1656,6 +1705,7 @@ TExprNode::TPtr RewriteReadOrEffectInput(const TExprNode::TPtr& node, TExprConte
             .Columns(read.Columns())
             .SourceType(sourceType)
             .UniqueId().Value(ToString(uniqueSourceIdCounter++)).Build()
+            .Settings(BuildOpReadSettings(read, ctx, node->Pos()))
             .Done().Ptr();
     }
     if (TCoFilter::Match(node.Get()) || TCoOrderedFilter::Match(node.Get())) {
@@ -1979,13 +2029,18 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                         .Columns(readExpr.Columns())
                         .SourceType(sourceType)
                         .UniqueId().Value(std::to_string(uniqueSourceIdCounter++)).Build()
+                        .Settings(BuildOpReadSettings(readExpr, ctx, node->Pos()))
                     .Done().Ptr();
                     // clang-format on
                 }
                 else if (TKqlReadTableIndexRanges::Match(childExpr.Get())) {
-                    fromExpr = Build<TKqpOpReplaceAlias>(ctx, node->Pos())
-                        .Input(RewriteReadOrEffectInput(childExpr, ctx, kqpCtx, uniqueSourceIdCounter))
-                        .Alias(alias).Done().Ptr();
+                    fromExpr = BuildViewIndexOpRead(TKqlReadTableIndexRanges(childExpr), alias->Content(), kqpCtx,
+                                                    uniqueSourceIdCounter, ctx, node->Pos());
+                    if (!fromExpr) {
+                        fromExpr = Build<TKqpOpReplaceAlias>(ctx, node->Pos())
+                            .Input(RewriteReadOrEffectInput(childExpr, ctx, kqpCtx, uniqueSourceIdCounter))
+                            .Alias(alias).Done().Ptr();
+                    }
                 }
                 else if (childExpr->IsCallable("YqlSelect")){
                     TExprNode::TPtr subquery;

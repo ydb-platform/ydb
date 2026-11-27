@@ -154,6 +154,13 @@ message TSerialManagementStage {
 //                                                                                                                                                      +--------------------------------+
 //
 message TGroupState {
+    // A group may request an invariant before entering the corresponding INV1 or INV2 state.
+    enum ETargetInvariant {
+        NO_INVARIANT = 0;
+        INVARIANT_1 = 1;
+        INVARIANT_2 = 2;
+    }
+
     enum EState {
         NORMAL = 0;  // I/I/I.
 

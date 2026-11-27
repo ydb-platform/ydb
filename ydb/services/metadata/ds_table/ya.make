@@ -18,11 +18,18 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/core/grpc_services/base
     ydb/core/grpc_services/local_rpc
+    ydb/core/protos
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
+    ydb/core/ydb_convert
+    ydb/library/accessor
     ydb/library/actors/core
+    ydb/library/services
+    ydb/public/api/protos
+    ydb/services/metadata/abstract
     ydb/services/metadata/common
     ydb/services/metadata/initializer
+    ydb/services/metadata/request
     ydb/services/metadata/scheme_transaction
     ydb/services/metadata/secret
 )

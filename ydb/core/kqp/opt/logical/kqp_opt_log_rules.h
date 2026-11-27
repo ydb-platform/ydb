@@ -57,7 +57,7 @@ NYql::NNodes::TExprBase KqpRewriteStreamLookupIndex(const NYql::NNodes::TExprBas
 NYql::NNodes::TExprBase KqpRewriteLookupTable(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
-NYql::NNodes::TExprBase KqpRewriteTopSortOverIndexRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext&,
+NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteTopSortOverIndexRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext&,
     NYql::TTypeAnnotationContext& typesCtx, const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap);
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpPushLimitOverFullText(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);

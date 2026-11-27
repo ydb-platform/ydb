@@ -12,6 +12,7 @@ from ydb.public.api.protos.ydb_keyvalue_pb2 import ReadResult
 from hamcrest import assert_that, is_, has_entries
 
 import copy
+import grpc
 import logging
 import time
 import yaml
@@ -217,6 +218,46 @@ class BridgeKiKiMRTest(object):
             return result
         else:
             return response
+
+    def update_and_confirm_failover(self, client, surviving_client, updates, expected_generation):
+        expected = {pile.pile_name: pile.state for pile in updates}
+        may_have_applied = False
+        can_retry = True
+        last_observation = None
+
+        def confirmed():
+            nonlocal may_have_applied, can_retry, last_observation
+            try:
+                if may_have_applied:
+                    response = surviving_client.get_cluster_state()
+                    last_observation = response
+                    if response.operation.status in (StatusIds.UNAVAILABLE, StatusIds.TIMEOUT):
+                        return False
+                    assert_that(response.operation.status, is_(StatusIds.SUCCESS), str(response))
+                    state = bridge.GetClusterStateResult()
+                    assert_that(response.operation.result.Unpack(state), str(response))
+                    last_observation = {pile.pile_name: pile.state for pile in state.pile_states}
+                    if state.generation > expected_generation:
+                        return last_observation == expected
+                    if not can_retry or state.generation < expected_generation:
+                        return False
+
+                response = client.update_cluster_state(updates, expected_generation=expected_generation)
+                last_observation = response
+                status = response.operation.status
+                can_retry = status in (StatusIds.INTERNAL_ERROR, StatusIds.UNAVAILABLE, StatusIds.TIMEOUT)
+                assert_that(can_retry or status == StatusIds.SUCCESS or (status == StatusIds.ABORTED and may_have_applied),
+                            str(response))
+                may_have_applied |= status in (StatusIds.SUCCESS, StatusIds.TIMEOUT, StatusIds.INTERNAL_ERROR)
+            except grpc.RpcError as error:
+                if error.code() not in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED):
+                    raise
+                may_have_applied = True
+                last_observation = error
+            return False
+
+        applied = wait_for(confirmed, timeout_seconds=120, max_step_seconds=1)
+        assert_that(applied, f"Failover was not observed on the surviving pile: {last_observation}")
 
     def get_cluster_state(self, client):
         response = client.get_cluster_state()

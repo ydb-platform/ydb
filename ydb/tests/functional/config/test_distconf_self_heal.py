@@ -6,7 +6,6 @@ import time
 from copy import deepcopy
 
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.common.wait_for import retry_assertions
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
@@ -33,18 +32,6 @@ def extract_node_ids(ring):
         node_ids.update(ring["Node"])
     for nested in ring.get("Ring", []):
         node_ids.update(extract_node_ids(nested))
-    return node_ids
-
-
-def extract_all_node_ids(config, config_name):
-    """Collect all node ids present in either the RingGroups or single Ring representation."""
-    config = config[f"{config_name}Config"]
-    node_ids = set()
-    if "RingGroups" in config:
-        for rg in config["RingGroups"]:
-            node_ids.update(extract_node_ids(rg))
-    elif "Ring" in config:
-        node_ids.update(extract_node_ids(config["Ring"]))
     return node_ids
 
 
@@ -104,50 +91,68 @@ class KiKiMRDistConfSelfHealTest(object):
     def teardown_class(cls):
         cls.cluster.stop()
 
-    def do_request(self, json_req):
+    def do_request(self, json_req, *, timeout=10):
         url = f'http://localhost:{self.cluster.nodes[1].mon_port}/actors/nodewarden?page=distconf'
-        response = requests.post(url, headers={'content-type': 'application/json'}, json=json_req, timeout=10)
+        response = requests.post(url, headers={'content-type': 'application/json'}, json=json_req, timeout=timeout)
         response.raise_for_status()
         return response.json()
 
-    def do_request_config(self, recommended=False):
-        resp = self.do_request({"GetStateStorageConfig": {"Recommended": recommended}})
+    def do_request_config(self, recommended=False, *, timeout=10):
+        resp = self.do_request({"GetStateStorageConfig": {"Recommended": recommended}}, timeout=timeout)
         logger.info(f"Config:{resp}")
         return resp["StateStorageConfig"]
+
+    def wait_for_config(self, config_name, predicate, timeout=60):
+        deadline = time.monotonic() + timeout
+        config = None
+        while (remaining := deadline - time.monotonic()) > 0:
+            config = self.do_request_config(timeout=remaining)[f"{config_name}Config"]
+            if predicate(config):
+                return config
+            time.sleep(min(0.2, max(0, deadline - time.monotonic())))
+        raise AssertionError(f"Timed out waiting for {config_name}, last configuration was {config}")
+
+    def wait_for_healed_ring(self, config_name):
+        def healed(config):
+            ring = config.get("Ring")
+            return (ring is not None and not ring.get("WriteOnly", False)
+                    and ring.get("NToSelect") == 9 and len(ring.get("Ring", [])) == 9)
+
+        return self.wait_for_config(config_name, healed)["Ring"]
 
     def change_state_storage(self, defaultRingGroup, newRingGroup, configName="StateStorage"):
         logger.info(f"Current {configName} config: {defaultRingGroup}")
         logger.info(f"Target {configName} config: {newRingGroup}")
+
+        def reconfigure(groups):
+            response = self.do_request({"ReconfigStateStorage": {f"{configName}Config": {"RingGroups": groups}}}, timeout=90)
+            assert_that(response.get("Status", "OK") == "OK", response)
+
         for i in range(len(newRingGroup)):
             newRingGroup[i]["WriteOnly"] = True
         assert_that(defaultRingGroup[0]["NToSelect"] > 0)
-        logger.info(self.do_request({"ReconfigStateStorage": {f"{configName}Config": {
-                    "RingGroups": defaultRingGroup + newRingGroup}}}))
+        reconfigure(defaultRingGroup + newRingGroup)
         time.sleep(1)
         assert_eq(self.do_request_config()[f"{configName}Config"], {"RingGroups": defaultRingGroup + newRingGroup})
         time.sleep(1)
         for i in range(len(newRingGroup)):
             newRingGroup[i]["WriteOnly"] = False
-        logger.info(self.do_request({"ReconfigStateStorage": {f"{configName}Config": {
-                    "RingGroups": defaultRingGroup + newRingGroup}}}))
+        reconfigure(defaultRingGroup + newRingGroup)
         time.sleep(1)
         assert_eq(self.do_request_config()[f"{configName}Config"], {"RingGroups": defaultRingGroup + newRingGroup})
 
         time.sleep(1)
         for i in range(len(defaultRingGroup)):
             defaultRingGroup[i]["WriteOnly"] = True
-        logger.info(self.do_request({"ReconfigStateStorage": {f"{configName}Config": {
-                    "RingGroups": newRingGroup + defaultRingGroup}}}))
+        reconfigure(newRingGroup + defaultRingGroup)
         time.sleep(1)
         assert_eq(self.do_request_config()[f"{configName}Config"], {"RingGroups": newRingGroup + defaultRingGroup})
 
         time.sleep(1)
-        logger.info(self.do_request({"ReconfigStateStorage": {f"{configName}Config": {
-                    "RingGroups": newRingGroup}}}))
+        reconfigure(newRingGroup)
         time.sleep(1)
         assert_eq(self.do_request_config()[f"{configName}Config"], {"Ring": newRingGroup[0]} if len(newRingGroup) == 1 else {"RingGroups": newRingGroup})
-        logger.info(self.do_request({"ReconfigStateStorage": {f"{configName}Config": {
-                    "RingGroups": newRingGroup}}}))
+        reconfigure(newRingGroup)
 
     def do_bad_config(self, configName):
         defaultConfig = [get_ring_group(self.do_request_config(), configName)]
@@ -159,6 +164,7 @@ class KiKiMRDistConfSelfHealTest(object):
         rg = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 5)
         assert_eq(len(rg["Ring"]), 9)
+        return rg
 
     def test(self):
         self.do_test("StateStorage")
@@ -176,13 +182,7 @@ class TestKiKiMRDistConfSelfHeal(KiKiMRDistConfSelfHealTest):
 
         logger.info("Start SelfHeal")
         logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}}))
-
-        def wait_healed():
-            rg = get_ring_group(self.do_request_config(), configName)
-            assert_eq(rg["NToSelect"], 9)
-            assert_eq(len(rg["Ring"]), 9)
-
-        retry_assertions(wait_healed, timeout_seconds=30, step_seconds=1.0)
+        self.wait_for_healed_ring(configName)
 
 
 class TestKiKiMRDistConfSelfHealNotNeed(KiKiMRDistConfSelfHealTest):
@@ -234,25 +234,14 @@ class TestKiKiMRDistConfSelfHealParallelCall(KiKiMRDistConfSelfHealTest):
 
         logger.info("Start SelfHeal")
         logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 3, "ForceHeal": True}}))
-        time.sleep(1)
-        rg = self.do_request_config()[f"{configName}Config"]["RingGroups"]
+        rg = self.wait_for_config(configName, lambda c: "RingGroups" in c)["RingGroups"]
         assert_eq(len(rg), 2)
         assert_that("WriteOnly" not in rg[0])
         assert_eq(rg[1]["WriteOnly"], True)
 
         logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}}))
-        time.sleep(1)
-        assert_eq(len(self.do_request_config()[f"{configName}Config"]["RingGroups"]), 2)
-
-        def wait_parallel_healed():
-            config = self.do_request_config()[f"{configName}Config"]
-            # Heal goes RingGroups → single Ring; KeyError is not retried by retry_assertions.
-            assert_that("Ring" in config, f"still waiting for single Ring: {config}")
-            rg = config["Ring"]
-            assert_eq(rg["NToSelect"], 9)
-            assert_eq(len(rg["Ring"]), 9)
-
-        retry_assertions(wait_parallel_healed, timeout_seconds=30, step_seconds=1.0)
+        assert_eq(len(self.wait_for_config(configName, lambda c: "RingGroups" in c)["RingGroups"]), 2)
+        self.wait_for_healed_ring(configName)
 
 
 class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
@@ -274,15 +263,6 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
         "update_state_timeout": 1_000_000,
         "retry_update_config": 1_000_000,
     }}
-
-    def wait_for_config(self, config_name, predicate, timeout=60):
-        deadline = time.monotonic() + timeout
-        while True:
-            config = self.do_request_config()[f"{config_name}Config"]
-            if predicate(config):
-                return config
-            assert_that(time.monotonic() < deadline, config)
-            time.sleep(0.2)
 
     def do_test(self, configName):
         # Restarting a heal with two readable groups needs real node observations
@@ -353,22 +333,14 @@ class TestKiKiMRDistConfSelfHealAllowedNodes(KiKiMRDistConfSelfHealTest):
         logger.info("Start SelfHeal with allowed nodes restriction (forbidding node %s) for %s",
                     self.forbidden_node_id, configName)
         logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}}))
+        healed_config = self.wait_for_healed_ring(configName)
+        node_ids = extract_node_ids(healed_config)
 
-        def wait_allowed_nodes():
-            healed_config = self.do_request_config()
-            rg = get_ring_group(healed_config, configName)
-            # do_bad_config leaves NToSelect=5; wait until heal restores a full ring.
-            assert_eq(rg["NToSelect"], 9)
-            assert_eq(len(rg["Ring"]), 9)
-            node_ids = extract_all_node_ids(healed_config, configName)
-
-            assert_that(len(node_ids) > 0, f"Healed {configName} config has no nodes: {healed_config}")
-            assert_that(self.forbidden_node_id not in node_ids,
-                        f"Forbidden node {self.forbidden_node_id} present in healed {configName} config: {node_ids}")
-            assert_that(node_ids <= set(self.allowed_node_ids),
-                        f"Healed {configName} config uses nodes outside the allowed list: {node_ids - set(self.allowed_node_ids)}")
-
-        retry_assertions(wait_allowed_nodes, timeout_seconds=30, step_seconds=1.0)
+        assert_that(len(node_ids) > 0, f"Healed {configName} config has no nodes: {healed_config}")
+        assert_that(self.forbidden_node_id not in node_ids,
+                    f"Forbidden node {self.forbidden_node_id} present in healed {configName} config: {node_ids}")
+        assert_that(node_ids <= set(self.allowed_node_ids),
+                    f"Healed {configName} config uses nodes outside the allowed list: {node_ids - set(self.allowed_node_ids)}")
 
 
 class TestKiKiMRDistConfSelfHealAutomaticManagementDisabled(KiKiMRDistConfSelfHealTest):
@@ -426,8 +398,7 @@ class TestKiKiMRDistConfSelfHealMixedAutomaticManagement(KiKiMRDistConfSelfHealT
         assert_that(resp.get("ErrorReason", "").startswith(message), {"Response": resp, "Expected": message})
 
     def do_test(self, configName):
-        self.do_bad_config(configName)
-        bad_config = get_ring_group(self.do_request_config(), configName)
+        bad_config = self.do_bad_config(configName)
 
         logger.info(
             "Start SelfHeal with mixed automatic management (disabled for %s) for %s",
@@ -446,12 +417,6 @@ class TestKiKiMRDistConfSelfHealMixedAutomaticManagement(KiKiMRDistConfSelfHealT
         else:
             disabled_before = get_ring_group(self.do_request_config(), self.disabled_config_name)
             logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}}))
-
-            def wait_mixed_healed():
-                disabled_after = get_ring_group(self.do_request_config(), self.disabled_config_name)
-                assert_eq(disabled_after, disabled_before)
-                rg = get_ring_group(self.do_request_config(), configName)
-                assert_eq(rg["NToSelect"], 9)
-                assert_eq(len(rg["Ring"]), 9)
-
-            retry_assertions(wait_mixed_healed, timeout_seconds=30, step_seconds=1.0)
+            self.wait_for_healed_ring(configName)
+            disabled_after = get_ring_group(self.do_request_config(), self.disabled_config_name)
+            assert_eq(disabled_after, disabled_before)

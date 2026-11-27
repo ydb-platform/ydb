@@ -1,7 +1,7 @@
 #pragma once
 #include "header.h"
 
-#include <ydb/core/formats/arrow/program/execution.h>
+#include <ydb/core/formats/arrow/program/index_check/index_check.h>
 
 namespace NKikimr::NOlap::NIndexes {
 class IIndexMeta;

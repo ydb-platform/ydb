@@ -486,6 +486,36 @@ void TestConstantFolding(bool columnTables) {
     }
 }
 
+void TestUdfConstantFolding(bool columnStore, const TString& query, size_t resultCount = 1, bool newRbo = true) {
+    NKikimrConfig::TAppConfig appConfig;
+    auto* config = appConfig.MutableTableServiceConfig();
+    config->SetEnableNewRBO(newRbo);
+    config->SetEnableFallbackToYqlOptimizer(false);
+    config->SetEnableFallbackOnRowTables(false);
+    config->SetDefaultCostBasedOptimizationLevel(4);
+    TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+    auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+    const TString storage = columnStore ? " WITH (STORE = COLUMN)" : "";
+    for (const TString schema : {
+            "CREATE TABLE `/Root/R` (id Int32 NOT NULL, payload1 String, ts Date, PRIMARY KEY (id))",
+            "CREATE TABLE `/Root/S` (id Int32 NOT NULL, payload2 String, PRIMARY KEY (id))"}) {
+        auto result = session.ExecuteQuery(schema + storage + ";", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    auto explained = session.ExecuteQuery(query, NQuery::TTxControl::NoTx(),
+        NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).GetValueSync();
+    UNIT_ASSERT_C(explained.IsSuccess(), explained.GetIssues().ToString());
+
+    auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), resultCount);
+    for (const auto& resultSet : result.GetResultSets()) {
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
+    }
+}
+
 void TestQueryClient(bool columnTables) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -1036,6 +1066,51 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST_TWIN(ConstantFolding, ColumnStore) {
         TestConstantFolding(ColumnStore);
+    }
+
+    Y_UNIT_TEST_TWIN(UdfConstantFold, ColumnStore) {
+        // Replicate ut/join/data/queries/udf_constant_fold.sql with RBO fallback disabled.
+        const TString query = R"(
+            SELECT * FROM `/Root/S` AS S WHERE S.payload2 = String::HexDecode("54");
+            SELECT * FROM `/Root/R` AS R
+            WHERE R.ts = DateTime::MakeDate(DateTime::Parse('%Y-%m-%d')("2023-10-20"));
+            SELECT CAST("[6]" AS JsonDocument) AS doc FROM `/Root/R` AS R;
+            SELECT CAST("1.23" AS DyNumber) AS doc FROM `/Root/R` AS R;
+            SELECT * FROM `/Root/R` AS R
+            WHERE CAST("1.32" AS DyNumber) = CAST("1.23" AS DyNumber);
+        )";
+        TestUdfConstantFolding(ColumnStore, query, 5);
+    }
+
+    Y_UNIT_TEST_TWIN(UdfConstantFoldString, ColumnStore) {
+        TestUdfConstantFolding(ColumnStore, R"(
+            SELECT * FROM `/Root/S` AS S WHERE S.payload2 = String::HexDecode("54");
+        )");
+    }
+
+    Y_UNIT_TEST_TWIN(UdfConstantFoldDateTime, ColumnStore) {
+        TestUdfConstantFolding(ColumnStore, R"(
+            SELECT * FROM `/Root/R` AS R WHERE R.ts = DateTime::MakeDate(DateTime::Parse('%Y-%m-%d')("2023-10-20"));
+        )");
+    }
+
+    Y_UNIT_TEST_TWIN(UdfConstantFoldDateTimeLegacyOptimizer, ColumnStore) {
+        TestUdfConstantFolding(ColumnStore, R"(
+            SELECT * FROM `/Root/R` AS R WHERE R.ts = DateTime::MakeDate(DateTime::Parse('%Y-%m-%d')("2023-10-20"));
+        )", 1, false);
+    }
+
+    Y_UNIT_TEST_TWIN(UdfConstantFoldJsonDocument, ColumnStore) {
+        TestUdfConstantFolding(ColumnStore, R"(
+            SELECT CAST("[6]" AS JsonDocument) AS doc FROM `/Root/R` AS R;
+        )");
+    }
+
+    Y_UNIT_TEST_TWIN(UdfConstantFoldDyNumber, ColumnStore) {
+        TestUdfConstantFolding(ColumnStore, R"(
+            SELECT CAST("1.23" AS DyNumber) AS doc FROM `/Root/R` AS R;
+            SELECT * FROM `/Root/R` AS R WHERE CAST("1.32" AS DyNumber) = CAST("1.23" AS DyNumber);
+        )", 2);
     }
 
     Y_UNIT_TEST(OrderBy) {

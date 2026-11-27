@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
 
+#include <util/generic/scope.h>
 #include <util/system/type_name.h>
 
 using namespace NBridgeTest;
@@ -63,6 +64,18 @@ namespace {
             .NumPiles = 2,
             .AutomaticBootstrap = true,
         };
+    }
+
+    template<typename TResult>
+    TAutoPtr<TResult> DisconnectPileAndWaitForReply(TEnvironmentSetup& env, TActorId edgeId) {
+        auto *edge = dynamic_cast<TTestActorSystem::TEdgeActor*>(env.Runtime->GetActor(edgeId));
+        UNIT_ASSERT(edge);
+        std::unique_ptr<IEventHandle> reply;
+        edge->WaitForEvent(&reply);
+        Y_DEFER { edge->StopWaitingForEvent(); };
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        WaitUntil(env, [&] { return bool(reply); }, "in-flight request reply", TDuration::Seconds(1), 10);
+        return reply->Release<TResult>();
     }
 
     class TQueuedRoutingTest {
@@ -633,11 +646,9 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         auto res = env.WaitForEdgeActorEvent<TResult>(edge, false, env.Runtime->GetClock() + TDuration::Seconds(1));
         UNIT_ASSERT_C(!res, "request completed without the second pile: " << res->Get()->ToString());
 
-        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
-        res = env.WaitForEdgeActorEvent<TResult>(edge, false, env.Runtime->GetClock() + TDuration::Seconds(10));
-        UNIT_ASSERT_C(res, "request not completed after the pile has been disconnected");
-        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
-        check(*res->Get());
+        const auto reply = DisconnectPileAndWaitForReply<TResult>(env, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Status, NKikimrProto::OK, reply->ToString());
+        check(*reply);
 
         hold = false;
         for (auto& ev : std::exchange(held, {})) { // the part gives up waiting for its VDisks
@@ -694,12 +705,10 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         checker.SendPut(groupId, edge);
         WaitUntil(env, [&] { return proxyId.has_value(); }, "put of the second pile", TDuration::MilliSeconds(10), 100);
 
-        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
-        const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
-            env.Runtime->GetClock() + TDuration::Seconds(10));
+        const auto reply = DisconnectPileAndWaitForReply<TEvBlobStorage::TEvPutResult>(env, edge);
         env.Runtime->FilterFunction = {};
         UNIT_ASSERT(poisoned);
-        UNIT_ASSERT_C(res, "restarted request lost when the proxy stopped");
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Status, NKikimrProto::ERROR, reply->ToString());
         const auto put = GetBridgeHandleCounters(GetBridgeRequestCounters(env, 1), "PutTabletLog", "256");
         UNIT_ASSERT_VALUES_EQUAL(GetBridgeCompletedRequests(put, "ERROR")->Val(), 1);
     }

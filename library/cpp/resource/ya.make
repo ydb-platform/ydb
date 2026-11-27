@@ -12,6 +12,11 @@ SRCS(
     static_blob_default.cpp
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib
+)
+
 END()
 
 RECURSE_FOR_TESTS(

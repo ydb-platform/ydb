@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/storage/optimizer/abstract
     ydb/core/tx/columnshard/engines/storage/actualizer/index
     ydb/core/tx/columnshard/counters
+    ydb/core/tx/columnshard/engines/storage/data_stats
     ydb/core/tx/columnshard/engines/portions
     ydb/core/tx/columnshard/engines/predicate
     ydb/core/tx/columnshard/hooks/abstract

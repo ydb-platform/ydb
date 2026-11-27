@@ -266,6 +266,9 @@ namespace NKikimr::NStorage {
                     if (!cmd.GetBSC()) {
                         throw TExError() << "Incorrect request";
                     }
+                    if (!state.GetUnsyncedBSC()) {
+                        return StartCommitConfirmation();
+                    }
                     state.SetUnsyncedBSC(false);
                 }
                 return StartProposition(&config);
@@ -375,14 +378,12 @@ namespace NKikimr::NStorage {
             throw TExError() << "Cluster is already bridged one";
         }
 
-        // nodes running without BridgeConfig won't be able to work in bridged cluster, as well as the ones of versions
-        // not supporting the features the converted cluster requires
-        THashSet<ui32> requiredNodeIds;
-        for (const auto& node : Self->StorageConfig->GetAllNodes()) {
-            requiredNodeIds.insert(node.GetNodeId());
-        }
+        // every connected node gets the converted config, so it must run with BridgeConfig and support the features
+        // the converted cluster requires; nodes being down or partitioned are not waited for: the ones returning with
+        // compatible settings catch up through the config exchange, while the connectivity checker refuses the ones
+        // running without BridgeConfig or of older versions until the admin restarts them properly
         const bool skipStoragePoolConversion = cmd.GetSkipStoragePoolConversion();
-        RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {}, [this, skipStoragePoolConversion] {
+        RequireBridgeCapability(BridgeFeatureLevel, {}, {}, [this, skipStoragePoolConversion] {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
             if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig,
                     skipStoragePoolConversion)) {
@@ -402,7 +403,7 @@ namespace NKikimr::NStorage {
         if (!Self->SelfManagementEnabled) {
             throw TExError() << "Self-management must be enabled to roll the bridged cluster back";
         } else if (NBridge::IsRollbackPending(details)) {
-            return Finish(TResult::OK, std::nullopt); // being rolled back already, see the rollback status
+            return StartCommitConfirmation();
         } else if (details.HasPendingPileOperation()) {
             throw TExError() << "Operation on pile is in progress";
         } else if (details.PileSyncStateSize()) {
@@ -547,17 +548,23 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd) {
         RunCommonChecks();
 
-        const auto& details = Self->StorageConfig->GetClusterStateDetails();
+        const auto& current = *Self->StorageConfig;
+        const auto& details = current.GetClusterStateDetails();
         if (!details.GetBscConversionPending()) {
+            const auto& previous = current.GetPrevConfig().GetClusterStateDetails();
+            if (current.GetGeneration() && current.HasClusterState() && !NBridge::IsRollbackPending(details)
+                    && (!previous.GetBscConversionPending() || previous.GetBscConversionId() == cmd.GetBscConversionId())) {
+                return StartCommitConfirmation();
+            }
             return Finish(TResult::OK, std::nullopt); // already cleared
         } else if (cmd.GetBscConversionId() != details.GetBscConversionId()) {
             // late notification of the conversion the cluster has been rolled back from, BSC performs the current one
             // afterwards; BSC of older version reports no identity, but it can't take part in the conversion started by
-            // this version (which requires every node to support it), as it has 0 then
+            // this version (which requires every connected node to support it, and fences the others), as it has 0 then
             return Finish(TResult::OK, std::nullopt);
         }
 
-        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        NKikimrBlobStorage::TStorageConfig config = current;
         config.MutableClusterStateDetails()->ClearBscConversionPending();
         config.MutableClusterStateDetails()->ClearBscConversionId();
         StartProposition(&config);
@@ -649,7 +656,7 @@ namespace NKikimr::NStorage {
             // the notification may come late, when the operation it refers to has already been finished
             throw TExError() << "Pending pile operation is another one";
         } else if (cmd.HasErrorReason() && op.HasErrorReason() && op.GetErrorReason() == cmd.GetErrorReason()) {
-            return Finish(TResult::OK, std::nullopt); // nothing changes
+            return StartCommitConfirmation();
         }
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;

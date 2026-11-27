@@ -65,8 +65,10 @@ void TPartition::ReplyWrite(
     LOG_D(
         "TPartition::ReplyWrite");
 
-    PQ_ENSURE(offset <= (ui64)Max<i64>())("Offset is too big", offset);
-    PQ_ENSURE(seqNo <= (ui64)Max<i64>())("SeqNo is too big", seqNo);
+    PQ_ENSURE(offset <= (ui64)Max<i64>(),
+        {"tooBigOffset", offset});
+    PQ_ENSURE(seqNo <= (ui64)Max<i64>(),
+        {"tooBigSeqNo", seqNo});
 
     THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
@@ -528,7 +530,11 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             ctx.Send(TabletActorId, reply.Release());
             response.Span.EndOk();
         } else {
-            PQ_ENSURE(false)("reason", "Unexpected message")("topic", TopicName())("cookie", response.GetCookie())("index", response.Body.index());
+            PQ_ENSURE(false,
+                {"reason", "Unexpected message"},
+                {"topic", TopicName()},
+                {"cookie", response.GetCookie()},
+                {"index", response.Body.index()});
         }
         Responses.pop_front();
     }
@@ -546,7 +552,9 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         return;
     }
 
-    PQ_ENSURE(BlobEncoder.EndOffset == BlobEncoder.Head.GetNextOffset())("EndOffset", GetEndOffset())("NextOffset", BlobEncoder.Head.GetNextOffset());
+    PQ_ENSURE(BlobEncoder.EndOffset == BlobEncoder.Head.GetNextOffset(),
+        {"endOffset", GetEndOffset()},
+        {"nextOffset", BlobEncoder.Head.GetNextOffset()});
 
     // a) !CompactedKeys.empty() && NewHead.PackedSize == 0
     // b) !CompactedKeys.empty() && NewHead.PackedSize != 0
@@ -930,7 +938,7 @@ void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TA
 void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
     LOG_T("TPartition::HandleOnWrite TEvRegisterMessageGroup");
 
-    const auto& body = ev->Get()->Body;
+    auto& body = ev->Get()->Body;
 
     auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId);
     if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
@@ -946,6 +954,16 @@ void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const T
             if (!body.AfterSplit) {
                 return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
                     "AfterSplit must be set");
+            }
+            if (Config.GetSplitByPartitionKey() && it->second.KeyRange) {
+                NKikimrPQ::TPartitionKeyRange keyRange;
+                it->second.KeyRange->Serialize(keyRange);
+                if (body.KeyRange && (body.KeyRange->GetFromBound() != keyRange.GetFromBound()
+                        || body.KeyRange->GetToBound() != keyRange.GetToBound())) {
+                    return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                        "Key range does not match the split registration");
+                }
+                body.KeyRange = std::move(keyRange);
             }
             break;
         default:
@@ -1291,10 +1309,10 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
             }
         }
         if (!zone.DataKeysBody.empty() && zone.CompactedKeys.empty()) {
-            PQ_ENSURE(zone.DataKeysBody.back().Key.GetOffset() + zone.DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset())
-                ("LAST KEY", zone.DataKeysBody.back().Key.ToString())
-                ("HeadOffset", zone.Head.Offset)
-                ("NEWKEY", x.NewKey.ToString());
+            PQ_ENSURE(zone.DataKeysBody.back().Key.GetOffset() + zone.DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset(),
+                {"lastKey", zone.DataKeysBody.back().Key},
+                {"headOffset", zone.Head.Offset},
+                {"NEWKEY", x.NewKey});
         }
         LOG_D(
             "Writing blob: topic partition old key new key size WTime",
@@ -1485,7 +1503,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 {"curOffset", curOffset},
                 {"offset", poffset}
             );
-            PQ_ENSURE(!p.Internal)("topic", TopicName()); // No Already for transactions;
+            PQ_ENSURE(!p.Internal,
+                {"topic", TopicName()}); // No Already for transactions;
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
             MsgsDiscarded.Inc();
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());

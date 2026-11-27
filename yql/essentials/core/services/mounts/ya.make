@@ -28,4 +28,10 @@ RESOURCE(
     yql/essentials/mount/lib/yql/spark.yqls /lib/yql/spark.yqls
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    logos/projects/ads/mldwh/querygen
+    toloka/analytics/programs/yql_parser
+)
+
 END()

@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
@@ -1162,8 +1163,7 @@ void TestMirroredOffsetSurvivesRestart(bool kafkaBatch) {
             }
             return TTestActorRuntimeBase::EEventAction::PROCESS;
         });
-        // No mirror rule: only KV can restore MirroredOffset after the restart.
-        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+        PQTabletPrepare({.partitions = 1, .specVersion = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
         PQGetPartInfo(0, 0, tc);
         UNIT_ASSERT(partitionActor);
         tc.Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
@@ -1173,16 +1173,30 @@ void TestMirroredOffsetSurvivesRestart(bool kafkaBatch) {
             CmdWrite(0, "sourceid_before_gap", {{1, "before-gap"}}, tc);
             expected.push_back({.SeqNo = 1, .Offset = 0, .Data = "before-gap"});
         }
+        TActorId mirrorer;
+        auto observeMirrorer = tc.Runtime->AddObserver<TEvPQ::TEvInitCredentials>([&](auto& ev) {
+            mirrorer = ev->Sender;
+            ev.Reset();
+        });
+        auto config = MakePQTabletConfig({.partitions = 1, .writeSpeed = 50_MB},
+            {{.Name = "user1", .Important = true}}, *tc.Runtime, 2);
+        config.MutablePartitionConfig()->MutableMirrorFrom()->SetMirrorConsumerOffsets(true);
+        SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config, tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
+        tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT(mirrorer);
         constexpr ui64 mirroredOffset = 1000;
         // Only an empty partition advances its boundaries to the replicated position.
         const ui64 expectedStartOffset = prefill ? 0 : mirroredOffset;
         const ui64 expectedEndOffset = prefill ? 1 : mirroredOffset;
         auto replicationData = MakeHolder<TEvPQ::TEvReplicationData>();
         replicationData->MirroredOffset = mirroredOffset;
-        tc.Runtime->Send(new IEventHandle(partitionActor, tc.Edge, replicationData.Release(), 0, 17));
+        tc.Runtime->Send(new IEventHandle(partitionActor, mirrorer, replicationData.Release(), 0, 17));
         tc.Runtime->SimulateSleep(TDuration::Seconds(1));
         PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
 
+        config.SetVersion(3);
+        config.MutablePartitionConfig()->ClearMirrorFrom();
+        SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config, tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
         PQTabletRestart(tc);
         PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
 

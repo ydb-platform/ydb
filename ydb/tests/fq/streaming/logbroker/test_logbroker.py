@@ -7,6 +7,7 @@ import pytest
 import ydb
 
 from ydb.tests.fq.streaming_common.common import StreamingTestBase, YdbClient, counter_nodes, get_sensors
+from ydb.tests.library.common.wait_for import wait_for
 
 
 def wait_topic_consumer(driver, cluster_name, path, consumer, timeout=60):
@@ -55,7 +56,7 @@ def wait_topic_messages(logbrokers, path, expected_count, timeout=120):
 
 
 class TestLogbroker(StreamingTestBase):
-    def init(self, kikimr, logbroker_federation, cleanup, query_name="sledge_hammer"):
+    def init(self, kikimr, logbroker_federation, cleanup, query_name="sledge_hammer", partitions_count=4):
         database = "/logbroker-federation/admin"
         self.input_topic = f"{query_name}-input"
         self.output_topic = f"{query_name}-output"
@@ -71,7 +72,7 @@ class TestLogbroker(StreamingTestBase):
             for topic in (self.input_topic, self.output_topic):
                 driver.topic_client.create_topic(
                     topic,
-                    min_active_partitions=4,
+                    min_active_partitions=partitions_count,
                     consumers=[federation_consumer],
                 )
 
@@ -135,6 +136,74 @@ class TestLogbroker(StreamingTestBase):
                         self.logbrokers_client[cluster_name].topic_read(self.output_topic, self.consumer, count)
                     )
             assert sorted(actual) == sorted(messages), counts
+
+    def test_read_different_partition_counts_after_restart(self, kikimr, logbroker_federation):
+        with ExitStack() as cleanup:
+            partition_counts = {"cluster_a": 2, "cluster_b": 4, "cluster_c": 6}
+            self.init(
+                kikimr,
+                logbroker_federation,
+                cleanup,
+                query_name="different_partition_counts",
+                partitions_count=min(partition_counts.values()),
+            )
+            assert self.logbrokers_client.keys() == partition_counts.keys()
+            for cluster_name, partitions_count in partition_counts.items():
+                topic_client = self.logbrokers_client[cluster_name].driver.topic_client
+                if partitions_count != min(partition_counts.values()):
+                    topic_client.alter_topic(self.input_topic, set_min_active_partitions=partitions_count)
+                assert wait_for(
+                    lambda: {
+                        partition.partition_id for partition in topic_client.describe_topic(self.input_topic).partitions
+                    }
+                    == set(range(partitions_count)),
+                    timeout_seconds=60,
+                    step_seconds=0.5,
+                ), f"Expected {partitions_count} partitions on {cluster_name}"
+
+            self.start_query(kikimr, cleanup)
+            expected_messages = []
+            actual_messages = []
+            read_counts = {name: 0 for name in partition_counts}
+
+            def write_messages(phase):
+                for cluster_name, partitions_count in partition_counts.items():
+                    for partition_id in range(partitions_count):
+                        message = f"{phase}, {cluster_name}, partition {partition_id}"
+                        self.logbrokers_client[cluster_name].topic_write(
+                            self.input_topic, [message], partition_id=partition_id
+                        )
+                        expected_messages.append(message)
+
+            def check_output():
+                counts = wait_topic_messages(self.logbrokers_client, self.output_topic, len(expected_messages))
+                for cluster_name, count in counts.items():
+                    unread_count = count - read_counts[cluster_name]
+                    if unread_count:
+                        actual_messages.extend(
+                            self.logbrokers_client[cluster_name].topic_read(
+                                self.output_topic, self.consumer, unread_count
+                            )
+                        )
+                    read_counts[cluster_name] = count
+                assert sorted(actual_messages) == sorted(expected_messages), counts
+
+            write_messages("before restart")
+            check_output()
+            # Persist offsets from every cluster and partition before stopping the query.
+            self.wait_completed_checkpoints(kikimr, self.query_name)
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{self.query_name}` SET (RUN = FALSE);")
+            assert wait_for(
+                lambda: self.get_query_state(kikimr, self.query_name).Status == "STOPPED",
+                timeout_seconds=120,
+                step_seconds=0.5,
+            ), self.get_query_state(kikimr, self.query_name)
+
+            # Data written while stopped must be read from the saved offsets on resume.
+            write_messages("while stopped")
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{self.query_name}` SET (RUN = TRUE);")
+            self.wait_completed_checkpoints(kikimr, self.query_name)
+            check_output()
 
     def wait_available_clusters(self, kikimr, expected_count, timeout=120):
         path = f"{kikimr.get_database_name()}/{self.query_name}"

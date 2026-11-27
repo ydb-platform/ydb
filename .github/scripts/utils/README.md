@@ -10,14 +10,14 @@
 - **tests/** — unit-тесты (`tests/dashboard`, `tests/metrics`), не в продуктовых пакетах
 
 - **dashboard/** — построение дашбордов
-  - `runner_footprint.py` — provisioned лимиты из `.github/config/runners_footprints.yml`
+  - `runner_capacity.py` — лимиты/рекомендации дашборда из measured `/proc` (`resources_monitor.jsonl`)
   - `analyze_resources.py` — HTML по данным monitor
   - **test_metrics/** — дашборд тестов (evlog + report + overlay CPU/RAM/disk)
     - `tests_resource_dashboard.py` — основной скрипт
     - `dashboard_*.py` — рендеринг HTML
     - `ya_make_requirements.py` — чтение REQUIREMENTS из ya.make
 
-Конфиг раннеров: `.github/config/runners_footprints.yml`. На дашборде красная линия = monitor, фиолетовая пунктирная = лимит из конфига.
+Dashboard limits/mem→cpu: measured host from `resources_monitor.jsonl`; tuning knobs in `.github/config/tests_resource_dashboard.yml`. `runners_footprints.yml` is for `export_runner_capacity` fleet inventory only.
 
 Unit-тесты лежат отдельно в `tests/` (не рядом с продуктовым кодом):
 

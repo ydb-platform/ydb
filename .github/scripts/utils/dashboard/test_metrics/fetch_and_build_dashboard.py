@@ -209,7 +209,7 @@ def main() -> None:
         "--build-preset",
         type=str,
         default=None,
-        help="ya make build preset for runner footprint (e.g. relwithdebinfo, release-asan). Auto-detected from URL if omitted.",
+        help="ya make build preset (e.g. relwithdebinfo, release-asan). Auto-detected from URL if omitted.",
     )
     ap.add_argument(
         "--top-n",

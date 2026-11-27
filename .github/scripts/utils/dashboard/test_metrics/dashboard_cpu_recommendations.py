@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
-    from ..runner_footprint import RunnerFootprint, resolve_runner_footprint
+    from ..runner_capacity import DashboardTuning, MeasuredHost, load_dashboard_tuning, mem_cpu_tiers_for
 except ImportError:
     _dashboard_dir = Path(__file__).resolve().parent.parent
     if str(_dashboard_dir) not in sys.path:
         sys.path.insert(0, str(_dashboard_dir))
-    from runner_footprint import RunnerFootprint, resolve_runner_footprint
+    from runner_capacity import DashboardTuning, MeasuredHost, load_dashboard_tuning, mem_cpu_tiers_for
 
 
 def _status_bucket() -> dict[str, int]:
@@ -235,15 +235,21 @@ def build_cpu_recommendations(
     test_duration_stats_by_suite: Optional[dict[str, dict[str, Any]]] = None,
     maximize_reqs_for_timeout_tests: bool = False,
     runner_cpu_series: Optional[list[tuple[float, float]]] = None,
-    runner_footprint: Optional[RunnerFootprint] = None,
+    measured_host: Optional[MeasuredHost] = None,
+    tuning: Optional[DashboardTuning] = None,
 ) -> list[dict[str, Any]]:
-    fp = runner_footprint or resolve_runner_footprint()
-    runner_cores = fp.vcpu
-    mem_budget_gb = fp.mem_budget_gb
-    mem_min_chunk_gb = fp.mem_min_chunk_gb
-    cpu_saturation_pct = fp.cpu_saturation_pct
-    near_budget_factor = fp.near_budget_factor
-    mem_cpu_tiers = fp.mem_cpu_tiers
+    dash = tuning if tuning is not None else load_dashboard_tuning()
+    mem_min_chunk_gb = dash.mem_min_chunk_gb
+    cpu_saturation_pct = dash.cpu_saturation_pct
+    near_budget_factor = dash.near_budget_factor
+    if measured_host is not None:
+        runner_cores = measured_host.vcpu
+        mem_budget_gb = measured_host.mem_budget_gb(dash)
+        mem_cpu_tiers = mem_cpu_tiers_for(measured_host.vcpu)
+    else:
+        runner_cores = 0
+        mem_budget_gb = 0.0
+        mem_cpu_tiers = mem_cpu_tiers_for(None)
     dedup_runs_by_chunk: dict[tuple[str, str], dict[str, Any]] = {}
     dedup_runs_fallback: list[dict[str, Any]] = []
     for r in runs:
@@ -428,7 +434,7 @@ def build_cpu_recommendations(
         cpu_for_memory: Any = None
         mem_max_parallel = 0
         mem_driven_cpu = False
-        if max_chunk_ram_gb >= mem_min_chunk_gb:
+        if measured_host is not None and max_chunk_ram_gb >= mem_min_chunk_gb:
             mem_max_parallel = max(1, int(mem_budget_gb // max_chunk_ram_gb))
             cpu_for_memory = _round_cpu_up(runner_cores / mem_max_parallel, mem_cpu_tiers)
             if recommended_req != "all" and int(recommended_req) < int(cpu_for_memory):
@@ -891,10 +897,13 @@ def build_cpu_recommendations(
         # into a cpu recommendation above (cpu_for_memory). Here we expose the diagnostic
         # per-chunk numbers and explain how memory maps onto the cpu slot.
         per_chunk_ram_gb = peak_ram / max_par if max_par > 0 else peak_ram
+        mem_budget_explain = (
+            f"{mem_budget_gb:.0f}" if measured_host is not None else "n/a (no monitor host)"
+        )
         mem_explain = (
             f"max_chunk_ram_gb={max_chunk_ram_gb:.1f}; peak_suite_ram_gb={peak_ram:.1f}; "
             f"max_parallel_self={max_par}; avg_per_chunk_ram_gb={per_chunk_ram_gb:.1f}; "
-            f"mem_budget_gb={mem_budget_gb:.0f}; cpu_for_memory={cpu_for_memory}; "
+            f"mem_budget_gb={mem_budget_explain}; cpu_for_memory={cpu_for_memory}; "
             f"mem_driven_cpu={mem_driven_cpu}"
         )
         if cpu_for_memory is not None:

@@ -65,6 +65,9 @@ void TStagePredictor::Scan(const NYql::TExprNode::TPtr& stageNode) {
             HasSortFlag = true;
         } else if (node.Maybe<NYql::NNodes::TCoFilterBase>()) {
             HasFilterFlag = true;
+        } else if (node.Ref().Content() == "BlockCombineHashed" || node.Ref().Content() == "BlockCombineAll") {
+            // Partial block aggregation. The row WideCombiner path sets the same flag below.
+            HasStateCombinerFlag = true;
         } else if (node.Maybe<NYql::NNodes::TCoWideCombiner>()) {
             auto wCombiner = node.Cast<NYql::NNodes::TCoWideCombiner>();
             GroupByKeysCount = wCombiner.KeyExtractor().Ptr()->ChildrenSize() - 1;

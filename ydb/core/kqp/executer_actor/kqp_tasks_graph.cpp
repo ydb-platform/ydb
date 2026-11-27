@@ -2532,6 +2532,19 @@ std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetSca
             const TStagePredictor& predictor = stageInfo.Meta.Tx.Body->GetCalculationPredictor(stageInfo.Meta.GetStageIdx(stageInfo.Id));
             taskReason = TTaskType::LEVEL_PREDICTED; // TODO: need to store also params for predictor
             result = predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), {});
+            // A partial aggregation over a column scan is one task when the cost model
+            // underestimates the table (TPC-H lineitem is estimated at 1000 rows). The
+            // shards then block on that single consumer. Split only a combinable
+            // aggregation: a map join in the same stage must keep the predicted count,
+            // or each task rebuilds the full hash table.
+            const auto& settings = stage.GetProgram().GetSettings();
+            if (settings.GetHasStateAggregation() && !settings.GetHasMapJoin() && !settings.GetHasFinalAggregation()) {
+                const ui32 threads = TStagePredictor::GetUsableThreads();
+                if (result < threads) {
+                    taskReason = TTaskType::OLAP_AGGREGATION_SCAN;
+                    result = threads;
+                }
+            }
         }
     } else {
         taskReason = TTaskType::OLTP_AGGREGATION_SCAN;
@@ -2716,24 +2729,44 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
     } else {
         ui32 metaId = 0;
         for (auto& [nodeId, shardsInfo] : nodeShards) {
-            const ui32 metaGlueingId = ++metaId;
-            TTaskMeta meta;
-            {
+            auto& nodeTasks = tasksByNode.at(nodeId);
+            if (nodeTasks.size() <= 1) {
+                const ui32 metaGlueingId = ++metaId;
+                TTaskMeta meta;
                 for (auto& shardInfo : shardsInfo) {
                     MergeReadInfoToTaskMeta(meta, shardInfo.ShardId, shardInfo.KeyReadRanges, readSettings,
                         columns, op, /*isPersistentScan*/ true);
                 }
                 PrepareScanMetaForUsage(meta, keyTypes);
+                for (ui64 taskId : nodeTasks) {
+                    auto& task = GetTask(taskId);
+                    task.Reason = TTaskType::DEFAULT_SHARD_SCAN;
+                    task.Meta = meta;
+                    task.Meta.SetEnableShardsSequentialScan(false);
+                    task.Meta.ExpectedNodeId = nodeId;
+                    task.Meta.ScanTask = true;
+                    task.SetMetaId(metaGlueingId);
+                }
+                continue;
             }
-
-            for (ui64 taskId : tasksByNode.at(nodeId)) {
-                auto& task = GetTask(taskId);
-                task.Reason = TTaskType::DEFAULT_SHARD_SCAN;
-                task.Meta = meta;
+            // One shared meta would make every task read every shard and multiply
+            // a partial aggregation. Each shard goes to one task.
+            std::vector<TTaskMeta> metas(nodeTasks.size());
+            for (size_t si = 0; si < shardsInfo.size(); ++si) {
+                MergeReadInfoToTaskMeta(metas[si % metas.size()], shardsInfo[si].ShardId, shardsInfo[si].KeyReadRanges,
+                    readSettings, columns, op, /*isPersistentScan*/ true);
+            }
+            for (auto& meta : metas) {
+                PrepareScanMetaForUsage(meta, keyTypes);
+            }
+            for (size_t t = 0; t < nodeTasks.size(); ++t) {
+                auto& task = GetTask(nodeTasks[t]);
+                task.Reason = TTaskType::OLAP_AGGREGATION_SCAN;
+                task.Meta = std::move(metas[t]);
                 task.Meta.SetEnableShardsSequentialScan(false);
                 task.Meta.ExpectedNodeId = nodeId;
                 task.Meta.ScanTask = true;
-                task.SetMetaId(metaGlueingId);
+                task.SetMetaId(++metaId);
             }
         }
     }
@@ -4090,7 +4123,7 @@ TVector<TString> TKqpTasksGraph::GetStageIntrospection(const TStageId& stageId) 
                 introspections.push_back(ToString(count) + " tasks by resource snapshot for source read");
                 break;
             case TTaskType::ECreateReason::OLAP_AGGREGATION_SCAN:
-                introspections.push_back(ToString(count) + " tasks from CSScanThreadsPerNode setting");
+                introspections.push_back(ToString(count) + " tasks for partial OLAP aggregation");
                 break;
             case TTaskType::ECreateReason::OLTP_AGGREGATION_SCAN:
                 introspections.push_back(ToString(count) + " tasks from DSScanMinimalThreads setting");
@@ -4524,9 +4557,10 @@ void TKqpTasksGraph::CountScanTasksFromShards(TStageInfo& stageInfo, bool enable
         MaxTasksGraph->AddStage(stageInfo, stageType, inputs);
 
         // It's ok to create tasks only on nodes with shards - to prevent cross-network traffic.
-        for (const auto& [nodeId, _] : nodeShards) {
+        for (const auto& [nodeId, shards] : nodeShards) {
             const auto maxTasksPerNode = GetScanTasksPerNode(stageInfo, isOlapScan, nodeId).first;
-            for (ui32 i = 0; i < maxTasksPerNode; ++i) {
+            const ui32 count = std::min<ui32>(std::max<ui64>(shards, 1), maxTasksPerNode);
+            for (ui32 i = 0; i < count; ++i) {
                 MaxTasksGraph->AddTask(AddTask(stageInfo, TTask::UNKNOWN), nodeId);
             }
         }

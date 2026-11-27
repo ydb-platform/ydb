@@ -3480,6 +3480,43 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT(continuations.empty());
     }
 
+    Y_UNIT_TEST(GC_PreservesActiveReservationOnLimitDecrease) {
+        for (bool capped : {false, true}) {
+            auto config = TSharedPageCacheMock::DefaultConfig();
+            config.SetMemoryLimit(8 * PAGE_TOTAL_SIZE);
+            if (capped) {
+                config.SetTryKeepInMemoryMaxRatio(0.75);
+            }
+            TSharedPageCacheMock cache(config);
+            auto regular = MakeIntrusive<TPageCollectionMock>(1ul, 8u);
+            auto cold = MakeIntrusive<TPageCollectionMock>(2ul, 6u);
+            const TVector<TPageLocation> pages = {_P(0), _P(1), _P(2), _P(3), _P(4), _P(5), _P(6), _P(7)};
+            cache.Request(cache.Sender1, regular, pages);
+            cache.CheckFetches({TFetch{80, regular, pages}});
+            cache.Provide(regular, pages);
+            auto pinned = cache.CheckResults({TFetch{1, regular, pages}});
+
+            cache.Attach(cache.Sender2, cold, ECacheMode::TryKeepInMemory);
+            cache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(cache.Counters->ActivePages->Val(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cache.Counters->PassivePages->Val(), 6);
+
+            // All eight pages are pinned. The two active pages already fit the 50% reservation.
+            cache.SetLimit(6 * PAGE_TOTAL_SIZE);
+            cache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(cache.Counters->ActiveLimitBytes->Val(), 6 * PAGE_TOTAL_SIZE);
+            UNIT_ASSERT_VALUES_EQUAL(cache.Counters->ActivePages->Val(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cache.Counters->PassivePages->Val(), 6);
+
+            pinned.clear();
+            cache.Wakeup();
+            UNIT_ASSERT_VALUES_EQUAL(cache.Counters->PassivePages->Val(), 0);
+            // Reread the original working set while replies for the cold collection are held.
+            cache.Request(cache.Sender1, regular, pages);
+            UNIT_ASSERT_VALUES_EQUAL(cache.Counters->CacheHitPages->Val(), 2);
+        }
+    }
+
     Y_UNIT_TEST(GC_ReportsBytesEvictedFromBothTiers) {
         TStringStream log;
         auto config = TSharedPageCacheMock::DefaultConfig();

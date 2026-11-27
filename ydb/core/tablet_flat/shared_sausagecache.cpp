@@ -178,6 +178,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
     // A large decrease of the total limit or either tier allocation continues after other events run.
     bool LimitDecreaseScheduled = false;
+    // Regular-tier size requested by the latest allocation update, consumed by DoGC.
+    ui64 PendingRegularBytesToKeep = Max<ui64>();
 
     ui64 GetTargetCacheLimitBytes() const {
         if (Config.HasMemoryLimit()) {
@@ -226,74 +228,85 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             || InMemoryTierHasRoomFor(TPageTraits::GetSize(page));
     }
 
+    ui64 NextLimit(ui64 current, ui64 target) const {
+        if (current <= target) {
+            return target;
+        }
+        if (LimitDecreaseScheduled) {
+            return current;
+        }
+        const ui64 step = Config.GetMaxLimitDecreaseStepBytes();
+        return step && current - target > step ? current - step : target;
+    }
+
+    ui64 GrowInMemoryAllocation(ui64 cacheLimit, ui64 target, ui64 bytesMovingToInMemory) {
+        const ui32 regularTier = static_cast<ui32>(ECacheMode::Regular);
+        const ui64 regularSize = Cache.GetTierSize(regularTier);
+        Y_DEBUG_ABORT_UNLESS(bytesMovingToInMemory <= regularSize);
+        const ui64 remainingRegular = regularSize - bytesMovingToInMemory;
+        const ui64 occupiedRegular = Min(remainingRegular, Cache.GetTierLimit(regularTier));
+
+        // Free slots and resident pages being promoted are available immediately.
+        // Displace at most one step of occupied regular capacity.
+        const ui64 regularLimit = NextLimit(occupiedRegular, cacheLimit - target);
+
+        // A simultaneous total-limit decrease is handled by GC's active-page reservation.
+        const ui64 oldTotal = Cache.GetLimit();
+        const ui64 totalDecrease = oldTotal > cacheLimit ? oldTotal - cacheLimit : 0;
+        const ui64 regularBudget = regularLimit + totalDecrease;
+        if (occupiedRegular > regularBudget) {
+            const ui64 bytesTransferred = occupiedRegular - regularBudget;
+            PendingRegularBytesToKeep = remainingRegular - bytesTransferred;
+        }
+        return cacheLimit - regularLimit;
+    }
+
     void ActualizeCacheSizeLimit(ui64 regularBytesMovingToInMemory = 0) {
         Counters.ConfigLimitBytes->Set(Config.HasMemoryLimit() ? Config.GetMemoryLimit() : 0);
 
-        // Share one continuation between total-limit and tier-allocation decreases. Other events must
-        // not apply another step while that continuation is pending.
-        const ui64 configuredStep = Config.GetMaxLimitDecreaseStepBytes();
-        const ui64 maxDecrease = configuredStep ? configuredStep : Max<ui64>();
-        const ui64 decreaseStep = LimitDecreaseScheduled ? 0 : maxDecrease;
-        const auto adjustLimit = [decreaseStep](ui64 current, ui64 target) {
-            return current > target ? current - Min(current - target, decreaseStep) : target;
-        };
-
         const ui64 targetLimit = GetTargetCacheLimitBytes();
-        const ui64 newLimit = adjustLimit(Cache.GetLimit(), targetLimit);
+        const ui64 newLimit = NextLimit(Cache.GetLimit(), targetLimit);
+        const ui64 demand = Min(newLimit, GetInMemoryLimitBytes());
+        const ui64 ratioCap = GetMaxInMemoryBytes(newLimit);
+        const ui64 currentAllocation = Cache.GetTierLimit(static_cast<ui32>(ECacheMode::TryKeepInMemory));
 
-        // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
-        // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
-        // because of that DoGC should be called to ensure limits
-        const ui64 maxInMemoryBytes = GetMaxInMemoryBytes(newLimit);
-        const ui32 inMemoryTier = static_cast<ui32>(ECacheMode::TryKeepInMemory);
-        const ui64 inMemoryLimit = adjustLimit(Cache.GetTierLimit(inMemoryTier), maxInMemoryBytes);
-        const ui64 inMemoryDemand = Min(newLimit, GetInMemoryLimitBytes());
-        const ui64 targetRegularLimit = newLimit - Min(inMemoryDemand, inMemoryLimit);
-
-        // Transfer free regular capacity immediately. Limit the regular pages displaced by this step,
-        // excluding resident pages the caller is about to move into the in-memory tier itself.
-        const ui32 regularTier = static_cast<ui32>(ECacheMode::Regular);
-        const ui64 regularSize = Cache.GetTierSize(regularTier);
-        Y_DEBUG_ABORT_UNLESS(regularBytesMovingToInMemory <= regularSize);
-        const ui64 occupiedRegular = Min(regularSize - regularBytesMovingToInMemory, Cache.GetTierLimit(regularTier));
-        const ui64 regularLimit = adjustLimit(occupiedRegular, targetRegularLimit);
-        Cache.UpdateLimit(newLimit, newLimit - regularLimit);
+        PendingRegularBytesToKeep = Max<ui64>();
+        ui64 allocation = Min(demand, NextLimit(currentAllocation, ratioCap));
+        if (allocation > currentAllocation) {
+            allocation = GrowInMemoryAllocation(newLimit, allocation, regularBytesMovingToInMemory);
+        }
+        Cache.UpdateLimit(newLimit, allocation);
         Counters.ActiveLimitBytes->Set(newLimit);
 
-        if (!LimitDecreaseScheduled &&
-            (newLimit > targetLimit || Cache.GetTierLimit(inMemoryTier) != Min(inMemoryDemand, maxInMemoryBytes))) {
+        if (!LimitDecreaseScheduled && (newLimit > targetLimit || allocation != Min(demand, ratioCap))) {
             LimitDecreaseScheduled = true;
             Send(SelfId(), new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoLimitDecrease)));
         }
     }
 
     void DoGC() {
-        const ui64 activeBytesBeforeTierEviction = StatActiveBytes;
-        const ui64 inMemoryBytesBeforeTierEviction = ActiveInMemoryBytes;
-        // A tier can exceed its new limit even when total cache usage is below the overall limit.
-        // Enforce limits here, after handlers finish moving pages between tiers.
-        // With no in-memory allocation or pages, preserve the regular-only GC eviction order.
-        const ui32 inMemoryTier = static_cast<ui32>(ECacheMode::TryKeepInMemory);
-        if (Cache.GetTierLimit(inMemoryTier) != 0 || Cache.GetTierSize(inMemoryTier) != 0) {
-            Evict(Cache.EnsureLimits());
+        const ui64 cacheLimit = Cache.GetLimit();
+        const ui64 inMemoryBytesBeforeEviction = ActiveInMemoryBytes;
+        // Trim to the current step of the ratio cap. Total pressure uses the active reservation below.
+        if (Config.GetTryKeepInMemoryMaxRatio() < 1.0 && ActiveInMemoryBytes > GetMaxInMemoryBytes(cacheLimit)) {
+            Evict(Cache.EnsureTierLimit(static_cast<ui32>(ECacheMode::TryKeepInMemory)));
         }
-
-        ui64 evictedBytes = activeBytesBeforeTierEviction - StatActiveBytes;
-        ui64 evictedInMemoryBytes = inMemoryBytesBeforeTierEviction - ActiveInMemoryBytes;
+        ui64 evictedInMemoryBytes = inMemoryBytesBeforeEviction - ActiveInMemoryBytes;
+        ui64 evictedBytes = evictedInMemoryBytes;
 
         // maybe we already have enough useless pages
         // update StatActiveBytes + StatPassiveBytes
         ProcessGCList();
 
-        const ui64 cacheLimit = Cache.GetLimit();
         // TODO: get rid of active pages reservation
         const ui64 configActiveReservedBytes = cacheLimit * Config.GetActivePagesReservationPercent() / 100;
 
         THashSet<TCollection*> recheck;
-        // Evict pages from the cache until *all* used bytes get under the cache limit,
-        // but stop if *active* bytes get under configActiveReservedBytes to avoid the case
-        // where we just make all pages passive without actually freeing any memory.
-        while (GetStatAllBytes() > cacheLimit && StatActiveBytes > configActiveReservedBytes) {
+        // EvictNext selects regular pages first. Under total pressure, respect the active reservation.
+        const ui32 regularTier = static_cast<ui32>(ECacheMode::Regular);
+        const ui64 regularBytesToKeep = std::exchange(PendingRegularBytesToKeep, Max<ui64>());
+        while (Cache.GetTierSize(regularTier) > regularBytesToKeep ||
+               (GetStatAllBytes() > cacheLimit && StatActiveBytes > configActiveReservedBytes)) {
             if (TPage* evictedPage = Cache.EvictNext()) {
                 auto pageSize = TPageTraits::GetSize(evictedPage);
                 evictedBytes += pageSize;

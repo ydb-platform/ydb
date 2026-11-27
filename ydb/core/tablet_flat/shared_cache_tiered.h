@@ -54,6 +54,10 @@ namespace NKikimr::NSharedCache {
             return evicted;
         }
 
+        TIntrusiveList<TPage> EnsureTierLimit(ui32 tier) Y_WARN_UNUSED_RESULT {
+            return CacheTiers[tier].EnsureLimits();
+        }
+
         ui64 GetLimit() const {
             return RegularTier->GetLimit() + TryKeepInMemoryTier->GetLimit();
         }

@@ -3430,7 +3430,7 @@ TActorId TPartitionFixture::StartCdcMirrorer() {
         ev.Reset();
     });
     Config.SetVersion(Config.GetVersion() + 1);
-    Config.MutableCdcReplication();
+    Config.SetCdcReplication(true);
     Config.MutablePartitionConfig()->MutableMirrorFrom()->SetMirrorConsumerOffsets(true);
     SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     WaitCmdWrite();

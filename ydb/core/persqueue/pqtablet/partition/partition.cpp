@@ -5322,8 +5322,8 @@ void TPartition::Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const 
 }
 
 bool TPartition::IsCdcReplicationTopic() const {
-    return Config.HasCdcReplication()
-        || (ChangeConfig && ChangeConfig->Config.HasCdcReplication());
+    return Config.GetCdcReplication()
+        || (ChangeConfig && ChangeConfig->Config.GetCdcReplication());
 }
 
 TActorId TPartition::GetActiveMirrorer() const {

@@ -130,9 +130,11 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     arrow::UInt64Builder b7;
 
     NJson::TJsonValue jsonInfo;
-    jsonInfo["a"]["b"] = 1;
-    jsonInfo["a"]["c"] = "asds";
-    jsonInfo["b"] = "asd";
+    if (GetWithJsonDocument()) {
+        jsonInfo["a"]["b"] = 1;
+        jsonInfo["a"]["c"] = "asds";
+        jsonInfo["b"] = "asd";
+    }
 
     size_t index = 1ULL;
     const auto magic = WithSomeNulls_ ? 3ULL : 0ULL;
@@ -153,9 +155,11 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
         else
             Y_ABORT_UNLESS(b5.Append(message).ok());
 
-        jsonInfo["a"]["b"] = i;
-        auto jsonStringBase = jsonInfo.GetStringRobust();
-        Y_ABORT_UNLESS(b6.Append(jsonStringBase.data(), jsonStringBase.size()).ok());
+        if (GetWithJsonDocument()) {
+            jsonInfo["a"]["b"] = i;
+            auto jsonStringBase = jsonInfo.GetStringRobust();
+            Y_ABORT_UNLESS(b6.Append(jsonStringBase.data(), jsonStringBase.size()).ok());
+        }
         Y_ABORT_UNLESS(b7.Append(i * 1000).ok());
     }
 
@@ -172,10 +176,10 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     Y_ABORT_UNLESS(b3.Finish(&a3).ok());
     Y_ABORT_UNLESS(b4.Finish(&a4).ok());
     Y_ABORT_UNLESS(b5.Finish(&a5).ok());
-    Y_ABORT_UNLESS(b6.Finish(&a6).ok());
     Y_ABORT_UNLESS(b7.Finish(&a7).ok());
 
     if (GetWithJsonDocument()) {
+        Y_ABORT_UNLESS(b6.Finish(&a6).ok());
         return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a6, a7 });
     } else {
         return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a7 });

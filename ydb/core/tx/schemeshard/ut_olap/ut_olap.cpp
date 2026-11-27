@@ -2831,24 +2831,20 @@ Y_UNIT_TEST_SUITE(TOlap) {
         const TString data = NTxUT::MakeTestBlob({0, 100000}, defaultYdbSchema, {}, {"timestamp"});
         ui64 writeId = 0;
         std::vector<ui64> uncommittedLockIds;
-        while (!GetSmallBlobsQuotaExceeded(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase"))) {
+        for (;;) {
             UNIT_ASSERT_C(uncommittedLockIds.size() < 6 * hardCountQuota, "uncommitted portions never exceeded the small-blobs quota; " << DEBUG_HINT);
-            std::vector<ui64> writeIds;
             ++txId;
-            UNIT_ASSERT_C(NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
-                              NEvWrite::EModificationType::Upsert, txId),
-                DEBUG_HINT);
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, nullptr,
+                NEvWrite::EModificationType::Upsert, txId, TDuration::Seconds(1));
+            const auto status = NTxUT::WaitWriteResult(runtime, shardId);
+            if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {
+                break;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(status, ui32(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED), DEBUG_HINT);
             uncommittedLockIds.push_back(txId);
             runtime.SimulateSleep(TDuration::Seconds(1));
         }
-
-        {
-            std::vector<ui64> writeIds;
-            ++txId;
-            UNIT_ASSERT_C(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
-                              NEvWrite::EModificationType::Upsert, txId, TDuration::Seconds(1)),
-                "a write must be refused while the quota is exceeded; " << DEBUG_HINT);
-        }
+        CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
 
         ui64 planStep = 0;
         TSet<ui64> txIds;

@@ -35,6 +35,8 @@
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
 
+#include <memory>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::IMPORT
 
 namespace NKikimr {
@@ -2300,7 +2302,7 @@ private:
                 // intact and retry the mkdir after the concurrent change.
                 Self->TxIdToImport.erase(txId);
                 item.SubState = ESubState::AllocateTxId;
-                ctx.Schedule(TDuration::MilliSeconds(100), new IEventHandle(Self->TxAllocatorClient, Self->SelfId(),
+                ctx.Schedule(TDuration::MilliSeconds(100), std::make_unique<IEventHandle>(Self->TxAllocatorClient, Self->SelfId(),
                     new TEvTxAllocatorClient::TEvAllocate(), 0, importInfo->Id));
                 return;
             }

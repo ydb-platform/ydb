@@ -1,6 +1,8 @@
 #include "output.h"
 #include <library/cpp/testing/unittest/registar.h>
 #include <complex>
+#include <cstdint>
+#include <optional>
 #include <sstream>
 #include <util/string/builder.h>
 #include <util/generic/vector.h>
@@ -30,5 +32,10 @@ Y_UNIT_TEST_SUITE(TestOutput) {
                 CheckComplexOutHelper(real, imag);
             }
         }
+    }
+
+    Y_UNIT_TEST(TestOptionalUint64) {
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuilder() << std::optional<std::uint64_t>{42}, "42");
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuilder() << std::optional<std::uint64_t>{}, "(NULL)");
     }
 } // Y_UNIT_TEST_SUITE(TestOutput)

@@ -157,6 +157,11 @@ public:
         return nullptr;
     }
 
+    TString GetAuditUserSID() const {
+        const auto token = GetParsedToken();
+        return token ? token->GetUserSID() : TString();
+    }
+
     TString GetSerializedToken() const {
         if (AuthorizeTicketResult) {
             if (AuthorizeTicketResult->Token) {

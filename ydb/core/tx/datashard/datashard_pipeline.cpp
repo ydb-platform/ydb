@@ -2445,8 +2445,9 @@ void TPipeline::AddWaitingReadIterator(
     const bool waitPlanStep = Self->WaitPlanStep(waitStep);
     span.Attribute("ydb.visibility.plan_step_wait_registered", waitPlanStep);
     span.Event("visibility wait entered");
+    TRowVersion unreadableEdge = TRowVersion::Min();
     if (!waitPlanStep) {
-        const auto unreadableEdge = GetUnreadableEdge();
+        unreadableEdge = GetUnreadableEdge();
         span.Attribute("ydb.visibility.initial_unreadable_step", static_cast<i64>(unreadableEdge.Step));
         span.Attribute("ydb.visibility.initial_unreadable_tx_id", static_cast<i64>(unreadableEdge.TxId));
         if (version < unreadableEdge) {

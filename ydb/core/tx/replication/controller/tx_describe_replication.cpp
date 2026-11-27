@@ -143,14 +143,16 @@ public:
 
         // Source statistics are optional: even a live proxy may never receive
         // a response from the source. Return the available results on timeout.
-        Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
+        constexpr auto timeout = TDuration::Seconds(5);
+        const auto deadline = NYdb::TDeadline::AfterDuration(timeout);
+        Schedule(timeout, new TEvents::TEvWakeup());
         for (const auto& [id, _] : Targets) {
             DescribeTarget(id);
         }
 
         for (const auto& [id, topic] : Topics) {
             Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(topic.SrcPath,
-                NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)), 0, id);
+                NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true).Deadline(deadline)), 0, id);
         }
         Become(&TThis::StateWork);
     }

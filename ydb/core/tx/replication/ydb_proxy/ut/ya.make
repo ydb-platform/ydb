@@ -10,6 +10,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/core/persqueue/public/describer
     ydb/core/security/sasl
     ydb/core/tx/replication/ut_helpers
     ydb/core/tx/replication/ydb_proxy/local_proxy

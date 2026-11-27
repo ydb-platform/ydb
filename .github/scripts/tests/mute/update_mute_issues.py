@@ -36,6 +36,8 @@ GITHUB_QUERY_MAX_ATTEMPTS = 6
 GITHUB_QUERY_TIMEOUT_SECONDS = 60
 GITHUB_QUERY_MAX_BACKOFF_SECONDS = 30
 GITHUB_QUERY_RETRY_STATUSES = {429, 500, 502, 503, 504}
+# HTTP 200 + GraphQL type UNKNOWN — GitHub transient internal error.
+GITHUB_QUERY_RETRY_ERROR_TYPES = {'UNKNOWN'}
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.
@@ -97,6 +99,22 @@ def handle_github_errors(response):
     raise Exception("GraphQL Error(s): " + " | ".join(formatted_errors))
 
 
+def _github_graphql_errors_retryable(response):
+    errors = response.get('errors') or []
+    if not errors:
+        return False
+    for raw_error in errors:
+        if not isinstance(raw_error, dict):
+            return False
+        extensions = raw_error.get('extensions') or {}
+        error_type = raw_error.get('type')
+        if 'INSUFFICIENT_SCOPES' in (error_type, extensions.get('code')):
+            return False
+        if error_type not in GITHUB_QUERY_RETRY_ERROR_TYPES:
+            return False
+    return True
+
+
 def _retry_backoff_seconds(attempt, response=None):
     backoff_seconds = min(2**attempt, GITHUB_QUERY_MAX_BACKOFF_SECONDS)
 
@@ -137,6 +155,14 @@ def run_query(query, variables=None):
 
         if request.status_code == 200:
             body = request.json()
+            if (
+                _github_graphql_errors_retryable(body)
+                and attempt < GITHUB_QUERY_MAX_ATTEMPTS - 1
+            ):
+                backoff_seconds = _retry_backoff_seconds(attempt)
+                print(f"GitHub GraphQL returned UNKNOWN error. Retrying in {backoff_seconds}s")
+                time.sleep(backoff_seconds)
+                continue
             handle_github_errors(body)
             return body
 

@@ -58,7 +58,7 @@ private:
         MvccSnapshot = ev->Get()->MvccSnapshot;
         Orbit = std::move(ev->Get()->Orbit);
         Cookie = ev->Get()->Cookie;
-        AcquireSpan = NWilson::TSpan(TWilsonKqp::Detailed, ev->TraceId,
+        AcquireSpan = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::Detailed, NWilson::TTraceId(ev->TraceId),
             "Snapshot acquisition", NWilson::EFlags::AUTO_END);
         AcquireSpan.Attribute("ydb.snapshot.mvcc", MvccSnapshot);
         AcquireSpan.Event("request received");

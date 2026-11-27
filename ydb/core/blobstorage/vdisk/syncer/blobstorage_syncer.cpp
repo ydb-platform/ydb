@@ -342,6 +342,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
+            HFunc(TEvSyncerCommit, ForwardCommit)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
@@ -365,6 +366,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
+            HFunc(TEvSyncerCommit, ForwardCommit)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
@@ -433,6 +435,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
+            HFunc(TEvSyncerCommit, ForwardCommit)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
@@ -543,6 +546,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
+            HFunc(TEvSyncerCommit, ForwardCommit)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
@@ -557,6 +561,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
+            HFunc(TEvSyncerCommit, ForwardCommit)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
@@ -694,6 +699,10 @@ namespace NKikimr {
                 rec->SetPhase(Phase);
                 ctx.Send(ev->Sender, result.release());
             }
+        }
+
+        void ForwardCommit(TEvSyncerCommit::TPtr& ev, const TActorContext& ctx) {
+            ctx.Send(ev->Forward(CommitterId));
         }
 
         void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {

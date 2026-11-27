@@ -55,6 +55,8 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         EStage Stage = EStage::ConfirmConfig;
         std::unique_ptr<TGroupStateBarrier> Barrier;
 
+        bool ChangesInvariant = false;
+
         bool RequiresStartupConfirmation(ui32 realm) const {
             return WaitForRecoveringVDiskStartup(*Info.GroupState) && IsRecovering(Info.States[realm]);
         }
@@ -151,7 +153,10 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             TGroup& group = Groups[message.GroupId];
             group.Info = *message.Info;
             group.Next = *next;
-            if (policyStep) {
+            group.ChangesInvariant = ChangesMirror3dcInvariant(*config, *next);
+            if (policyStep && group.ChangesInvariant) {
+                group.Stage = EStage::CheckPromotion;
+            } else if (policyStep) {
                 group.Stage = EStage::Propose;
                 RepairGroups.insert(message.GroupId);
                 ProposeState(message.GroupId, &group);
@@ -176,6 +181,9 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             }
         }
         if (group.Stage == EStage::CheckPromotion) {
+            if (group.ChangesInvariant && !TMirror3dcWriteQuorumChecker::HasEnsuredMetadataLayout(group.Next, uncertain)) {
+                return false;
+            }
             // Every placement allowed by the next E must include at least one confirmed VDisk.
             return !TMirror3dcWriteQuorumChecker::CanHideEnsuredLayout(group.Next, uncertain);
         }
@@ -344,7 +352,8 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         bool allowReadOnly = group.Stage == EStage::CheckPromotion || IsLeaving(role);
         group.ConfirmedDisks[query.Disk] = record.HasVDiskID() && reported == expected
             && record.GetStatus() == NKikimrProto::OK && record.GetJoinedGroup() && record.GetReplicated()
-            && (!record.GetIsReadOnly() || allowReadOnly);
+            && (!record.GetIsReadOnly() || allowReadOnly)
+            && (group.Stage != EStage::CheckPromotion || !group.ChangesInvariant || (record.HasGenerationStartLsn() && record.GetDurabilityReplicated()));
         if (!--group.Pending) {
             FinishStatusRound(query.GroupId, &group);
             RunRepairs();

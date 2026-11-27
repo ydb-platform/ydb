@@ -153,6 +153,10 @@ namespace NKikimr {
             TSjOutcome Handle(TEvFullSyncFinished::TPtr &ev);
             TSjOutcome Terminate(ESyncStatus status);
 
+            // Used only after a successful ordinary sync has applied the response.
+            bool WatchGenerationCut = false;
+            bool GenerationCutReached = false;
+
             bool NeedCommit() const {
                 bool need = OldSyncState != GetCurrent().SyncState;
                 return need;
@@ -202,6 +206,7 @@ namespace NKikimr {
             EPhase Phase = EStart;
             // previous sync state
             const TSyncState OldSyncState;
+            TSyncState AppliedSyncState;
             NSyncer::TPeerSyncState Current;
             // stat counter
             ui64 BytesReceived = 0;

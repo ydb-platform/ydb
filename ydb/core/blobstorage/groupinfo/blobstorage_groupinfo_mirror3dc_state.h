@@ -155,6 +155,19 @@ struct TMirror3dcGroupConfiguration {
     bool operator==(const TMirror3dcGroupConfiguration&) const = default;
 };
 
+constexpr bool ChangesMirror3dcInvariant(const TMirror3dcGroupConfiguration& before,
+        const TMirror3dcGroupConfiguration& after) {
+    if (GetMirror3dcReadLayout(before.State) != GetMirror3dcReadLayout(after.State)) {
+        return true;
+    }
+    for (unsigned realm = 0; realm < before.Realms.size(); ++realm) {
+        if (IsReadable(before.Realms[realm]) != IsReadable(after.Realms[realm])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 struct TMirror3dcTransition {
     EMirror3dcGroupState From;
     EMirror3dcGroupState To;

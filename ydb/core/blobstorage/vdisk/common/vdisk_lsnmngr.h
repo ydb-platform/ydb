@@ -56,6 +56,12 @@ namespace NKikimr {
             return static_cast<ui64>(AtomicGet(ConfirmedLsn));
         }
 
+        // Called on the allocation mailbox, including while an allocated segment awaits PDisk.
+        ui64 GetLastAllocated() {
+            auto guard = Guard(WriteLock);
+            return InFly.Empty() ? GetConfirmed() : InFly.Back().Last;
+        }
+
         void Output(IOutputStream &str) const {
             str << "{InFly# [";
             TAllocFreeQueue<TLsnSeg>::TIterator it(InFly);
@@ -221,6 +227,10 @@ namespace NKikimr {
         // hull confirmed lsn
         ui64 GetConfirmedLsnForHull() const {
             return AllocForHull->GetConfirmed();
+        }
+
+        ui64 GetLastAllocatedSyncLogLsn() const {
+            return AllocForSyncLog->GetLastAllocated();
         }
 
         // synclog confirmed lsn

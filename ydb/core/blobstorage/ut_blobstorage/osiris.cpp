@@ -743,6 +743,8 @@ Y_UNIT_TEST_SUITE(Osiris) {
         ui32 osirisDone = 0;
         ui32 replDone = 0;
         ui32 osirisWrites = 0;
+        bool holdSnapshots = false;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> snapshots;
         bool holdOsirisDone = false;
         bool holdReplDone = false;
         std::vector<std::unique_ptr<IEventHandle>> heldOsirisDone;
@@ -751,7 +753,11 @@ Y_UNIT_TEST_SUITE(Osiris) {
             .NodeCount = 9,
             .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
         });
-        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+        env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (holdSnapshots && event->GetTypeRewrite() == TEvBlobStorage::EvVSyncFull) {
+                snapshots.emplace_back(node, std::move(event));
+                return false;
+            }
             switch (event->GetTypeRewrite()) {
                 case TEvBlobStorage::EvControllerNodeServiceSetUpdate: {
                     NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& record =
@@ -852,8 +858,18 @@ Y_UNIT_TEST_SUITE(Osiris) {
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
         UNIT_ASSERT_C(osirisWrites, "Raising D to 2+2 must resurrect additional copies");
         checkReplicationFlags(true);
-        // A generation-only update must not start another pass.
+        // Skip several generations without changing D. Blob replication stays complete,
+        // but an incremental cursor alone cannot establish the inherited metadata.
+        holdSnapshots = true;
         applyStates();
+        UNIT_ASSERT(!snapshots.empty());
+        checkReplicationFlags(false);
+        holdSnapshots = false;
+        for (auto& [node, event] : snapshots) {
+            env.Runtime->Schedule(env.Runtime->GetClock(), event.release(), nullptr, node);
+        }
+        env.Sim(TDuration::Seconds(60));
+        checkReplicationFlags(true);
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
         // Completing INV2_PENDING changes E, but keeps D=2+2: no new pass is needed.

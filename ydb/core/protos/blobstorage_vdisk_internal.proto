@@ -130,6 +130,15 @@ message TSyncerVDiskEntry {
 message TSyncerEntryPoint {
     optional NKikimrBlobStorage.TLocalGuidInfo LocalGuidInfo = 5;
     repeated TSyncerVDiskEntry Entries = 10;
+    message TGenerationCut {
+        optional uint32 Generation = 1;
+        optional fixed64 IncarnationGuid = 2;
+        optional uint64 Lsn = 3;
+        optional bool HasPreviousMetadata = 4;
+        optional bool MetadataReplicated = 5;
+        optional uint32 FirstGeneration = 6;
+    }
+    optional TGenerationCut GenerationCut = 11;
     // Info about YDB version of VDisk which made this record
     optional NKikimrConfig.TStoredCompatibilityInfo CompatibilityInfo = 15;
 };

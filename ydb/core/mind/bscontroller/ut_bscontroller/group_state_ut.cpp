@@ -20,6 +20,7 @@ struct TVDiskReplicationStatus {
     std::optional<ui32> ReplicatingRealm;
     std::optional<TVDiskIdShort> ErrorDisk;
     std::optional<bool> DurabilityReplicated = true;
+    bool HasGenerationCut = true;
     bool FailSecondRealm = false;
     bool OnlyFirstRealm = false;
 };
@@ -99,6 +100,9 @@ public:
         const auto replyStatus = status.ErrorDisk == diskId ? NKikimrProto::ERROR : NKikimrProto::OK;
         std::unique_ptr<TEvBlobStorage::TEvVStatusResult> result =
             std::make_unique<TEvBlobStorage::TEvVStatusResult>(replyStatus, disk, true, replicated, false, 1);
+        if (status.HasGenerationCut) {
+            result->Record.SetGenerationStartLsn(0);
+        }
         if (status.DurabilityReplicated) {
             result->Record.SetDurabilityReplicated(*status.DurabilityReplicated && available);
         }
@@ -200,6 +204,22 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         }
     }
 
+    Y_UNIT_TEST(ReformattedSoloDiskCanRecoverMetadataFromItsPeers) {
+        using Q = TMirror3dcWriteQuorumChecker;
+        using TInfo = TBlobStorageGroupInfo;
+        TInfo::TTopology topology(TBlobStorageGroupType(TBlobStorageGroupType::ErasureMirror3dc), 3, 3, 1, true);
+        TMirror3dcGroupConfiguration solo{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1,
+            {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}};
+        TInfo::TGroupVDisks peers(&topology);
+        UNIT_ASSERT(!Q::CoversInheritedMetadata(solo, peers));
+        for (ui32 domain : {1u, 2u}) {
+            peers |= TInfo::TGroupVDisks(&topology, TVDiskIdShort(0, domain, 0));
+        }
+        UNIT_ASSERT(Q::CanHideEnsuredLayout(solo, ~peers)); // The lost disk could hold an entire E=1.
+        UNIT_ASSERT(Q::CoversInheritedMetadata(solo, peers));
+        UNIT_ASSERT(!Q::CanAcknowledgeMetadataWithout(solo, peers));
+    }
+
     Y_UNIT_TEST(StableFailureDoesNotStartReplication) {
         TGroupStateFixture fixture;
         fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED});
@@ -229,12 +249,34 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         fixture.ReplyRound(6, status);
         fixture.AssertNoProposal();
         fixture.AssertNoRepair();
-        // One incomplete Included realm cannot contain the next E=1+1 by itself.
         status.ErrorDisk.reset();
+        status.DurabilityReplicated = true;
+        fixture.ReplyRound(6, status);
+        fixture.AssertNoProposal(); // No destination in the second Included realm has completed replication.
+        status.ReplicatingRealm.reset();
+        status.FailSecondRealm = true;
+        status.DurabilityReplicated = false;
+        fixture.ReplyRound(6, status);
+        fixture.AssertNoProposal();
+        status.DurabilityReplicated = true;
         fixture.ReplyRound(6, status);
         auto proposal = fixture.GetProposal();
         UNIT_ASSERT(proposal.State == NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
         UNIT_ASSERT(proposal.Realms[2] == TFailRealm::EXCLUDED);
+    }
+
+    Y_UNIT_TEST(SecondRealmExclusionRequiresGenerationMetadata) {
+        using S = NKikimrBlobStorage::TGroupState;
+        TGroupStateFixture fixture;
+        fixture.Info.TargetExcluded = TExcludedRealms{false, true, true};
+        fixture.Update(7, S::DC_FAILURE_INV1, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED});
+        TVDiskReplicationStatus status;
+        status.HasGenerationCut = false;
+        fixture.ReplyRound(3, status);
+        fixture.AssertNoProposal();
+        status.HasGenerationCut = true;
+        fixture.ReplyRound(3, status);
+        UNIT_ASSERT(fixture.GetProposal().State == S::DC_SOLO_INV1);
     }
 
     Y_UNIT_TEST(SoloRecoveryPendingWaitsForRecoveringVDiskStartup) {

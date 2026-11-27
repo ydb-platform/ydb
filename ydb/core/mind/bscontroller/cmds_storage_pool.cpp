@@ -1400,7 +1400,8 @@ namespace NKikimr::NBsController {
                 if (!IsValidMirror3dcGroupConfiguration(current)) {
                     return std::unexpected<TString>(TStringBuilder() << "unsupported mirror-3-dc state for group# " << groupId);
                 }
-                if (!isNew && !parameters.FromGroupStateActor && RecoveringComplete(previous) == current) {
+                if (!isNew && !parameters.FromGroupStateActor
+                        && (RecoveringComplete(previous) == current || ChangesMirror3dcInvariant(previous, current))) {
                     return std::unexpected<TString>(TStringBuilder() << "group# " << groupId
                         << ": group state transition requires recovery confirmation");
                 }

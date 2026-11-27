@@ -2949,6 +2949,9 @@ namespace NKikimr {
         : public TEventPB<TEvBlobStorage::TEvVSync,
                     NKikimrBlobStorage::TEvVSync,
                     TEvBlobStorage::EvVSync> {
+        // Filled locally by the receiving Skeleton before forwarding to SyncLog.
+        std::optional<ui64> GenerationStartLsn;
+
         TEvVSync()
         {}
 

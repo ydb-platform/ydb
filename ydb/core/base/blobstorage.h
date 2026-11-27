@@ -687,6 +687,8 @@ struct TEvBlobStorage {
         EvMirror3dcRepairScanResult,
         EvRunMirror3dcRepair,
         EvRunMirror3dcRepairResult,
+        EvGenerationMetadataReplicated,
+        EvSyncerGenerationCutApplied,
 
         EvEnd
     };

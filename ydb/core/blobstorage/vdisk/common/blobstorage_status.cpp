@@ -24,6 +24,7 @@ namespace NKikimr {
         const bool ReplDone;
         const bool DurabilityReplDone;
         const bool IsReadOnly;
+        const std::optional<ui64> GenerationStartLsn;
         unsigned Counter;
         std::unique_ptr<TEvBlobStorage::TEvVStatusResult> Result;
 
@@ -45,6 +46,9 @@ namespace NKikimr {
             Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(
                 NKikimrProto::OK, SelfVDiskId, true, ReplDone, IsReadOnly, IncarnationGuid);
             Result->Record.SetDurabilityReplicated(DurabilityReplDone);
+            if (GenerationStartLsn) {
+                Result->Record.SetGenerationStartLsn(*GenerationStartLsn);
+            }
 
             const auto& oos = VCtx->GetOutOfSpaceState();
             Result->Record.SetStatusFlags(oos.GetGlobalStatusFlags().Flags);
@@ -107,7 +111,8 @@ namespace NKikimr {
                 const TInstant &now,
                 bool replDone,
                 bool durabilityReplDone,
-                bool isReadOnly)
+                bool isReadOnly,
+            std::optional<ui64> generationStartLsn)
             : TActorBootstrapped<TStatusRequestHandler>()
             , VCtx(vctx)
             , SkeletonId(skeletonId)
@@ -123,6 +128,7 @@ namespace NKikimr {
             , ReplDone(replDone)
             , DurabilityReplDone(durabilityReplDone)
             , IsReadOnly(isReadOnly)
+            , GenerationStartLsn(generationStartLsn)
             , Counter(0)
         {}
     };
@@ -141,9 +147,10 @@ namespace NKikimr {
             const TInstant &now,
             bool replDone,
             bool durabilityReplDone,
-            bool isReadOnly) {
+            bool isReadOnly,
+            std::optional<ui64> generationStartLsn) {
         return new TStatusRequestHandler(vctx, skeletonId, syncerId, syncLogId, ifaceMonGroup, selfVDiskId,
-            incarnationGuid, groupInfo, ev, notifyId, now, replDone, durabilityReplDone, isReadOnly);
+            incarnationGuid, groupInfo, ev, notifyId, now, replDone, durabilityReplDone, isReadOnly, generationStartLsn);
     }
 
 } // NKikimr

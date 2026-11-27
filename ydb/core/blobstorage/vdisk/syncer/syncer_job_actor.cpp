@@ -143,6 +143,12 @@ namespace NKikimr {
 
         void Handle(TEvLocalSyncDataResult::TPtr &ev, const TActorContext &ctx) {
             TSjOutcome outcome = Task->Handle(ev);
+            if (Task->GenerationCutReached && !Task->IsFullRecoveryTask() && ev->Get()->Status == NKikimrProto::OK) {
+                // Later pages may be written continuously. This page is already durable.
+                ctx.Send(NotifyId, new TEvSyncerGenerationCutApplied(Task->VDiskId, Task->GetCurrent().SyncState.Guid));
+                Task->WatchGenerationCut = false;
+                Task->GenerationCutReached = false;
+            }
             Handle(std::move(outcome), ctx);
         }
 

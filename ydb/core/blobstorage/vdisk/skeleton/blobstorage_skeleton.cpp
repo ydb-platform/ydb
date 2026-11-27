@@ -47,6 +47,8 @@
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_hullrepljob.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_committer.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisrunner.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogrecovery.h>
@@ -1767,10 +1769,9 @@ namespace NKikimr {
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_OTHER, "TEvVStatus",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"marker", "BSVS20"});
-            const bool durabilityReplDone = DurabilityReplDone && !RepeatRecoveryPending && !HasUnreadableBlobs;
             const TActorId aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
                 IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now,
-                ReplDone, durabilityReplDone, Config->BaseInfo.ReadOnly));
+                ReplDone, DurabilityReplDone(), Config->BaseInfo.ReadOnly, GetGenerationStartLsn()));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
@@ -2032,6 +2033,12 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvVSync::TPtr &ev, const TActorContext &ctx) {
             if (!Config->BaseInfo.DonorMode) {
+                // A reformatted disk cannot testify for acknowledgements issued by its previous incarnation.
+                if (DbBirthLsn && (*DbBirthLsn == 0 || (SelfVDiskId.GroupGeneration > 1
+                        && GenerationCut.GetFirstGeneration() < SelfVDiskId.GroupGeneration - 1))
+                        && SelfVDiskId.SameDisk(ev->Get()->Record.GetTargetVDiskID())) {
+                    ev->Get()->GenerationStartLsn = GetGenerationStartLsn();
+                }
                 ctx.Send(ev->Forward(Db->SyncLogID));
             }
         }
@@ -2243,12 +2250,12 @@ namespace NKikimr {
 
         void TryRepeatRecovery(const TActorContext& ctx) {
             if (CurrentStateFunc() != &TThis::StateNormal
-                    || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !DurabilityReplDone
+                    || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !DurabilityDataReplDone
                     || Config->BaseInfo.ReadOnly || GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
                 return;
             }
             RepeatRecoveryPending = false;
-            DurabilityReplDone = false;
+            DurabilityDataReplDone = false;
             ReplOnlyPhantomsRemain = false;
             UpdateReplState();
             RepeatOsirisId = StartOsiris(SelfId(), ctx);
@@ -2364,6 +2371,12 @@ namespace NKikimr {
             }
             if (FreshGate) {
                 FreshGate->Kick(ctx);
+            }
+            if (WaitingForCutLsn && GetGenerationStartLsn()) {
+                WaitingForCutLsn = false;
+                if (CurrentStateFunc() == &TThis::StateNormal) {
+                    UpdateReplState();
+                }
             }
             if (VDiskCompactionState && !results.empty()) {
                 VDiskCompactionState->Logged(ctx, results.back().Lsn);
@@ -2526,7 +2539,7 @@ namespace NKikimr {
             // propagate status to Node Warden unless replication is on -- in that case it sets the status itself
             if (!runRepl) {
                 ReplDone = true;
-                DurabilityReplDone = true;
+                DurabilityDataReplDone = true;
             }
             UpdateReplState();
             RunBalancing(ctx);
@@ -2830,8 +2843,22 @@ namespace NKikimr {
                     Config,
                     StartupDataSyncBlockedUntilCutLsn);
                 // syncer performes sync recovery
+                if (GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+                    GenerationCut = ev->Get()->SyncerData->GenerationCut;
+                    GenerationCutCommitted = GenerationCut.HasGeneration() && GenerationCut.HasLsn()
+                        && GenerationCut.GetGeneration() == SelfVDiskId.GroupGeneration
+                        && GenerationCut.GetIncarnationGuid() == static_cast<ui64>(Db->GetVDiskIncarnationGuid());
+                    if (!GenerationCutCommitted) {
+                        // The configuration may have changed while this disk was stopped.
+                        PrepareGenerationCut(SelfVDiskId.GroupGeneration);
+                    }
+                    ev->Get()->SyncerData->GenerationCut = GenerationCut;
+                }
                 Db->SyncerID.Set(ctx.Register(CreateSyncerActor(sc, GInfo, ev->Get()->SyncerData)));
                 ActiveActors.Insert(Db->SyncerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
+                if (GenerationCut.HasGeneration() && !GenerationCutCommitted) {
+                    CommitGenerationCut(ctx);
+                }
             } else {
                 // continue without sync
                 SkeletonIsUpAndRunning(ctx);
@@ -3214,10 +3241,56 @@ namespace NKikimr {
             return layouts ? std::optional(layouts->Durability) : std::nullopt;
         }
 
+        void PrepareGenerationCut(ui32 generation) {
+            bool sameIncarnation = GenerationCut.HasIncarnationGuid()
+                && GenerationCut.GetIncarnationGuid() == Db->GetVDiskIncarnationGuid().Guid;
+            bool hasPreviousMetadata = sameIncarnation && generation > 1
+                && GenerationCut.GetGeneration() == generation - 1 && GenerationCut.GetMetadataReplicated();
+            if (!sameIncarnation || !GenerationCut.HasFirstGeneration()) {
+                GenerationCut.SetFirstGeneration(generation);
+            }
+            GenerationCut.SetHasPreviousMetadata(generation == 1 || hasPreviousMetadata);
+            GenerationCut.SetMetadataReplicated(false);
+            GenerationCut.SetGeneration(generation);
+            GenerationCut.SetIncarnationGuid(Db->GetVDiskIncarnationGuid());
+            GenerationCut.SetLsn(Db->LsnMngr->GetLastAllocatedSyncLogLsn());
+            GenerationCutCommitted = false;
+            WaitingForCutLsn = false;
+        }
+
+        void CommitGenerationCut(const TActorContext& ctx) {
+            auto commit = std::make_unique<TEvSyncerCommit>();
+            commit->Modif = TEvSyncerCommit::EGenerationCut;
+            commit->GenerationCut = GenerationCut;
+            ctx.Send(Db->SyncerID, commit.release(), 0, GenerationCut.GetGeneration());
+        }
+
+        void Handle(TEvSyncerCommitDone::TPtr& ev, const TActorContext&) {
+            if (GenerationCut.HasGeneration() && ev->Cookie == GenerationCut.GetGeneration()) {
+                GenerationCutCommitted = true;
+                WaitingForCutLsn = Db->LsnMngr->GetConfirmedLsnForSyncLog() < GenerationCut.GetLsn();
+                if (!WaitingForCutLsn && CurrentStateFunc() == &TThis::StateNormal) {
+                    UpdateReplState();
+                }
+            }
+        }
+
+        std::optional<ui64> GetGenerationStartLsn() const {
+            if (GenerationCutCommitted && GenerationCut.GetGeneration() == SelfVDiskId.GroupGeneration
+                    && Db->LsnMngr->GetConfirmedLsnForSyncLog() >= GenerationCut.GetLsn()) {
+                return GenerationCut.GetLsn();
+            }
+            return std::nullopt;
+        }
+
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
 
             if (msg->NewInfo->GroupGeneration > GInfo->GroupGeneration) {
+                if (Db->SyncerID && msg->NewInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+                    PrepareGenerationCut(msg->NewInfo->GroupGeneration);
+                    CommitGenerationCut(ctx);
+                }
                 const std::optional<EMirror3dcLayout> previousDurability = GetDurabilityLayout(*GInfo);
                 const std::optional<EMirror3dcLayout> nextDurability = GetDurabilityLayout(*msg->NewInfo);
                 RepeatRecoveryPending |= previousDurability && nextDurability
@@ -3227,6 +3300,9 @@ namespace NKikimr {
             // Save locally
             GInfo = msg->NewInfo;
             SelfVDiskId = msg->NewVDiskId;
+            if (GenerationCut.HasGeneration() && !GenerationCutCommitted && CurrentStateFunc() == &TThis::StateNormal) {
+                UpdateReplState();
+            }
 
             if (PDiskCtx && Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
                 Config->GroupSizeInUnits = GInfo->GroupSizeInUnits;
@@ -3276,7 +3352,7 @@ namespace NKikimr {
             switch (static_cast<EReplDone>(ev->Cookie)) {
                 case EReplDone::Finished:
                     ReplDone = true;
-                    DurabilityReplDone = true;
+                    DurabilityDataReplDone = true;
                     ReplOnlyPhantomsRemain = false;
                     break;
 
@@ -3389,8 +3465,32 @@ namespace NKikimr {
             ctx.Send(ev->Forward(*SkeletonFrontIDPtr));
         }
 
+        void Handle(TEvGenerationMetadataReplicated::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Get()->Generation == SelfVDiskId.GroupGeneration) {
+                MetadataReplicatedGeneration = ev->Get()->Generation;
+                if (!GenerationCut.GetMetadataReplicated()) {
+                    GenerationCut.SetMetadataReplicated(true);
+                    CommitGenerationCut(ctx);
+                }
+                if (CurrentStateFunc() == &TThis::StateNormal) {
+                    UpdateReplState();
+                }
+            }
+        }
+
+        bool DurabilityReplDone() const {
+            if (!DurabilityDataReplDone || RepeatRecoveryPending || HasUnreadableBlobs) {
+                return false;
+            }
+            if (GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+                    && GInfo->GetTopology().GetTotalFailRealmsNum() == 3) {
+                return MetadataReplicatedGeneration == SelfVDiskId.GroupGeneration && GetGenerationStartLsn().has_value();
+            }
+            return true;
+        }
+
         void UpdateReplState() {
-            const bool ready = DurabilityReplDone && !HasUnreadableBlobs;
+            const bool ready = DurabilityReplDone();
             UpdateVDiskStatus(ready ? NKikimrBlobStorage::READY : NKikimrBlobStorage::REPLICATING);
         }
 
@@ -3694,6 +3794,8 @@ namespace NKikimr {
             HFunc(NPDisk::TEvCutLog, Handle)
             IgnoreFunc(TEvRecoveryLogCutDone)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvSyncerCommitDone, Handle)
+            HFunc(TEvGenerationMetadataReplicated, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
@@ -3751,6 +3853,8 @@ namespace NKikimr {
             HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvSyncerCommitDone, Handle)
+            HFunc(TEvGenerationMetadataReplicated, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
@@ -3831,6 +3935,8 @@ namespace NKikimr {
             HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvSyncerCommitDone, Handle)
+            HFunc(TEvGenerationMetadataReplicated, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
@@ -3868,6 +3974,8 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvSyncerCommitDone, Handle)
+            HFunc(TEvGenerationMetadataReplicated, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             IgnoreFunc(TEvOsirisDone)
             CFunc(TEvBlobStorage::EvReplDone, Ignore)
@@ -3970,6 +4078,10 @@ namespace NKikimr {
         const TActorId NodeWardenServiceId;
         TVDiskID SelfVDiskId;
         TMaybe<ui64> DbBirthLsn;
+        NKikimrVDiskData::TSyncerEntryPoint::TGenerationCut GenerationCut;
+        bool GenerationCutCommitted = false;
+        bool WaitingForCutLsn = false;
+        std::optional<ui32> MetadataReplicatedGeneration;
         TActiveActors ActiveActors;
         // fields for handling NPDisk::TEvCutLog
         std::unique_ptr<NPDisk::TEvCutLog> CutLogDelayedMsg;
@@ -3984,7 +4096,7 @@ namespace NKikimr {
         bool RepeatRecoveryPending = false;
         TActorId RepeatOsirisId;
         bool ReplDone = false;
-        bool DurabilityReplDone = false;
+        bool DurabilityDataReplDone = false;
         bool ReplOnlyPhantomsRemain = false;
         TInstant WhiteboardUpdateTimestamp = TInstant::Zero();
         std::shared_ptr<std::atomic_uint64_t> PDiskWriteBytes = std::make_shared<std::atomic_uint64_t>();

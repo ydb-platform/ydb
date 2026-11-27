@@ -74,6 +74,9 @@ namespace NKikimr {
             switch (msg->Modif) {
                 case TEvSyncerCommit::ENone:
                     break; // nothing to do
+                case TEvSyncerCommit::EGenerationCut:
+                    *Sds.Proto.MutableGenerationCut() = msg->GenerationCut;
+                    break;
                 case TEvSyncerCommit::ELocalGuid: {
                     Sds.Proto.MutableLocalGuidInfo()->MergeFrom(msg->LocalGuidInfo);
                     break;
@@ -106,9 +109,11 @@ namespace NKikimr {
         struct TNotify {
             const TActorId ActorId;
             const void *Cookie = nullptr;
-            TNotify(const TActorId aid, const void *cookie)
+            ui64 EventCookie;
+            TNotify(const TActorId aid, const void *cookie, ui64 eventCookie)
                 : ActorId(aid)
                 , Cookie(cookie)
+                , EventCookie(eventCookie)
             {}
         };
         using TNotifyVec = TVector<TNotify>;
@@ -162,11 +167,11 @@ namespace NKikimr {
             // generate commit / put to the queue
             if (InFly.empty()) {
                 // no writes at this moment
-                InFly.emplace_back(ev->Sender, cookie);
+                InFly.emplace_back(ev->Sender, cookie, ev->Cookie);
                 GenerateCommit(ctx);
             } else {
                 // commit write is going on
-                Delayed.emplace_back(ev->Sender, cookie);
+                Delayed.emplace_back(ev->Sender, cookie, ev->Cookie);
             }
         }
 
@@ -176,7 +181,7 @@ namespace NKikimr {
 
             // reply committed on all writes completed
             for (const auto &x: InFly){
-                ctx.Send(x.ActorId, new TEvSyncerCommitDone(x.Cookie));
+                ctx.Send(x.ActorId, new TEvSyncerCommitDone(x.Cookie), 0, x.EventCookie);
             }
             InFly.clear();
 

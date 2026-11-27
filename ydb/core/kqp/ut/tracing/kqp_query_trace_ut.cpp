@@ -212,6 +212,14 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT(!std::ranges::empty(StageSpans(*uploader)));
         UNIT_ASSERT(FindAttribute(*FindSpan(*uploader, "Task: "), "ydb.task_id"));
         UNIT_ASSERT(!FindSpan(*uploader, "Session.query.QUERY_ACTION_EXECUTE"));
+        const auto* pipeline = FindSpan(*uploader, "Datashard pipeline");
+        UNIT_ASSERT(pipeline);
+        UNIT_ASSERT(FindAttribute(*pipeline, "ydb.tx_id"));
+        bool selected = false;
+        for (const auto& event : pipeline->events()) {
+            selected |= event.name() == "operation selected";
+        }
+        UNIT_ASSERT(selected);
     }
 
     Y_UNIT_TEST(CommonLevelsAndDisabledTracing) {

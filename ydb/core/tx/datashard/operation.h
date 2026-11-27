@@ -20,6 +20,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
+#include <ydb/library/actors/wilson/wilson_event_budget.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -580,7 +581,9 @@ public:
     using TPtr = TIntrusivePtr<TOperation>;
     using EResultStatus = NKikimrTxDataShard::TEvProposeTransactionResult::EStatus;
 
-    virtual ~TOperation() = default;
+    virtual ~TOperation();
+    void TracePipelineEvent(const char* name, const TOperation* cause = nullptr, bool dryRun = false);
+    void FinishPipelineTrace(const char* boundary);
 
     TActorId GetTarget() const { return Target; }
     void SetTarget(TActorId target) { Target = target; }
@@ -993,6 +996,11 @@ public:
     NLWTrace::TOrbit Orbit;
 
     NWilson::TSpan OperationSpan;
+private:
+    NWilson::TSpan PipelineTraceSpan;
+    NWilson::TSpanEventBudget PipelineTraceEvents;
+    bool PipelineTraceFinished = false;
+    ui32 PipelineCauseLinks = 0;
 };
 
 inline IOutputStream &operator <<(IOutputStream &out,

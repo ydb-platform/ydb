@@ -34,6 +34,20 @@ NYql::TExprNode::TPtr MakeLabel(NYql::TExprContext& ctx, const std::vector<TStri
 
 Y_UNIT_TEST_SUITE(KqpCBO) {
 
+Y_UNIT_TEST(MapJoinRejectedOnLargeOrUnknownBuildSide) {
+    TKqpOptimizerStatistics small(KqpBaseTable, 100, 4, 4e5, 0);
+    TKqpOptimizerStatistics largeBytes(KqpBaseTable, 100, 4, 2e6, 0);
+    TKqpOptimizerStatistics unknown(KqpBaseTable, 0, 4, 0, 0);
+    TKqpOptimizerStatistics unknownDummy(KqpBaseTable, 1000, 4, 2e6, 0);
+
+    UNIT_ASSERT(IsMapJoinApplicable(InnerJoin, small));
+    UNIT_ASSERT(!IsMapJoinApplicable(InnerJoin, largeBytes));
+    UNIT_ASSERT(!IsMapJoinApplicable(InnerJoin, unknown));
+    UNIT_ASSERT(!IsMapJoinApplicable(InnerJoin, unknownDummy));
+    UNIT_ASSERT(!IsMapJoinApplicable(OuterJoin, small));
+    UNIT_ASSERT(!IsMapJoinApplicable(Exclusion, small));
+}
+
 Y_UNIT_TEST(Empty) {
     TBaseProviderContext pctx;
     NYql::TExprContext dummyCtx;

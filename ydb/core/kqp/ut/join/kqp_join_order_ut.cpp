@@ -858,6 +858,13 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
     }
 
+    Y_UNIT_TEST(LargeBuildSideUsesHashJoin) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/large_join_sides.sql", "stats/large_join_sides.json", false, true, true);
+        auto joinFinder = TFindJoinWithLabels(plan);
+        auto join = joinFinder.Find({"R", "S"});
+        UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)" || join.Join == "InnerJoin (Grace)", join.Join);
+    }
+
     Y_UNIT_TEST_TWIN(ShuffleEliminationOneJoin, EnableSeparationComputeActorsFromRead) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_one_join.sql", "stats/tpch1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead});
         auto joinFinder = TFindJoinWithLabels(plan);

@@ -33,6 +33,28 @@ public:
     }
 };
 
+// Registered on the first Set, so an unused value is not exported.
+class TLazyValue {
+private:
+    NMonitoring::TDynamicCounters::TCounterPtr Counter;
+    std::once_flag Registered;
+    ::NMonitoring::TDynamicCounterPtr Group;
+    TString Name;
+
+public:
+    TLazyValue(::NMonitoring::TDynamicCounterPtr group, TString name)
+        : Group(std::move(group))
+        , Name(std::move(name)) {
+    }
+
+    void Set(const i64 value) {
+        std::call_once(Registered, [this] {
+            Counter = Group->GetCounter(Name, false);
+        });
+        Counter->Set(value);
+    }
+};
+
 class TCommonCountersOwner {
 private:
     ::NMonitoring::TDynamicCounterPtr SubGroup;
@@ -71,7 +93,6 @@ public:
 
     TString GetAggregationPathInfo() const;
 
-    NMonitoring::TDynamicCounters::TCounterPtr GetAggregationValue(const TString& name) const;
     NMonitoring::TDynamicCounters::TCounterPtr GetValue(const TString& name) const;
     NMonitoring::TDynamicCounters::TCounterPtr GetDeriviative(const TString& name) const;
     void DeepSubGroup(const TString& id, const TString& value);
@@ -81,6 +102,8 @@ public:
     }
     NMonitoring::THistogramPtr GetHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const;
     TLazyHistogram GetLazyHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const;
+    std::shared_ptr<TLazyValue> GetLazyValue(const TString& name) const;
+    std::shared_ptr<TLazyValue> GetLazyAggregationValue(const TString& name) const;
 
     TCommonCountersOwner(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr);
 

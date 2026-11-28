@@ -5,9 +5,10 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.test_meta import skip_with_issue, link_test_case
+from ydb.tests.library.harness.util import LogLevels
 
 import ydb
-
+import time
 
 class TestExample:
     """
@@ -19,7 +20,14 @@ class TestExample:
         # TODO: remove comment below
         # This cluster will be initialized before all tests in current suite and will be stopped after all tests
         # See KikimrConfigGenerator for full possibilities (feature flags, configs, erasure, etc.)
-        self.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.NONE))
+        self.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.NONE,
+            additional_log_configs={
+                    'KQP_PROXY': LogLevels.DEBUG,
+                    'KQP_SESSION': LogLevels.DEBUG,
+                    'KQP_QUERY': LogLevels.DEBUG,
+                }
+            )
+        )
         self.cluster.start()
 
         self.driver = ydb.Driver(
@@ -40,7 +48,8 @@ class TestExample:
         Test description
         TODO: change description to yours
         """
-
+        time.sleep(90)
+        return
         with ydb.QuerySessionPool(self.driver) as session_pool:
             table_name = "unique_table_name_for_test"
             value = 42

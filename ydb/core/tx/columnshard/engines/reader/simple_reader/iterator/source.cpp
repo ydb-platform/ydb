@@ -111,7 +111,7 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     if (memoryLimit && !IsSourceInMemory()) {
         const auto accessor = ExtractPortionAccessor();
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
-        StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
+        StageResult->BuildResultPages(*accessor, *memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds());
     } else {
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         if (StageResult->IsEmpty()) {
@@ -433,9 +433,9 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
     const auto accessorType = GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType();
     // Dictionary-only accessors are indexed by dictionary entries, not portion rows: only when no row-level filter
     // (PK range, duplicates, deletions) has to be applied to this portion.
-    const bool dictionaryOnlyAllowed = addr.GetUseDictionaryOnly() && UsageClass == TPKRangeFilter::EUsageClass::FullUsage && !IsConflicting() &&
-                                       readContext->GetDuplicateFilterPortionCount() <= 1 &&
-                                       NCommon::IsDictionaryOnlyFetchCompatible(columnFilter);
+    const bool dictionaryOnlyAllowed =
+        addr.GetUseDictionaryOnly() && !GetIsStartedByCursor() && UsageClass == TPKRangeFilter::EUsageClass::FullUsage && !IsConflicting() &&
+        readContext->GetDuplicateFilterPortionCount() <= 1 && NCommon::IsDictionaryOnlyFetchCompatible(columnFilter);
     if (dictionaryOnlyAllowed && accessorType == NArrow::NAccessor::IChunkedArray::EType::Dictionary) {
         GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();
         return std::make_shared<NCommon::TDictionaryFetchLogic>(addr.GetColumnId(), source);

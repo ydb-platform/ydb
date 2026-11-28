@@ -23,6 +23,7 @@ PEERDIR(
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
     ydb/library/yql/utils/plan
+    yql/essentials/core
 )
 
 END()

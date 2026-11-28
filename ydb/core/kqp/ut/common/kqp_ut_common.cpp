@@ -22,6 +22,7 @@
 #include <library/cpp/testing/common/env.h>
 
 #include <util/system/mutex.h>
+#include <util/string/printf.h>
 
 #include <memory>
 

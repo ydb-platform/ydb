@@ -161,7 +161,7 @@ namespace NKikimr::NConveyorComposite {
             root->AddDatabase(database);
             database->AddPool(pool);
             pool->AddQuery(query);
-            auto snapshot = std::make_shared<NHdrf::NSnapshot::TQuery>(identity.QueryId, query);
+            auto snapshot = std::make_shared<NHdrf::NSnapshot::TQuery>(query);
             // Model an already-demanding query: a zero assigned share must throttle, not bootstrap.
             snapshot->CpuMaxDemand = Max<ui64>(fairShare, 1);
             snapshot->CpuFairShare = fairShare;

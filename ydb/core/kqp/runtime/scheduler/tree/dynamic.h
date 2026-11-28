@@ -40,6 +40,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> CpuMaxDemand = 0;
         std::atomic<ui64> CpuThrottle = 0;
 
+        double CpuRemains = 0;
+
         std::atomic<ui64> CpuBurstUsage = 0;
         std::atomic<ui64> CpuBurstUsageResume = 0;
         std::atomic<ui64> CpuBurstThrottle = 0;
@@ -95,7 +97,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         TSchedulableTaskList SchedulableTasks; // protected by TasksMutex
     };
 
-    class TPool : public TTreeElement, public NHdrf::TPool<ETreeType::DYNAMIC> {
+    class TPool : public TTreeElement, public NHdrf::TPool<ETreeType::DYNAMIC>, public std::enable_shared_from_this<TPool> {
     public:
         TPool(const TPoolId& id, const NMonitoring::TDynamicCounterPtr& counters);
 
@@ -113,7 +115,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         }
 
     protected:
-        virtual NSnapshot::TPool* CreateSnapshot(const NStatic::TPoolPtr& pool) const;
+        virtual NSnapshot::TPool* CreateSnapshot(const NStatic::TPoolPtr& pool);
     };
 
     // The memory of the default pool is accounted, but not limited by the pool itself
@@ -122,7 +124,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         TDefaultPool(const TPoolId& id, const NMonitoring::TDynamicCounterPtr& counters);
 
     protected:
-        NSnapshot::TPool* CreateSnapshot(const NStatic::TPoolPtr& pool) const override;
+        NSnapshot::TPool* CreateSnapshot(const NStatic::TPoolPtr& pool) override;
     };
 
     class TDatabase : public TPool {

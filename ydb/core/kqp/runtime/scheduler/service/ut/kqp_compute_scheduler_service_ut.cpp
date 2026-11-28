@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/runtime/scheduler/service/service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_memory.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_task.h>
 
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/service/service.h>
@@ -11,6 +12,7 @@
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/subsystems/stats.h>
 
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/cms/console/console.h>
@@ -26,7 +28,228 @@ namespace NKikimr::NKqp {
 
 using namespace NWorkloadManager;
 
+namespace {
+
+class TUserPoolStats final : public NActors::TActorSystemStatsSubSystem {
+public:
+    void GetExecutorPoolState(i16 poolId, NActors::TExecutorPoolState& state) const override {
+        UNIT_ASSERT_VALUES_EQUAL(poolId, 0); // UserPoolId in the test runtime
+        state.CurrentLimit = 1;
+        state.MaxLimit = 16;
+        state.PossibleMaxLimit = Potential;
+    }
+    void GetPoolStats(ui32, NActors::TExecutorPoolStats&, TVector<NActors::TExecutorThreadStats>&) const override {}
+    void GetPoolStats(ui32, NActors::TExecutorPoolStats&, TVector<NActors::TExecutorThreadStats>&, TVector<NActors::TExecutorThreadStats>&) const override {}
+    void GetExecutorPoolStates(std::vector<NActors::TExecutorPoolState>&) const override {}
+    void GetHarmonizerStats(NActors::THarmonizerStats&) const override {}
+
+    float Potential = 8;
+};
+
+struct TCpuLimitFixture {
+    TTestBasicRuntime Runtime;
+    TUserPoolStats* Stats = nullptr;
+    NScheduler::TComputeSchedulerPtr Scheduler;
+    TActorId Service;
+    TActorId Sender;
+    TVector<NScheduler::TSchedulableTaskPtr> Tasks;
+
+    TCpuLimitFixture() {
+        Runtime.SetupNodeSubSystems = [this](ui32, NActors::TActorSystemSetup* setup) {
+            auto stats = std::make_unique<TUserPoolStats>();
+            Stats = stats.get();
+            setup->RegisterSubSystem<NActors::TActorSystemStatsSubSystem>(std::move(stats));
+        };
+        Runtime.Initialize(TAppPrepare().Unwrap());
+        Scheduler = std::make_shared<NScheduler::TComputeScheduler>(
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            NScheduler::TOptions{.MemoryEnabled = true});
+        Runtime.RegisterService(NWorkloadManager::MakeServiceId(Runtime.GetNodeId()), Runtime.AllocateEdgeActor());
+        Runtime.GetAppData().KqpComputeScheduler = Scheduler;
+        const auto memoryController = Runtime.AllocateEdgeActor();
+        Runtime.RegisterService(NMemory::MakeMemoryControllerId(), memoryController);
+        Service = Runtime.Register(CreateKqpComputeSchedulerService(TDuration::Hours(1)));
+        Runtime.GrabEdgeEvent<NMemory::TEvConsumerRegister>(memoryController);
+        Sender = Runtime.AllocateEdgeActor();
+        UNIT_ASSERT_VALUES_EQUAL(Scheduler->GetTotalCpuLimit(), 8);
+    }
+
+    void AddPool(const TString& poolId, double limitPercent, double guaranteePercent) {
+        NResourcePool::TPoolSettings settings;
+        settings.TotalCpuLimitPercentPerNode = limitPercent;
+        settings.TotalCpuGuaranteePercentPerNode = guaranteePercent;
+        settings.TotalMemoryLimitPercentPerNode = 30;
+        Runtime.Send(new IEventHandle(Service, Sender, new NScheduler::TEvAddPool("db", poolId, settings)));
+    }
+
+    void Tick(float cpu) {
+        Stats->Potential = cpu;
+        Runtime.Send(new IEventHandle(Service, Sender, new NActors::TEvents::TEvWakeup()));
+    }
+
+    NScheduler::NHdrf::NDynamic::TQueryPtr AddDemand(const TString& poolId, ui64 queryId, ui64 demand) {
+        auto query = Scheduler->AddOrUpdateQuery("db", poolId, queryId);
+        for (ui64 i = 0; i < demand; ++i) {
+            Tasks.push_back(std::make_shared<NScheduler::TSchedulableTask>(query));
+            Tasks.back()->IncreaseThrottle();
+        }
+        return query;
+    }
+};
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
+
+    Y_UNIT_TEST(PotentialUserPoolCapacityRescalesLiveSnapshot) {
+        TCpuLimitFixture f;
+        f.AddPool("a", 50, 50);
+        f.AddPool("b", 50, 50);
+        f.Runtime.Send(new IEventHandle(f.Service, f.Sender, new NMemory::TEvConsumerLimit(1000_MB)));
+        auto a = f.AddDemand("a", 1, 8);
+        auto b = f.AddDemand("b", 2, 8);
+        for (ui64 cpu : {8, 4, 2, 8}) {
+            auto previous = f.Scheduler->GetStaticTree();
+            f.Tick(cpu);
+            const auto tree = f.Scheduler->GetStaticTree();
+            UNIT_ASSERT_VALUES_EQUAL(tree->TotalCpuLimit, cpu);
+            UNIT_ASSERT_VALUES_EQUAL(tree == previous, previous->TotalCpuLimit == cpu);
+            for (const auto& query : {a, b}) {
+                const auto attrs = query->GetParent()->GetConfiguredAttributes();
+                UNIT_ASSERT_VALUES_EQUAL(attrs.GetCpuLimit(), cpu / 2);
+                UNIT_ASSERT_VALUES_EQUAL(attrs.GetCpuGuarantee(), cpu / 2);
+                UNIT_ASSERT_VALUES_EQUAL(attrs.GetReadLimit(), TDuration::MilliSeconds(500));
+                UNIT_ASSERT_VALUES_EQUAL(attrs.GetMemoryLimit(), 300_MB);
+                UNIT_ASSERT_VALUES_EQUAL(query->GetSnapshot()->GetParent()->CpuFairShare, cpu / 2);
+            }
+        }
+        f.Tick(2.25f);
+        UNIT_ASSERT_VALUES_EQUAL(f.Scheduler->GetTotalCpuLimit(), 3);
+        f.Tick(0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Scheduler->GetTotalCpuLimit(), 1);
+    }
+
+    Y_UNIT_TEST(FractionalShareSurvivesUserPoolCapacityDrop) {
+        TCpuLimitFixture f;
+        f.AddPool("a", -1, 85);
+        f.AddPool("b", -1, 15);
+        const auto a = f.AddDemand("a", 1, 8);
+        const auto b = f.AddDemand("b", 2, 8);
+        f.Tick(8);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->GetParent()->GetCpuGuarantee(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->CpuFairShare, 1);
+
+        // The balance from the 8-CPU snapshot survives the policy update.
+        for (ui64 expectedB : {1, 0}) {
+            f.Tick(4);
+            const auto* poolA = a->GetSnapshot()->GetParent();
+            const auto* poolB = b->GetSnapshot()->GetParent();
+            UNIT_ASSERT_VALUES_EQUAL(poolA->GetCpuGuarantee(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(poolB->GetCpuGuarantee(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(poolA->CpuFairShare + poolB->CpuFairShare, 4);
+            UNIT_ASSERT_VALUES_EQUAL(poolB->CpuFairShare, expectedB);
+        }
+    }
+
+    Y_UNIT_TEST(WakesThrottledTaskWhenCpuFairShareBecomesPositive) {
+        using TTask = NScheduler::TSchedulableTask;
+        TCpuLimitFixture f;
+        f.AddPool("pool", 0, -1);
+        const auto a = f.Scheduler->AddOrUpdateQuery("db", "pool", 1);
+        const auto b = f.Scheduler->AddOrUpdateQuery("db", "pool", 2);
+        const auto workerA = f.Runtime.AllocateEdgeActor();
+        const auto workerB = f.Runtime.AllocateEdgeActor();
+        const auto taskA = std::make_shared<TTask>(a);
+        const auto taskB = std::make_shared<TTask>(b);
+        taskA->RegisterForResume(workerA);
+        taskB->RegisterForResume(workerB);
+        taskA->IncreaseThrottle();
+        taskB->IncreaseThrottle();
+        UNIT_ASSERT_VALUES_EQUAL(a->ResumeTasks(1), 0); // No actor context on the test thread.
+
+        auto grabWakeup = [&](const TActorId& worker) {
+            return f.Runtime.GrabEdgeEvent<TTask::TResumeEventType>(worker, TDuration::MilliSeconds(10));
+        };
+        auto assertNoWakeups = [&] {
+            // Tick delivers the service event synchronously. Inspect the dedicated worker
+            // mailboxes without dispatching (waiting for an absent event can throw).
+            UNIT_ASSERT(f.Runtime.CaptureMailboxEvents(workerA.Hint(), workerA.NodeId()).empty());
+            UNIT_ASSERT(f.Runtime.CaptureMailboxEvents(workerB.Hint(), workerB.NodeId()).empty());
+        };
+        f.Tick(8);
+        UNIT_ASSERT_VALUES_EQUAL(a->GetSnapshot()->CpuFairShare, 0);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->CpuFairShare, 0);
+        assertNoWakeups();
+
+        NResourcePool::TPoolSettings settings;
+        settings.TotalCpuLimitPercentPerNode = 12.5;
+        f.Runtime.Send(new IEventHandle(f.Service, f.Sender,
+            new NWorkloadManager::TEvUpdatePoolInfo("db", "pool", settings, std::nullopt)));
+        f.Tick(8);
+        const auto wakeupA = grabWakeup(workerA);
+        const auto wakeupB = grabWakeup(workerB);
+        UNIT_ASSERT(wakeupA && TTask::IsResumeEvent(wakeupA));
+        UNIT_ASSERT(wakeupB && TTask::IsResumeEvent(wakeupB));
+        UNIT_ASSERT_VALUES_EQUAL(a->GetSnapshot()->CpuFairShare, 1);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->CpuFairShare, 1);
+        // Both are notified, but only one can use the shared slot.
+        UNIT_ASSERT(taskA->TryIncreaseUsage());
+        UNIT_ASSERT(!taskB->TryIncreaseUsage());
+        taskA->DecreaseUsage(TDuration::Zero(), TTask::CPU_DEFAULT);
+
+        f.Tick(8);
+        assertNoWakeups(); // No extra wakeup when the share stays positive.
+    }
+
+    Y_UNIT_TEST(WakesQueryWhenPoolFairShareStaysPositive) {
+        using TTask = NScheduler::TSchedulableTask;
+        TCpuLimitFixture f;
+        f.AddPool("pool", 12.5, -1);
+        const auto a = f.AddDemand("pool", 1, 1);
+        const auto b = f.Scheduler->AddOrUpdateQuery("db", "pool", 2);
+        f.Tick(8);
+        UNIT_ASSERT_VALUES_EQUAL(a->GetSnapshot()->CpuFairShare, 1);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->CpuFairShare, 0);
+
+        const auto worker = f.Runtime.AllocateEdgeActor();
+        const auto task = std::make_shared<TTask>(b);
+        task->RegisterForResume(worker);
+        task->IncreaseThrottle();
+
+        f.Tick(8);
+        const auto wakeup = f.Runtime.GrabEdgeEvent<TTask::TResumeEventType>(worker, TDuration::MilliSeconds(10));
+        UNIT_ASSERT(wakeup);
+        UNIT_ASSERT(TTask::IsResumeEvent(wakeup));
+        UNIT_ASSERT_VALUES_EQUAL(a->GetSnapshot()->CpuFairShare, 1);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->CpuFairShare, 1);
+    }
+
+    Y_UNIT_TEST(ResizeRetriesDesiredPercentagesAfterSiblingRemoval) {
+        TCpuLimitFixture f;
+        f.Tick(2);
+        f.AddPool("a", 100, 60);
+        f.AddPool("b", 100, 60); // Individually rounded guarantees would fit.
+        const auto a = f.Scheduler->GetOrCreateMemoryPool("db", "a");
+        UNIT_ASSERT(!a->GetConfiguredAttributes().CpuGuarantee);
+        f.Tick(8);
+        UNIT_ASSERT(!a->GetConfiguredAttributes().CpuGuarantee);
+        UNIT_ASSERT_VALUES_EQUAL(a->GetConfiguredAttributes().GetCpuLimit(), 8);
+        f.Runtime.Send(new IEventHandle(f.Service, f.Sender, new NMemory::TEvConsumerLimit(500_MB)));
+        UNIT_ASSERT_VALUES_EQUAL(a->GetConfiguredAttributes().GetMemoryLimit(), 150_MB);
+        for (int i = 0; i < 2; ++i) {
+            f.Runtime.Send(new IEventHandle(f.Service, f.Sender,
+                new NWorkloadManager::TEvUpdatePoolInfo("db", "b", std::nullopt, std::nullopt)));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(a->GetConfiguredAttributes().GetCpuGuarantee(), 4);
+        f.Tick(4);
+        UNIT_ASSERT(!f.Scheduler->GetStaticTree()->GetDatabase("db")->GetPool("b"));
+        UNIT_ASSERT_VALUES_EQUAL(a->GetConfiguredAttributes().GetCpuGuarantee(), 2);
+        f.Runtime.Send(new IEventHandle(f.Service, f.Sender,
+            new NWorkloadManager::TEvUpdatePoolInfo("db", "a", NResourcePool::TPoolSettings(), std::nullopt)));
+        f.Tick(8);
+        UNIT_ASSERT(!a->GetConfiguredAttributes().CpuLimit);
+        UNIT_ASSERT(!a->GetConfiguredAttributes().CpuGuarantee);
+    }
 
     Y_UNIT_TEST(InvalidPolicyEventsDoNotPoisonLaterUpdates) {
         TTestBasicRuntime runtime;

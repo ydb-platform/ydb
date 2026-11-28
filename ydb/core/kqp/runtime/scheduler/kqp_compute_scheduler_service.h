@@ -71,12 +71,14 @@ private:
     std::atomic<bool> Enabled;
     const bool MemoryEnabled;
 
-    TRWMutex Mutex;
-    TMutex UpdateMutex; // serializes snapshot accounting and publication
+    TMutex UpdateMutex; // serializes snapshot accounting and publication; acquire before Mutex
+
     struct TQueryState {
         ui64 AddQueryCount;
         NHdrf::NDynamic::TQueryPtr Query;
     };
+
+    TRWMutex Mutex;
     NHdrf::NDynamic::TRootPtr Root;                 // protected by Mutex
     THashMap<NHdrf::TQueryId, TQueryState> Queries; // protected by Mutex
 

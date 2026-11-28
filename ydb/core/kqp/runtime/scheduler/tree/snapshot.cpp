@@ -12,11 +12,23 @@ ui64 CeilToCpu(ui64 microCores) {
     return (microCores + MicroCoresPerCore - 1) / MicroCoresPerCore;
 }
 
+template <class T>
+const TId& GetOriginId(const std::shared_ptr<T>& origin) {
+    Y_ENSURE(origin, "Snapshot origin is required");
+    return origin->GetId();
+}
+
 } // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 // TTreeElement
 ///////////////////////////////////////////////////////////////////////////////
+
+TTreeElement::TTreeElement(const std::shared_ptr<NDynamic::TTreeElement>& origin, const TStaticAttributes& attrs)
+    : TTreeElementBase(GetOriginId(origin))
+    , TStaticAttributes(attrs)
+    , Origin(origin)
+{}
 
 TPool* TTreeElement::GetParent() const {
     return dynamic_cast<TPool*>(Parent);
@@ -114,37 +126,44 @@ ui64 FillDemand(const std::vector<TTreeElement*>& children, std::vector<ui64>& u
         }
 
         if (!satisfied) {
-            // Everyone left demands more than its proportion, so the rest is split as it is. The proportions
-            // are rounded down, and the CPUs lost on rounding are given one by one to the children with
-            // the largest fractional parts (the largest remainder method) - otherwise a child with a small
-            // weight could get no CPU at all, and up to a CPU per child would be left idling.
+            // Give everyone the whole part of their proportion. The fractional part is carried
+            // across snapshots and an extra slot costs one unit of balance.
             // Every child here demands more than its proportion, so an extra CPU never exceeds its demand.
-            std::vector<std::pair<double, size_t>> remainders;
+            std::vector<std::pair<double, size_t>> roundingCandidates;
             ui64 given = 0;
             for (size_t i = 0; i < children.size(); ++i) {
                 if (unsatisfiedDemand.at(i) > 0) {
-                    const double proportion = children.at(i)->GetWeight() * leftFairShare / totalWeight;
+                    auto& child = *children.at(i);
+                    const double proportion = child.GetWeight() * leftFairShare / totalWeight;
                     const auto share = Min<ui64>(static_cast<ui64>(proportion), leftFairShare - given);
-                    children.at(i)->CpuFairShare += share;
+                    child.CpuFairShare += share;
                     unsatisfiedDemand.at(i) -= share;
                     given += share;
-                    remainders.emplace_back(proportion - share, i);
+                    if (const double remainder = proportion - share; remainder > 0) {
+                        double remains = remainder;
+                        if (const auto origin = child.Origin.lock()) {
+                            origin->CpuRemains += remainder;
+                            remains = origin->CpuRemains;
+                        }
+                        roundingCandidates.emplace_back(remains, i);
+                    }
                 }
             }
             leftFairShare -= given;
 
-            // Stable, so the ties are resolved in the same order on every node.
-            // TODO: the same children win the ties on every snapshot - with more children than CPUs the rest
-            //       get nothing for as long as the contention lasts.
-            std::ranges::stable_sort(remainders, [](const auto& left, const auto& right) {
+            // Pool ID breaks exact ties, but the winner's balance goes down for the next snapshot.
+            std::ranges::stable_sort(roundingCandidates, [](const auto& left, const auto& right) {
                 return left.first > right.first;
             });
-            for (const auto& [_, i] : remainders) {
+            for (const auto& [_, i] : roundingCandidates) {
                 if (leftFairShare == 0) {
                     break;
                 }
                 if (unsatisfiedDemand.at(i) > 0) {
                     ++children.at(i)->CpuFairShare;
+                    if (const auto origin = children.at(i)->Origin.lock()) {
+                        origin->CpuRemains -= 1;
+                    }
                     --unsatisfiedDemand.at(i);
                     --leftFairShare;
                 }
@@ -191,10 +210,12 @@ void TTreeElement::DistributeFairShare() {
     FillDemand(children, unsatisfiedDemand, leftFairShare);
 }
 
-void TTreeElement::UpdateTopDown() {
+TQueriesToResume TTreeElement::UpdateTopDown() {
     // Memory goes first, since the CPU pass publishes snapshots of queries.
     UpdateMemoryTopDown();
-    UpdateCpuTopDown();
+    TQueriesToResume queriesToResume;
+    UpdateCpuTopDown(queriesToResume);
+    return queriesToResume;
 }
 
 void TTreeElement::UpdateMemoryTopDown() {
@@ -210,7 +231,7 @@ void TTreeElement::UpdateMemoryTopDown() {
     });
 }
 
-void TTreeElement::UpdateCpuTopDown() {
+void TTreeElement::UpdateCpuTopDown(TQueriesToResume& queriesToResume) {
     // At this moment we know own fair-share. Need to calibrate children.
 
     if (!IsPool()) {
@@ -222,7 +243,7 @@ void TTreeElement::UpdateCpuTopDown() {
         DistributeFairShare();
 
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
-            child->UpdateCpuTopDown();
+            child->UpdateCpuTopDown(queriesToResume);
         });
     }
     // All-equal variant (when children are queries)
@@ -233,8 +254,8 @@ void TTreeElement::UpdateCpuTopDown() {
                 query->CpuFairShare = CpuFairShare;
             }
 
-            if (auto originalQuery = query->Origin.lock()) {
-                originalQuery->SetSnapshot(query->shared_from_this());
+            if (auto origin = query->PublishSnapshot()) {
+                queriesToResume.emplace_back(std::move(origin), query->CpuFairShare);
             }
         });
     }
@@ -244,12 +265,21 @@ void TTreeElement::UpdateCpuTopDown() {
 // TQuery
 ///////////////////////////////////////////////////////////////////////////////
 
-TQuery::TQuery(const TQueryId& id, const NDynamic::TQueryPtr& query)
-    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id)
-    , TTreeElement(id)
-    , NHdrf::TQuery<ETreeType::SNAPSHOT>(id)
-    , Origin(query)
+TQuery::TQuery(const NDynamic::TQueryPtr& origin)
+    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(GetOriginId(origin))
+    , TTreeElement(origin)
+    , NHdrf::TQuery<ETreeType::SNAPSHOT>(std::get<TQueryId>(origin->GetId()))
 {
+}
+
+NDynamic::TQueryPtr TQuery::PublishSnapshot() {
+    if (auto origin = std::static_pointer_cast<NDynamic::TQuery>(Origin.lock())) {
+        const auto previous = origin->SetSnapshot(shared_from_this());
+        if (CpuFairShare > 0 && previous && previous->CpuFairShare == 0) {
+            return origin;
+        }
+    }
+    return {};
 }
 
 void TQuery::UpdateBottomUp(ui64 totalCpuLimit, TDuration period) {
@@ -281,10 +311,10 @@ ui64 TQuery::CalculateRawCpuActualDemand(TDuration period) const {
 // TPool
 ///////////////////////////////////////////////////////////////////////////////
 
-TPool::TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool)
-    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id)
-    , TTreeElement(id, pool ? static_cast<const TStaticAttributes&>(*pool) : TStaticAttributes{})
-    , NHdrf::TPool<ETreeType::SNAPSHOT>(id)
+TPool::TPool(const NDynamic::TPoolPtr& origin, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool)
+    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(GetOriginId(origin))
+    , TTreeElement(origin, pool ? static_cast<const TStaticAttributes&>(*pool) : TStaticAttributes{})
+    , NHdrf::TPool<ETreeType::SNAPSHOT>(std::get<TPoolId>(origin->GetId()))
     , StaticPool(pool)
 {
     Counters = counters;
@@ -320,9 +350,9 @@ void TPool::AccountSnapshotDuration(TDuration period) {
 // TDefaultPool
 ///////////////////////////////////////////////////////////////////////////////
 
-TDefaultPool::TDefaultPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool)
-    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id)
-    , TPool(id, counters, pool)
+TDefaultPool::TDefaultPool(const NDynamic::TPoolPtr& origin, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool)
+    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(GetOriginId(origin))
+    , TPool(origin, counters, pool)
 {
 }
 
@@ -330,9 +360,9 @@ TDefaultPool::TDefaultPool(const TPoolId& id, const std::optional<TPoolCounters>
 // TDatabase
 ///////////////////////////////////////////////////////////////////////////////
 
-TDatabase::TDatabase(const TDatabaseId& id, const NStatic::TPoolPtr& pool)
-    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id)
-    , TPool(id, {}, pool)
+TDatabase::TDatabase(const NDynamic::TPoolPtr& origin, const NStatic::TPoolPtr& pool)
+    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(GetOriginId(origin))
+    , TPool(origin, {}, pool)
 {
 }
 
@@ -340,9 +370,9 @@ TDatabase::TDatabase(const TDatabaseId& id, const NStatic::TPoolPtr& pool)
 // TRoot
 ///////////////////////////////////////////////////////////////////////////////
 
-TRoot::TRoot(const NStatic::TRootPtr& tree, TMonotonic timestamp)
-    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>("(ROOT)")
-    , TPool("(ROOT)", {}, tree)
+TRoot::TRoot(const NDynamic::TPoolPtr& origin, const NStatic::TRootPtr& tree, TMonotonic timestamp)
+    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(GetOriginId(origin))
+    , TPool(origin, {}, tree)
     , Timestamp(timestamp)
     , StaticTree(tree)
     , TotalCpuLimit(tree->TotalCpuLimit)
@@ -362,7 +392,7 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
     return std::static_pointer_cast<TDatabase>(GetPool(databaseId));
 }
 
-void TRoot::Update(const TRootPtr& previous) {
+TQueriesToResume TRoot::Update(const TRootPtr& previous) {
     const auto period = previous && Timestamp > previous->Timestamp ? Timestamp - previous->Timestamp : TDuration::Zero();
 
     UpdateBottomUp(TotalCpuLimit, period);
@@ -381,11 +411,12 @@ void TRoot::Update(const TRootPtr& previous) {
 
     const ui64 memoryLimit = Min<ui64>(GetMemoryLimit(), TotalMemoryLimit);
     MemoryFairShare = memoryLimit > defaultPoolsUsage ? memoryLimit - defaultPoolsUsage : 0;
-    UpdateTopDown();
+    auto queriesToResume = UpdateTopDown();
 
     if (period) {
         AccountSnapshotDuration(period);
     }
+    return queriesToResume;
 }
 
 } // namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot

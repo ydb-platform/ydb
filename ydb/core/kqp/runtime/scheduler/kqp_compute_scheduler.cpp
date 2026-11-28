@@ -267,11 +267,7 @@ bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId, const bool i
 THashMap<NHdrf::TFullPoolId, double> TComputeScheduler::GetLeafPoolFairShares() const {
     THashMap<NHdrf::TFullPoolId, double> result;
     auto snapshot = Root->GetSnapshot();
-    if (!snapshot) {
-        return result;
-    }
-    const auto totalCpu = snapshot->TotalCpuLimit;
-    if (!totalCpu) {
+    if (!snapshot || !snapshot->TotalCpuLimit) {
         return result;
     }
 
@@ -284,7 +280,7 @@ THashMap<NHdrf::TFullPoolId, double> TComputeScheduler::GetLeafPoolFairShares() 
             if (!ReadQueries.contains(fullPoolId)) {
                 return;
             }
-            result[fullPoolId] = double(pool->CpuFairShare) / totalCpu;
+            result[fullPoolId] = double(pool->CpuFairShare) / snapshot->TotalCpuLimit;
         } else {
             pool->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* child, size_t) {
                 self(self, databaseId, child);
@@ -311,14 +307,16 @@ void TComputeScheduler::UpdateFairShare() {
         snapshot = NHdrf::NSnapshot::TRootPtr(Root->TakeSnapshot());
     }
 
-    snapshot->Update(Root->GetSnapshot());
+    const auto queriesToResume = snapshot->Update(Root->GetSnapshot());
 
     {
         TWriteGuard lock(Mutex);
-        // Never publish effective values for an obsolete configuration after a replacement.
-        if (snapshot->StaticTree == Root->GetStaticTree()) {
-            Root->SetSnapshot(snapshot);
-        }
+        Root->SetSnapshot(snapshot);
+    }
+    updateLock.Release();
+
+    for (const auto& [query, cpuFairShare] : queriesToResume) {
+        query->ResumeTasks(Min<ui64>(cpuFairShare, std::numeric_limits<ui32>::max()));
     }
 
     Counters.UpdateFairShare->Add((TMonotonic::Now() - startTime).MicroSeconds());

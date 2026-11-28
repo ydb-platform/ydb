@@ -33,12 +33,9 @@ void TSchedulableTask::RegisterForResume(std::function<void()> resume) {
 bool TSchedulableTask::TryResume() {
     if (ResumeCallback) {
         ResumeCallback();
-    } else if (NActors::TlsActivationContext) {
-        NActors::TActivationContext::Send(ActorId, GetResumeEvent());
-    } else {
-        return false;
+        return true;
     }
-    return true;
+    return NActors::TlsActivationContext && NActors::TActivationContext::Send(ActorId, GetResumeEvent());
 }
 
 bool TSchedulableTask::TryIncreaseUsage() {

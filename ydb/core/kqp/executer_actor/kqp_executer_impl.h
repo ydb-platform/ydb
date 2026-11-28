@@ -1241,6 +1241,12 @@ protected:
         ui32 eventType = ev->Get()->SourceType;
         auto reason = ev->Get()->Reason;
         switch (eventType) {
+            case TEvKqpExecuter::TEvStreamData::EventType: {
+                // the session actor sends the parts through the interconnect session to the request actor; when that
+                // session breaks, the rest of the result cannot reach the client
+                return ReplyUnavailable(TStringBuilder() << "Failed to deliver a result part to " << ev->Sender
+                    << ", reason: " << static_cast<ui32>(reason));
+            }
             case TEvKqpNode::TEvStartKqpTasksRequest::EventType: {
                 switch (reason) {
                     case TEvents::TEvUndelivered::EReason::ReasonActorUnknown: {

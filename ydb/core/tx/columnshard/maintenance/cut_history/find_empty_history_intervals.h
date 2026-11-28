@@ -5,6 +5,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -48,6 +49,7 @@ struct TFindEmptyHistoryIntervalsContext {
     struct TPortion {
         TInternalPathId PathId;
         ui64 PortionId;
+        NOlap::TPortionInfo::TConstPtr Info;
         std::shared_ptr<NOlap::ISnapshotSchema> Schema;
         ui64 AccessorMemory;
     };

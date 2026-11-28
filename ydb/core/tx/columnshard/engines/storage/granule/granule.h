@@ -31,7 +31,6 @@ class TColumnEngineForLogs;
 
 class TGranuleMeta: TNonCopyable {
 private:
-    TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
     THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
@@ -52,8 +51,10 @@ private:
     NGranule::NPortionsIndex::TPortionsIndex PortionsIndex;
     TLoadedKeyRanges LoadedKeyRanges = TLoadedKeyRanges::BuildNothing();
 
-    void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
-    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool onLoad = false);
+    void OnAddCommittedPortion(const std::shared_ptr<TPortionInfo>& portion, const bool refreshCounters = true, const bool onLoad = false);
+    void OnRemoveCommittedPortion(const std::shared_ptr<TPortionInfo>& portion, const bool refreshCounters = true);
+    void AddInsertedPortion(const std::shared_ptr<TWrittenPortionInfo>& portion);
+    std::shared_ptr<TWrittenPortionInfo> ExtractInsertedPortion(const TInsertWriteId insertWriteId);
 
     TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
         if (!portion) {
@@ -110,9 +111,9 @@ public:
     void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
         const auto innerPortion = GetInnerPortion(portion).DetachResult();
         YDB_LOG_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
-        OnBeforeChangePortion(innerPortion);
+        OnRemoveCommittedPortion(innerPortion, /*refreshCounters=*/false);
         modifier(innerPortion);
-        OnAfterChangePortion(innerPortion);
+        OnAddCommittedPortion(innerPortion);
     }
 
     void InsertPortionOnExecute(
@@ -146,7 +147,6 @@ public:
 
     void CommitImmediateOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion,
         const ui64 firstPKColumnId) const;
-    void CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine);
 
     std::vector<NStorageOptimizer::TTaskDescription> GetOptimizerTasksDescription() const {
         return OptimizerPlanner->GetTasksDescription();

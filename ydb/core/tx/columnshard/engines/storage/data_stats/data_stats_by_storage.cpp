@@ -24,19 +24,25 @@ NOlap::TSimplePortionsGroupInfo SumGroups(
 
 }   // namespace
 
-NOlap::TSimplePortionsGroupInfo& TStorageStats::GetGroup(const NOlap::TPortionInfo& portion) {
-    if (portion.HasRemoveSnapshot()) {
-        return Removed;
+NOlap::TSimplePortionsGroupInfo& TStorageStats::GetGroup(const EPortionGroup group) {
+    switch (group) {
+        case EPortionGroup::Uncommitted:
+            return Uncommitted;
+        case EPortionGroup::Written:
+            return Written;
+        case EPortionGroup::Compacted:
+            return Compacted;
+        case EPortionGroup::Removed:
+            return Removed;
     }
-    return portion.GetPortionType() == NOlap::EPortionType::Written ? Written : Compacted;
 }
 
-void TStorageStats::AddPortion(const NOlap::TPortionInfo& portion) {
-    GetGroup(portion).AddPortion(portion);
+void TStorageStats::AddPortion(const NOlap::TPortionInfo& portion, const EPortionGroup group) {
+    GetGroup(group).AddPortion(portion);
 }
 
-void TStorageStats::RemovePortion(const NOlap::TPortionInfo& portion) {
-    GetGroup(portion).RemovePortion(portion);
+void TStorageStats::RemovePortion(const NOlap::TPortionInfo& portion, const EPortionGroup group) {
+    GetGroup(group).RemovePortion(portion);
 }
 
 void TStorageStats::AddSmallBlob(const ui64 bytes) {
@@ -50,19 +56,19 @@ void TStorageStats::RemoveSmallBlob(const ui64 bytes) {
 }
 
 bool TStorageStats::IsEmpty() const {
-    return Written.IsEmpty() && Compacted.IsEmpty() && Removed.IsEmpty() && !SmallBlobsBytes && !SmallBlobsCount;
+    return Uncommitted.IsEmpty() && Written.IsEmpty() && Compacted.IsEmpty() && Removed.IsEmpty() && !SmallBlobsBytes && !SmallBlobsCount;
 }
 
-void TDataStatsByStorage::AddPortion(const NOlap::TPortionInfo& portion, const ui64 blobStorageSmallBlobBytes) {
-    Storages[portion.GetTierNameDef(GetBlobStorageId())].AddPortion(portion);
+void TDataStatsByStorage::AddPortion(const NOlap::TPortionInfo& portion, const EPortionGroup group, const ui64 blobStorageSmallBlobBytes) {
+    Storages[portion.GetTierNameDef(GetBlobStorageId())].AddPortion(portion, group);
     if (blobStorageSmallBlobBytes) {
         Storages[GetBlobStorageId()].AddSmallBlob(blobStorageSmallBlobBytes);
     }
 }
 
-void TDataStatsByStorage::RemovePortion(const NOlap::TPortionInfo& portion, const ui64 blobStorageSmallBlobBytes) {
+void TDataStatsByStorage::RemovePortion(const NOlap::TPortionInfo& portion, const EPortionGroup group, const ui64 blobStorageSmallBlobBytes) {
     const TString storageId = portion.GetTierNameDef(GetBlobStorageId());
-    GetStorageVerified(storageId).RemovePortion(portion);
+    GetStorageVerified(storageId).RemovePortion(portion, group);
     if (blobStorageSmallBlobBytes) {
         GetStorageVerified(GetBlobStorageId()).RemoveSmallBlob(blobStorageSmallBlobBytes);
         EraseStorageIfEmpty(GetBlobStorageId());
@@ -88,6 +94,12 @@ const TStorageStats& TDataStatsByStorage::GetStorageStats(const TString& storage
     static const TStorageStats empty;
     auto it = Storages.find(storageId);
     return it == Storages.end() ? empty : it->second;
+}
+
+NOlap::TSimplePortionsGroupInfo TDataStatsByStorage::GetUncommitted(const std::optional<TString>& storageId) const {
+    return SumGroups(Storages, storageId, [](const TStorageStats& storage) {
+        return storage.GetUncommitted();
+    });
 }
 
 NOlap::TSimplePortionsGroupInfo TDataStatsByStorage::GetWritten(const std::optional<TString>& storageId) const {

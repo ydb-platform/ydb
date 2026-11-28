@@ -579,7 +579,7 @@ private:
             if (State->VanillaJobPath.empty()) {
                 auto f = IDqGateway::TFileResource();
                 f.SetName("dq_vanilla_job.lite");
-                f.SetObjectId(GetProgramCommitId());
+                f.SetObjectId(GetProgramHash());
                 f.SetObjectType(IDqGateway::TFileResource::EEXE_FILE);
                 uploadList->emplace(f);
             } else {
@@ -587,7 +587,7 @@ private:
                 f.SetName("dq_vanilla_job.lite");
                 const auto preparedFile = PrepareFile(
                     State->VanillaJobPath,
-                    GetProgramCommitId(),
+                    GetProgramHash(),
                     State->VanillaJobMd5);
                 f.SetObjectId(preparedFile.ObjectId);
                 f.SetLocalPath(preparedFile.Path);
@@ -1749,7 +1749,7 @@ private:
     }
 
     IDqGateway::TDqProgressWriter MakeDqProgressWriter(const TPublicIds::TPtr& publicIds) const {
-        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<IDqGateway::TProgressWriterState>()](IDqGateway::TProgressWriterState state) 
+        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<IDqGateway::TProgressWriterState>()](IDqGateway::TProgressWriterState state)
         {
             if (*current != state) {
                 for (const auto& publicId : publicIds->AllPublicIds) {

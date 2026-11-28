@@ -58,7 +58,7 @@ private:
 
     TPositiveControlInteger WaitObjectsCount;
 
-    std::shared_ptr<ICallback> Callback;
+    const std::shared_ptr<ICallback> Callback;
     const EConsumer Consumer;
 
     bool RemoveAddrOnFinished(const TAddress addr) {
@@ -144,6 +144,7 @@ public:
         : StartRequest(startRequestInstant)
         , Callback(std::move(callback))
         , Consumer(consumer) {
+        AFL_VERIFY(Callback);
         for (auto&& i : addresses) {
             Wait[TPolicy::GetSourceId(i)].emplace(i);
             WaitObjectsCount.Inc();

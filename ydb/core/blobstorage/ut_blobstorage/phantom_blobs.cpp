@@ -1,5 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
+#include <ydb/core/blobstorage/vdisk/syncer/syncer_job_actor.h>
+#include <ydb/core/blobstorage/vdisk/syncer/syncer_job_task.h>
 
 #include <util/random/random.h>
 
@@ -359,7 +362,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
     std::vector<TNodeState> GetStates(TBlobStorageGroupType erasure, EOnline online,
             bool phantomFlagStorageEnabled, bool isPersistent, ui64 memoryLimit) {
-        return std::vector<TNodeState>(erasure.BlobSubgroupSize(), 
+        return std::vector<TNodeState>(erasure.BlobSubgroupSize(),
                 TNodeState{
                     .Online = online,
                     .PhantomFlagStorageEnabled = phantomFlagStorageEnabled,
@@ -497,6 +500,42 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         states2[0].Online = EOnline::Dead;
         Test(erasure, states1, states2, true);
     }
+
+    Y_UNIT_TEST(FailedFullSyncDoesNotAdvanceSyncState) {
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3dc;
+        const auto states = GetStatesOneDead(erasure, 10_KB);
+        TTestCtx ctx({
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
+            .VDiskConfigPreprocessor = [](TVDiskConfig& config) { config.MaxResponseSize = 1_KB; },
+            .ControllerNodeId = 2,
+            .PDiskChunkSize = 32_MB,
+            .EnablePhantomFlagStorage = true,
+            .TinySyncLog = true,
+        }, 300, 10000, states, /*expectPhantoms=*/false);
+
+        TActorId failedJob;
+        bool checked = false;
+        ctx.Env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (!failedJob && ev->GetTypeRewrite() == TEvBlobStorage::EvVSyncFullResult) {
+                auto& record = ev->Get<TEvBlobStorage::TEvVSyncFullResult>()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
+                if (record.GetCookie() > 0) {
+                    record.SetStatus(NKikimrProto::ERROR);
+                    failedJob = ev->GetRecipientRewrite();
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvSyncJobDone && ev->Sender == failedJob) {
+                const auto& task = *ev->Get<TEvSyncerJobDone>()->Task;
+                UNIT_ASSERT_VALUES_EQUAL(task.GetCurrent().LastSyncStatus, NKikimrVDiskData::TSyncerVDiskEntry::Error);
+                UNIT_ASSERT(!task.NeedCommit());
+                checked = true;
+            }
+            return true;
+        };
+        ctx.RunTestWithUpdate(states);
+        UNIT_ASSERT(checked);
+    }
+
     Y_UNIT_TEST(TestLoweringMemoryLimit) {
         auto erasure = TBlobStorageGroupType::ErasureMirror3dc;
         auto states1 = GetStates(erasure, EOnline::Alive, true, false, 10_KB);

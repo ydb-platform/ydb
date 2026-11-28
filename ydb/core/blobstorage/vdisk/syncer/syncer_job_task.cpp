@@ -143,8 +143,11 @@ namespace NKikimr {
             auto now = TAppData::TimeProvider->Now();
             Current.LastSyncStatus = status;
             Current.LastTry = now;
-            if (NSyncer::TPeerSyncState::Good(status))
+            if (NSyncer::TPeerSyncState::Good(status)) {
                 Current.LastGood = now;
+            } else if (IsFullRecoveryTask() && status != TSyncStatusVal::FullRecover) {
+                Current.SyncState = OldSyncState;
+            }
 
             // log
             Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_DEBUG, BS_SYNCER,

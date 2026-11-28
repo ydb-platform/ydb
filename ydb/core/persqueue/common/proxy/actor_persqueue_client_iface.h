@@ -33,7 +33,8 @@ public:
         NActors::TActorSystem* actorSystem,
         const NKikimrPQ::TPQConfig::TPQLibSettings& settings
     ) const {
-        AFL_ENSURE(!ActorSystemPtr->load(std::memory_order_relaxed))("d", "Double init");
+        YDB_LOG_ENSURE(!ActorSystemPtr->load(std::memory_order_relaxed),
+            {"d", "Double init"});
         ActorSystemPtr->store(actorSystem, std::memory_order_relaxed);
 
         auto driverConfig = NYdb::TDriverConfig()
@@ -130,7 +131,7 @@ protected:
         if (config.HasDatabase()) {
             clientSettings.Database(config.GetDatabase());
         }
-        AFL_ENSURE(Driver);
+        YDB_LOG_ENSURE(Driver);
         return NYdb::NTopic::TTopicClient(*Driver, clientSettings);
     }
 
@@ -204,7 +205,7 @@ protected:
         if (config.HasDatabase()) {
             clientSettings.Database(config.GetDatabase());
         }
-        AFL_ENSURE(Driver);
+        YDB_LOG_ENSURE(Driver);
         return NYdb::NTopic::TTopicClient(*Driver, clientSettings);
     }
 };

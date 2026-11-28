@@ -47,7 +47,8 @@ void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     ChildActorId = {};
 
     auto& topics = ev->Get()->Topics;
-    AFL_ENSURE(topics.size() == 1)("s", topics.size());
+    YDB_LOG_ENSURE(topics.size() == 1,
+        {"s", topics.size()});
 
     auto& topic = topics.begin()->second;
     DescribeStatus = topic.Status;
@@ -118,7 +119,7 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 
     TString dataStr;
     bool res = proto.SerializeToString(&dataStr);
-    AFL_ENSURE(res);
+    YDB_LOG_ENSURE(res);
     cmdWrite.SetData(dataStr);
 
     return totalSize;
@@ -144,7 +145,8 @@ void TWriterActor::DoWrite() {
             partition = TopicInfo->PartitionChooser->GetRandomPartition();
         }
 
-        AFL_ENSURE(partition)("t", TopicInfo->Description.GetName());
+        YDB_LOG_ENSURE(partition,
+            {"t", TopicInfo->Description.GetName()});
 
         PendingMessages.push_back({
             .Index = message.Index,
@@ -177,7 +179,8 @@ void TWriterActor::DoWrite() {
         }
 
         const auto* node = TopicInfo->PartitionGraph->GetPartition(partitionId);
-        AFL_ENSURE(node)("p", partitionId);
+        YDB_LOG_ENSURE(node,
+            {"p", partitionId});
         SendToTablet(node->TabletId, request.release());
         ++PendingRequests;
     }

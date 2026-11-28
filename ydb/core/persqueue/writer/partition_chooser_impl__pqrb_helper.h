@@ -20,7 +20,7 @@ public:
     }
 
     void SendRequest(const NActors::TActorContext& ctx) {
-        AFL_ENSURE(BalancerTabletId);
+        YDB_LOG_ENSURE(BalancerTabletId);
 
         if (!Pipe) {
             NTabletPipe::TClientConfig clientConfig;

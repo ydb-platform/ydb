@@ -389,14 +389,14 @@ private:
     }
 
     void FinishClustersList(TIntrusivePtr<TClustersList> clustersList) {
-        AFL_ENSURE(clustersList);
-        AFL_ENSURE(clustersList->Clusters.size());
+        YDB_LOG_ENSURE(clustersList);
+        YDB_LOG_ENSURE(clustersList->Clusters.size());
         AccountPageFrom.clear();
         clustersList->Version = clustersList->ClusterVersion + clustersList->BalancerVersion + clustersList->SumAccountVersions();
         clustersList->BuildVisibleClusters();
         ClustersList = std::move(clustersList);
         ClustersListUpdateTimestamp = Ctx().Now();
-        AFL_ENSURE(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp);
+        YDB_LOG_ENSURE(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp);
 
         BroadcastClustersUpdate();
         ReplyAllGetClustersListRequests();

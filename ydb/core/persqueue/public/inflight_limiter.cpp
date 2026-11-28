@@ -37,7 +37,7 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
         return !wasMemoryLimitReached;
     }
 
-    AFL_ENSURE(Layout.empty() || Offset > Layout.back().Offset);
+    YDB_LOG_ENSURE(Layout.empty() || Offset > Layout.back().Offset);
 
     ui64 rest = Size;
     if (!Layout.empty() && Layout.back().Size < LayoutUnitSize) {
@@ -84,7 +84,7 @@ bool TInFlightController::Remove(ui64 Offset) {
         if (Layout.size() == 1) {
             TotalSize = 0;
         } else {
-            AFL_ENSURE(TotalSize >= it->Size);
+            YDB_LOG_ENSURE(TotalSize >= it->Size);
             TotalSize -= it->Size;
         }
     }

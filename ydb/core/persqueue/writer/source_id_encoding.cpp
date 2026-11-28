@@ -35,7 +35,8 @@ TString GetSelectSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
                    << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
                    << "` WHERE Hash == $Hash AND Topic == $Topic AND ProducerId == $SourceId;";
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            YDB_LOG_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 
@@ -49,7 +50,8 @@ TString GetSelectSourceIdQuery(const TString& root, ESourceIdTableGeneration gen
                     generation
             );
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            YDB_LOG_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 
@@ -79,7 +81,8 @@ TString GetUpdateSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
                     << "` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
                                               "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo);";
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            YDB_LOG_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 
@@ -108,7 +111,8 @@ TString GetUpdateAccessTimeQueryFromPath(const TString& path, ESourceIdTableGene
                    "SET AccessTime = $AccessTime "
                    "WHERE Hash = $Hash AND Topic = $Topic AND ProducerId = $SourceId AND Partition = $Partition;";
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            YDB_LOG_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 
@@ -122,7 +126,8 @@ TString GetUpdateSourceIdQuery(const TString& root, ESourceIdTableGeneration gen
                     generation
             );
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            YDB_LOG_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 
@@ -136,7 +141,8 @@ TString GetUpdateAccessTimeQuery(const TString& root, ESourceIdTableGeneration g
                     generation
             );
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            YDB_LOG_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 
@@ -156,7 +162,7 @@ TString EncodeSimple(const TString& sourceId) {
 }
 
 TString DecodeSimple(const TString& sourceId) {
-    AFL_ENSURE(!sourceId.empty() && sourceId[0] == TTags::Simple);
+    YDB_LOG_ENSURE(!sourceId.empty() && sourceId[0] == TTags::Simple);
     return sourceId.substr(1);
 }
 
@@ -180,7 +186,7 @@ TString EncodeBase64(const TString& sourceId) {
 }
 
 TString DecodeBase64(const TString& sourceId) {
-    AFL_ENSURE(!sourceId.empty() && sourceId[0] == TTags::Base64);
+    YDB_LOG_ENSURE(!sourceId.empty() && sourceId[0] == TTags::Base64);
     return Base64Prefix + StripStringRight(Base64EncodeUrl(sourceId.substr(1)), EqualsStripAdapter(','));
 }
 
@@ -193,7 +199,7 @@ TString Encode(const TString& sourceId) {
 }
 
 TString Decode(const TString& sourceId) {
-    AFL_ENSURE(!sourceId.empty());
+    YDB_LOG_ENSURE(!sourceId.empty());
 
     switch (sourceId[0]) {
     case TTags::Simple:

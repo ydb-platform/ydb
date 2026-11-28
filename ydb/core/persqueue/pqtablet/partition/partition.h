@@ -68,7 +68,7 @@ struct TTransaction {
         , CalcPredicateSpan(std::move(tx->Span))
         , CalcPredicateTimestamp(calcPredicateTimestamp)
     {
-        AFL_ENSURE(Tx);
+        YDB_LOG_ENSURE(Tx);
     }
 
     TTransaction(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> changeConfig,
@@ -76,13 +76,13 @@ struct TTransaction {
         : ChangeConfig(changeConfig)
         , SendReply(sendReply)
     {
-        AFL_ENSURE(ChangeConfig);
+        YDB_LOG_ENSURE(ChangeConfig);
     }
 
     explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> proposeConfig)
         : ProposeConfig(proposeConfig)
     {
-        AFL_ENSURE(ProposeConfig);
+        YDB_LOG_ENSURE(ProposeConfig);
     }
 
     explicit TTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> proposeTx)
@@ -93,7 +93,7 @@ struct TTransaction {
         if (record.HasSupportivePartitionActor()) {
             SupportivePartitionActor = ActorIdFromProto(record.GetSupportivePartitionActor());
         }
-        AFL_ENSURE(ProposeTransaction);
+        YDB_LOG_ENSURE(ProposeTransaction);
     }
 
     TMaybe<ui64> GetTxId() const {

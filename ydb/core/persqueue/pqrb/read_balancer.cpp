@@ -1066,8 +1066,8 @@ void TPersQueueReadBalancer::OnReceiveAttemptPartitionsWriteComplete(
     TReceiveAttemptPartitionsWriteBatch batch,
     const TActorContext& ctx
 ) {
-    AFL_ENSURE(ReceiveAttemptPartitionsWriteInProgress);
-    AFL_ENSURE(!PendingReceiveAttemptPartitionsWrites.empty());
+    YDB_LOG_ENSURE(ReceiveAttemptPartitionsWriteInProgress);
+    YDB_LOG_ENSURE(!PendingReceiveAttemptPartitionsWrites.empty());
 
     PendingReceiveAttemptPartitionsWrites.pop_front();
     ReceiveAttemptPartitionsWriteInProgress = false;

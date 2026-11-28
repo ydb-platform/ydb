@@ -190,7 +190,8 @@ TSourceIdInfo TSourceIdInfo::Updated(TSchemaChangeInfo&& schemaChange) const {
 }
 
 TSourceIdInfo TSourceIdInfo::Parse(const TString& data, TInstant now) {
-    AFL_ENSURE(data.size() >= 2 * sizeof(ui64))("description", "Data must contain at least SeqNo & Offset");
+    YDB_LOG_ENSURE(data.size() >= 2 * sizeof(ui64),
+        {"description", "Data must contain at least SeqNo & Offset"});
     ui32 pos = 0;
 
     TSourceIdInfo result;
@@ -200,15 +201,19 @@ TSourceIdInfo TSourceIdInfo::Parse(const TString& data, TInstant now) {
     result.CreateTimestamp = TInstant::MilliSeconds(ReadAs<ui64>(data, pos, now.MilliSeconds()));
     result.ProducerEpoch = ReadAs<TMaybe<i16>>(data, pos);
 
-    AFL_ENSURE(result.SeqNo <= (ui64)Max<i64>())("description", "SeqNo is too big")("seqNo", result.SeqNo);
-    AFL_ENSURE(result.Offset <= (ui64)Max<i64>())("description", "Offset is too big")("offset", result.Offset);
+    YDB_LOG_ENSURE(result.SeqNo <= (ui64)Max<i64>(),
+        {"description", "SeqNo is too big"},
+        {"seqNo", result.SeqNo});
+    YDB_LOG_ENSURE(result.Offset <= (ui64)Max<i64>(),
+        {"description", "Offset is too big"},
+        {"offset", result.Offset});
 
     return result;
 }
 
 void TSourceIdInfo::Serialize(TBuffer& data) const {
-    AFL_ENSURE(!Explicit);
-    AFL_ENSURE(!KeyRange);
+    YDB_LOG_ENSURE(!Explicit);
+    YDB_LOG_ENSURE(!KeyRange);
 
     data.Resize(4 * sizeof(ui64) + sizeof(TMaybe<i16>));
     ui32 pos = 0;
@@ -337,7 +342,7 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
         maxDeleteSourceIds = Min(maxDeleteSourceIds, MAX_DELETE_COMMAND_COUNT);
     }
 
-    AFL_ENSURE(maxDeleteSourceIds <= InMemorySourceIds.size());
+    YDB_LOG_ENSURE(maxDeleteSourceIds <= InMemorySourceIds.size());
 
     const auto ttl = TDuration::Seconds(config.GetSourceIdLifetimeSeconds());
     ui32 size = request->Record.ByteSize();
@@ -348,7 +353,7 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
         }
 
         auto it = InMemorySourceIds.find(sourceId);
-        AFL_ENSURE(it != InMemorySourceIds.end());
+        YDB_LOG_ENSURE(it != InMemorySourceIds.end());
         if (it->second.Explicit) {
             continue;
         }
@@ -386,10 +391,10 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
     for (auto& t : toDelOffsets) {
         // delete sourceId from memory
         size_t res = InMemorySourceIds.erase(t.second);
-        AFL_ENSURE(res == 1);
+        YDB_LOG_ENSURE(res == 1);
         // delete sourceID from offsets
         res = SourceIdsByOffset[0].erase(t);
-        AFL_ENSURE(res == 1);
+        YDB_LOG_ENSURE(res == 1);
         // save owners to drop and delete records from map
         auto it = SourceIdOwners.find(t.second);
         if (it != SourceIdOwners.end()) {
@@ -402,7 +407,7 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
 }
 
 void TSourceIdStorage::LoadSourceIdInfo(const TString& key, const TString& data, TInstant now) {
-    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize());
+    YDB_LOG_ENSURE(key.size() >= TKeyPrefix::MarkedSize());
 
     const auto mark = TKeyPrefix::EMark(key[TKeyPrefix::MarkPosition()]);
     switch (mark) {
@@ -411,24 +416,26 @@ void TSourceIdStorage::LoadSourceIdInfo(const TString& key, const TString& data,
     case TKeyPrefix::MarkProtoSourceId:
         return LoadProtoSourceIdInfo(key, data);
     default:
-        AFL_ENSURE(false)("reason", "Unexpected mark")("mark", (char)mark);
+        YDB_LOG_ENSURE(false,
+            {"reason", "Unexpected mark"},
+            {"mark", (char)mark});
     }
 }
 
 void TSourceIdStorage::LoadRawSourceIdInfo(const TString& key, const TString& data, TInstant now) {
-    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize());
-    AFL_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkSourceId);
+    YDB_LOG_ENSURE(key.size() >= TKeyPrefix::MarkedSize());
+    YDB_LOG_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkSourceId);
 
     RegisterSourceIdInfo(key.substr(TKeyPrefix::MarkedSize()), TSourceIdInfo::Parse(data, now), true);
 }
 
 void TSourceIdStorage::LoadProtoSourceIdInfo(const TString& key, const TString& data) {
-    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize());
-    AFL_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId);
+    YDB_LOG_ENSURE(key.size() >= TKeyPrefix::MarkedSize());
+    YDB_LOG_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId);
 
     NKikimrPQ::TMessageGroupInfo proto;
     const bool ok = proto.ParseFromString(data);
-    AFL_ENSURE(ok);
+    YDB_LOG_ENSURE(ok);
 
     RegisterSourceIdInfo(key.substr(TKeyPrefix::MarkedSize()), TSourceIdInfo::Parse(proto), true);
 }
@@ -438,21 +445,21 @@ void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdIn
     if (it != InMemorySourceIds.end()) {
         if (!load || it->second.Offset < sourceIdInfo.Offset) {
             const auto res = SourceIdsByOffset[sourceIdInfo.Explicit].erase(std::make_pair(it->second.Offset, sourceId));
-            AFL_ENSURE(res == 1);
+            YDB_LOG_ENSURE(res == 1);
         } else {
             return;
         }
     }
 
     const bool res = SourceIdsByOffset[sourceIdInfo.Explicit].emplace(sourceIdInfo.Offset, sourceId).second;
-    AFL_ENSURE(res);
+    YDB_LOG_ENSURE(res);
 
     if (sourceIdInfo.Explicit) {
         ExplicitSourceIds.insert(sourceId);
     }
 
     if (const auto& heartbeat = sourceIdInfo.LastHeartbeat) {
-        AFL_ENSURE(sourceIdInfo.Explicit);
+        YDB_LOG_ENSURE(sourceIdInfo.Explicit);
 
         if (it != InMemorySourceIds.end() && it->second.LastHeartbeat) {
             ForgetHeartbeat(sourceId, it->second.LastHeartbeat->Version);
@@ -462,7 +469,7 @@ void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdIn
     }
 
     if (const auto& schemaChange = sourceIdInfo.LastSchemaChange) {
-        AFL_ENSURE(sourceIdInfo.Explicit);
+        YDB_LOG_ENSURE(sourceIdInfo.Explicit);
 
         if (it != InMemorySourceIds.end() && it->second.LastSchemaChange) {
             ForgetSchemaChange(sourceId, it->second.LastSchemaChange->Version);
@@ -499,7 +506,7 @@ TInstant TSourceIdStorage::MinAvailableTimestamp(TInstant now) const {
     for (ui32 i = 0 ; i < 2; ++i) {
         if (!SourceIdsByOffset[i].empty()) {
             auto it = InMemorySourceIds.find(SourceIdsByOffset[i].begin()->second);
-            AFL_ENSURE(it != InMemorySourceIds.end());
+            YDB_LOG_ENSURE(it != InMemorySourceIds.end());
             ds = Min(ds, it->second.WriteTimestamp);
         }
     }
@@ -514,7 +521,7 @@ TRowVersion TSourceIdStorage::GetCommittedSchemaChangeVersion() const {
 
     // Each explicit source with a schema change is in exactly one version bucket;
     // the map is ordered, so the minimum committed version is begin()->first.
-    AFL_ENSURE(!SourceIdsBySchemaChange.empty());
+    YDB_LOG_ENSURE(!SourceIdsBySchemaChange.empty());
     return SourceIdsBySchemaChange.begin()->first;
 }
 
@@ -671,18 +678,18 @@ TMaybe<THeartbeat> THeartbeatEmitter::CanEmit() const {
 }
 
 TMaybe<THeartbeat> THeartbeatEmitter::GetFromStorage(TSourceIdsByHeartbeat::const_iterator it) const {
-    AFL_ENSURE(!it->second.empty());
+    YDB_LOG_ENSURE(!it->second.empty());
     const auto& someSourceId = *it->second.begin();
 
-    AFL_ENSURE(Storage.InMemorySourceIds.contains(someSourceId));
+    YDB_LOG_ENSURE(Storage.InMemorySourceIds.contains(someSourceId));
     return Storage.InMemorySourceIds.at(someSourceId).LastHeartbeat;
 }
 
 TMaybe<THeartbeat> THeartbeatEmitter::GetFromDiff(TSourceIdsByHeartbeat::const_iterator it) const {
-    AFL_ENSURE(!it->second.empty());
+    YDB_LOG_ENSURE(!it->second.empty());
     const auto& someSourceId = *it->second.begin();
 
-    AFL_ENSURE(Heartbeats.contains(someSourceId));
+    YDB_LOG_ENSURE(Heartbeats.contains(someSourceId));
     return Heartbeats.at(someSourceId);
 }
 
@@ -777,18 +784,18 @@ TMaybe<TSchemaChangeInfo> TSchemaChangeEmitter::CanEmit() const {
 }
 
 TMaybe<TSchemaChangeInfo> TSchemaChangeEmitter::GetFromStorage(TSourceIdsBySchemaChange::const_iterator it) const {
-    AFL_ENSURE(!it->second.empty());
+    YDB_LOG_ENSURE(!it->second.empty());
     const auto& someSourceId = *it->second.begin();
 
-    AFL_ENSURE(Storage.InMemorySourceIds.contains(someSourceId));
+    YDB_LOG_ENSURE(Storage.InMemorySourceIds.contains(someSourceId));
     return Storage.InMemorySourceIds.at(someSourceId).LastSchemaChange;
 }
 
 TMaybe<TSchemaChangeInfo> TSchemaChangeEmitter::GetFromDiff(TSourceIdsBySchemaChange::const_iterator it) const {
-    AFL_ENSURE(!it->second.empty());
+    YDB_LOG_ENSURE(!it->second.empty());
     const auto& someSourceId = *it->second.begin();
 
-    AFL_ENSURE(SchemaChanges.contains(someSourceId));
+    YDB_LOG_ENSURE(SchemaChanges.contains(someSourceId));
     return SchemaChanges.at(someSourceId);
 }
 

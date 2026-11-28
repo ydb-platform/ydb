@@ -103,7 +103,7 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvTxWriteRequest::T
 
     if (auto* writer = GetPartitionWriter(event.SessionId, event.TxId, event.DeferredPublish, ctx); writer) {
         if (PendingWriteAccepted.Expected == Max<ui64>()) {
-            AFL_ENSURE(PendingWriteResponse.Expected == Max<ui64>());
+            YDB_LOG_ENSURE(PendingWriteResponse.Expected == Max<ui64>());
 
             PendingWriteAccepted.Expected = event.Request->GetCookie();
             PendingWriteResponse.Expected = event.Request->GetCookie();
@@ -164,7 +164,7 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr&
 
     auto key = std::make_pair(result.SessionId, result.TxId);
     auto p = Writers.find(key);
-    AFL_ENSURE(p != Writers.end());
+    YDB_LOG_ENSURE(p != Writers.end());
 
     if (result.IsSuccess()) {
         p->second->OnEvInitResult(ev);
@@ -184,7 +184,7 @@ void TPartitionWriterCacheActor::TryForwardToOwner(TEvent* event, TEventQueue<TE
                                                    ui64 cookie,
                                                    const TActorContext& ctx)
 {
-    AFL_ENSURE(queue.Expected != Max<ui64>());
+    YDB_LOG_ENSURE(queue.Expected != Max<ui64>());
 
     if (queue.Expected == cookie) {
         ctx.Send(Owner, event);
@@ -208,7 +208,7 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TP
 
     auto key = std::make_pair(result.SessionId, result.TxId);
     auto p = Writers.find(key);
-    AFL_ENSURE(p != Writers.end());
+    YDB_LOG_ENSURE(p != Writers.end());
 
     if (result.Cookie == p->second->SentRequests.front().Cookie) {
         p->second->OnWriteAccepted(result, ctx);
@@ -230,7 +230,7 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvWriteResponse::TP
 
     auto key = std::make_pair(result.SessionId, result.TxId);
     auto p = Writers.find(key);
-    AFL_ENSURE(p != Writers.end());
+    YDB_LOG_ENSURE(p != Writers.end());
 
     if (result.IsSuccess()) {
         ui64 cookie = result.Record.GetPartitionResponse().GetCookie();
@@ -284,14 +284,14 @@ auto TPartitionWriterCacheActor::GetPartitionWriter(
     RegisterPartitionWriter(sessionId, txId, deferredPublish, ctx);
 
     p = Writers.find(key);
-    AFL_ENSURE(p != Writers.end());
+    YDB_LOG_ENSURE(p != Writers.end());
 
     return p->second.get();
 }
 
 bool TPartitionWriterCacheActor::TryDeleteOldestWriter(const TActorContext& ctx)
 {
-    AFL_ENSURE(!Writers.empty());
+    YDB_LOG_ENSURE(!Writers.empty());
 
     auto minLastActivity = TInstant::Max();
     auto oldest = Writers.end();

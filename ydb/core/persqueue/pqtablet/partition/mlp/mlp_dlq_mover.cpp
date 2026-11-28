@@ -127,7 +127,8 @@ void TDLQMoverActor::CreateWriter() {
 
     auto& chooser = TopicInfo.Info->PartitionChooser;
     TargetPartition = chooser->GetPartition(ProducerId);
-    AFL_ENSURE(TargetPartition)("p", ProducerId);
+    YDB_LOG_ENSURE(TargetPartition,
+        {"p", ProducerId});
 
     TPartitionWriterOpts opts; // TODO request units
     opts.WithDeduplication(true)
@@ -271,9 +272,9 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
     }
 
     bool processingPaused = PendingMessagesSize >= MaxPendingMessagesSize;
-    AFL_ENSURE(PendingMessagesSize >= messageSize)
-        ("PendingMessagesSize", PendingMessagesSize)
-        ("messageSize", messageSize);
+    YDB_LOG_ENSURE(PendingMessagesSize >= messageSize,
+        {"pendingMessagesSize", PendingMessagesSize},
+        {"messageSize", messageSize});
     PendingMessagesSize -= messageSize;
     if (processingPaused) {
         ProcessQueue();
@@ -310,7 +311,8 @@ STFUNC(TDLQMoverActor::StateDescribe) {
                 "Unexpected",
                 {"event", EventStr("StateDescribe", ev)}
             );
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateDescribe", ev));
+            YDB_LOG_VERIFY_DEBUG(false,
+                {"Unexpected", EventStr("StateDescribe", ev)});
     }
 }
 
@@ -324,7 +326,8 @@ STFUNC(TDLQMoverActor::StateInit) {
                 "Unexpected",
                 {"event", EventStr("StateInit", ev)}
             );
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
+            YDB_LOG_VERIFY_DEBUG(false,
+                {"Unexpected", EventStr("StateInit", ev)});
     }
 }
 
@@ -341,7 +344,8 @@ STFUNC(TDLQMoverActor::StateWork) {
                 "Unexpected",
                 {"event", EventStr("StateWork", ev)}
             );
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWork", ev));
+            YDB_LOG_VERIFY_DEBUG(false,
+                {"Unexpected", EventStr("StateWork", ev)});
     }
 }
 

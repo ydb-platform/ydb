@@ -61,7 +61,8 @@ private:
         LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
 
         auto& topics = ev->Get()->Topics;
-        AFL_ENSURE(topics.size() == 1)("s", topics.size());
+        YDB_LOG_ENSURE(topics.size() == 1,
+            {"s", topics.size()});
 
         TopicInfo = std::move(topics.begin()->second);
         switch(TopicInfo.Status) {

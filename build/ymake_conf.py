@@ -2755,6 +2755,7 @@ class Cuda(object):
         self.cuda_target_root.emit()
         self.cuda_version.emit()
         self.cuda_architectures.emit()
+        emit('CUDA_ARCHITECTURES_FROM_USER', self.cuda_architectures.from_user)
         self.use_arcadia_cuda.emit()
         self.use_arcadia_cuda_host_compiler.emit()
         self.cuda_sanitize.emit()

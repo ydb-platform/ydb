@@ -2,7 +2,7 @@ PY3TEST()
 
 STYLE_PYTHON()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 PEERDIR(
     contrib/python/boto3
@@ -10,10 +10,16 @@ PEERDIR(
     library/python/testing/recipe
     library/python/testing/yatest_common
     library/recipes/common
-    ydb/tests/tools/fq_runner
+    ydb/tests/fq/streaming_common
+    ydb/public/sdk/python
+    ydb/public/sdk/python/enable_v3_new_behavior
+    contrib/python/pytest
+    contrib/python/requests
 )
 
 DEPENDS(
+    ydb/apps/ydb
+    ydb/apps/ydbd
     contrib/python/moto/bin
 )
 

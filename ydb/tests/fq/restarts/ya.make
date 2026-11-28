@@ -3,21 +3,26 @@ PY3TEST()
 STYLE_PYTHON()
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=false)
-
-INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
-
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner.inc)
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 PEERDIR(
     contrib/python/boto3
+    contrib/python/pytest
+    contrib/python/requests
     library/python/port_manager
     library/python/testing/recipe
     library/python/testing/yatest_common
     library/recipes/common
-    ydb/tests/tools/fq_runner
+    ydb/tests/fq/streaming_common
+    ydb/public/api/grpc
+    ydb/public/api/protos
+    ydb/public/sdk/python
+    ydb/tests/library
 )
 
 DEPENDS(
+    ydb/apps/ydb
+    ydb/apps/ydbd
     contrib/python/moto/bin
 )
 

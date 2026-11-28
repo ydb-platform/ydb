@@ -5,6 +5,7 @@ STYLE_PYTHON()
 PY_SRCS(
     endpoint_determiner.py
     settings.py
+    ydb_helpers.py
 )
 
 PEERDIR(

@@ -8,6 +8,7 @@ PY_SRCS(
 
 PEERDIR(
     library/python/testing/yatest_common
+    ydb/tests/tools/datastreams_helpers
     ydb/tests/tools/fq_runner
 )
 

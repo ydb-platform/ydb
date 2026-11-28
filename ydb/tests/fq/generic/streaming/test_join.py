@@ -6,21 +6,19 @@ import time
 from collections import Counter
 from itertools import chain, islice
 
-import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
+import operator
+import ydb
 
-from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
+from ydb.tests.fq.generic.utils.ydb_helpers import create_external_data_source
+from ydb.tests.fq.streaming_common.common import StreamingTestBase, counter_nodes, get_sensors
+from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
 from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
 from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 
 import conftest
 import random
-
-# TODO:
-# Mostly identical to ydb streaming test ydb/tests/fq/streaming/generic/test_json.py
-# Keep in sync (until yqv1 will be decomissioned and this copy removed)
 
 MAX_WRITE_STREAM_SIZE = 500
 DEBUG = 0
@@ -52,9 +50,9 @@ def ResequenceId(messages, field="id"):
 def freeze(obj):
     # Designed for (deserialized) obj
     t = type(obj)
-    if t == dict:
+    if t is dict:
         return frozenset((k, freeze(v)) for k, v in obj.items())
-    if t == list:
+    if t is list:
         return tuple(map(freeze, obj))
     return obj
 
@@ -494,7 +492,7 @@ TESTCASES = [
     # 9
     (
         R'''
-            PRAGMA dq.MaxTasksPerStage = "3";
+            PRAGMA ydb.MaxTasksPerStage = "3";
             $input = SELECT * FROM myyds.`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
@@ -549,7 +547,7 @@ TESTCASES = [
     # 10
     (
         R'''
-            PRAGMA dq.MaxTasksPerStage = "1";
+            PRAGMA ydb.MaxTasksPerStage = "1";
 
             $input = SELECT * FROM myyds.`{input_topic}`;
 
@@ -1120,24 +1118,63 @@ one_time_waiter = OneTimeWaiter(
 )
 
 
-class TestJoinStreaming(TestYdsBase):
-    @yq_v1
-    @pytest.mark.parametrize(
-        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
-    )
-    @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_simple(self, kikimr, fq_client: FederatedQueryClient, yq_version):
-        self.init_topics(f"pq_yq_streaming_test_simple{yq_version}")
-        fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-
-        table_name = 'join_table'
-        ydb_conn_name = f'ydb_conn_{table_name}'
-
-        fq_client.create_ydb_connection(
-            name=ydb_conn_name,
-            database_id='local',
+class TestJoinStreaming(StreamingTestBase):
+    def _prepare(self, kikimr, title, partitions_count=1, shared=False):
+        endpoint = self.get_endpoint(kikimr, local_topics=False)
+        self.init_topics(title, partitions_count=partitions_count, endpoint=endpoint)
+        create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
+        self.create_source(kikimr, "wmyds" if shared else "myyds", shared=shared, endpoint=endpoint)
+        create_external_data_source(
+            kikimr.ydb_client,
+            "ydb_conn_join_table",
+            "Ydb",
+            "tests-fq-generic-streaming-ydb:2136",
+            "local",
+            token="root@builtin",
         )
         one_time_waiter.wait()
+        return endpoint
+
+    def _start(self, kikimr, query_name, sql):
+        kikimr.ydb_client.query(f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                PRAGMA pq.Consumer = "{self.consumer_name}";
+                {sql}
+            END DO;
+        ''')
+
+    def _stop(self, kikimr, query_name):
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+        path = f"{kikimr.get_database_name()}/{query_name}"
+        assert wait_for(
+            lambda: [
+                row.Status
+                for row in kikimr.ydb_client.query(
+                    f'SELECT Status FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+                )[0].rows
+            ]
+            == ["STOPPED"],
+            timeout_seconds=120,
+        ), f"Streaming query did not stop: {path}"
+
+    def _lookup_sensors(self, kikimr, query_name):
+        path = f"{kikimr.get_database_name()}/{query_name}"
+        for node_index in counter_nodes(kikimr.cluster):
+            sensors = get_sensors(kikimr.cluster, node_index, "kqp")
+            for component in ("Lookup", "LookupSrc"):
+                values = sensors.find_sensors(
+                    labels={"subsystem": "DqLookup", "tx_id": path, "component": component},
+                    key_label="sensor",
+                    combine=operator.add,
+                )
+                for name, value in values.items():
+                    print(f"node[{node_index}].tx_id[{path}].component[{component}].{name} = {value}", file=sys.stderr)
+                yield component, values
+
+    def test_simple(self, kikimr):
+        title = "pq_ydb_streaming_test_simple"
+        endpoint = self._prepare(kikimr, title)
+        table_name = "join_table"
 
         sql = R'''
             $input = SELECT * FROM myyds.`{input_topic}`;
@@ -1154,29 +1191,18 @@ class TestJoinStreaming(TestYdsBase):
             select * from $enriched;
             '''.format(input_topic=self.input_topic, output_topic=self.output_topic, table_name=table_name)
 
-        query_id = fq_client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+        query_name = f"q_{title}"
+        self._start(kikimr, query_name, sql)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
         messages = ['A', 'B', 'C']
-        self.write_stream(messages)
+        self.write_stream(messages, endpoint=endpoint)
 
-        read_data = self.read_stream(len(messages))
+        read_data = self.read_stream(len(messages), endpoint=endpoint)
         assert read_data == messages
 
-        fq_client.abort_query(query_id)
-        fq_client.wait_query(query_id)
+        self._stop(kikimr, query_name)
 
-        describe_response = fq_client.describe_query(query_id)
-        status = describe_response.result.query.meta.status
-        assert not describe_response.issues, str(describe_response.issues)
-        assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
-
-    @yq_v1
-    @pytest.mark.parametrize(
-        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
-    )
-    @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
     @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
@@ -1186,20 +1212,10 @@ class TestJoinStreaming(TestYdsBase):
         testcase,
         streamlookup,
         partitions_count,
-        fq_client: FederatedQueryClient,
-        yq_version,
     ):
-        title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}{yq_version}"
-        self.init_topics(title, partitions_count=partitions_count)
-        fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-
-        table_name = 'join_table'
-        ydb_conn_name = f'ydb_conn_{table_name}'
-
-        fq_client.create_ydb_connection(
-            name=ydb_conn_name,
-            database_id='local',
-        )
+        title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}"
+        endpoint = self._prepare(kikimr, title, partitions_count)
+        table_name = "join_table"
 
         sql, messages, *options = TESTCASES[testcase]
         sql = sql.format(
@@ -1211,26 +1227,21 @@ class TestJoinStreaming(TestYdsBase):
 
         options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
-        one_time_waiter.wait()
-
-        query_id = fq_client.create_query(title, sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-
-        if not streamlookup and "MultiGet true" in sql:
-            fq_client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-            describe_result = fq_client.describe_query(query_id).result
-            describe_string = "{}".format(describe_result)
-            print("Describe result: {}".format(describe_string), file=sys.stderr)
-            assert "Cannot compare key columns" in describe_string
+        query_name = f"q_{title}"
+        try:
+            self._start(kikimr, query_name, sql)
+        except ydb.issues.Error as error:
+            assert not streamlookup and "MultiGet true" in sql, error
+            assert "Cannot compare key columns" in str(error)
             return
-
-        fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+        assert not (not streamlookup and "MultiGet true" in sql)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
         for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
-            self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]))
+            self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]), endpoint=endpoint)
 
         expected_len = sum(map(len, messages)) - len(messages)
-        read_data = self.read_stream(expected_len)
+        read_data = self.read_stream(expected_len, endpoint=endpoint)
         if DEBUG:
             print(streamlookup, testcase, file=sys.stderr)
             print(sql, file=sys.stderr)
@@ -1239,37 +1250,15 @@ class TestJoinStreaming(TestYdsBase):
         messages_ctr = Counter(map(freeze, map(json.loads, chain(*map(lambda row: islice(row, 1, None), messages)))))
         assert read_data_ctr == messages_ctr
 
-        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
-            for component in ["Lookup", "LookupSrc"]:
-                componentSensors = sensors.find_sensors(
-                    labels={"operation": query_id, "component": component},
-                    key_label="sensor",
-                )
-                if component == "LookupSrc":
-                    if options_dict.get("FullscanLimit") == "0" or (
-                        "FullscanLimit" not in options_dict and options_dict.get("MaxCachedRows") == "0"
-                    ):
-                        assert componentSensors.get("Fullscans", 0) == 0
-                for k in componentSensors:
-                    print(
-                        f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
-                        file=sys.stderr,
-                    )
+        for component, component_sensors in self._lookup_sensors(kikimr, query_name):
+            if component == "LookupSrc":
+                if options_dict.get("FullscanLimit") == "0" or (
+                    "FullscanLimit" not in options_dict and options_dict.get("MaxCachedRows") == "0"
+                ):
+                    assert component_sensors.get("Fullscans", 0) == 0
 
-        fq_client.abort_query(query_id)
-        fq_client.wait_query(query_id)
+        self._stop(kikimr, query_name)
 
-        describe_response = fq_client.describe_query(query_id)
-        status = describe_response.result.query.meta.status
-        assert not describe_response.issues, str(describe_response.issues)
-        assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
-
-    @yq_v1
-    @pytest.mark.parametrize(
-        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
-    )
-    @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
     @pytest.mark.parametrize("partitions_count", [1, 2])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("streamlookup", [True, False])
@@ -1281,37 +1270,25 @@ class TestJoinStreaming(TestYdsBase):
         streamlookup,
         tasks,
         partitions_count,
-        fq_client: FederatedQueryClient,
-        yq_version,
     ):
         title = f"slj_wm_{partitions_count}{str(streamlookup)[:1]}{limit}{tasks}"
-        self.init_topics(title, partitions_count=partitions_count)
-        fq_client.create_yds_connection(
-            "wmyds",
-            os.getenv("YDB_DATABASE"),
-            os.getenv("YDB_ENDPOINT"),
-            shared_reading=True,
-        )
-
-        table_name = 'join_table'
-        ydb_conn_name = f'ydb_conn_{table_name}'
-
-        fq_client.create_ydb_connection(
-            name=ydb_conn_name,
-            database_id='local',
-        )
+        # Shared reading does not populate the partition metadata required by watermarks.
+        endpoint = self._prepare(kikimr, title, partitions_count)
+        table_name = "join_table"
 
         options = ()
         streamlookup_hint = Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else ''
-        idle_clause = R", WATERMARK_IDLE_TIMEOUT = 'PT5S'" if tasks > 1 or partitions_count > 1 else ""
+        watermark_granularity = 2
+        watermark_idle_timeout = 5
+        idle_clause = (
+            Rf", WATERMARK_IDLE_TIMEOUT = 'PT{watermark_idle_timeout}S'" if tasks > 1 or partitions_count > 1 else ""
+        )
         sql = Rf'''
-            PRAGMA dq.WatermarksMode = "default";
-            PRAGMA dq.MaxTasksPerStage = "{tasks}";
-            PRAGMA dq.WatermarksGranularityMs = "2000";
+            PRAGMA ydb.MaxTasksPerStage = "{tasks}";
 
             $event_time = ($ts) -> (CAST(($ts*1000000ul) AS Timestamp));
 
-            $input = SELECT * FROM wmyds.`{self.input_topic}`
+            $input = SELECT * FROM myyds.`{self.input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -1319,12 +1296,14 @@ class TestJoinStreaming(TestYdsBase):
                             user Int32,
                             skip Bool
                         )
-                        , WATERMARK = $event_time(`ts`) - Interval('PT3S')
-                        , WATERMARK_GRANULARITY = 'PT2S'
+                    );
+            $input = SELECT e.*, $event_time(ts) AS event_time FROM $input AS e;
+            $input = SELECT * FROM $input WITH (
+                        WATERMARK = event_time - Interval('PT3S'),
+                        WATERMARK_GRANULARITY = 'PT{watermark_granularity}S'
                         {idle_clause}
-                    )            ;
-            $input =
-                SELECT e.*, $event_time(ts) AS event_time FROM $input AS e WHERE skip IS DISTINCT FROM true;
+            );
+            $input = SELECT * FROM $input WHERE skip IS DISTINCT FROM true;
             $enriched = SELECT event_time, ts, u.data as uid
                 FROM
                     $input as e
@@ -1337,7 +1316,7 @@ class TestJoinStreaming(TestYdsBase):
                             , uid
                 ;
 
-            insert into wmyds.`{self.output_topic}`
+            insert into myyds.`{self.output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             '''
 
@@ -1366,23 +1345,23 @@ class TestJoinStreaming(TestYdsBase):
         ]
         messages = messages[:limit]
 
-        one_time_waiter.wait()
+        query_name = f"q_{title}"
+        self._start(kikimr, query_name, sql)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
-        query_id = fq_client.create_query(title, sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-
-        fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+        if partitions_count > 1 or tasks > 1:
+            # Let empty partitions become idle before sending event-time watermarks.
+            # Both the activity time and the idle check are rounded to the next granularity tick.
+            time.sleep(watermark_idle_timeout + 2 * watermark_granularity)
 
         for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
             self.write_stream(
                 map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]),
                 partition_key=b'1',
+                endpoint=endpoint,
             )
-        if partitions_count > 1 or tasks > 1:
-            time.sleep(5.0)
-
         expected_len = sum(map(len, messages)) - len(messages)
-        read_data = self.read_stream(expected_len)
+        read_data = self.read_stream(expected_len, endpoint=endpoint)
         if DEBUG:
             print(streamlookup, file=sys.stderr)
             print(sql, file=sys.stderr)
@@ -1391,33 +1370,6 @@ class TestJoinStreaming(TestYdsBase):
         messages_ctr = Counter(map(freeze, map(json.loads, chain(*map(lambda row: islice(row, 1, None), messages)))))
         assert read_data_ctr == messages_ctr
 
-        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
-            for component in ["Lookup", "LookupSrc"]:
-                componentSensors = sensors.find_sensors(
-                    labels={"operation": query_id, "component": component},
-                    key_label="sensor",
-                )
-                for k in componentSensors:
-                    print(
-                        f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
-                        file=sys.stderr,
-                    )
-            sensors = kikimr.compute_plane.get_sensors(node_index, "yq")
-            mkqlSensors = sensors.find_sensors(
-                labels={"query_id": query_id, "sensor": "MkqlMaxMemoryUsage"},
-                key_label="Stage",
-            )
-            for k in mkqlSensors:
-                print(
-                    f'node[{node_index}].query_id[{query_id}].Stage[{k}].MkqlMaxMemoryUsage = {mkqlSensors[k]}',
-                    file=sys.stderr,
-                )
+        list(self._lookup_sensors(kikimr, query_name))
 
-        fq_client.abort_query(query_id)
-        fq_client.wait_query(query_id)
-
-        describe_response = fq_client.describe_query(query_id)
-        status = describe_response.result.query.meta.status
-        assert not describe_response.issues, str(describe_response.issues)
-        assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
+        self._stop(kikimr, query_name)

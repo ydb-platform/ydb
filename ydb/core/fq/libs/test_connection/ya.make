@@ -29,7 +29,3 @@ END()
 RECURSE(
     events
 )
-
-RECURSE_FOR_TESTS(
-    ut
-)

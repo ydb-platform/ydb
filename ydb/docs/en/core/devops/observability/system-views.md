@@ -83,7 +83,7 @@ Note that the tuple `(NodeId, PDiskId)` forms a foreign key to the `ds_pdisks` v
 |---------------------|----------|---------|-----------------------------------------------------------------------------------------------------------|
 | GroupId             | Uint32   | 0       | Storage group number in the cluster                                                                       |
 | Generation          | Uint32   |         | Storage group configuration generation                                                                     |
-| ErasureSpecies      | String   |         | Redundancy encoding mode for the group (`block-4-2`, `mirror-3-dc`, `mirror-3of4`, ...)                        |
+| ErasureSpecies      | String   |         | Redundancy encoding mode for the group (`block-4-2`, `block-8-2`, `mirror-3-dc`, `mirror-3of4`, ...)                        |
 | BoxId               | Uint64   |         | Identifier of the Box in which this group was created                                                     |
 | StoragePoolId       | Uint64   |         | Storage pool identifier within the Box where this group operates                                          |
 | EncryptionMode      | Uint32   |         | Presence of data encryption in the group and encryption algorithm if enabled                              |
@@ -107,7 +107,7 @@ In this view, the tuple `(BoxId, StoragePoolId)` forms a foreign key to the `ds_
 | StoragePoolId  | Uint64   | 1       | Storage pool identifier within the Box                                                                      |
 | Name           | String   |         | User-defined storage pool name (used for linking tablets and storage pools)                                 |
 | Generation     | Uint64   |         | Storage pool configuration generation (number of changes)                                                   |
-| ErasureSpecies | String   |         | Redundancy encoding mode for all groups within this storage pool                                            |
+| ErasureSpecies | String   |         | Default redundancy encoding mode for this storage pool; use `ds_groups.ErasureSpecies` for each group                                            |
 | VDiskKind      | String   |         | Preset operating mode setting for all VDisks in this storage pool                                           |
 | Kind           | String   |         | User-defined string description of pool purpose, can also be used for filtering                             |
 | NumGroups      | Uint32   |         | Number of groups within this storage pool                                                                   |

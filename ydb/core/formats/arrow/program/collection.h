@@ -78,7 +78,7 @@ public:
         if (!HasData()) {
             return false;
         }
-        return !GetRecordsCountActualVerified() || IsEmptyFilter();
+        return (RecordsCountActual && !*RecordsCountActual) || IsEmptyFilter();
     }
 
     bool HasSomeUsefulInfo() const {

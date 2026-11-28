@@ -81,7 +81,7 @@ class Github:
             "Authorization": f"token {self.access_token}",
             "Accept": "application/vnd.github.v3+json",
         }
-        response = getattr(self.session, method)(url, params=params, json=data, headers=headers)
+        response = getattr(self.session, method)(url, params=params, json=data, headers=headers, timeout=(30, 60))
         response.raise_for_status()
         result = None
         if response.status_code != 204:

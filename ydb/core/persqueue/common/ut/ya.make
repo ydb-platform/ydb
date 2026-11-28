@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/persqueue/common)
 
 SRCS(
     microseconds_sliding_window_ut.cpp
+    key_ut.cpp
 )
 
 PEERDIR(

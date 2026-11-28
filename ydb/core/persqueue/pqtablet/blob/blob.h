@@ -179,11 +179,13 @@ public:
     ui64 Offset;
     ui16 PartNo;
     ui32 PackedSize;
+    ui64 TrailingOffsetDelta;
 
     THead()
     : Offset(0)
     , PartNo(0)
     , PackedSize(0)
+    , TrailingOffsetDelta(0)
     {}
 
     void Clear();

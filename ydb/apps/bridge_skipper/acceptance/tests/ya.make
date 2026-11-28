@@ -2,6 +2,8 @@ PY3TEST()
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram_disk:1)
+
 FORK_SUBTESTS()
 # Give each current scenario its own chunk: BSC warmup alone takes >=20 seconds.
 # Leave headroom for new cases without regrouping slow scenarios under one timeout.

@@ -805,7 +805,12 @@ void TNodeWarden::Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {
             if (group.ProxyId) {
                 Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(group.Info, group.NodeLayoutInfo));
             }
+        } else {
+            group.NodeLayoutInfo.Reset();
         }
+    }
+    for (const auto& [groupId, _] : BridgeProxies) {
+        SendBridgeReadLayouts(groupId);
     }
 }
 

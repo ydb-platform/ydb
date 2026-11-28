@@ -655,6 +655,7 @@ struct TEvBlobStorage {
         EvNodeWardenStandbySeal,
         EvNodeWardenStandbySealed,
         EvNodeWardenBlobDepotS3RouterReady,
+        EvBridgeProxyReadLayouts,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

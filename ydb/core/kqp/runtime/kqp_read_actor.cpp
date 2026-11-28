@@ -1217,6 +1217,11 @@ public:
                 // Let the session invalidate cached query plans before retrying a schema change.
                 return replyError("Read schema error", NYql::NDqProto::StatusIds::SCHEME_ERROR);
             }
+            case Ydb::StatusIds::PRECONDITION_FAILED:
+                if (Settings->GetReadHints() & NKikimrTxDataShard::TEvRead::HINT_READ_BACKUP_COPY) {
+                    return replyError("Backup table read failed", NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
+                }
+                [[fallthrough]];
             default: {
                 return replyError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED);
             }

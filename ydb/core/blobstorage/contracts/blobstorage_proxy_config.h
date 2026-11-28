@@ -8,20 +8,39 @@
 
 #include <util/stream/str.h>
 
+#include <algorithm>
+#include <span>
+
 namespace NKikimr {
 
     struct TNodeLayoutInfo : TThrRefBase {
-        // indexed by NodeId
-        TNodeLocation SelfLocation;
-        TVector<TNodeLocation> LocationPerOrderNumber;
+        TVector<ui32> DistancePerOrderNumber;
+        bool HasAllDataCenters;
 
         TNodeLayoutInfo(const TNodeLocation& selfLocation, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-                THashMap<ui32, TNodeLocation>& map)
-            : SelfLocation(selfLocation)
-            , LocationPerOrderNumber(info->GetTotalVDisksNum())
+                const THashMap<ui32, TNodeLocation>& map)
+            : DistancePerOrderNumber(info->GetTotalVDisksNum(), Max<ui32>())
+            , HasAllDataCenters(!DistancePerOrderNumber.empty() && selfLocation.HasKey(TNodeLocation::TKeys::DataCenter))
         {
-            for (ui32 i = 0; i < LocationPerOrderNumber.size(); ++i) {
-                LocationPerOrderNumber[i] = map[info->GetActorId(i).NodeId()];
+            // In a physical pile group, the pile name identifies the copy and can span several datacenters.
+            const bool skipPile = info->GetBridgeProxyGroupId().has_value();
+            auto items = [skipPile](const TNodeLocation& location) {
+                std::span result(location.GetItems());
+                return skipPile && !result.empty() && result.front().first == TNodeLocation::TKeys::BridgePileName
+                    ? result.subspan(1) : result;
+            };
+            const auto self = items(selfLocation);
+            for (ui32 i = 0; i < DistancePerOrderNumber.size(); ++i) {
+                if (const auto it = map.find(info->GetActorId(i).NodeId()); it != map.end()) {
+                    const auto disk = items(it->second);
+                    const auto [end, _] = std::ranges::mismatch(self, disk);
+                    if (end != self.begin()) {
+                        DistancePerOrderNumber[i] -= std::prev(end)->first;
+                    }
+                    HasAllDataCenters &= it->second.HasKey(TNodeLocation::TKeys::DataCenter);
+                } else {
+                    HasAllDataCenters = false;
+                }
             }
         }
     };

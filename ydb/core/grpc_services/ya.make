@@ -216,6 +216,7 @@ PEERDIR(
     ydb/core/local_indexes/bloom
     ydb/core/persqueue/deferred_publish
     ydb/core/protos
+    ydb/core/quoter/public
     ydb/core/scheme
     ydb/core/scheme/mkql
     ydb/core/security

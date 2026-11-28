@@ -3971,19 +3971,24 @@ TKqpTasksGraph::TKqpTasksGraph(
             GetMeta().StreamResult = true;
             break;
         case NKqpProto::TKqpPhyTx::TYPE_SCAN: {
-            size_t resultsSize = Transactions.at(0).Body->ResultsSize();
-            YQL_ENSURE(resultsSize != 0);
+            GetMeta().IsScan = true;
 
-            GetMeta().StreamResult = Transactions.at(0).Body->GetResults(0).GetIsStream();
-
-            if (GetMeta().StreamResult) {
-                YQL_ENSURE(resultsSize == 1);
-            } else {
-                for (size_t i = 1; i < resultsSize; ++i) {
-                    YQL_ENSURE(Transactions.at(0).Body->GetResults(i).GetIsStream() == GetMeta().StreamResult);
+            // A scan query may be split into several physical transactions: a precompute phase
+            // followed by the main one. Results of the precompute phase are materialized and passed
+            // to the next transaction as parameters, so they may freely mix DqCnValue and collected
+            // DqCnResult connections. Only query-visible results are streamed to the client.
+            size_t streamedResults = 0;
+            for (const auto& tx : Transactions) {
+                for (ui32 i = 0; i < tx.Body->ResultsSize(); ++i) {
+                    const auto& result = tx.Body->GetResults(i);
+                    if (result.GetIsStream() && result.HasQueryResultIndex()) {
+                        ++streamedResults;
+                    }
                 }
             }
-            GetMeta().IsScan = true;
+
+            YQL_ENSURE(streamedResults <= 1, "Scan query has multiple streaming results");
+            GetMeta().StreamResult = (streamedResults == 1);
         }   break;
         default:
             YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);

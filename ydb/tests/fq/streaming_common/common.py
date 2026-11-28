@@ -92,6 +92,7 @@ def get_ydb_config(request, enable_fq_connector=None):
 
     for flag in (
         "enable_streaming_aggregation_advanced",
+        "enable_streaming_query_read_from",
         "enable_streaming_query_scheme_operations",
         "enable_streaming_query_state_recompute",
         "enable_shared_reading_structured_json_parsing",
@@ -878,6 +879,20 @@ class StreamingTestBase(TestYdsBase):
 
     def get_ydb_client(self, kikimr: Kikimr, local_topics: bool) -> YdbClient:
         return kikimr.ydb_client if local_topics else kikimr.external_ydb_client
+
+    def get_query_state(self, kikimr: Kikimr, query_name: str):
+        path = f"{kikimr.get_database_name()}/{query_name}"
+        result_sets = kikimr.ydb_client.query(
+            f"""
+            SELECT Status, RetryCount, Issues
+            FROM `.sys/streaming_queries`
+            WHERE Path = "{path}";
+        """,
+            timeout=10,
+        )
+        assert len(result_sets) == 1, result_sets
+        assert len(result_sets[0].rows) == 1, result_sets[0].rows
+        return result_sets[0].rows[0]
 
     def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False, endpoint: Endpoint = None) -> None:
         if endpoint is None:

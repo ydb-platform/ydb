@@ -10,7 +10,50 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
+
 namespace NKikimr::NStorage {
+
+    void TNodeWarden::SendBridgeReadLayouts(TGroupId groupId, bool resolveMissing) {
+        const auto proxies = BridgeProxies.find(groupId);
+        if (proxies == BridgeProxies.end() ||
+                std::ranges::none_of(proxies->second, [](const auto& proxy) { return proxy.second; })) {
+            return;
+        }
+
+        std::vector<TBridgePileReadLayout> layouts;
+        const auto parent = Groups.find(groupId.GetRawId());
+        if (parent != Groups.end() && parent->second.Info && parent->second.Info->IsBridged()) {
+            const auto& state = parent->second.Info->Group->GetBridgeGroupState();
+            layouts.resize(state.PileSize());
+            NBridge::ForEachGroupPile(state, [&](TBridgePileId pileId, const auto& part) {
+                const ui32 id = part.GetGroupId();
+                if (EjectedGroups.contains(id)) {
+                    return;
+                }
+                const auto it = Groups.find(id);
+                if (it == Groups.end() || !it->second.Info || it->second.Info->GroupGeneration < part.GetGroupGeneration()) {
+                    if (resolveMissing && (it == Groups.end() || !it->second.GroupResolver)) {
+                        RequestGroupConfig(id, Groups[id]);
+                    }
+                    return;
+                }
+                auto& child = it->second;
+                if (child.Info->GroupGeneration == part.GetGroupGeneration() &&
+                        child.Info->GetBridgeProxyGroupId() == groupId) {
+                    if (!child.NodeLayoutInfo) {
+                        child.NodeLayoutInfo = MakeIntrusive<TNodeLayoutInfo>(NodeLocationMap[LocalNodeId],
+                            child.Info, NodeLocationMap);
+                    }
+                    layouts[pileId.GetPileIndex()] = {child.Info, child.NodeLayoutInfo};
+                }
+            });
+        }
+        for (const auto& [actor, subscribed] : proxies->second) {
+            if (subscribed) {
+                Send(actor, new TEvBridgeProxyReadLayouts(layouts));
+            }
+        }
+    }
 
     TIntrusivePtr<TBlobStorageGroupInfo> TNodeWarden::NeedGroupInfo(ui32 groupId) {
         if (EjectedGroups.count(groupId)) {
@@ -121,6 +164,7 @@ namespace NKikimr::NStorage {
         // obtain group record
         const auto [it, _] = Groups.try_emplace(groupId);
         TGroupRecord& group = it->second;
+        const auto previousInfo = group.Info;
         group.MaxKnownGeneration = Max(group.MaxKnownGeneration, generation);
         // forget pending queries
         if (fromController) {
@@ -155,23 +199,24 @@ namespace NKikimr::NStorage {
             const bool firstInvalidEncryptionMode = !ep.HasEncryptionMode() && !incomingEncryptionModeIsKnown;
             const bool encryptionModeChanged = ep.HasEncryptionMode() && ep.GetEncryptionMode() != incomingEncryptionMode;
             if (firstInvalidEncryptionMode || encryptionModeChanged) {
-                STLOG(PRI_ERROR, BS_NODE, NW113, "ApplyGroupInfo EncryptionMode diagnostics",
-                    (GroupId, groupId),
-                    (GroupGeneration, generation),
-                    (FromController, fromController),
-                    (FromResolver, fromResolver),
-                    (StoredHasEncryptionMode, ep.HasEncryptionMode()),
-                    (StoredEncryptionModeRaw, ep.GetEncryptionMode()),
-                    (IncomingHasEncryptionMode, newGroup->HasEncryptionMode()),
-                    (IncomingEncryptionModeRaw, incomingEncryptionMode),
-                    (StoredLifeCyclePhase, ep.GetLifeCyclePhase()),
-                    (IncomingLifeCyclePhase, newGroup->GetLifeCyclePhase()),
-                    (HadCurrentGroup, hadCurrentGroup),
-                    (PrevCurrentGroupGeneration, prevCurrentGroupGeneration),
-                    (PrevCurrentGroupEncryptionModeRaw, prevCurrentGroupEncryptionMode),
-                    (MaxKnownGeneration, group.MaxKnownGeneration),
-                    (StoredEncryptionParams, ep),
-                    (IncomingGroup, *newGroup));
+                YDB_LOG_ERROR("ApplyGroupInfo EncryptionMode diagnostics",
+                    {"marker", "NW113"},
+                    {"groupId", groupId},
+                    {"groupGeneration", generation},
+                    {"fromController", fromController},
+                    {"fromResolver", fromResolver},
+                    {"storedHasEncryptionMode", ep.HasEncryptionMode()},
+                    {"storedEncryptionModeRaw", ep.GetEncryptionMode()},
+                    {"incomingHasEncryptionMode", newGroup->HasEncryptionMode()},
+                    {"incomingEncryptionModeRaw", incomingEncryptionMode},
+                    {"storedLifeCyclePhase", ep.GetLifeCyclePhase()},
+                    {"incomingLifeCyclePhase", newGroup->GetLifeCyclePhase()},
+                    {"hadCurrentGroup", hadCurrentGroup},
+                    {"prevCurrentGroupGeneration", prevCurrentGroupGeneration},
+                    {"prevCurrentGroupEncryptionModeRaw", prevCurrentGroupEncryptionMode},
+                    {"maxKnownGeneration", group.MaxKnownGeneration},
+                    {"storedEncryptionParams", ep},
+                    {"incomingGroup", *newGroup});
             }
 
             Y_VERIFY_S(!encryptionModeChanged,
@@ -249,6 +294,8 @@ namespace NKikimr::NStorage {
             group.Info = TBlobStorageGroupInfo::Parse(*currentGroup, &mainKey, &err);
             if (group.Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
                 group.NodeLayoutInfo = MakeIntrusive<TNodeLayoutInfo>(NodeLocationMap[LocalNodeId], group.Info, NodeLocationMap);
+            } else {
+                group.NodeLayoutInfo.Reset();
             }
             Y_ABORT_UNLESS(group.EncryptionParams.HasEncryptionMode());
             if (const TString& s = err.Str()) {
@@ -331,6 +378,19 @@ namespace NKikimr::NStorage {
             group.GroupResolver = {};
         }
 
+        if (previousInfo != group.Info) {
+            const auto id = TGroupId::FromValue(groupId);
+            SendBridgeReadLayouts(id, true);
+            const auto parent = group.Info ? group.Info->GetBridgeProxyGroupId() : std::nullopt;
+            const auto previousParent = previousInfo ? previousInfo->GetBridgeProxyGroupId() : std::nullopt;
+            if (parent && *parent != id) {
+                SendBridgeReadLayouts(*parent);
+            }
+            if (previousParent && previousParent != parent && *previousParent != id) {
+                SendBridgeReadLayouts(*previousParent);
+            }
+        }
+
         bool syncersChanged = false;
         for (auto it = WorkingSyncers.lower_bound(TWorkingSyncer{.BridgeProxyGroupId = TGroupId::FromValue(groupId)});
                 it != WorkingSyncers.end() && it->BridgeProxyGroupId.GetRawId() == groupId; ++it) {
@@ -407,7 +467,11 @@ namespace NKikimr::NStorage {
                 PoisonLocalVDisk(*vdisk);
             }
             group.VDisksOfGroup.Clear();
+            const auto parent = group.Info ? group.Info->GetBridgeProxyGroupId() : std::nullopt;
             Groups.erase(groupId);
+            if (parent) {
+                SendBridgeReadLayouts(*parent);
+            }
             Send(SelfId(), new TEvNodeWardenUnsubscribeFromCache(Sprintf("G%08" PRIx32, groupId)));
             CheckStandbySeals(); // no proxy of the group is started here anymore
 

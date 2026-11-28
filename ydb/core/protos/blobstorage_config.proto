@@ -215,6 +215,8 @@ message TStoragePoolSettings {
     // blob_storage_config.vdisk_heap_allocator_num_leading_disks for this pool, including 0; absent inherits it.
     // Takes effect when a VDisk starts; running VDisks are not restarted.
     optional uint32 VDiskHeapAllocatorNumLeadingDisks = 1;
+    // Target for the ordinary mirror-3-dc groups in this pool. The default is NO_INVARIANT.
+    optional TGroupState.ETargetInvariant TargetInvariant = 2;
 }
 
 message TUpdateStoragePoolSettings {
@@ -758,7 +760,7 @@ message TDefineDataCenterStates {
 message TDefineGroupState {
     message TGroupDefinition {
         optional uint32 GroupId = 1;
-        // Required: exactly three physical realm roles.
+        // Specify exactly three physical realm roles when setting GroupState.
         repeated TDataCenterState.EState FailRealmStates = 2;
         // If set, apply only to this group generation.
         optional uint32 ExpectedGroupGeneration = 3;

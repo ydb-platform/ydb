@@ -5,12 +5,13 @@
 #include <ydb/core/blobstorage/bridge/keep_check.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
-#include <ydb/core/util/stlog.h>
 
 #include <ydb/library/actors/async/wait_for_event.h>
 
 #include <map>
 #include <span>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY_BRIDGE
 
 namespace NKikimr {
 
@@ -69,6 +70,8 @@ namespace NKikimr {
         bool Passthrough = false;
         std::shared_ptr<const TBridgeProxyPoolCounters> PoolCounters;
         TBridgeProxyCounters RequestCounters;
+        std::vector<TBridgePileReadLayout> ReadLayouts;
+        bool SubscribedToReadLayouts = false;
 
         using TClusterState = NKikimrBridge::TClusterState;
 
@@ -94,6 +97,115 @@ namespace NKikimr {
         static bool GroupPartTakesGets(NKikimrBridge::TGroupState::EStage stage) {
             return stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA
                 || stage == NKikimrBridge::TGroupState::SYNCED;
+        }
+
+        struct TReadCost {
+            ui32 WorstDistance = 0;
+            ui64 ReadsAtWorstDistance = 0;
+
+            void Add(ui32 distance) {
+                if (distance > WorstDistance) {
+                    WorstDistance = distance;
+                    ReadsAtWorstDistance = 0;
+                }
+                ReadsAtWorstDistance += distance == WorstDistance;
+            }
+
+            auto operator<=>(const TReadCost&) const = default;
+        };
+
+        std::optional<TReadCost> EstimateReadCost(const TEvBlobStorage::TEvGet& get, TBridgePileId pile,
+                const NKikimrBridge::TGroupState::TPile& part) const {
+            if (pile.GetPileIndex() >= ReadLayouts.size()) {
+                return std::nullopt;
+            }
+            const auto& layout = ReadLayouts[pile.GetPileIndex()];
+            if (!layout.Group || layout.Group->GroupID != GetPartGroupId(part) ||
+                    layout.Group->GroupGeneration != part.GetGroupGeneration() || !layout.Nodes->HasAllDataCenters) {
+                return std::nullopt;
+            }
+            const auto& group = *layout.Group;
+            const auto& distances = layout.Nodes->DistancePerOrderNumber;
+            TReadCost cost;
+            for (const auto& query : std::span(get.Queries.Get(), get.QuerySize)) {
+                TBlobStorageGroupInfo::TOrderNums disks;
+                group.GetTopology().PickSubgroup(query.Id.Hash(), disks);
+                if (group.Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
+                    // A healthy block read goes straight to the data parts intersecting the requested range.
+                    const ui32 size = query.Id.BlobSize();
+                    if (query.Shift >= size) {
+                        return std::nullopt;
+                    }
+                    const ui32 end = query.Size ? query.Shift + Min(query.Size, size - query.Shift) : size;
+                    TBlockSplitRange range;
+                    group.Type.BlockSplitRange(static_cast<TErasureType::ECrcMode>(query.Id.CrcMode()),
+                        size, query.Shift, end, &range);
+                    for (ui32 part = range.BeginPartIdx; part < range.EndPartIdx; ++part) {
+                        if (range.PartRanges[part].Begin != range.PartRanges[part].End) {
+                            cost.Add(distances[disks[part]]);
+                        }
+                    }
+                } else if (group.Type.GetErasure() == TErasureType::ErasureMirror3dc) {
+                    std::optional<ui32> nearest;
+                    for (ui32 main = 0; main < 3; ++main) {
+                        const ui32 order = disks[main];
+                        if (group.IsFailRealmReadable(group.GetTopology().GetVDiskId(order).FailRealm)) {
+                            nearest = Min(nearest.value_or(Max<ui32>()), distances[order]);
+                        }
+                    }
+                    if (!nearest) {
+                        return std::nullopt;
+                    }
+                    cost.Add(*nearest);
+                } else if (group.Type.GetErasure() == TErasureType::ErasureMirror3of4) {
+                    // DS proxy shuffles the four possible primary reads. Use the furthest possible primary.
+                    cost.Add(std::max({distances[disks[0]], distances[disks[1]],
+                        distances[disks[2]], distances[disks[3]]}));
+                } else {
+                    Y_DEBUG_ABORT_UNLESS(group.Type.GetErasure() == TErasureType::ErasureNone);
+                    cost.Add(distances[disks[0]]);
+                }
+            }
+            return cost;
+        }
+
+        TBridgePileId PickInitialGetPile(const TEvBlobStorage::TEvGet& get, const NKikimrBridge::TGroupState& state,
+                TBridgePileId authorityPileId) const {
+            const bool canProbeStandby = !get.ReaderTabletData && !get.ForceBlockTabletData && !get.AcquireBlockedGeneration &&
+                !get.Decommission && !get.IsInternal && !get.PhantomCheck && !get.CollectDebugInfo &&
+                !get.ReportDetailedPartMap && !get.IsVerboseNoDataEnabled;
+            TBridgePileId local, best;
+            std::optional<std::tuple<TReadCost, bool, bool>> bestRank;
+            bool comparable = true;
+            NBridge::ForEachGroupPile(state, [&](TBridgePileId id, const auto& part) {
+                const auto* pile = BridgeInfo->FindPile(id);
+                if (!pile) {
+                    return;
+                }
+                const bool standby = pile->State == TClusterState::HOT_STANDBY && id != authorityPileId && canProbeStandby;
+                if (!standby && !(pile->State == TClusterState::SYNCHRONIZED && IsPileInDataQuorum(id) &&
+                        PartHoldsEverything(state, *pile, authorityPileId))) {
+                    return;
+                }
+                const bool self = pile == BridgeInfo->SelfNodePile;
+                if (self) {
+                    local = id;
+                }
+                if (!comparable) {
+                    return;
+                }
+                if (const auto cost = EstimateReadCost(get, id, part)) {
+                    const auto rank = std::tuple(*cost, !self, standby);
+                    if (!bestRank || rank < *bestRank) {
+                        bestRank = rank;
+                        best = id;
+                    }
+                } else {
+                    comparable = false;
+                }
+            });
+            // A cold or changing layout is only a routing hint. Use the eligible local pile or fan out immediately.
+            return comparable ? best : local;
         }
 
         static std::unique_ptr<TEvBlobStorage::TEvGet> MakeGetSubrequest(const TEvBlobStorage::TEvGet& original,
@@ -714,8 +826,11 @@ namespace NKikimr {
                         } else if (existing.Status == current.Status) {
                             // status did not change, so there is nothing to do, unless the piles have different data
                             if (!(existing.Buffer == current.Buffer)) {
-                                STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB08, "piles have different data of the blob",
-                                    (GroupId, self.GroupId), (BlobId, existing.Id), (BridgePileId, pile.BridgePileId));
+                                YDB_LOG_CRIT("Piles have different data of the blob",
+                                    {"marker", "BPB08"},
+                                    {"groupId", self.GroupId},
+                                    {"blobId", existing.Id},
+                                    {"bridgePileId", pile.BridgePileId});
                                 if (current.Status == NKikimrProto::OK) {
                                     state.PayloadConflicts.Set(queryIndex);
                                 }
@@ -916,8 +1031,11 @@ namespace NKikimr {
                 } else if (ev->Status == NKikimrProto::NODATA || ev->Id < state.Id) { // this pile has older version than already discovered
                     item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
                 } else if (state.Buffer != ev->Buffer) { // same blob with different data
-                    STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB09, "piles have different data of the blob",
-                        (GroupId, self.GroupId), (BlobId, state.Id), (BridgePileId, pile.BridgePileId));
+                    YDB_LOG_CRIT("Piles have different data of the blob",
+                        {"marker", "BPB09"},
+                        {"groupId", self.GroupId},
+                        {"blobId", state.Id},
+                        {"bridgePileId", pile.BridgePileId});
                     auto res = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::ERROR,
                         state.MinGeneration, state.BlockedGeneration);
                     res->ErrorReason = TStringBuilder() << "piles have different data of the blob " << state.Id;
@@ -1025,8 +1143,11 @@ namespace NKikimr {
                     merge(std::greater<TLogoBlobID>());
                 }
                 if (divergedId) {
-                    STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB10, "piles have different data of the blob",
-                        (GroupId, self.GroupId), (BlobId, *divergedId), (BridgePileId, pile.BridgePileId));
+                    YDB_LOG_CRIT("Piles have different data of the blob",
+                        {"marker", "BPB10"},
+                        {"groupId", self.GroupId},
+                        {"blobId", *divergedId},
+                        {"bridgePileId", pile.BridgePileId});
                     return static_cast<TEvBlobStorage::TEvRange&>(*OriginalRequest).MakeErrorResponse(NKikimrProto::ERROR,
                         TStringBuilder() << "piles have different data of the blob " << *divergedId, self.GroupId);
                 }
@@ -1197,12 +1318,21 @@ namespace NKikimr {
 
             // the proxy is in the registry of Node Warden before it gets the storage config it needs to serve requests,
             // so that every seal Node Warden handles from now on reaches it
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NStorage::TEvNodeWardenRegisterBridgeProxy(GroupId,
-                true));
+            RegisterWithNodeWarden(AppData()->FeatureFlags.GetEnableBridgeProxyLocalPileFirstGet());
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ true));
             Become(&TThis::StateWaitBridgeInfo);
             WaitBridgeInfoSince = TActivationContext::Monotonic();
             HandleWakeup();
+        }
+
+        void RegisterWithNodeWarden(bool subscribeToReadLayouts) {
+            SubscribedToReadLayouts = subscribeToReadLayouts;
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NStorage::TEvNodeWardenRegisterBridgeProxy(GroupId,
+                true, subscribeToReadLayouts));
+        }
+
+        void Handle(TEvBridgeProxyReadLayouts::TPtr ev) {
+            ReadLayouts = std::move(ev->Get()->Piles);
         }
 
         void HandleWakeup() {
@@ -1410,8 +1540,10 @@ namespace NKikimr {
                 }
             }
             for (const auto& request : requests) {
-                STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB12, "request restarted as it waits for pile out of data quorum",
-                    (RequestId, request->RequestId), (GroupId, GroupId));
+                YDB_LOG_INFO("Request restarted as it waits for pile out of data quorum",
+                    {"marker", "BPB12"},
+                    {"requestId", request->RequestId},
+                    {"groupId", GroupId});
                 ForgetSubrequests(*request);
                 FinishRequest(*request);
                 if (auto handle = TryMakeRestartHandle(*request).first) {
@@ -1568,8 +1700,9 @@ namespace NKikimr {
                 // this process runs without BridgeConfig, but the group is bridged one; this happens when the node was
                 // not prepared before the cluster got converted to bridged one, and it can't serve bridged groups until
                 // restarted with BridgeConfig
-                STLOG(NotCapableReported ? PRI_DEBUG : PRI_CRIT, BS_PROXY_BRIDGE, BPB04,
-                    "bridged group request on node running without BridgeConfig", (GroupId, GroupId));
+                YDB_LOG(NotCapableReported ? PRI_DEBUG : PRI_CRIT, "Bridged group request on node running without BridgeConfig",
+                    {"marker", "BPB04"},
+                    {"groupId", GroupId});
                 NotCapableReported = true;
                 ReplyWithError(*ev->Get(), ev->Sender, ev->Cookie,
                     "node runs without BridgeConfig and can't serve bridged group");
@@ -1590,9 +1723,12 @@ namespace NKikimr {
             const auto& state = Info->Group->GetBridgeGroupState();
             if (const ui64 generation = StorageConfig->GetClusterState().GetGeneration();
                     generation < state.GetClusterStateGeneration()) {
-                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB05, "request waits for newer cluster state", (GroupId, GroupId),
-                    (GroupGeneration, Info->GroupGeneration), (ClusterStateGeneration, generation),
-                    (BridgeGroupState, state));
+                YDB_LOG_DEBUG("Request waits for newer cluster state",
+                    {"marker", "BPB05"},
+                    {"groupId", GroupId},
+                    {"groupGeneration", Info->GroupGeneration},
+                    {"clusterStateGeneration", generation},
+                    {"bridgeGroupState", state});
                 QueuePending(PendingForClusterState, MakePendingHandle(*ev), routingBudget);
                 return;
             }
@@ -1609,21 +1745,14 @@ namespace NKikimr {
             TBridgePileId initialGetPileId;
             bool probeStandby = false;
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
-                const auto *selfPile = BridgeInfo->SelfNodePile;
                 const auto& get = *ev->Get();
                 if (AppData()->FeatureFlags.GetEnableBridgeProxyLocalPileFirstGet() && !get.MustRestoreFirst &&
                         !get.IsIndexOnly && get.Deadline == TInstant::Max()) {
-                    if (selfPile->State == TClusterState::SYNCHRONIZED && IsPileInDataQuorum(selfPile->BridgePileId) &&
-                            PartHoldsEverything(state, *selfPile, authorityPileId)) {
-                        initialGetPileId = selfPile->BridgePileId;
-                    } else if (selfPile->State == TClusterState::HOT_STANDBY && selfPile->BridgePileId != authorityPileId &&
-                            NBridge::GetGroupPile(state, selfPile->BridgePileId) &&
-                            !get.ReaderTabletData && !get.ForceBlockTabletData && !get.AcquireBlockedGeneration &&
-                            !get.Decommission && !get.IsInternal && !get.PhantomCheck && !get.CollectDebugInfo &&
-                            !get.ReportDetailedPartMap && !get.IsVerboseNoDataEnabled) {
-                        initialGetPileId = selfPile->BridgePileId;
-                        probeStandby = true;
+                    if (!SubscribedToReadLayouts) {
+                        RegisterWithNodeWarden(true); // the feature was enabled at runtime
                     }
+                    initialGetPileId = PickInitialGetPile(get, state, authorityPileId);
+                    probeStandby = initialGetPileId && BridgeInfo->GetPile(initialGetPileId)->State == TClusterState::HOT_STANDBY;
                 }
             }
 
@@ -1680,15 +1809,21 @@ namespace NKikimr {
                     (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate> && !hasTrustedPile)) {
                 // no pile is able to take this request with the group state we have; it is older than the cluster state
                 // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
-                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),
-                    (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
+                YDB_LOG_DEBUG("Request waits for newer group state",
+                    {"marker", "BPB06"},
+                    {"groupId", GroupId},
+                    {"groupGeneration", Info->GroupGeneration},
+                    {"bridgeGroupState", state});
                 QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingBudget);
                 return;
             }
             if (!reachesAuthority) {
                 // the group relies on its part in the single pile, and writes reaching other parts only would be lost
-                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB07, "request waits for the pile of the authority part",
-                    (GroupId, GroupId), (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
+                YDB_LOG_DEBUG("Request waits for the pile of the authority part",
+                    {"marker", "BPB07"},
+                    {"groupId", GroupId},
+                    {"groupGeneration", Info->GroupGeneration},
+                    {"bridgeGroupState", state});
                 QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingBudget);
                 return;
             }
@@ -1706,10 +1841,13 @@ namespace NKikimr {
                 }
             }
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
-                (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
-                (BridgeGroupState, request->Info->Group->GetBridgeGroupState()),
-                (Request, originalRequest.ToString()));
+            YDB_LOG_DEBUG("New request",
+                {"marker", "BPB00"},
+                {"requestId", request->RequestId},
+                {"groupId", GroupId},
+                {"groupGeneration", request->Info->GroupGeneration},
+                {"bridgeGroupState", request->Info->Group->GetBridgeGroupState()},
+                {"request", originalRequest});
 
             for (auto& [bridgePileId, eventToSend] : subrequests) {
                 SendQuery(request, bridgePileId, std::move(eventToSend));
@@ -1733,9 +1871,13 @@ namespace NKikimr {
             Y_ABORT_UNLESS(common);
             common->ForceGroupGeneration = groupPileInfo->GetGroupGeneration();
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB03, "new subrequest", (RequestId, request->RequestId),
-                (BridgePileId, bridgePileId), (Request, ev->ToString()), (Cookie, LastRequestCookie + 1),
-                (GroupPileInfo, *groupPileInfo));
+            YDB_LOG_DEBUG("New subrequest",
+                {"marker", "BPB03"},
+                {"requestId", request->RequestId},
+                {"bridgePileId", bridgePileId},
+                {"request", ev->ToString()},
+                {"cookie", LastRequestCookie + 1},
+                {"groupPileInfo", *groupPileInfo});
 
             // allocate cookie for this specific request and bind it to the common one
             const ui64 cookie = ++LastRequestCookie;
@@ -1844,9 +1986,13 @@ namespace NKikimr {
                     static_cast<ui64>(Max<i64>(StandbyMaxBytesInFlight, 0))) {
                 // the standby can't keep up (or is cut off while still in HOT_STANDBY); holding more would only grow
                 // memory of every node, while the rejoin recovers the write anyway
-                STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB11, "background write dropped over budget", (GroupId, GroupId),
-                    (BridgePileId, bridgePileId), (Bytes, bytes), (BytesInFlight, StandbyBytesInFlight->Val()),
-                    (MaxBytesInFlight, static_cast<i64>(StandbyMaxBytesInFlight)));
+                YDB_LOG_INFO("Background write dropped over budget",
+                    {"marker", "BPB11"},
+                    {"groupId", GroupId},
+                    {"bridgePileId", bridgePileId},
+                    {"bytes", bytes},
+                    {"bytesInFlight", StandbyBytesInFlight->Val()},
+                    {"maxBytesInFlight", static_cast<i64>(StandbyMaxBytesInFlight)});
                 ++*StandbyWritesDropped;
                 if (const auto *part = FindPart(bridgePileId)) {
                     ReportStandbyLoss(request.get(), GetPartGroupId(*part), IsDataWrite(*ev));
@@ -1876,9 +2022,14 @@ namespace NKikimr {
             common->RestartCounter = write.Restarts;
 
             const ui64 cookie = ++LastRequestCookie;
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB12, "new background write", (GroupId, GroupId),
-                (BridgePileId, write.BridgePileId), (Request, ev->ToString()), (Cookie, cookie),
-                (Restarts, write.Restarts), (GroupPileInfo, *part));
+            YDB_LOG_DEBUG("New background write",
+                {"marker", "BPB12"},
+                {"groupId", GroupId},
+                {"bridgePileId", write.BridgePileId},
+                {"request", ev->ToString()},
+                {"cookie", cookie},
+                {"restarts", write.Restarts},
+                {"groupPileInfo", *part});
             const auto [it, inserted] = BackgroundWritesInFlight.emplace(cookie, std::move(write));
             Y_DEBUG_ABORT_UNLESS(inserted);
             DispatchSubrequest(groupId, std::move(ev), cookie, std::move(traceId), SelfId());
@@ -1915,9 +2066,14 @@ namespace NKikimr {
                 }
             } else {
                 if (msg.Status != NKikimrProto::OK) {
-                    STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB13, "background write lost", (GroupId, GroupId),
-                        (BridgePileId, write.BridgePileId), (Status, msg.Status), (Restarts, write.Restarts),
-                        (Response, msg.ToString()));
+                    YDB_LOG_INFO("Background write lost",
+                        {"marker", "BPB13"},
+                        {"groupId", GroupId},
+                        {"bridgePileId", write.BridgePileId},
+                        {"status", msg.Status},
+                        {"restarts", write.Restarts},
+                        {"response", msg.ToString()});
+
                     ++*StandbyWritesLost;
                     ReportStandbyLoss(write);
                 }
@@ -2212,12 +2368,13 @@ namespace NKikimr {
 
             const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA;
 
-            STLOG(isError ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_BRIDGE, BPB02, "intermediate response",
-                (RequestId, request->RequestId),
-                (GroupId, item.GroupId),
-                (Status, ev->Get()->Status),
-                (PileState, pile.State),
-                (Response, ev->Get()->ToString()));
+            YDB_LOG(isError ? PRI_NOTICE : PRI_DEBUG, "Intermediate response",
+                {"marker", "BPB02"},
+                {"requestId", request->RequestId},
+                {"groupId", item.GroupId},
+                {"status", ev->Get()->Status},
+                {"pileState", pile.State},
+                {"response", ev->Get()->ToString()});
 
             Y_ABORT_UNLESS(request->ResponsesPending);
             --request->ResponsesPending;
@@ -2259,12 +2416,13 @@ namespace NKikimr {
                             }));
                         };
 
-                        STLOG(success ? PRI_INFO : PRI_NOTICE, BS_PROXY_BRIDGE, BPB01, "request finished",
-                            (RequestId, request->RequestId),
-                            (Status, common->Status),
-                            (Response, response->ToString()),
-                            (Passed, TDuration::Seconds(request->Timer.Passed())),
-                            (SubrequestTimings, makeSubrequestTimings()));
+                        YDB_LOG(success ? PRI_INFO : PRI_NOTICE, "Request finished",
+                            {"marker", "BPB01"},
+                            {"requestId", request->RequestId},
+                            {"status", common->Status},
+                            {"response", response->ToString()},
+                            {"passed", TDuration::Seconds(request->Timer.Passed())},
+                            {"subrequestTimings", makeSubrequestTimings()});
 
                         if (success) {
                             request->Span.EndOk();
@@ -2275,8 +2433,10 @@ namespace NKikimr {
                         SendReply(*request->OriginalRequest, request->Sender, request->Cookie, std::move(response));
                         FinishRequest(*request);
                     } else if (request->RestartNeeded) {
-                        STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB13, "request restarted as its restoration source is out of"
-                            " data quorum", (RequestId, request->RequestId), (GroupId, GroupId));
+                        YDB_LOG_INFO("Request restarted as its restoration source is out of data quorum",
+                            {"marker", "BPB13"},
+                            {"requestId", request->RequestId},
+                            {"groupId", GroupId});
                         redispatch = TryMakeRestartHandle(*request).first;
                         FinishRequest(*request);
                     }
@@ -2310,8 +2470,10 @@ namespace NKikimr {
                 // the bridged cluster has been rolled back, the group is an ordinary one with the VDisks of its inline
                 // pile; the inner proxy serves it as such, and so do the requests waiting here
                 if (!Passthrough) {
-                    STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB11, "group is not bridged anymore, passing requests through",
-                        (GroupId, GroupId), (GroupGeneration, msg->Info->GroupGeneration));
+                    YDB_LOG_INFO("Group is not bridged anymore, passing requests through",
+                        {"marker", "BPB11"},
+                        {"groupId", GroupId},
+                        {"groupGeneration", msg->Info->GroupGeneration});
                     Passthrough = true;
                 }
                 Send(InnerProxyId, new TEvBlobStorage::TEvConfigureProxy(std::move(msg->Info), msg->NodeLayoutInfo,
@@ -2393,6 +2555,7 @@ namespace NKikimr {
             hFunc(TEvBlobStorage::TEvConfigureProxy, Handle)
             hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle)
             hFunc(TEvNodeWardenStorageConfig, Handle)
+            hFunc(TEvBridgeProxyReadLayouts, Handle)
             hFunc(NStorage::TEvNodeWardenStandbySeal, Handle)
             hFunc(TEvCheckPendingRequests, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
@@ -2450,8 +2613,9 @@ namespace NKikimr {
                 for (auto& ev : std::exchange(PendingQ, {})) {
                     TActivationContext::Send(ev.release());
                 }
-            } else if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
-                StateFunc(ev); // pending requests are answered with error
+            } else if (ev->GetTypeRewrite() == TEvBridgeProxyReadLayouts::EventType ||
+                    ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
+                StateFunc(ev);
             } else if (ev->GetTypeRewrite() == TEvents::TSystem::Wakeup) {
                 HandleWakeup();
                 CheckWaitBridgeInfoTimeout();

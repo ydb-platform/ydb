@@ -649,21 +649,6 @@ TFuture<void> TClientBase::ExternalizeNode(
     return req->Invoke().As<void>();
 }
 
-TFuture<void> TClientBase::InternalizeNode(
-    const TYPath& path,
-    const TInternalizeNodeOptions& options)
-{
-    auto proxy = CreateApiServiceProxy();
-
-    auto req = proxy.InternalizeNode();
-    SetTimeoutOptions(*req, options);
-
-    ToProto(req->mutable_path(), path);
-    ToProto(req->mutable_transactional_options(), options);
-
-    return req->Invoke().As<void>();
-}
-
 TFuture<NObjectClient::TObjectId> TClientBase::CreateObject(
     NObjectClient::EObjectType type,
     const TCreateObjectOptions& options)

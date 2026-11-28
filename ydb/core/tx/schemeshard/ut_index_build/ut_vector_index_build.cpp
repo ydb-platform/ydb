@@ -1,4 +1,5 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -1369,6 +1370,53 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
 
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+    }
+
+    Y_UNIT_TEST(PrefixedBuildTableFiltersDomainTierIds) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        const auto schemeShard = TTestTxConfig::SchemeShard;
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Vectors"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix" Type: "Uint32" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        WriteVectorTableRows(runtime, schemeShard, ++txId, "/MyRoot/Vectors", 0, 0, 200);
+
+        // The temporary first-level posting table uses the domain default in effect at build time.
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        policy->DefaultTaskPriority = 37;
+        policy->Generations.front().TierId = 0;
+        policy->Generations.back().TierId = 42;
+        runtime.GetAppData().DomainsInfo->AddCompactionPolicy(TDomainsInfo::UserTableDefaultPoicyName(), policy);
+
+        NKikimrCompaction::TCompactionPolicy expected;
+        policy->Serialize(expected);
+        expected.MutableGeneration(expected.GenerationSize() - 1)->ClearTierId();
+        bool sawFirstLevel = false;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                const auto& table = tx.GetCreateTable();
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable
+                    && table.GetName() == "indexImplPostingTable0build"
+                    && table.KeyColumnNamesSize() && table.GetKeyColumnNames(0) == "prefix") {
+                    UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionConfig().GetCompactionPolicy().DebugString(), expected.DebugString());
+                    sawFirstLevel = true;
+                }
+            }
+        });
+
+        const ui64 buildId = ++txId;
+        TestBuildVectorIndex(runtime, buildId, schemeShard, "/MyRoot", "/MyRoot/Vectors", "ByPrefix", {"prefix", "embedding"});
+        env.TestWaitNotification(runtime, buildId);
+        const auto result = TestGetBuildIndex(runtime, schemeShard, "/MyRoot", buildId);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE, result.DebugString());
+        UNIT_ASSERT(sawFirstLevel);
     }
 
     Y_UNIT_TEST(VectorIndexAutodetectPublishesSettingsOnWriteOnly) {

@@ -992,16 +992,6 @@ TFuture<void> TTransaction::ExternalizeNode(
         PatchTransactionId(options));
 }
 
-TFuture<void> TTransaction::InternalizeNode(
-    const TYPath& path,
-    const TInternalizeNodeOptions& options)
-{
-    ValidateActive();
-    return Client_->InternalizeNode(
-        path,
-        PatchTransactionId(options));
-}
-
 TFuture<bool> TTransaction::NodeExists(
     const TYPath& path,
     const TNodeExistsOptions& options)

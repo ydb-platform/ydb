@@ -2446,8 +2446,15 @@ public:
                 return EExecutionStatus::DelayComplete;
             }
 
+            const bool readBackup = request->Record.GetHints() & NKikimrTxDataShard::TEvRead::HINT_READ_BACKUP_COPY;
+            const bool useBatchScan = (request->Record.GetHints() & TEvDataShard::TEvRead::HINT_BATCH) && scanPossible();
+            if (readBackup && !useBatchScan) {
+                SetStatusError(Result->Record, Ydb::StatusIds::UNSUPPORTED, "Cannot use a batch scan for this backup table read");
+                return EExecutionStatus::DelayComplete;
+            }
+
             // User may want us to start a batch scan, do so when possible
-            if ((request->Record.GetHints() & TEvDataShard::TEvRead::HINT_BATCH) && scanPossible()) {
+            if (useBatchScan) {
                 if (state.IsHeadRead) {
                     if (auto status = upgradeToRepeatableRead()) {
                         return *status;
@@ -2748,7 +2755,8 @@ public:
             auto& userTableInfo = it->second;
             TableInfo = TShortTableInfo(userTableInfo, record.HasVectorTopK());
 
-            Y_ENSURE(!userTableInfo->IsBackup);
+            Y_ENSURE(!userTableInfo->IsBackup ||
+                (record.GetHints() & NKikimrTxDataShard::TEvRead::HINT_READ_BACKUP_COPY));
 
             state.SchemaVersion = userTableInfo->GetTableSchemaVersion();
             if (record.GetTableId().HasSchemaVersion()) {
@@ -3648,15 +3656,24 @@ public:
                 }
 
                 auto& userTableInfo = it->second;
-                if (userTableInfo->IsBackup) {
-                    ReplyError(
-                        Ydb::StatusIds::BAD_REQUEST,
-                        TStringBuilder() << "Can't read from a backup table"
-                            << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                        ctx.SelfID.NodeId(),
-                        state);
+                const bool readBackup = record.GetHints() & NKikimrTxDataShard::TEvRead::HINT_READ_BACKUP_COPY;
+                if (readBackup != userTableInfo->IsBackup) {
+                    if (readBackup) {
+                        ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, "Export checksum requires a private backup table",
+                            ctx.SelfID.NodeId(), state);
+                    } else {
+                        ReplyError(
+                            Ydb::StatusIds::BAD_REQUEST,
+                            TStringBuilder() << "Can't read from a backup table"
+                                << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
+                            ctx.SelfID.NodeId(),
+                            state);
+                    }
                     return true;
                 }
+
+                // An immutable backup copy doesn't need pipeline dependencies
+                setUsingSnapshotFlag = readBackup;
 
                 if (state.IsHeadRead) {
                     // We want to try and choose a more specific non-repeatable snapshot

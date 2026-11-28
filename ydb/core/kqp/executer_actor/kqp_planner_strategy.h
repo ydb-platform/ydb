@@ -5,6 +5,10 @@
 
 #include <ydb/library/actors/core/actorid.h>
 
+#include <util/generic/hash.h>
+
+#include <optional>
+
 namespace NKikimr::NKqp {
 
 class IKqpPlannerStrategy {
@@ -23,8 +27,11 @@ public:
         TVector<ui64> TaskIds;
     };
 
-    virtual TVector<TResult> Plan(const TVector<const NKikimrKqp::TKqpNodeResources*>& nodeResources,
-        const TVector<TTaskResourceEstimation>& estimatedResources) = 0;
+    using TFixedAssignments = THashMap<ui64 /* taskId */, ui64 /* nodeId */>;
+
+    // Only returns placements for free tasks. A plan with no free tasks can still succeed.
+    virtual std::optional<TVector<TResult>> Plan(const TVector<const NKikimrKqp::TKqpNodeResources*>& nodeResources,
+        const TVector<TTaskResourceEstimation>& estimatedResources, const TFixedAssignments& fixedAssignments) = 0;
 
 protected:
     TLogFunc LogFunc;

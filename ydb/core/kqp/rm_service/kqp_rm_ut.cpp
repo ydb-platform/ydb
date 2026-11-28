@@ -466,6 +466,7 @@ public:
         UNIT_TEST(ManyTasks);
         UNIT_TEST(NotEnoughMemory);
         UNIT_TEST(NotEnoughExecutionUnits);
+        UNIT_TEST(ExecutionUnitsAfterLimitReduction);
         UNIT_TEST(ResourceBrokerNotEnoughResources);
         UNIT_TEST(SingleSnapshotByExchanger);
         UNIT_TEST(Reduce);
@@ -544,6 +545,7 @@ public:
     void ManyTasks();
     void NotEnoughMemory();
     void NotEnoughExecutionUnits();
+    void ExecutionUnitsAfterLimitReduction();
     void ResourceBrokerNotEnoughResources();
     void Snapshot();
     void SingleSnapshotByExchanger();
@@ -749,6 +751,27 @@ void KqpRm::NotEnoughExecutionUnits() {
 
     AssertResourceManagerStats(rm, 1000, 100);
     AssertResourceBrokerSensors(0, 0, 0, 0, 0);
+}
+
+void KqpRm::ExecutionUnitsAfterLimitReduction() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+    const NRm::TKqpResourcesRequest request{.ExecutionUnits = 1};
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+    UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
+
+    auto config = MakeKqpResourceManagerConfig();
+    config.SetComputeActorsCount(1);
+    Reconfigure(config);
+
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExecutionUnits, 0u);
+    rm->FreeResources(*tx, 1, request);
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExecutionUnits, 0u);
+    rm->FreeResources(*tx, 2, request);
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExecutionUnits, 1u);
 }
 
 void KqpRm::ResourceBrokerNotEnoughResources() {

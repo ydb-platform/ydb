@@ -286,4 +286,119 @@ Y_UNIT_TEST_SUITE(KqpComputeActorCreation) {
     }
 }
 
+Y_UNIT_TEST_SUITE(KqpTaskPlacement) {
+    enum class ELocalSnapshot {
+        Current,
+        StaleMemory,
+        StaleExecutionUnits,
+    };
+
+    struct TPlacementScenario {
+        ELocalSnapshot LocalSnapshot = ELocalSnapshot::Current;
+        bool PinResultStage = false;
+        ui32 PeerExecutionUnits = 1;
+    };
+
+    void CheckLocalCapacityPlacement(const TPlacementScenario& scenario) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetComputeActorsCount(1);
+        TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto executer = runtime.AllocateEdgeActor();
+        auto rm = GetKqpResourceManager(executer.NodeId());
+
+        runtime.RunCall([&] {
+            const auto live = rm->GetLocalResources();
+            UNIT_ASSERT_VALUES_EQUAL(live.ExecutionUnits, 1u);
+            // One live local slot makes the local fast path unavailable for the two tasks.
+            TVector<NKikimrKqp::TKqpNodeResources> snapshot(2);
+            const ui32 peerId = executer.NodeId() + 1;
+            snapshot[0].SetNodeId(executer.NodeId());
+            snapshot[0].SetTotalMemory(live.Memory);
+            snapshot[0].SetUsedMemory(scenario.LocalSnapshot == ELocalSnapshot::StaleMemory ? live.Memory : 0);
+            snapshot[0].SetAvailableComputeActors(scenario.LocalSnapshot == ELocalSnapshot::StaleExecutionUnits ? 0 : live.ExecutionUnits);
+            snapshot[1].SetNodeId(peerId);
+            snapshot[1].SetTotalMemory(live.Memory / 2);
+            snapshot[1].SetAvailableComputeActors(scenario.PeerExecutionUnits);
+
+            NKqpProto::TKqpPhyTx txProto;
+            txProto.AddStages()->MutableProgram()->MutableSettings()->SetHasMapJoin(scenario.PinResultStage);
+            if (scenario.PinResultStage) {
+                txProto.AddStages()->MutableProgram()->MutableSettings()->SetStageLevel(1);
+            }
+            const IKqpGateway::TPhysicalTxData tx(std::make_shared<TKqpPhyTxHolder>(nullptr, &txProto, nullptr, nullptr), nullptr);
+            const TVector<IKqpGateway::TPhysicalTxData> transactions;
+            const NKikimrConfig::TTableServiceConfig::TAggregationConfig aggregation;
+            TKqpTasksGraph graph("/Root", transactions, nullptr, {}, aggregation, nullptr, {}, nullptr, false);
+            graph.GetMeta().UserRequestContext = MakeIntrusive<TUserRequestContext>();
+            const NYql::NDq::TStageId rootStageId(0, 0);
+            const NYql::NDq::TStageId resultStageId(0, scenario.PinResultStage ? 1 : 0);
+            graph.AddStageInfo(TStageInfo(rootStageId, 0, 0, TStageInfoMeta(tx)));
+            if (scenario.PinResultStage) {
+                graph.AddStageInfo(TStageInfo(resultStageId, 0, 0, TStageInfoMeta(tx)));
+            }
+            const ui64 rootTaskId = graph.AddTask(graph.GetStageInfo(rootStageId)).Id;
+            const ui64 resultTaskId = graph.AddTask(graph.GetStageInfo(resultStageId)).Id;
+
+            NWilson::TSpan span;
+            NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig retries;
+            TKqpPlanner planner({
+                .TasksGraph = graph,
+                .TxId = TxId,
+                .Executer = executer,
+                .Database = "/Root",
+                .UserToken = {},
+                .Deadline = {},
+                .StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE,
+                .StatsReportingSettings = {},
+                .RlPath = {},
+                .ExecuterSpan = span,
+                .ResourcesSnapshot = std::move(snapshot),
+                .ExecuterRetriesConfig = retries,
+                .MkqlMemoryLimit = 0,
+                .AsyncIoFactory = nullptr,
+                .AllowSinglePartitionOpt = false,
+                .FederatedQuerySetup = std::nullopt,
+                .ResourceManager_ = rm,
+                .CaFactory_ = {},
+                .BlockTrackingMode = {},
+                .ArrayBufferMinFillPercentage = {},
+                .BufferPageAllocSize = {},
+                .EnableCheckpoints = false,
+                .EnableWatermarks = false,
+            });
+            if (auto error = planner.AssignTasksToNodes()) {
+                UNIT_FAIL(error->Get<TEvKqp::TEvAbortExecution>()->GetIssues().ToString());
+            }
+            const auto rootNode = graph.GetTask(rootTaskId).Meta.ExpectedNodeId.value();
+            const auto resultNode = graph.GetTask(resultTaskId).Meta.ExpectedNodeId.value();
+            if (scenario.PinResultStage) {
+                UNIT_ASSERT_VALUES_EQUAL(resultNode, executer.NodeId());
+                UNIT_ASSERT_VALUES_EQUAL(rootNode, peerId);
+            } else if (scenario.PeerExecutionUnits == 2) {
+                UNIT_ASSERT_VALUES_EQUAL(resultNode, peerId);
+                UNIT_ASSERT_VALUES_EQUAL(rootNode, peerId);
+            } else {
+                const auto localId = executer.NodeId();
+                UNIT_ASSERT((rootNode == localId && resultNode == peerId) || (rootNode == peerId && resultNode == localId));
+            }
+            return true;
+        });
+    }
+
+    Y_UNIT_TEST(ReservePinnedResultOnSnapshot) {
+        CheckLocalCapacityPlacement({.PinResultStage = true});
+    }
+
+    Y_UNIT_TEST_TWIN(StaleLocalCapacity, StaleMemory) {
+        CheckLocalCapacityPlacement({.LocalSnapshot = StaleMemory ? ELocalSnapshot::StaleMemory : ELocalSnapshot::StaleExecutionUnits});
+    }
+
+    Y_UNIT_TEST(PreserveSuccessfulSnapshotPlacement) {
+        // The original plan fits both unpinned tasks on the peer despite the stale local entry.
+        CheckLocalCapacityPlacement({.LocalSnapshot = ELocalSnapshot::StaleExecutionUnits, .PeerExecutionUnits = 2});
+    }
+}
+
 } // namespace NKikimr::NKqp

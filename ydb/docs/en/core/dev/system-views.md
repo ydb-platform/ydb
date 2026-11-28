@@ -198,9 +198,18 @@ WHERE Rank = 1
 
 ## Detailed query information {#query-metrics}
 
-The following system view contains detailed query information:
+The following system views contain detailed query information:
 
 * `query_metrics_one_minute` — data is split into minute intervals, contains up to 256 queries for the last 6 hours.
+* `query_metrics_one_hour` — data is split into hourly intervals, contains up to 256 queries in each interval.
+
+{% if feature_flags.collect_hour_metric == false %}
+{% note warning %}
+
+The `query_metrics_one_hour` view is populated only when the `collect_hour_metric` feature flag is enabled. The flag is set in the `feature_flags` section, see [feature flags](../reference/configuration/feature_flags.md).
+
+{% endnote %}
+{% endif %}
 
 Each row of the view contains information about multiple queries with the same text that occurred during the interval. The view fields contain the minimum, maximum, and total values for each tracked query characteristic. Within the interval, queries are sorted in descending order of total CPU time spent.
 

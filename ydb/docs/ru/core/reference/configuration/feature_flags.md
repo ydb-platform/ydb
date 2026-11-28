@@ -40,6 +40,7 @@ feature_flags:
 | `enable_external_data_sources`                           | Включение [внешних источников данных](../../concepts/datamodel/external_data_source.md)|
 | `enable_grpc_audit`                                      | Включение [аудита](../../security/audit-log.md#grpc-connection) изменений состояния gRPC-соединения |
 | `enable_fs_backups`                                      | Включение операций [резервного копирования и восстановления на сетевую файловую систему](../../concepts/backup.md#nfs) |
+| `collect_hour_metric`                                    | Сбор [часовых метрик запросов](../../dev/system-views.md#query-metrics) в представлении `query_metrics_one_hour` |
 | `switch_to_config_v2`                                    | Переход с конфигурации V1 на [конфигурацию V2](../../devops/configuration-management/migration/migration-to-v2.md) |
 | `enable_streaming_queries`                               | Включение [потоковых запросов](../../concepts/streaming-query/streaming-query.md) |
 | `enable_user_attributes_in_topic_query`                  | [Пользовательские атрибуты сообщений](../../concepts/query_execution/topics.md#system-metadata) в запросах к топикам через `__ydb_user_attributes` |

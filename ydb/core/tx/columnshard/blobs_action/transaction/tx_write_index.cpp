@@ -89,7 +89,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
         Ev->Get()->IndexChanges->WriteIndexOnComplete(Self, context);
     }
 
-    Self->EnqueueBackgroundActivities(false);
+    Self->EnqueueBackgroundActivities();
     changes->MutableBlobsAction().OnCompleteTxAfterAction(*Self, Ev->Get()->GetPutStatus() == NKikimrProto::OK);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(*changes, *Self);
 }

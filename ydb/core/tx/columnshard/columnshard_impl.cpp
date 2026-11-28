@@ -112,6 +112,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
     , DataLocksManager(std::make_shared<NOlap::NDataLocks::TManager>())
     , DataStats(std::make_shared<TShardDataStats>(StoragesManager, info->TabletID))
+    , MediatorTime(info->TabletID, Counters.GetTabletCounters())
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
@@ -141,55 +142,6 @@ void TColumnShard::OnDetach(const TActorContext& ctx) {
 void TColumnShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ev);
     Die(ctx);
-}
-
-void TColumnShard::TryRegisterMediatorTimeCast() {
-    if (MediatorTimeCastRegistered) {
-        return;   // already registered
-    }
-
-    if (!ProcessingParams) {
-        return;   // cannot register without processing params
-    }
-
-    Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvRegisterTablet(TabletID(), *ProcessingParams));
-    MediatorTimeCastRegistered = true;
-}
-
-void TColumnShard::UnregisterMediatorTimeCast() {
-    if (MediatorTimeCastRegistered) {
-        Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvUnregisterTablet(TabletID()));
-        MediatorTimeCastRegistered = false;
-        MediatorTimeCastEntry = nullptr;
-    }
-}
-
-bool TColumnShard::WaitPlanStep(ui64 step) {
-    if (step <= LastPlannedStep) {
-        return false;
-    }
-    if (MediatorTimeCastEntry) {
-        ui64 mediatorStep = MediatorTimeCastEntry->Get(TabletID());
-        if (step <= mediatorStep) {
-            return false;
-        }
-    }
-    if (MediatorTimeCastRegistered) {
-        if (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin()) {
-            MediatorTimeCastWaitingSteps.insert(step);
-            SendWaitPlanStep(step);
-            YDB_LOG_DEBUG("Waiting for plan step from mediator time cast",
-                {"planStep", step});
-            return true;
-        }
-    }
-    return false;
-}
-
-void TColumnShard::SendWaitPlanStep(ui64 step) {
-    if (MediatorTimeCastRegistered) {
-        Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
-    }
 }
 
 void TColumnShard::RescheduleWaitingReads() {
@@ -226,14 +178,6 @@ NOlap::TSnapshot TColumnShard::GetMaxReadVersionForSchema(const ui64 schemaVersi
     // A newer schema already exists. The scan must resolve exactly the schema the
     // write was built against, so pin the read to the last snapshot where that schema is still active.
     return std::min(maxReadVersion, nextSchemaChange->GetPreviousSnapshot());
-}
-
-ui64 TColumnShard::GetOutdatedStep() const {
-    ui64 step = LastPlannedStep;
-    if (MediatorTimeCastEntry) {
-        step = Max(step, MediatorTimeCastEntry->Get(TabletID()));
-    }
-    return step;
 }
 
 void TColumnShard::PublishMinSnapshotForNewScans(const IScanSnapshotGuard& guard) const {
@@ -527,12 +471,11 @@ void TColumnShard::RunAlterStore(
     ApplyColumnShardConfig();
 }
 
-void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
+void TColumnShard::EnqueueBackgroundActivities() {
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"tabletId", TabletID()});
-    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, periodic",
-        {"event", "EnqueueBackgroundActivities"},
-        {"periodic", periodic});
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"event", "EnqueueBackgroundActivities"});
     StoragesManager->GetOperatorVerified(NOlap::IStoragesManager::DefaultStorageId);
     StoragesManager->GetSharedBlobsManager()->GetStorageManagerVerified(NOlap::IStoragesManager::DefaultStorageId);
     Counters.GetCSCounters().OnStartBackground();
@@ -1345,7 +1288,7 @@ void TColumnShard::Die(const TActorContext& ctx) {
     YDB_LOG_VERIFY(TabletActivityImpl->Dec() == 0);
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
-    UnregisterMediatorTimeCast();
+    MediatorTime.Unregister(ctx);
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
     Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
     Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
@@ -2010,6 +1953,10 @@ STFUNC(TColumnShard::StateWork) {
         {"selfId", SelfId()},
         {"ev", ev->GetTypeName()});
     TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
+    if (HoldUntilMediatorTimeReady(ev)) {
+        return;
+    }
+
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvTxProcessing::TEvReadSet, Handle);
         HFunc(TEvTxProcessing::TEvReadSetAck, Handle);
@@ -2035,6 +1982,7 @@ STFUNC(TColumnShard::StateWork) {
 
         HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
+        HFunc(TEvMediatorTimecast::TEvSubscribeReadStepResult, Handle);
         HFunc(TEvPrivate::TEvWriteIndex, Handle);
         HFunc(TEvPrivate::TEvScanStats, Handle);
         HFunc(TEvPrivate::TEvReadFinished, Handle);

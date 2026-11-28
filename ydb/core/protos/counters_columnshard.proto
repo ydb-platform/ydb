@@ -55,6 +55,7 @@ enum ESimpleCounters {
     COUNTER_SCANS_WAITING_SNAPSHOT = 45                     [(CounterOpts) = {Name: "ScansWaitingSnapshot"}];
     COUNTER_SCANS_WAITING_LOADED_PORTIONS = 46              [(CounterOpts) = {Name: "ScansWaitingLoadedPortions"}];
     COUNTER_WRITES_WAITING_LOADED_PORTIONS = 47             [(CounterOpts) = {Name: "WritesWaitingLoadedPortions"}];
+    COUNTER_EVENTS_WAITING_MEDIATOR_TIME = 48               [(CounterOpts) = {Name: "EventsWaitingMediatorTime"}];
 }
 
 enum ECumulativeCounters {

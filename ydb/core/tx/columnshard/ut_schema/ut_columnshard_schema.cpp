@@ -1,5 +1,6 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/base/tx_processing.h>
 #include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
@@ -1341,6 +1342,7 @@ void TestProposeResultNotViaPipe(const bool standalone) {
     auto txBody = TTestSchema::CreateInitShardTxBody(tableId, standalone, testYdbSchema, testYdbPk, {}, "/Root/olap");
     auto event =
         std::make_unique<TEvColumnShard::TEvProposeTransaction>(NKikimrTxColumnShard::TX_KIND_SCHEMA, schemeShardId, sender, txId, txBody, 0, 0);
+    *event->Record.MutableProcessingParams() = ExtractProcessingParams(*runtime.GetAppData().DomainsInfo->GetDomain());
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
 
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);

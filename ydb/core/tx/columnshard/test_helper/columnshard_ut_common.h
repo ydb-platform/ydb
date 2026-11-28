@@ -545,6 +545,8 @@ TSerializedTableRange MakeTestRange(
 // The key MakeTestBlob gives to the row of this value.
 NArrow::TSimpleRow MakeTestKey(const ui64 value, const std::vector<NArrow::NTest::TTestColumn>& pk);
 
+ui64 GetSimpleCounter(TTestBasicRuntime& runtime, const TActorId& sender, const TString& name);
+
 }   // namespace NKikimr::NTxUT
 
 namespace NKikimr::NColumnShard {

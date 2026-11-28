@@ -20,6 +20,7 @@ The _Error type_ column shows the status with which the query will complete in c
 | Table | Maximum column name length | 255 | Limits the number of characters in a column name. | MaxTableColumnNameLength | SCHEME_ERROR | Column name too long |
 | Table | Maximum number of columns in the primary key | 20 | Each table must have a primary key. The number of columns that make up the primary key cannot exceed this limit. | MaxTableKeyColumns | SCHEME_ERROR | Too many key columns |
 | Table | Maximum number of indexes | 20 | Maximum number of indexes, in addition to the primary key index, that can be created on a table. | MaxTableIndices | PRECONDITION_FAILED | Indexes count has reached maximum value in the table |
+| Table | Maximum number of changefeeds | 5 | Maximum number of change data capture (CDC) changefeeds that can be created on a table. | MaxTableCdcStreams | GENERIC_ERROR | Cdc streams count has reached maximum value in the table |
 | Table | Maximum number of replicas | 3 | Maximum number of read-only replicas that can be specified when creating a table with replicas. | MaxFollowersCount | BAD_REQUEST | Too much followers |
 | Table | Maximum number of tables to copy | 10,000 | Limit on the size of the table list for consistent table copy operations. | MaxConsistentCopyTargets | BAD_REQUEST | Consistent copy object count limit exceeded |
 

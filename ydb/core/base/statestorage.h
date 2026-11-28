@@ -39,6 +39,7 @@ struct TEvStateStorage {
         EvRingGroupPassAway,
         EvConfigVersionInfo,
         EvListBoard,
+        EvBoardPublishUpdate,  // Update payload in existing board publish actor
 
         // replies (local, from proxy)
         EvInfo = EvLookup + 512,
@@ -543,6 +544,15 @@ struct TEvStateStorage {
             , Path(path)
         {}
     };
+
+    struct TEvBoardPublishUpdate : public TEventLocal<TEvBoardPublishUpdate, EvBoardPublishUpdate> {
+        TString NewPayload;
+        
+        TEvBoardPublishUpdate(const TString& newPayload)
+            : NewPayload(newPayload)
+        {}
+    };
+
 };
 
 enum ERingGroupState {

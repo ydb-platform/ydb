@@ -32,6 +32,7 @@ private:
     std::shared_ptr<NLWTrace::TOrbit> ScanOrbit;
     const ui64 PathId;
     const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> SchedulerPool;
+    const bool CsStatsEnabled;
 
 public:
     virtual void PassAway() override;
@@ -48,7 +49,7 @@ public:
         const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
         const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
         std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId = 0,
-        std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool = std::nullopt);
+        std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool = std::nullopt, bool csStatsEnabled = false);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -102,6 +103,7 @@ private:
     void AddRow(const TConstArrayRef<TCell>& row) override;
 
     NKqp::TScanStatistics GetScanStats();
+    NColumnShard::TCsScanStats GetCsScanStats() const;
 
     TOwnedCellVec ConvertLastKey(const std::shared_ptr<arrow::RecordBatch>& lastReadKey);
 

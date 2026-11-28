@@ -49,6 +49,7 @@ SRCS(
     ut_scan_actor.cpp
     ut_scan_cursor.cpp
     ut_script.cpp
+    ut_script_stats.cpp
     ut_minmax_index.cpp
     ut_sync_portion_index_reuse.cpp
     ut_portion_blob_validation.cpp

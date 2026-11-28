@@ -42,6 +42,11 @@ NKqp::TScanStatistics TColumnShardScan::GetScanStats() {
     return stats;
 }
 
+// TODO: Merge with GetScanStats.
+NColumnShard::TCsScanStats TColumnShardScan::GetCsScanStats() const {
+    return { .Steps = ScanCountersPool.GetStepStats() };
+}
+
 LWTRACE_USING(YDB_CS_SCAN);
 
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(60);
@@ -62,13 +67,14 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
     const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
     const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
-    std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId, std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool)
+    std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId, std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool, bool csStatsEnabled)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , ColumnDataManager(columnDataManager)
     , ScanOrbit(std::move(orbit))
     , PathId(pathId)
     , SchedulerPool(std::move(schedulerPool))
+    , CsStatsEnabled(csStatsEnabled)
     , ColumnShardActorId(columnShardActorId)
     , ScanComputeActorId(scanComputeActorId)
     , ScanDiagnosticsActorId(scanDiagnosticsActorId)
@@ -549,6 +555,9 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch, ui64 sourceId)
             {"stats", Stats->ToJson()},
             {"iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO")});
         Result->StatsOnFinished = std::make_shared<TScanStatsOwner>(ScanIterator->GetStats());
+        if (CsStatsEnabled) {
+            Result->ScanStats = std::make_shared<const NColumnShard::TCsScanStats>(GetCsScanStats());
+        }
     } else {
         YDB_LOG_VERIFY(ChunksLimiter.Take(Bytes));
         Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();

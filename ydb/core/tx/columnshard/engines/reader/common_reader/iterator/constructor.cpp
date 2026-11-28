@@ -17,7 +17,9 @@ void TBlobsFetcherTask::TStartJob::Start(std::unique_ptr<TDataSourceLease> sourc
 void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     auto& source = SourceLease->GetSource();
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("fbf"));
-    source.MutableStageData().AddBlobs(source.DecodeBlobAddresses(ExtractBlobsData()));
+    auto blobsData = ExtractBlobsData();
+    Step.RecordReadBytes(source, blobsData);
+    source.MutableStageData().AddBlobs(source.DecodeBlobAddresses(std::move(blobsData)));
     YDB_LOG_VERIFY(Step.Next());
     auto task = std::make_shared<TStepAction>(std::move(SourceLease), std::move(Step), Context->GetCommonContext()->GetScanActorId(), false);
     Context->GetCommonContext()->SendTaskToExecute(task);
@@ -75,6 +77,7 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("cf_reply"));
     const TMonotonic start = TMonotonic::Now();
     NBlobOperations::NRead::TCompositeReadBlobs blobsData = ExtractBlobsData();
+    Cursor.RecordReadBytes(source, blobsData);
     blobsData.Merge(std::move(ProvidedBlobs));
     TReadActionsCollection readActions;
     auto* signals = source.GetExecutionContext().GetCurrentStepSignalsOptional();

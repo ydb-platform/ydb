@@ -182,6 +182,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
 
     TInstant startTime = TActivationContext::Now();
     if (ev->Get()->Finished) {
+        // TODO: Forward ScanStats from TEvScanData when the KQP consumer is ready.
         state->State = EShardState::PostRunning;
     }
 

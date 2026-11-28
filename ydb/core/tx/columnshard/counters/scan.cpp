@@ -4,6 +4,9 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/program/graph_execute.h>
 
+#include <algorithm>
+#include <type_traits>
+
 namespace NKikimr::NColumnShard {
 
 TScanCounters::TScanCounters(const TString& module)
@@ -115,6 +118,170 @@ TString TConcreteScanCounters::StepsCountersDebugString() const {
     bld << "counters_summ_across_all_steps:(";
     bld << "[StepName: AllSteps; " << sum.DebugString() << "])\n";
     return bld;
+}
+
+namespace {
+
+template <class T>
+void AppendUnique(std::vector<T>& target, const std::vector<T>& source) {
+    for (const auto& item : source) {
+        if (std::find(target.begin(), target.end(), item) == target.end()) {
+            target.push_back(item);
+        }
+    }
+}
+
+}   // namespace
+
+void TReserveMemoryStepDetails::Merge(const TReserveMemoryStepDetails& other) {
+    for (const auto& source : other.Stages) {
+        const auto stage = std::find_if(Stages.begin(), Stages.end(), [&source](const TStage& current) {
+            return source.Stage == current.Stage;
+        });
+        auto& target = stage == Stages.end() ? Stages.emplace_back(TStage{ source.Stage, {} }) : *stage;
+        AppendUnique(target.MemoryTypes, source.MemoryTypes);
+    }
+    if (other.RequestedBytes) {
+        RequestedBytes = RequestedBytes.value_or(0) + *other.RequestedBytes;
+    }
+}
+
+void TFetchColumnsStepDetails::Merge(const TFetchColumnsStepDetails& other) {
+    AppendUnique(Columns, other.Columns);
+}
+
+void TAssembleStepDetails::Merge(const TAssembleStepDetails& other) {
+    AppendUnique(Columns, other.Columns);
+}
+
+void TPKFilterDetails::Merge(const TPKFilterDetails& other) {
+    AppendUnique(Columns, other.Columns);
+    AppendUnique(Predicates, other.Predicates);
+}
+
+void TShardingFilterStepDetails::Merge(const TShardingFilterStepDetails& other) {
+    AppendUnique(Columns, other.Columns);
+}
+
+void TDeletionFilterStepDetails::Merge(const TDeletionFilterStepDetails& other) {
+    AppendUnique(Columns, other.Columns);
+}
+
+void TSnapshotFilterStepDetails::Merge(const TSnapshotFilterStepDetails& other) {
+    AppendUnique(Snapshots, other.Snapshots);
+}
+
+void TLimitStepDetails::Merge(const TLimitStepDetails& other) {
+    AppendUnique(Limits, other.Limits);
+}
+
+void TPrepareResultStepDetails::Merge(const TPrepareResultStepDetails& other) {
+    AppendUnique(StartResultBuildingInplace, other.StartResultBuildingInplace);
+}
+
+void TBuildResultStepDetails::Merge(const TBuildResultStepDetails& other) {
+    if (const auto& source = other.PageBounds) {
+        auto& bounds = PageBounds ? *PageBounds : PageBounds.emplace(*source);
+        bounds.MinStartIndex = std::min(bounds.MinStartIndex, source->MinStartIndex);
+        bounds.MaxStartIndex = std::max(bounds.MaxStartIndex, source->MaxStartIndex);
+        bounds.MinRecordsCount = std::min(bounds.MinRecordsCount, source->MinRecordsCount);
+        bounds.MaxRecordsCount = std::max(bounds.MaxRecordsCount, source->MaxRecordsCount);
+    }
+}
+
+std::vector<TConcreteScanCounters::TStepHandle> TConcreteScanCounters::RegisterSteps(const std::vector<TStepDescription>& descriptions) const {
+    auto lock = FetchingStepCounters->WriteGuard();
+    auto& steps = lock.Value;
+    const auto mergeDetails = [](TStepDetails& target, const TStepDetails& source) {
+        std::visit([&target](const auto& details) {
+            using TDetails = std::decay_t<decltype(details)>;
+            if constexpr (!std::is_same_v<TDetails, std::monostate>) {
+                auto* current = std::get_if<TDetails>(&target);
+                auto& targetDetails = current ? *current : target.emplace<TDetails>();
+                targetDetails.Merge(details);
+            }
+        }, source);
+    };
+    std::vector<TStepList::iterator> existing;
+    existing.reserve(steps.size());
+    for (auto it = steps.begin(); it != steps.end(); ++it) {
+        existing.push_back(it);
+    }
+
+    // Compute the longest common subsequence of each pair of suffixes.
+    std::vector<std::vector<size_t>> matches(descriptions.size() + 1, std::vector<size_t>(existing.size() + 1));
+    for (size_t i = descriptions.size(); i != 0; --i) {
+        for (size_t j = existing.size(); j != 0; --j) {
+            if (descriptions[i - 1].Name == existing[j - 1]->Name) {
+                matches[i - 1][j - 1] = 1 + matches[i][j];
+            } else {
+                matches[i - 1][j - 1] = std::max(matches[i][j - 1], matches[i - 1][j]);
+            }
+        }
+    }
+
+    std::vector<TStepHandle> handles;
+    handles.reserve(descriptions.size());
+    size_t i = 0;
+    size_t j = 0;
+    while (i < descriptions.size()) {
+        if (j < existing.size() && descriptions[i].Name == existing[j]->Name) {
+            Y_ABORT_UNLESS(descriptions[i].Details.index() == existing[j]->Details.index(), "Inconsistent details type for step %s",
+                descriptions[i].Name.c_str());
+            mergeDetails(existing[j]->Details, descriptions[i].Details);
+            handles.push_back(TStepHandle(existing[j]));
+            ++i;
+            ++j;
+        } else if (j < existing.size() && matches[i][j + 1] > matches[i + 1][j]) {
+            ++j;
+        } else {
+            // On a tie, keep the earlier existing position available for a later match.
+            const auto next = j < existing.size() ? existing[j] : steps.end();
+            TStepCounters step{ descriptions[i].Name, {}, {} };
+            mergeDetails(step.Details, descriptions[i].Details);
+            handles.push_back(TStepHandle(steps.insert(next, std::move(step))));
+            ++i;
+        }
+    }
+    return handles;
+}
+
+namespace {
+
+void RecordStepMeasurement(TStepMeasurementCounters& counter, std::optional<ui64> value) {
+    if (value) {
+        counter.Sum += *value;
+        ++counter.Count;
+    }
+}
+
+}   // namespace
+
+void TConcreteScanCounters::RecordStepExecution(TStepHandle handle, TDuration activeTime, std::optional<ui64> inputRows,
+    std::optional<ui64> outputRows, std::optional<ui64> inputBytes, std::optional<ui64> outputBytes) const {
+    auto lock = FetchingStepCounters->WriteGuard();
+    auto& statistics = handle.Position->Statistics;
+    ++statistics.Calls;
+    statistics.ActiveTime += activeTime;
+    RecordStepMeasurement(statistics.InputRows, inputRows);
+    RecordStepMeasurement(statistics.OutputRows, outputRows);
+    RecordStepMeasurement(statistics.InputBytes, inputBytes);
+    RecordStepMeasurement(statistics.OutputBytes, outputBytes);
+}
+
+void TConcreteScanCounters::AddStepWait(TStepHandle handle, TDuration waitTime) const {
+    auto lock = FetchingStepCounters->WriteGuard();
+    handle.Position->Statistics.WaitTime += waitTime;
+}
+
+void TConcreteScanCounters::AddStepReadBytes(TStepHandle handle, ui64 readBytes) const {
+    auto lock = FetchingStepCounters->WriteGuard();
+    RecordStepMeasurement(handle.Position->Statistics.ReadBytes, readBytes);
+}
+
+std::vector<TStepCounters> TConcreteScanCounters::GetStepStats() const {
+    auto lock = FetchingStepCounters->ReadGuard();
+    return std::vector<TStepCounters>(lock.Value.begin(), lock.Value.end());
 }
 
 TConcreteScanCounters::TPerStepAtomicCounters TConcreteScanCounters::CountersForStep(TStringBuf stepName) const {

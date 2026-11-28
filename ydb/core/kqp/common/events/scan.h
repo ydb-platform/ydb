@@ -9,6 +9,10 @@
 #include "scan_stats.h"
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 
+namespace NKikimr::NColumnShard {
+struct TCsScanStats;
+}
+
 namespace NKikimr::NKqp {
 
 struct TLocksInfo {
@@ -55,6 +59,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     TOwnedCellVec LastKey;
     NKikimrKqp::TEvKqpScanCursor LastCursorProto;
     TScanStatistics CurrentStats;
+    std::shared_ptr<const NColumnShard::TCsScanStats> ScanStats;
     TDuration CpuTime;
     TDuration WaitTime;
     ui64 RawBytes = 0;
@@ -144,6 +149,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
 
 private:
     void InitRemote() const {
+        // TODO: Carry ScanStats from TEvScanData into TEvRemoteScanData.
         if (!Remote) {
             Remote = MakeHolder<TEvRemoteScanData>();
 

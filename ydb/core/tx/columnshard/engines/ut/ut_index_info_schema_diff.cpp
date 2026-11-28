@@ -238,6 +238,32 @@ void CheckMergedDiffBuildsSchema(const TSchemaHistory& history) {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
+    Y_UNIT_TEST(PrimaryKeyTypesComeFromLogicalSchema) {
+        auto storages = TTestStoragesManager::GetInstance();
+        auto cache = std::make_shared<TSchemaObjectsCache>(true);
+        const NScheme::TTypeInfo decimal(NScheme::TDecimalType(22, 9));
+        TSchemaHistory history;
+        history.NextVersion().DropColumn(3).AddColumn(4, "added", NScheme::NTypeIds::Uint64);
+        auto schemaV1 = history.GetVersions().front();
+        auto schemaV2 = history.GetVersions().back();
+        for (auto* schema : { &schemaV1, &schemaV2 }) {
+            *schema->MutableColumns(0) = NArrow::NTest::TTestColumn("timestamp", decimal).SetNullable(false).CreateColumn(1);
+        }
+
+        auto original = TIndexInfo::BuildFromProto(1, schemaV1, storages, cache);
+        UNIT_ASSERT(original);
+        auto updated = TIndexInfo::BuildFromProto(TSchemaDiffView::MakeSchemasDiff(schemaV1, schemaV2), *original, storages, cache);
+        UNIT_ASSERT(updated);
+        for (const auto* indexInfo : { &*original, &*updated }) {
+            const auto types = indexInfo->GetPrimaryKeyTypes();
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            UNIT_ASSERT(types.front() == indexInfo->GetPrimaryKeyColumns().front().second);
+            UNIT_ASSERT(types.front() == decimal);
+            UNIT_ASSERT(types.front().IsDecimalNumericComparisonEnabled());
+            UNIT_ASSERT(indexInfo->GetColumnFeaturesVerified(KeyColumnId).GetTypeInfo().IsDecimalNumericComparisonEnabled());
+        }
+    }
+
     Y_UNIT_TEST(AddColumn) {
         TSchemaHistory history;
         history.NextVersion().AddColumn(4, "added", NScheme::NTypeIds::Uint64);

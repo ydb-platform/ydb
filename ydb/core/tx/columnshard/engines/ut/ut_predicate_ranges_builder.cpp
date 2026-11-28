@@ -1,3 +1,4 @@
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -10,6 +11,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
+
+#include <array>
 
 namespace NKikimr {
 
@@ -72,6 +75,35 @@ TConstArrayRef<NScheme::TTypeInfo> KeyTypesRef(const TVector<NScheme::TTypeInfo>
 
 // scheme_tabledefs.h: TTableRange / TSerializedTableRange semantics (partial keys, null, inclusive, IsAmbiguous, IsEmpty).
 Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
+    Y_UNIT_TEST(DecimalPrefixBoundUsesTabletComparisonOrder) {
+        const NScheme::TTypeInfo decimal(NScheme::TDecimalType(22, 0));
+        const std::vector<TNameTypeInfo> keySchema = { { "key", decimal }, { "suffix", decimal } };
+        const auto arrowSchema = NArrow::MakeArrowSchema(keySchema).ValueOrDie();
+        const std::array<char, 16> one = { 1 };
+        const std::array<char, 16> twoHundredFiftySix = { 0, 1 };
+        const TCell lower(one.data(), one.size());
+        const TCell point(twoHundredFiftySix.data(), twoHundredFiftySix.size());
+        NArrow::TArrowBatchBuilder data;
+        UNIT_ASSERT(data.Start(keySchema).ok());
+        data.AddRow({ point, lower });
+        const auto batch = data.FlushBatch(false);
+
+        for (const bool numeric : { false, true }) {
+            const auto type = decimal.WithDecimalNumericComparison(numeric);
+            NOlap::TRangesBuilder ranges({ { "key", type }, { "suffix", type } }, arrowSchema);
+            ranges.AddRange(TSerializedTableRange({ lower }, true, {}, false));
+            auto filter = ranges.Finish();
+            UNIT_ASSERT_C(filter.IsSuccess(), filter.GetErrorMessage());
+            UNIT_ASSERT_VALUES_EQUAL(filter->Size(), 1);
+            const auto& from = filter->begin()->GetPredicateFrom();
+            UNIT_ASSERT_VALUES_EQUAL(from.NumColumns(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                from.GetSortableBatchPosition().GetSorting()->GetLogicalTypes().front().IsDecimalNumericComparisonEnabled(), numeric);
+            const NArrow::NMerger::TSortableBatchPosition position(batch, 0, false, { type, type });
+            UNIT_ASSERT_VALUES_EQUAL(filter->CheckPoint(position), numeric);
+        }
+    }
+
     Y_UNIT_TEST(TRangesBuilder_ExclusiveOpenToWithNullSecondKeyColumn) {
         using NOlap::TRangesBuilder;
 

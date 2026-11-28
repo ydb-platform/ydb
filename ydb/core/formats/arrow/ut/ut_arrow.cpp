@@ -481,6 +481,26 @@ std::vector<TDataRow> TestRows() {
     return rows;
 }
 
+const std::vector<std::pair<TString, TTypeInfo>>& MakeTable1000Schema() {
+    static const auto schema = [] {
+        std::vector<std::pair<TString, TTypeInfo>> result;
+        for (const auto& column : TDataRow::MakeYdbSchema()) {
+            if (column.first == "i8" || column.first == "i16" || column.first == "i32") {
+                result.emplace_back(column);
+            }
+        }
+
+        return result;
+    }();
+
+    return schema;
+}
+
+const std::vector<TTypeInfo>& MakeTable1000Types() {
+    static const auto types = NArrow::ColumnTypes(MakeTable1000Schema());
+    return types;
+}
+
 std::shared_ptr<arrow::Table> MakeTable1000() {
     TDataRowTableBuilder builder;
 
@@ -545,7 +565,7 @@ NArrow::NMerger::TCursor MakeSingleUi64CellTableCursor(const TString& columnName
     std::shared_ptr<arrow::Table> table =
         arrow::Table::Make(arrow::schema({ arrow::field(columnName, arrow::uint64()) }), { NArrow::MakeUI64Array(value, 1) });
 
-    return NArrow::NMerger::TCursor{table, 0, {columnName}};
+    return NArrow::NMerger::TCursor{ table, 0, { { columnName, TTypeInfo(NTypeIds::Uint64) } } };
 }
 
 THashMap<ui64, ui32> CountValues(const std::shared_ptr<arrow::UInt64Array>& array) {
@@ -871,7 +891,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1000);
         UNIT_ASSERT(!CheckSorted1000(batch));
 
-        auto sortPermutation = NArrow::MakeSortPermutation(batch, table->schema(), false);
+        auto sortPermutation = NArrow::MakeSortPermutation(batch, table->schema(), MakeTable1000Types(), false);
 
         auto res = arrow::compute::Take(batch, sortPermutation);
         UNIT_ASSERT(res.ok());
@@ -895,9 +915,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
-            const std::vector<std::string> vColumns = { batch->schema()->field(0)->name() };
+            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { MakeTable1000Schema().front() };
             auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
-                batch->schema(), batch->schema(), false, vColumns, std::nullopt, std::nullopt);
+                MakeTable1000Schema(), batch->schema(), false, versionSchema, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -905,7 +925,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
             sorted = builder.Finalize();
         }
         UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), 601);
-        UNIT_ASSERT(NArrow::IsSorted(sorted, batch->schema()));
+        UNIT_ASSERT(NArrow::IsSorted(sorted, batch->schema(), MakeTable1000Types()));
         UNIT_ASSERT(CheckSorted(sorted));
     }
 
@@ -923,9 +943,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
-            const std::vector<std::string> vColumns = { batch->schema()->field(0)->name() };
+            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { MakeTable1000Schema().front() };
             auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
-                batch->schema(), batch->schema(), true, vColumns, std::nullopt, std::nullopt);
+                MakeTable1000Schema(), batch->schema(), true, versionSchema, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Reversed(0));
             }
@@ -933,7 +953,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
             sorted = builder.Finalize();
         }
         UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), 601);
-        UNIT_ASSERT(NArrow::IsSorted(sorted, batch->schema(), true));
+        UNIT_ASSERT(NArrow::IsSorted(sorted, batch->schema(), MakeTable1000Types(), true));
         UNIT_ASSERT(CheckSorted(sorted, true));
     }
 
@@ -950,9 +970,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
-            const std::vector<std::string> vColumns = { "snap" };
+            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
             auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
-                batch->schema(), batches[0]->schema(), false, vColumns, std::nullopt, std::nullopt);
+                MakeTable1000Schema(), batches[0]->schema(), false, versionSchema, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -962,7 +982,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), 1000);
         UNIT_ASSERT(CheckSorted1000(sorted));
-        UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batch->schema()));
+        UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batch->schema(), MakeTable1000Types()));
 
         auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted->GetColumnByName("snap")));
         UNIT_ASSERT_VALUES_EQUAL(counts[0], 200);
@@ -987,9 +1007,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
-            const std::vector<std::string> vColumns = { "snap" };
+            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
             auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
-                batch->schema(), batches[0]->schema(), false, vColumns, maxVersionCursor, uncommittedVersionCursor);
+                MakeTable1000Schema(), batches[0]->schema(), false, versionSchema, maxVersionCursor, uncommittedVersionCursor);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -999,7 +1019,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), 600);
         UNIT_ASSERT(CheckSorted1000(sorted));
-        UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batch->schema()));
+        UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batch->schema(), MakeTable1000Types()));
 
         auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted->GetColumnByName("snap")));
         UNIT_ASSERT_VALUES_EQUAL(counts[0], 200);
@@ -1015,8 +1035,6 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
                                   ->AddColumn(batchesByKey[i]->num_columns(), "key", NArrow::MakeUI64Array(i, batchesByKey[i]->num_rows()))
                                   .ValueOrDie();
         }
-
-        std::shared_ptr<arrow::Schema> sortingSchema = std::make_shared<arrow::Schema>(*batchesByKey.front()->schema());
 
         std::shared_ptr<arrow::RecordBatch> maxVersion =
             arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
@@ -1034,9 +1052,10 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
-            const std::vector<std::string> vColumns = { "snap" };
+            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
             auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
-                sortingSchema, batches[0]->schema(), false, vColumns, maxVersionCursor, uncommittedVersionCursor);
+                std::vector<std::pair<TString, TTypeInfo>>{ { "key", TTypeInfo(NTypeIds::Uint64) } }, batches[0]->schema(), false, versionSchema,
+                maxVersionCursor, uncommittedVersionCursor);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -1045,7 +1064,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), 3);
-        UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batches[0]->schema()));
+        UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batches[0]->schema(), { TTypeInfo(NTypeIds::Uint64), TTypeInfo(NTypeIds::Uint64) }));
 
         {
             auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted->GetColumnByName("key")));

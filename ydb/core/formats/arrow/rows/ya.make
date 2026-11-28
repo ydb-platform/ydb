@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/scheme_types
     ydb/library/conclusion
     contrib/libs/apache/arrow
     ydb/library/actors/core

@@ -10,8 +10,8 @@ public:
         return kMinMaxClassName;
     }
 
-    static bool Skip(
-        NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op);
+    static bool Skip(const NArrow::NAccessor::TMinMax& chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue,
+        const NArrow::NSSA::TIndexCheckOperation& op, const NScheme::TTypeInfo& logicalType);
 
 private:
     using TBase = TSkipIndex;
@@ -21,7 +21,7 @@ private:
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override;
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
-        TChunkedBatchReader& reader, const ui32 recordsCount) const override;
+        TChunkedBatchReader& reader, const ui32 recordsCount, const TIndexInfo& indexInfo) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
 

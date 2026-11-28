@@ -22,6 +22,7 @@ public:
     
     constexpr TTypeInfo(const TTypeInfo& typeInfo)
         : TypeId(typeInfo.TypeId)
+        , DecimalNumericComparison(typeInfo.DecimalNumericComparison)
         , RawDesc(typeInfo.RawDesc)
     {}
 
@@ -52,12 +53,23 @@ public:
 
     constexpr TTypeInfo& operator=(const TTypeInfo& other) {
         TypeId = other.TypeId;
+        DecimalNumericComparison = other.DecimalNumericComparison;
         RawDesc = other.RawDesc;
         return *this;
     }
 
     constexpr TTypeId GetTypeId() const {
         return TypeId;
+    }
+
+    constexpr TTypeInfo WithDecimalNumericComparison(bool enabled) const {
+        TTypeInfo result(*this);
+        result.DecimalNumericComparison = enabled && TypeId == NTypeIds::Decimal;
+        return result;
+    }
+
+    constexpr bool IsDecimalNumericComparisonEnabled() const {
+        return DecimalNumericComparison;
     }
 
     constexpr const NKikimr::NPg::ITypeDesc* GetPgTypeDesc() const {
@@ -83,6 +95,8 @@ private:
     {}
 
     TTypeId TypeId = 0;
+    // In-memory ColumnShard ordering. SQL type equality and serialization use TypeId and the type parameters.
+    bool DecimalNumericComparison = false;
 
     // Storage for parameters of types
     union {

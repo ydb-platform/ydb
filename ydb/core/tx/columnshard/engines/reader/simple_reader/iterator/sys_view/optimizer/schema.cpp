@@ -2,6 +2,7 @@
 #include "schema.h"
 
 #include <ydb/core/sys_view/common/registry.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/sys_view_schema.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NOptimizer {
 
@@ -10,16 +11,7 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TSchemeSha
     writer.Append<ui64>(pathId.GetRawValue());
     writer.Append<ui64>(tabletId);
     writer.Append<ui64>(taskId);
-    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
-}
-
-const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {
-    static std::shared_ptr<arrow::Schema> schema = []() {
-        arrow::FieldVector fields = { std::make_shared<arrow::Field>("PathId", arrow::uint64()),
-            std::make_shared<arrow::Field>("TabletId", arrow::uint64()), std::make_shared<arrow::Field>("TaskId", arrow::uint64()) };
-        return std::make_shared<arrow::Schema>(std::move(fields));
-    }();
-    return schema;
+    return NCommon::BuildSysViewPKRow<NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats>(writer.Finish());
 }
 
 TIndexInfo TSchemaAdapter::GetIndexInfo(

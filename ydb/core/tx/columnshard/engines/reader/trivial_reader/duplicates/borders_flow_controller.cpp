@@ -92,7 +92,7 @@ TString TBordersFlowController::DebugString() const {
 
 void TBordersFlowController::AddBatch(const TBordersBatch& batch) {
     for (const auto& border : batch.GetBorders()) {
-        auto borderKey = NCommon::TReplaceKeyAdapter(NArrow::TSimpleRow{ border.GetKey()->MakeRecordBatch(), 0 }, IsReversed());
+        auto borderKey = NCommon::TReplaceKeyAdapter(NArrow::TSimpleRow(*border.GetKey()), IsReversed());
         YDB_LOG_VERIFY(WaitingBorders.erase(borderKey) == 1);
         YDB_LOG_VERIFY(ReadyBorders.insert(borderKey).second);
     }

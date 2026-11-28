@@ -51,7 +51,8 @@ protected:
         }
         return NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(GetIndexImpl(index)));
     }
-    virtual TMinMax DoGetMinMaxScalars() const override;
+
+    virtual TMinMax DoGetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const override;
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override;
     virtual ui32 DoGetNullsCount() const override {
         // Outside the single-null case, positions do not reference null entries.

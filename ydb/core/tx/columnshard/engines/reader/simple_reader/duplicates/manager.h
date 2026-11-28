@@ -113,7 +113,6 @@ private:
 
     const std::shared_ptr<ISnapshotSchema> LastSchema;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
-    const std::shared_ptr<arrow::Schema> PKSchema;
     const std::shared_ptr<NColumnShard::TSimpleDuplicateFilteringCounters> Counters;
     const TPortionIntervalTree Intervals;
     const std::shared_ptr<TPortionStore> Portions;

@@ -1,4 +1,5 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
@@ -16,8 +17,10 @@
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <array>
@@ -38,12 +41,14 @@ constexpr i32 ExpectedMaxColumnValue = TestValueColumnData.back();
 struct TTestSchemaOptions {
     bool WithMinMaxIndex = false;
     bool WithBloomIndex = false;
+    bool DecimalValue = false;
+    bool NumericComparison = false;
 };
 
-void FillDefaultSchemaProto(NKikimrSchemeOp::TColumnTableSchema& proto, const ui64 presetId) {
+void FillDefaultSchemaProto(NKikimrSchemeOp::TColumnTableSchema& proto, const ui64 presetId, const NScheme::TTypeInfo& valueType) {
     const std::vector<NArrow::NTest::TTestColumn> columns = {
         NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
-        NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Int32)),
+        NArrow::NTest::TTestColumn("value", valueType),
     };
     *proto.MutableColumns()->Add() = columns[0].CreateColumn(PkColumnId);
     *proto.MutableColumns()->Add() = columns[1].CreateColumn(ValueColumnId);
@@ -53,10 +58,11 @@ void FillDefaultSchemaProto(NKikimrSchemeOp::TColumnTableSchema& proto, const ui
 
 ISnapshotSchema::TPtr MakeTestSchema(const ui64 presetId, const TTestSchemaOptions& options) {
     auto storages = TTestStoragesManager::GetInstance();
-    auto cache = std::make_shared<TSchemaObjectsCache>();
+    auto cache = std::make_shared<TSchemaObjectsCache>(options.NumericComparison);
 
     NKikimrSchemeOp::TColumnTableSchema proto;
-    FillDefaultSchemaProto(proto, presetId);
+    FillDefaultSchemaProto(
+        proto, presetId, options.DecimalValue ? NScheme::TTypeInfo(NScheme::TDecimalType(22, 0)) : NScheme::TTypeInfo(NScheme::NTypeIds::Int32));
 
     if (options.WithMinMaxIndex) {
         *proto.AddIndexes() = NIndexes::TIndexMetaContainer(
@@ -64,6 +70,7 @@ ISnapshotSchema::TPtr MakeTestSchema(const ui64 presetId, const TTestSchemaOptio
                 ValueColumnId, NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>())))
                                   .SerializeToProto();
     }
+
     if (options.WithBloomIndex) {
         NIndexes::TRequestSettings bloomRequest;
         bloomRequest.FalsePositiveProbability = NIndexes::NDefaults::FalsePositiveProbability;
@@ -86,6 +93,26 @@ std::shared_ptr<arrow::RecordBatch> MakeTestBatch() {
     UNIT_ASSERT(valueBuilder.AppendValues({ TestValueColumnData[0], TestValueColumnData[1], TestValueColumnData[2] }).ok());
     auto schema = arrow::schema({ arrow::field("pk", arrow::uint64()), arrow::field("value", arrow::int32()) });
     return arrow::RecordBatch::Make(schema, 3, { pkBuilder.Finish().ValueOrDie(), valueBuilder.Finish().ValueOrDie() });
+}
+
+std::shared_ptr<arrow::Array> MakeDecimalArray(const std::vector<std::optional<i64>>& values) {
+    arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
+    for (const auto value : values) {
+        if (!value) {
+            UNIT_ASSERT(builder.AppendNull().ok());
+            continue;
+        }
+
+        std::array<ui8, 16> bytes;
+        bytes.fill(*value < 0 ? 0xff : 0);
+        for (ui32 i = 0; i < sizeof(i64); ++i) {
+            bytes[i] = (static_cast<ui64>(*value) >> (i * 8)) & 0xff;
+        }
+
+        UNIT_ASSERT(builder.Append(bytes.data()).ok());
+    }
+
+    return builder.Finish().ValueOrDie();
 }
 
 std::shared_ptr<NChunks::TChunkPreparation> BuildColumnChunkFromArray(
@@ -210,6 +237,101 @@ bool IsMemoryTierAvailable() {
 }
 
 }   // namespace
+
+Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
+    Y_UNIT_TEST(MinMaxIndexBuildsNumericBoundsAndPrunesPredicates) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        const auto schema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true, .NumericComparison = true });
+        const auto& indexInfo = schema->GetIndexInfo();
+        const auto meta = std::static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(indexInfo.GetIndexVerified(MinMaxIndexId).GetObjectPtr());
+        const auto nulls = MakeDecimalArray({ std::nullopt, std::nullopt });
+        const auto first = MakeDecimalArray({ 1, 256 });
+        const auto second = MakeDecimalArray({ -1, 0, std::nullopt });
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks = {
+            { ValueColumnId,
+                { BuildColumnChunkFromArray(*schema, ValueColumnId, nulls), BuildColumnChunkFromArray(*schema, ValueColumnId, first),
+                    BuildColumnChunkFromArray(*schema, ValueColumnId, second), BuildColumnChunkFromArray(*schema, ValueColumnId, nulls) } },
+        };
+        const auto index = meta->BuildIndexOptional(chunks, 2 * nulls->length() + first->length() + second->length(), indexInfo);
+        UNIT_ASSERT_C(index.IsSuccess(), index.GetErrorMessage());
+        UNIT_ASSERT_VALUES_EQUAL(index.GetResult().size(), 1);
+        const auto& payload = index.GetResult().front()->GetData();
+        const auto bounds = NArrow::NAccessor::TMinMax::FromBinaryString(payload, first->type());
+        UNIT_ASSERT(bounds.Min()->Equals(second->GetScalar(0).ValueOrDie()));
+        UNIT_ASSERT(bounds.Max()->Equals(first->GetScalar(1).ValueOrDie()));
+
+        using EOp = NArrow::NSSA::TIndexCheckOperation::EOperation;
+        const auto requests = MakeDecimalArray({ -2, -1, 255, 256, 257 });
+        const std::vector<std::pair<EOp, std::array<bool, 5>>> cases = {
+            { EOp::Equals, { false, true, true, true, false } },
+            { EOp::Less, { false, false, true, true, true } },
+            { EOp::LessOrEqual, { false, true, true, true, true } },
+            { EOp::Greater, { true, true, true, false, false } },
+            { EOp::GreaterOrEqual, { true, true, true, true, false } },
+        };
+        for (const auto& [op, expected] : cases) {
+            for (ui32 i = 0; i < expected.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(meta->CheckValue(payload, std::nullopt, requests->GetScalar(i).ValueOrDie(),
+                                             NArrow::NSSA::TIndexCheckOperation(op, true), indexInfo), expected[i]);
+            }
+        }
+
+        const auto legacySchema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true });
+        for (const auto& [op, expected] : cases) {
+            for (ui32 i = 0; i < expected.size(); ++i) {
+                UNIT_ASSERT(meta->CheckValue(payload, std::nullopt, requests->GetScalar(i).ValueOrDie(),
+                    NArrow::NSSA::TIndexCheckOperation(op, true), legacySchema->GetIndexInfo()));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(MinMaxIndexPreservesLegacyOrderAndPayload) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        const auto schema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true });
+        const auto& indexInfo = schema->GetIndexInfo();
+        const auto meta = std::static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(indexInfo.GetIndexVerified(MinMaxIndexId).GetObjectPtr());
+        const auto values = MakeDecimalArray({ 1, 256 });
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks = {
+            { ValueColumnId, { BuildColumnChunkFromArray(*schema, ValueColumnId, values) } },
+        };
+        const auto index = meta->BuildIndexOptional(chunks, values->length(), indexInfo);
+        UNIT_ASSERT_C(index.IsSuccess(), index.GetErrorMessage());
+        UNIT_ASSERT_VALUES_EQUAL(index.GetResult().size(), 1);
+        const auto& payload = index.GetResult().front()->GetData();
+        auto legacy = NArrow::NAccessor::TMinMax::MakeNull(values->type());
+        legacy.Min() = values->GetScalar(1).ValueOrDie();
+        legacy.Max() = values->GetScalar(0).ValueOrDie();
+        UNIT_ASSERT_VALUES_EQUAL(payload, legacy.ToBinaryString());
+        UNIT_ASSERT_VALUES_EQUAL(payload[0], '1');
+
+        const NArrow::NSSA::TIndexCheckOperation equals(NArrow::NSSA::TIndexCheckOperation::EOperation::Equals, true);
+        const auto requests = MakeDecimalArray({ 1, 256, 257 });
+        UNIT_ASSERT(meta->CheckValue(payload, std::nullopt, requests->GetScalar(0).ValueOrDie(), equals, indexInfo));
+        UNIT_ASSERT(meta->CheckValue(payload, std::nullopt, requests->GetScalar(1).ValueOrDie(), equals, indexInfo));
+        UNIT_ASSERT(!meta->CheckValue(payload, std::nullopt, requests->GetScalar(2).ValueOrDie(), equals, indexInfo));
+    }
+
+    Y_UNIT_TEST(NumericDecimalDoesNotPruneLegacyMinMaxPayload) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        const auto numericSchema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true, .NumericComparison = true });
+        const auto index = std::static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(
+            numericSchema->GetIndexInfo().GetIndexVerified(MinMaxIndexId).GetObjectPtr());
+        const auto values = MakeDecimalArray({ 256, 1, 255 });
+        auto bounds = NArrow::NAccessor::TMinMax::MakeNull(values->type());
+        bounds.Min() = values->GetScalar(0).ValueOrDie();
+        bounds.Max() = values->GetScalar(1).ValueOrDie();
+        const auto payload = bounds.ToBinaryString();
+        const auto request = values->GetScalar(2).ValueOrDie();
+        const NArrow::NSSA::TIndexCheckOperation operation(NArrow::NSSA::TIndexCheckOperation::EOperation::Greater, true);
+
+        const auto& binaryValues = static_cast<const arrow::FixedSizeBinaryArray&>(*values);
+        UNIT_ASSERT(binaryValues.GetView(1) < binaryValues.GetView(2));
+        UNIT_ASSERT(index->CheckValue(payload, std::nullopt, request, operation, numericSchema->GetIndexInfo()));
+    }
+}
 
 Y_UNIT_TEST_SUITE(TReuseIndexChunksTests) {
     Y_UNIT_TEST(PlacesInplaceIndexChunk) {

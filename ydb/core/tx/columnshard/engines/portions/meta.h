@@ -57,6 +57,7 @@ public:
 class TPortionMeta {
 private:
     std::shared_ptr<arrow::Schema> PKSchema;
+    YDB_READONLY_DEF(std::vector<NScheme::TTypeInfo>, PKTypes);
     NArrow::TSimpleRowContent FirstPKRow;
     NArrow::TSimpleRowContent LastPKRow;
     YDB_READONLY_DEF(TString, TierName);
@@ -73,7 +74,7 @@ private:
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;
     friend class TCompactedPortionInfo;
-    TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max);
+    TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max, const std::vector<NScheme::TTypeInfo>& pkTypes);
     TSnapshot RecordSnapshotMin;
     TSnapshot RecordSnapshotMax;
 

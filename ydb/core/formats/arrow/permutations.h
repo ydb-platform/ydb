@@ -9,9 +9,10 @@
 
 namespace NKikimr::NArrow {
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique);
+std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::shared_ptr<arrow::Schema>& sortingKey, const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool andUnique);
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& columns, const bool andUnique);
+std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
+    const std::vector<std::shared_ptr<arrow::Array>>& columns, const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool andUnique);
 
 }   // namespace NKikimr::NArrow

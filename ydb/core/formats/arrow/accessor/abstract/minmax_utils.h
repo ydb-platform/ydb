@@ -1,10 +1,16 @@
 #pragma once
 
+#include <ydb/library/formats/arrow/switch/compare.h>
+
 #include <arrow/datum.h>
 #include <library/cpp/json/writer/json_value.h>
 namespace NKikimr::NArrow::NAccessor {
 
 struct TMinMax {
+private:
+    TComparator::EComparisonOrder ComparisonOrder = TComparator::EComparisonOrder::Default;
+
+public:
     arrow::StructScalar MinMax;
     TMinMax(arrow::StructScalar minmax)
         : MinMax(minmax) 
@@ -35,26 +41,17 @@ struct TMinMax {
         return MinMax.value[1];
     }
 
-    void UniteWith(TMinMax other);
+    void UniteWith(const TMinMax& other, const NScheme::TTypeInfo& logicalType);
+
+    std::partial_ordering CompareWithMin(const std::shared_ptr<arrow::Scalar>& value, const NScheme::TTypeInfo& logicalType) const;
+    std::partial_ordering CompareWithMax(const std::shared_ptr<arrow::Scalar>& value, const NScheme::TTypeInfo& logicalType) const;
 
     static TMinMax FromBinaryString(std::string_view string, const std::shared_ptr<arrow::DataType>& fieldType);
 
-    static TMinMax Compute(std::shared_ptr<arrow::Array> arr);
-    static TMinMax Compute(std::shared_ptr<arrow::ChunkedArray> arr);
+    static TMinMax Compute(const std::shared_ptr<arrow::Array>& arr, const NScheme::TTypeInfo& logicalType);
+    static TMinMax Compute(const std::shared_ptr<arrow::ChunkedArray>& arr, const NScheme::TTypeInfo& logicalType);
 
     TString ToBinaryString() const;
 };
-
-namespace NArrowCompare {
-
-bool Less(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
-
-bool Greater(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
-
-bool LessOrEqual(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
-
-bool GreaterOrEqual(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
-
-}   // namespace NArrowCompare
 
 }   // namespace NKikimr::NArrow::NAccessor

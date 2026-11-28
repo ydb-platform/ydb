@@ -399,6 +399,7 @@ private:
     std::shared_ptr<TShardDataStats> DataStats;
     ui64 TabletId = 0;
     bool GenerateInternalPathId;
+    bool EnableDecimalNumericComparison = false;
     std::optional<TUnifiedPathId> TabletPathId;
     TInternalPathId MaxInternalPathId;
 

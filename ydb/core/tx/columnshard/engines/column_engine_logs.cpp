@@ -220,12 +220,12 @@ private:
 
             const auto& leftBorder =
                 from.IsAll() ? TBorder::MakeLeft(TPositionView::MakeLeftInf(), false)
-                             : TBorder::MakeLeft(
-                                   TPositionView(NArrow::TSimpleRow(from.GetSortableBatchPosition().MakeRecordBatch(), 0)), from.IsInclude());
+                             : TBorder::MakeLeft(TPositionView(NArrow::TSimpleRow(from.GetSortableBatchPosition().MakeRecordBatch(), 0,
+                                                     from.GetSortableBatchPosition().GetSorting()->GetLogicalTypes())), from.IsInclude());
             const auto& rightBorder =
-                to.IsAll()
-                    ? TBorder::MakeRight(TPositionView::MakeRightInf(), false)
-                    : TBorder::MakeRight(TPositionView(NArrow::TSimpleRow(to.GetSortableBatchPosition().MakeRecordBatch(), 0)), to.IsInclude());
+                to.IsAll() ? TBorder::MakeRight(TPositionView::MakeRightInf(), false)
+                           : TBorder::MakeRight(TPositionView(NArrow::TSimpleRow(to.GetSortableBatchPosition().MakeRecordBatch(), 0,
+                                                    to.GetSortableBatchPosition().GetSorting()->GetLogicalTypes())), to.IsInclude());
 
             intervals.EachIntersection(leftBorder, rightBorder, collector);
         }

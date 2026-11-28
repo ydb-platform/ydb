@@ -148,7 +148,8 @@ private:
         const TString& name = cache->GetStringCache(col.GetName());
         const bool notNull = col.HasNotNull() ? col.GetNotNull() : false;
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
-        return NTable::TColumn(name, id, typeInfoMod.TypeInfo, cache->GetStringCache(typeInfoMod.TypeMod), notNull);
+        const auto type = typeInfoMod.TypeInfo.WithDecimalNumericComparison(cache->GetEnableDecimalNumericComparison());
+        return NTable::TColumn(name, id, type, cache->GetStringCache(typeInfoMod.TypeMod), notNull);
     }
 
     TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, const std::shared_ptr<IStoragesManager>& operators,
@@ -476,6 +477,10 @@ public:
     /// Traditional Primary Key (includes uniqueness, search and sorting logic)
     const std::vector<TNameTypeInfo>& GetPrimaryKeyColumns() const {
         return PKColumns;
+    }
+
+    std::vector<NScheme::TTypeInfo> GetPrimaryKeyTypes() const {
+        return NArrow::ColumnTypes(PKColumns);
     }
 
     const THashMap<ui32, TNameTypeInfo>& GetColumns() const {

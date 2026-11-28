@@ -31,8 +31,8 @@ TFilterBuildingGuard::TFilterBuildingGuard()
 }
 
 TBuildFilterContext::TBuildFilterContext(const TActorId owner, const std::shared_ptr<const TAtomicCounter>& abortionFlag,
-    const TSnapshot& maxVersion, TPortionIndex&& portions, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
-    const std::shared_ptr<ISnapshotSchema>& snapshotSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
+    const TSnapshot& maxVersion, TPortionIndex&& portions, const TFieldByColumn& columns, const std::shared_ptr<ISnapshotSchema>& snapshotSchema,
+    const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
     const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory)
@@ -41,7 +41,6 @@ TBuildFilterContext::TBuildFilterContext(const TActorId owner, const std::shared
     , MaxVersion(maxVersion)
     , RequiredPortions(std::move(portions))
     , Columns(columns)
-    , PKSchema(pkSchema)
     , SnapshotSchema(snapshotSchema)
     , ColumnDataManager(columnDataManager)
     , DataAccessorsManager(dataAccessorsManager)
@@ -51,7 +50,6 @@ TBuildFilterContext::TBuildFilterContext(const TActorId owner, const std::shared
 {
     YDB_LOG_VERIFY(Owner);
     YDB_LOG_VERIFY(Columns.size());
-    YDB_LOG_VERIFY(PKSchema);
     YDB_LOG_VERIFY(SnapshotSchema);
     YDB_LOG_VERIFY(ColumnDataManager);
     YDB_LOG_VERIFY(DataAccessorsManager);

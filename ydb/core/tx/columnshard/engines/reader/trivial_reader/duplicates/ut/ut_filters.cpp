@@ -38,31 +38,22 @@ std::shared_ptr<arrow::RecordBatch> MakeTestBatch(const std::vector<int32_t>& ke
     return NColumnShard::MakeTestBatch<arrow::Int32Type, arrow::Int32Type>({ "key", "version" }, keys, versions);
 }
 
-std::shared_ptr<arrow::Schema> MakeKeySchema() {
-    return arrow::schema({ arrow::field("key", arrow::int32()) });
-}
-
 std::shared_ptr<arrow::Schema> MakeDataSchema() {
     return arrow::schema({ arrow::field("key", arrow::int32()) });
 }
 
-std::vector<std::string> GetVersionColumns() {
-    return { "version" };
-}
-
 // Helper to create a TBatchIterator from a batch with a given sourceId
 NArrow::NMerger::TBatchIterator MakeIterator(const std::shared_ptr<arrow::RecordBatch>& batch, ui64 sourceId) {
-    auto keySchema = MakeKeySchema();
-    auto dataSchema = MakeDataSchema();
-    return NArrow::NMerger::TBatchIterator(batch, nullptr, *keySchema, *dataSchema, GetVersionColumns(), sourceId);
+    return NArrow::NMerger::TBatchIterator(batch, nullptr, { { "key", NScheme::TTypeInfo(NScheme::NTypeIds::Int32) } }, *MakeDataSchema(),
+        { { "version", NScheme::TTypeInfo(NScheme::NTypeIds::Int32) } }, sourceId, NArrow::NMerger::TIterationOrder::Forward(0));
 }
 
 // Helper to create TEvRequestFilter::TPtr for testing
 TEvRequestFilter::TPtr MakeTestRequest(ui64 portionId, ui64 recordsCount, const std::shared_ptr<IFilterSubscriber>& subscriber) {
     // Create a minimal arrow batch for TSimpleRow construction
     auto batch = MakeTestBatch({ 0 }, { 0 });
-    NArrow::TSimpleRow minPK(batch, 0);
-    NArrow::TSimpleRow maxPK(batch, 0);
+    NArrow::TSimpleRow minPK(batch, 0, std::vector<NScheme::TTypeInfo>(2, NScheme::TTypeInfo(NScheme::NTypeIds::Int32)));
+    NArrow::TSimpleRow maxPK(batch, 0, std::vector<NScheme::TTypeInfo>(2, NScheme::TTypeInfo(NScheme::NTypeIds::Int32)));
 
     auto abortionFlag = std::make_shared<TAtomicCounter>(0);
 

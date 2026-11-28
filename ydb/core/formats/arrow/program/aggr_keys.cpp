@@ -426,7 +426,7 @@ private:
         keyBuilders.resize(KeyColumns.size());
         ui32 keysCount = 0;
         {
-            NMiniKQL::TRobinHoodHashFixedMap<TReplaceKeyHashable, ui32> keyToIndex(countCapacity);
+            NMiniKQL::TRobinHoodHashFixedMap<TPhysicalHashKey, ui32> keyToIndex(countCapacity);
             for (ui32 sourceIdx = 0; sourceIdx < sources.size(); ++sourceIdx) {
                 auto& source = sources[sourceIdx];
                 YDB_LOG_VERIFY(source);
@@ -452,7 +452,7 @@ private:
                 }
                 YDB_LOG_VERIFY(count);
                 decoder[sourceIdx].resize(*count);
-                TReplaceKeyHashable pos(keyArrays, 0, types);
+                TPhysicalHashKey pos(keyArrays, 0, types);
                 while (!pos.IsFinished()) {
                     bool isNew;
                     auto* it = keyToIndex.Insert(pos, isNew);

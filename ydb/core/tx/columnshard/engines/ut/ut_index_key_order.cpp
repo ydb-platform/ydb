@@ -105,13 +105,11 @@ void AssertSameOrder(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& 
     for (const auto& key : keys) {
         cells.push_back(ToCells(key, *batch->schema()));
     }
-    std::vector<NScheme::TTypeInfoOrder> types;
-    for (const auto& column : columns) {
-        types.emplace_back(column.second);
-    }
+    const auto logicalTypes = NArrow::ColumnTypes(columns);
+    const std::vector<NScheme::TTypeInfoOrder> types(logicalTypes.begin(), logicalTypes.end());
     for (ui32 i = 0; i < keys.size(); ++i) {
         for (ui32 j = 0; j < keys.size(); ++j) {
-            auto shardOrder = NArrow::TSimpleRowViewV0(keys[i]).Compare(NArrow::TSimpleRowViewV0(keys[j]), *batch->schema());
+            auto shardOrder = NArrow::TSimpleRowViewV0(keys[i]).Compare(NArrow::TSimpleRowViewV0(keys[j]), *batch->schema(), logicalTypes);
             UNIT_ASSERT(shardOrder.IsSuccess());
             const int localDbOrder = CompareTypedCellVectors(cells[i].data(), cells[j].data(), types.data(), types.size());
             const std::partial_ordering expected = shardOrder.DetachResult();
@@ -133,7 +131,7 @@ void AssertSameOrder(const NScheme::TTypeInfo& type, const TKeyValues& values) {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TIndexKeyOrder) {
-    // Decimal is left out until C10: local-db compares it as a number, the shard as bytes
+    // With the default flag, Decimal keys still use byte ordering on the shard.
     Y_UNIT_TEST(LocalDbOrdersEveryKeyTypeAsTheShard) {
         using namespace NScheme::NTypeIds;
         AssertSameOrder(NScheme::TTypeInfo(Bool), TKeyValues().AddBytes(TString(1, '\0')).AddBytes(TString(1, '\1')));

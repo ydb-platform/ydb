@@ -63,7 +63,8 @@ public:
 
     void AppendPointTo(std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders) const {
         YDB_LOG_VERIFY(Object);
-        Object->Batch.BuildSortingCursor().AppendPositionTo(builders, nullptr);
+        YDB_LOG_VERIFY(builders.size() >= NumColumns());
+        Object->Batch.BuildSortingCursor().AppendPositionTo({ builders.data(), NumColumns() }, nullptr);
     }
 
     bool IsAll() const {

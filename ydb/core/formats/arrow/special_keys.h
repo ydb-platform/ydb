@@ -19,7 +19,7 @@ protected:
 
     bool DeserializeFromString(const TString& data);
 
-    TSimpleRow GetKeyByIndex(const ui32 position) const;
+    TSimpleRow GetKeyByIndex(const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes) const;
 
     TSpecialKeys() = default;
     TSpecialKeys(const std::shared_ptr<arrow::RecordBatch>& data) {
@@ -43,19 +43,19 @@ public:
         , Rows(rows) {
     }
 
-    TSimpleRow GetFirst(const bool reverse = false) const {
+    TSimpleRow GetFirst(const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool reverse = false) const {
         if (reverse) {
-            return Rows.GetLast(Schema);
+            return Rows.GetLast(Schema, logicalTypes);
         } else {
-            return Rows.GetFirst(Schema);
+            return Rows.GetFirst(Schema, logicalTypes);
         }
     }
 
-    TSimpleRow GetLast(const bool reverse = false) const {
+    TSimpleRow GetLast(const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool reverse = false) const {
         if (reverse) {
-            return Rows.GetFirst(Schema);
+            return Rows.GetFirst(Schema, logicalTypes);
         } else {
-            return Rows.GetLast(Schema);
+            return Rows.GetLast(Schema, logicalTypes);
         }
     }
 
@@ -91,9 +91,14 @@ private:
 
 public:
     explicit TFirstLastSpecialKeys(const TString& data);
-    explicit TFirstLastSpecialKeys(const TSimpleRow& firstRow, const TSimpleRow& lastRow, const std::shared_ptr<arrow::Schema>& schema)
-        : TBase(std::vector<TString>({ firstRow.GetData(), lastRow.GetData() }), schema) {
+
+    explicit TFirstLastSpecialKeys(const TSimpleRow& firstRow, const TSimpleRow& lastRow)
+        : TBase(std::vector<TString>({ firstRow.GetData(), lastRow.GetData() }), firstRow.GetSchema())
+    {
+        YDB_LOG_VERIFY(firstRow.GetSchema()->Equals(*lastRow.GetSchema()));
+        YDB_LOG_VERIFY(firstRow.GetLogicalTypes() == lastRow.GetLogicalTypes());
     }
+
     explicit TFirstLastSpecialKeys(const TString& firstRow, const TString& lastRow, const std::shared_ptr<arrow::Schema>& schema)
         : TBase(std::vector<TString>({ firstRow, lastRow }), schema) {
     }
@@ -113,11 +118,12 @@ protected:
     }
 
 public:
-    TSimpleRow GetMin() const {
-        return GetFirst();
+    TSimpleRow GetMin(const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+        return GetFirst(logicalTypes);
     }
-    TSimpleRow GetMax() const {
-        return GetLast();
+
+    TSimpleRow GetMax(const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+        return GetLast(logicalTypes);
     }
 
     explicit TMinMaxSpecialKeys(const TString& data);
@@ -125,7 +131,8 @@ public:
         : TBase(data, schema) {
     }
 
-    explicit TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema);
+    explicit TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema,
+        const std::vector<NScheme::TTypeInfo>& logicalTypes);
 };
 
 }   // namespace NKikimr::NArrow

@@ -13,9 +13,8 @@ std::optional<ui64> TTrivialArray::DoGetRawSize() const {
     return NArrow::GetArrayDataSize(Array);
 }
 
-
-TMinMax TTrivialArray::DoGetMinMaxScalars() const {
-    return TMinMax::Compute(Array);
+TMinMax TTrivialArray::DoGetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const {
+    return TMinMax::Compute(Array, logicalType);
 }
 
 ui32 TTrivialArray::DoGetValueRawBytes() const {
@@ -91,10 +90,9 @@ std::optional<ui64> TTrivialChunkedArray::DoGetRawSize() const {
     return result;
 }
 
-TMinMax TTrivialChunkedArray::DoGetMinMaxScalars() const {
-    return TMinMax::Compute(Array);
+TMinMax TTrivialChunkedArray::DoGetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const {
+    return TMinMax::Compute(Array, logicalType);
 }
-
 
 ui32 TTrivialChunkedArray::DoGetValueRawBytes() const {
     ui32 result = 0;

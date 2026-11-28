@@ -38,7 +38,8 @@ private:
 
 public:
     IMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
-        : IncomingPosition(incoming.GetContainer(), 0, actualSchema->GetPKColumnNames(), incoming->schema()->field_names(), false)
+        : IncomingPosition(
+              incoming.GetContainer(), 0, actualSchema->GetIndexInfo().GetPrimaryKeyColumns(), incoming->schema()->field_names(), false)
         , Schema(actualSchema)
         , IncomingData(incoming)
     {
@@ -60,14 +61,8 @@ private:
 
     virtual TYdbConclusionStatus OnEqualKeys(
         const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
-        std::vector<NScheme::TTypeInfo> pkTypes;
-        for (auto&& nt : Schema->GetIndexInfo().GetPrimaryKeyColumns()) {
-            pkTypes.emplace_back(nt.second);
-        }
-
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED,
-            TStringBuilder() << "Conflict with existing key. "
-                             << exists.GetSorting()->DebugJson(exists.GetPosition(), pkTypes).GetStringRobust());
+            TStringBuilder() << "Conflict with existing key. " << exists.GetSorting()->DebugJson(exists.GetPosition()).GetStringRobust());
     }
 
     virtual TYdbConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {

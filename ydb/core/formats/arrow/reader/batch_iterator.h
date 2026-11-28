@@ -76,20 +76,20 @@ public:
     }
 
     template <class TDataContainer>
-    TBatchIterator(std::shared_ptr<TDataContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter, const arrow::Schema& keySchema,
-        const arrow::Schema& dataSchema, const std::vector<std::string>& versionColumnNames, const ui64 sourceId,
-        const TIterationOrder& order = TIterationOrder::Forward(0))
+    TBatchIterator(std::shared_ptr<TDataContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter,
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& keySchema, const arrow::Schema& dataSchema,
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& versionSchema, const ui64 sourceId, const TIterationOrder& order)
         : ControlPointFlag(false)
-        , KeyColumns(batch, 0, keySchema.field_names(), dataSchema.field_names(), order.GetIsReversed())
-        , VersionColumns(batch, 0, versionColumnNames, {}, false)
+        , KeyColumns(batch, 0, keySchema, dataSchema.field_names(), order.GetIsReversed())
+        , VersionColumns(batch, 0, versionSchema, {}, false)
         , RecordsCount(batch->num_rows())
         , ReverseSortKff(order.GetIsReversed() ? -1 : 1)
         , SourceId(sourceId)
-        , Filter(filter) {
+        , Filter(filter)
+    {
         YDB_LOG_VERIFY(batch);
         YDB_LOG_VERIFY(KeyColumns.IsSameSortingSchema(keySchema),
-            {"batch", KeyColumns.DebugJson()},
-            {"schema", keySchema.ToString()});
+            {"batch", KeyColumns.DebugJson()});
         YDB_LOG_VERIFY(KeyColumns.IsSameDataSchema(dataSchema),
             {"batch", KeyColumns.DebugJson()},
             {"schema", dataSchema.ToString()});

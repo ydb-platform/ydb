@@ -17,8 +17,6 @@
 
 #include <library/cpp/yt/system/atomic_object.h>
 
-#include <util/generic/hash_set.h>
-
 namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -86,9 +84,6 @@ private:
     // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
     TAtomicObject<std::string> DiscoveryToken_;
 
-    TAtomicObject<THashSet<std::string>> ProxyAddresses_;
-
-    void SetProxyAddresses(const std::vector<std::string>& addresses);
     bool IsKnownProxyAddress(TStringBuf address) const;
 
     std::vector<std::string> DiscoverProxiesViaHttp();

@@ -27,6 +27,12 @@ __all__ = [
     "TopicWriteResult",
     "TopicWriter",
     "TopicWriterAsyncIO",
+    "TopicWriterMulti",
+    "TopicWriterMultiAsyncIO",
+    "TopicWriterMultiSettings",
+    "TopicWriterPartitionChooser",
+    "TopicWriterPartitionByKeyKafka",
+    "TopicWriterPartitionByKeyBound",
     "TopicTxWriter",
     "TopicTxWriterAsyncIO",
     "TopicWriterInitInfo",
@@ -80,6 +86,17 @@ from ydb._topic_writer.topic_writer_asyncio import TxWriterAsyncIO as TopicTxWri
 from ydb._topic_writer.topic_writer_asyncio import WriterAsyncIO as TopicWriterAsyncIO
 from ._topic_writer.topic_writer_sync import WriterSync as TopicWriter
 from ._topic_writer.topic_writer_sync import TxWriterSync as TopicTxWriter
+
+from ._topic_writer.topic_writer_multi_asyncio import (  # noqa: F401
+    MultiWriterSettings as TopicWriterMultiSettings,
+    TopicWriterMultiAsyncIO,
+)
+from ._topic_writer.topic_writer_multi_sync import TopicWriterMultiSync as TopicWriterMulti
+from ._topic_writer.topic_writer_partition_chooser import (  # noqa: F401
+    PublicPartitionChooser as TopicWriterPartitionChooser,
+    PublicPartitionByKeyKafka as TopicWriterPartitionByKeyKafka,
+    PublicPartitionByKeyBound as TopicWriterPartitionByKeyBound,
+)
 
 from ._topic_common.common import (
     wrap_operation as _wrap_operation,
@@ -335,7 +352,7 @@ class TopicClientAsyncIO:
         partition_id: Union[int, None] = None,
         auto_seqno: bool = True,
         auto_created_at: bool = True,
-        codec: Optional[TopicCodec] = None,  # default mean auto-select
+        codec: Optional[TopicCodec] = None,  # default means auto-select
         # encoders: map[codec_code] func(encoded_bytes)->decoded_bytes
         # the func will be called from multiply threads in parallel.
         encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
@@ -367,7 +384,7 @@ class TopicClientAsyncIO:
         partition_id: Union[int, None] = None,
         auto_seqno: bool = True,
         auto_created_at: bool = True,
-        codec: Optional[TopicCodec] = None,  # default mean auto-select
+        codec: Optional[TopicCodec] = None,  # default means auto-select
         # encoders: map[codec_code] func(encoded_bytes)->decoded_bytes
         # the func will be called from multiply threads in parallel.
         encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
@@ -389,6 +406,36 @@ class TopicClientAsyncIO:
             settings.encoder_executor = self._executor
 
         return TopicTxWriterAsyncIO(tx=tx, driver=self._driver, settings=settings, _client=self)
+
+    def multiwriter(
+        self,
+        topic,
+        *,
+        producer_id_prefix: Optional[str] = None,  # default - random
+        partition_chooser: Optional[TopicWriterPartitionChooser] = None,  # selected from the topic description
+        auto_seqno: bool = True,
+        auto_created_at: bool = True,
+        codec: Optional[TopicCodec] = None,  # default means auto-select
+        encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
+        encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
+        # Close idle per-partition sub-writers after this many seconds (recreated on demand).
+        # None = default; <= 0 disables eviction.
+        writer_idle_timeout_sec: Optional[float] = None,
+    ) -> TopicWriterMultiAsyncIO:
+        logger.debug("Create multi-writer for topic=%s", topic)
+        args = locals().copy()
+        del args["self"]
+        self._check_closed()
+
+        settings = TopicWriterMultiSettings(**args)
+
+        if not settings.encoder_executor:
+            settings.encoder_executor = self._executor
+
+        return TopicWriterMultiAsyncIO(self._driver, settings, _parent=self)
 
     @ydb_retry(retry_cancelled=True, idempotent=True)
     async def commit_offset(
@@ -453,7 +500,7 @@ class TopicClient:
     def __del__(self):
         if not self._closed:
             try:
-                logger.warning("Topic client was not closed properly. Consider using method close().")
+                logger.debug("Topic client was not closed properly. Consider using method close().")
                 self.close()
             except BaseException:
                 logger.warning("Something went wrong during topic client close in __del__")
@@ -669,7 +716,7 @@ class TopicClient:
         partition_id: Union[int, None] = None,
         auto_seqno: bool = True,
         auto_created_at: bool = True,
-        codec: Optional[TopicCodec] = None,  # default mean auto-select
+        codec: Optional[TopicCodec] = None,  # default means auto-select
         # encoders: map[codec_code] func(encoded_bytes)->decoded_bytes
         # the func will be called from multiply threads in parallel.
         encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
@@ -702,7 +749,7 @@ class TopicClient:
         partition_id: Union[int, None] = None,
         auto_seqno: bool = True,
         auto_created_at: bool = True,
-        codec: Optional[TopicCodec] = None,  # default mean auto-select
+        codec: Optional[TopicCodec] = None,  # default means auto-select
         # encoders: map[codec_code] func(encoded_bytes)->decoded_bytes
         # the func will be called from multiply threads in parallel.
         encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
@@ -725,6 +772,36 @@ class TopicClient:
             settings.encoder_executor = self._executor
 
         return TopicTxWriter(tx, self._driver, settings, _parent=self)
+
+    def multiwriter(
+        self,
+        topic,
+        *,
+        producer_id_prefix: Optional[str] = None,  # default - random
+        partition_chooser: Optional[TopicWriterPartitionChooser] = None,  # selected from the topic description
+        auto_seqno: bool = True,
+        auto_created_at: bool = True,
+        codec: Optional[TopicCodec] = None,  # default means auto-select
+        encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
+        encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
+        # Close idle per-partition sub-writers after this many seconds (recreated on demand).
+        # None = default; <= 0 disables eviction.
+        writer_idle_timeout_sec: Optional[float] = None,
+    ) -> TopicWriterMulti:
+        logger.debug("Create multi-writer for topic=%s", topic)
+        args = locals().copy()
+        del args["self"]
+        self._check_closed()
+
+        settings = TopicWriterMultiSettings(**args)
+
+        if not settings.encoder_executor:
+            settings.encoder_executor = self._executor
+
+        return TopicWriterMulti(self._driver, settings, _parent=self)
 
     @ydb_retry(retry_cancelled=True, idempotent=True)
     def commit_offset(

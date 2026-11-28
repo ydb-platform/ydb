@@ -242,6 +242,14 @@ class PublicDescribeTopicResult:
     auto_partitioning_settings: Optional["PublicAutoPartitioningSettings"]
 
     @dataclass
+    class PartitionKeyRange:
+        from_bound: bytes
+        "Inclusive lower bound of the partition key range; empty bytes mean an open (leftmost) bound"
+
+        to_bound: bytes
+        "Exclusive upper bound of the partition key range; empty bytes mean an open (rightmost) bound"
+
+    @dataclass
     class PartitionInfo:
         partition_id: int
         "Partition identifier"
@@ -257,6 +265,9 @@ class PublicDescribeTopicResult:
 
         partition_stats: Optional["PublicPartitionStats"]
         "Stats for partition, filled only when include_stats in request is true"
+
+        key_range: Optional["PublicDescribeTopicResult.PartitionKeyRange"] = None
+        "Key range owned by the partition; filled for auto-partitioned topics"
 
     @dataclass
     class TopicStats:

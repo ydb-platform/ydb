@@ -134,6 +134,12 @@ public:
         }));
     }
 
+    bool ContainsPeer(TStringBuf address) const
+    {
+        auto guard = ReaderGuard(SpinLock_);
+        return ActiveAddresses_.contains(address) || BannedAddresses_.contains(address);
+    }
+
     void SetPeers(std::vector<std::string> addresses)
     {
         SortUnique(addresses);
@@ -952,6 +958,11 @@ TFuture<IChannelPtr> TDynamicChannelPool::GetChannel(
     const std::optional<THedgingChannelOptions>& hedgingOptions)
 {
     return Impl_->GetChannel(request, hedgingOptions);
+}
+
+bool TDynamicChannelPool::ContainsPeer(TStringBuf address) const
+{
+    return Impl_->ContainsPeer(address);
 }
 
 void TDynamicChannelPool::SetPeers(const std::vector<std::string>& addresses)

@@ -47,21 +47,28 @@ class PublicWriterSettings:
     # Backpressure is enabled when at least one of the limits above is set.
     # None = wait indefinitely for buffer space; positive value = raise TopicWriterBufferFullError on timeout.
     buffer_wait_timeout_sec: Optional[float] = None
+    # Internal hook used by the multi-partition writer. Called with a connection error
+    # before the default retry classification; returning True force-stops the writer
+    # (used to catch OVERLOADED on a split partition). Not part of the public writer() API.
+    _on_check_retriable_error: Optional[typing.Callable[[BaseException], bool]] = None
 
     def __post_init__(self):
         if self.producer_id is None:
             self.producer_id = uuid.uuid4().hex
-        if self.max_buffer_size_bytes is not None and self.max_buffer_size_bytes <= 0:
-            raise ValueError("max_buffer_size_bytes must be a positive integer, got %d" % self.max_buffer_size_bytes)
-        if self.max_buffer_messages is not None and self.max_buffer_messages <= 0:
-            raise ValueError("max_buffer_messages must be a positive integer, got %d" % self.max_buffer_messages)
-        if self.buffer_wait_timeout_sec is not None and (
-            self.buffer_wait_timeout_sec < 0
-            or self.buffer_wait_timeout_sec != self.buffer_wait_timeout_sec  # NaN check
-        ):
-            raise ValueError(
-                "buffer_wait_timeout_sec must be a non-negative number, got %r" % self.buffer_wait_timeout_sec
-            )
+        validate_buffer_limits(self.max_buffer_size_bytes, self.max_buffer_messages, self.buffer_wait_timeout_sec)
+
+
+def validate_buffer_limits(
+    max_buffer_size_bytes: Optional[int], max_buffer_messages: Optional[int], buffer_wait_timeout_sec: Optional[float]
+) -> None:
+    if max_buffer_size_bytes is not None and max_buffer_size_bytes <= 0:
+        raise ValueError("max_buffer_size_bytes must be a positive integer, got %d" % max_buffer_size_bytes)
+    if max_buffer_messages is not None and max_buffer_messages <= 0:
+        raise ValueError("max_buffer_messages must be a positive integer, got %d" % max_buffer_messages)
+    if buffer_wait_timeout_sec is not None and (
+        buffer_wait_timeout_sec < 0 or buffer_wait_timeout_sec != buffer_wait_timeout_sec  # NaN check
+    ):
+        raise ValueError("buffer_wait_timeout_sec must be a non-negative number, got %r" % buffer_wait_timeout_sec)
 
 
 @dataclass
@@ -127,6 +134,7 @@ class PublicMessage:
     created_at: Optional[datetime.datetime]
     data: "PublicMessage.SimpleSourceType"
     metadata_items: Optional[Dict[str, "PublicMessage.SimpleSourceType"]]
+    key: Optional[str] = None
 
     SimpleSourceType = Union[str, bytes]  # Will be extend
 
@@ -137,11 +145,13 @@ class PublicMessage:
         metadata_items: Optional[Dict[str, "PublicMessage.SimpleSourceType"]] = None,
         seqno: Optional[int] = None,
         created_at: Optional[datetime.datetime] = None,
+        key: Optional[str] = None,
     ):
         self.seqno = seqno
         self.created_at = created_at
         self.data = data
         self.metadata_items = metadata_items
+        self.key = key
 
     @staticmethod
     def _create_message(data: Message) -> "PublicMessage":
@@ -243,6 +253,17 @@ class TopicWriterBufferFullError(TopicWriterError):
     """Raised when write cannot proceed: buffer is full and timeout expired waiting for free space."""
 
     pass
+
+
+class TopicWriterPartitionSplitError(TopicWriterRepeatableError):
+    """Raised internally when the partition targeted by the writer has split.
+
+    Used by the multi-partition writer to stop a per-partition sub-writer so its
+    messages can be re-routed to the child partitions.
+    """
+
+    def __init__(self):
+        super().__init__("topic writer partition was split")
 
 
 def default_serializer_message_content(data: Any) -> bytes:

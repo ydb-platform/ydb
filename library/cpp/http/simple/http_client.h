@@ -135,7 +135,7 @@ private:
     const bool IsHttps;
 
     static TSpinLock ConnectionQuarantineMutex;
-    static TQueue<THolder<NPrivate::THttpConnection>> ConnectionQuarantine;
+    static TQueue<std::pair<TInstant, THolder<NPrivate::THttpConnection>>> ConnectionQuarantine; // (time queued, connection)
 
     THolder<NPrivate::THttpConnection> Connection;
     bool IsClosingRequired;

@@ -2557,6 +2557,10 @@ class CudaToolkit(object):
             required_host_version='11.8',
         ),
     }
+    # CUDA toolkits available only for Linux x86-64 builds.
+    LINUX_X86_64 = {
+        '13.5': CudaSdk(host_tools_json='cuda_13.5.json', target_sdk_json='cuda_target_13.5.json'),
+    }
     WINDOWS_X86_64 = {
         '11.4': CudaSdk(host_tools_json='cuda_11.4.json', target_sdk_json=None),
     }
@@ -2576,7 +2580,12 @@ class CudaToolkit(object):
         if not (host.is_linux_x86_64 or host.is_linux_armv8 or host.is_linux_armv9a):
             return {}
         if target.is_linux_x86_64:
-            return cls.with_aliases(cls.LINUX)
+            sdks = dict(cls.LINUX)
+            # LINUX_X86_64 toolkits ship only x86-64 host tools.
+            # An ARM host needs ARM tools even when cross-compiling for an x86-64 target.
+            if host.is_linux_x86_64:
+                sdks.update(cls.LINUX_X86_64)
+            return cls.with_aliases(sdks)
         if target.is_linux_armv8 or target.is_linux_armv9a:
             sdks = dict(cls.LINUX)
             sdks.update(cls.LEGACY_JETPACK)

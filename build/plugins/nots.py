@@ -1,8 +1,8 @@
 import functools
 import hashlib
 import json
-import shlex
 import os
+import shlex
 from typing import Any, TYPE_CHECKING
 
 # noinspection PyUnresolvedReferences
@@ -721,7 +721,7 @@ def _TS_LIBRARY_FOR_ARGS(unit: ymake.Unit, source: str) -> None:
     unit.set(["_TS_LIBRARY_FOR_BUILD_DIR", "${ARCADIA_BUILD_ROOT}/" + build])
     unit.set(["_TS_LIBRARY_FOR", "yes"])
     unit.set(["_TS_LIBRARY_MANIFEST_INPUT", '${hide;input:"$S/' + source + '/package.json"}'])
-    unit.set(["_TS_LIBRARY_OUTPUT_META", '${hide;output:"$B/' + build + '/output.tar.uuid"}'])
+    unit.set(["_TS_LIBRARY_OUTPUT_ARGS", '${hide;output:"$B/' + build + '/output.tar.uuid"}'])
     unit.onpeerdir([source])
     for filename in ("package.json", "pnpm-lock.yaml"):
         __set_append(unit, "_MAKEFILE_INCLUDE_LIKE_DEPS", "${ARCADIA_ROOT}/" + source + "/" + filename)
@@ -739,6 +739,39 @@ def _TS_LIBRARY_FOR_ARGS(unit: ymake.Unit, source: str) -> None:
         __set_append(unit, "_NODE_MODULES_INOUTS", "${hide:PEERS_LATE_OUTS}")
 
 
+def _configure_ts_program(unit: ymake.Unit) -> None:
+    if (
+        _node_modules_bundle_needed(unit, unit.get("MODDIR"))
+        or unit.get("_WITH_NODEJS_BIN") == "yes"
+        or unit.get("_WITH_BUN_BIN") == "yes"
+    ):
+        raise ValueError("TS_PROGRAM does not support separate node_modules or runtime outputs")
+
+    system = ""
+    if unit.get("OS_LINUX") == "yes" and unit.get("MUSL") != "yes":
+        system = "linux"
+    elif unit.get("OS_DARWIN") == "yes":
+        system = "darwin"
+    arch = ""
+    if unit.get("ARCH_X86_64") == "yes":
+        arch = "x64"
+    elif unit.get("ARCH_ARM64") == "yes" or unit.get("ARCH_AARCH64") == "yes":
+        arch = "arm64"
+    if not system or not arch:
+        raise ValueError("TS_PROGRAM supports glibc Linux and macOS on x86_64 and arm64")
+
+    # The host bundle runs the script. WITH_BUN supplies the target executable.
+    __set_append(
+        unit,
+        "NOTS_TOOL_BUILD_ENV",
+        [
+            f"--env TS_PROGRAM_BUN_TARGET=bun-{system}-{arch}",
+            "--env TS_PROGRAM_BUN_TARGET_BIN=${WITH_BUN_RESOURCE_GLOBAL}/bun",
+        ],
+    )
+    __set_append(unit, "TS_GLOB_EXCLUDE_ADDITIONAL", unit.get_subst("REALPRJNAME"))
+
+
 @ymake.macro
 @_with_report_configure_error
 def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
@@ -748,6 +781,7 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
     if unit.get("_TS_LIBRARY_FOR") == "yes" and unit.get("VCS_INFO_FILE"):
         unit.set(["_NOTS_VCS_INFO_FILE", "${BINDIR}/" + unit.get("VCS_INFO_FILE")])
     is_ts_package = unit.get("_TS_PACKAGE") == "yes"
+    is_ts_program = unit.get("_TS_MOD_NAME") == "TS_PROGRAM"
     ts_build_script = unit.get("_TS_BUILD_SCRIPT")
     ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
 
@@ -772,9 +806,6 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
             )
             return
 
-    pm = _create_pm(unit)
-    pj = pm.load_package_json_from_dir(pm.sources_path)
-
     # remove leading "./" or "/" and trailing "/"
     # build/, /build, ./build, ./build/ => build
     # build/a/, /build/a, ./build/a/, ./build/a => build/a
@@ -783,32 +814,38 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
             p = p[2:]
         return p.strip("/")
 
-    # checks that build outputs contains in package.json#files
-    # TS_OUTPUTS(build) -- files: ["build/esm", "build/cjs"] ✅
-    # TS_OUTPUTS(build) -- files: ["/build", "./build", "./build/", "build/"] ✅
-    # TS_OUTPUTS(build/dist) -- files: ["build"] ✅
-    # TS_OUTPUTS(dist) -- files: ["build"] ❌
-    # TS_OUTPUTS(dist) -- files: ["build/dist"] ❌
-    normalized_pj_files = [_normalize_path(f) for f in pj.get_files()]
     normalized_ts_outputs = [_normalize_path(f) for f in ts_outputs]
     if normalized_ts_outputs:
         unit.set(["_TS_OUTPUTS_JOINED", "|".join(normalized_ts_outputs)])
 
-    missing_outputs = []
-    for output in normalized_ts_outputs:
-        found = any(
-            pj_file == output or pj_file.startswith(output + "/") or output.startswith(pj_file + "/")
-            for pj_file in normalized_pj_files
-        )
-        if not found:
-            missing_outputs.append(output)
+    if is_ts_program:
+        _configure_ts_program(unit)
+    else:
+        pm = _create_pm(unit)
+        pj = pm.load_package_json_from_dir(pm.sources_path)
+        # checks that build outputs contains in package.json#files
+        # TS_OUTPUTS(build) -- files: ["build/esm", "build/cjs"] ✅
+        # TS_OUTPUTS(build) -- files: ["/build", "./build", "./build/", "build/"] ✅
+        # TS_OUTPUTS(build/dist) -- files: ["build"] ✅
+        # TS_OUTPUTS(dist) -- files: ["build"] ❌
+        # TS_OUTPUTS(dist) -- files: ["build/dist"] ❌
+        normalized_pj_files = [_normalize_path(f) for f in pj.get_files()]
 
-    if missing_outputs and unit.get("_TS_LIBRARY_FOR") != "yes":
-        ymake.report_configure_error(
-            "\n"
-            f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
-            f"Following directories are missing in {COLORS.cyan}package.json#files{COLORS.reset}: {COLORS.red}{', '.join(missing_outputs)}{COLORS.reset}"
-        )
+        missing_outputs = []
+        for output in normalized_ts_outputs:
+            found = any(
+                pj_file == output or pj_file.startswith(output + "/") or output.startswith(pj_file + "/")
+                for pj_file in normalized_pj_files
+            )
+            if not found:
+                missing_outputs.append(output)
+
+        if missing_outputs and unit.get("_TS_LIBRARY_FOR") != "yes":
+            ymake.report_configure_error(
+                "\n"
+                f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
+                f"Following directories are missing in {COLORS.cyan}package.json#files{COLORS.reset}: {COLORS.red}{', '.join(missing_outputs)}{COLORS.reset}"
+            )
 
     build_command = unit.get("_TS_BUILD_COMMAND")
     if unit.get("_TS_LIBRARY_FOR") == "yes" and build_command:

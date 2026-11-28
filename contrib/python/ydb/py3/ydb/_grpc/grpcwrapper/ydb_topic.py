@@ -1657,6 +1657,38 @@ class DescribeTopicResult(
         )
 
     @dataclass
+    class PartitionKeyRange(
+        IFromProto[
+            Optional["ydb_topic_pb2.PartitionKeyRange"],
+            Optional["DescribeTopicResult.PartitionKeyRange"],
+        ],
+        IToPublic,
+    ):
+        # Empty bytes mean an open bound: from_bound == b"" is the start of the
+        # key space (first partition), to_bound == b"" is the end (last partition).
+        from_bound: bytes
+        to_bound: bytes
+
+        @staticmethod
+        def from_proto(
+            msg: Optional[ydb_topic_pb2.PartitionKeyRange],
+        ) -> Optional["DescribeTopicResult.PartitionKeyRange"]:
+            if msg is None:
+                return None
+            return DescribeTopicResult.PartitionKeyRange(
+                from_bound=msg.from_bound,
+                to_bound=msg.to_bound,
+            )
+
+        def to_public(
+            self,
+        ) -> ydb_topic_public_types.PublicDescribeTopicResult.PartitionKeyRange:
+            return ydb_topic_public_types.PublicDescribeTopicResult.PartitionKeyRange(
+                from_bound=self.from_bound,
+                to_bound=self.to_bound,
+            )
+
+    @dataclass
     class PartitionInfo(
         IFromProto[
             Optional["ydb_topic_pb2.DescribeTopicResult.PartitionInfo"],
@@ -1669,6 +1701,7 @@ class DescribeTopicResult(
         child_partition_ids: List[int]
         parent_partition_ids: List[int]
         partition_stats: Optional["PartitionStats"]
+        key_range: Optional["DescribeTopicResult.PartitionKeyRange"]
 
         @staticmethod
         def from_proto(
@@ -1677,12 +1710,17 @@ class DescribeTopicResult(
             if msg is None:
                 return None
 
+            key_range = None
+            if msg.HasField("key_range"):
+                key_range = DescribeTopicResult.PartitionKeyRange.from_proto(msg.key_range)
+
             return DescribeTopicResult.PartitionInfo(
                 partition_id=msg.partition_id,
                 active=msg.active,
                 child_partition_ids=list(msg.child_partition_ids),
                 parent_partition_ids=list(msg.parent_partition_ids),
                 partition_stats=PartitionStats.from_proto(msg.partition_stats),
+                key_range=key_range,
             )
 
         def to_public(
@@ -1691,12 +1729,16 @@ class DescribeTopicResult(
             partition_stats = None
             if self.partition_stats is not None:
                 partition_stats = self.partition_stats.to_public()
+            key_range = None
+            if self.key_range is not None:
+                key_range = self.key_range.to_public()
             return ydb_topic_public_types.PublicDescribeTopicResult.PartitionInfo(
                 partition_id=self.partition_id,
                 active=self.active,
                 child_partition_ids=self.child_partition_ids,
                 parent_partition_ids=self.parent_partition_ids,
                 partition_stats=partition_stats,
+                key_range=key_range,
             )
 
     @dataclass

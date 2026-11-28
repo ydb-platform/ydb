@@ -19,6 +19,7 @@ from .topic_writer import (
     InternalMessage,
     TopicWriterStopped,
     TopicWriterError,
+    TopicWriterPartitionSplitError,
     TopicWriterBufferFullError,
     internal_message_size_bytes,
     messages_to_proto_requests,
@@ -55,6 +56,63 @@ if typing.TYPE_CHECKING:
 from .._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT
 
 logger = logging.getLogger(__name__)
+
+
+def _check_unkeyed(messages: Union[Message, List[Message]]) -> None:
+    batch = messages if isinstance(messages, list) else (messages,)
+    for message in batch:
+        if isinstance(message, PublicMessage) and message.key is not None:
+            raise TopicWriterError("A message with a partition key requires a multiwriter")
+
+
+class WriterBuffer:
+    """Track the soft limits for accepted messages until delivery completes."""
+
+    def __init__(self, max_bytes: Optional[int], max_messages: Optional[int], timeout: Optional[float]):
+        self.max_bytes = max_bytes
+        self.max_messages = max_messages
+        self.timeout = timeout
+        self.bytes = 0
+        self.messages = 0
+        self.updated = asyncio.Event()
+
+    def is_full(self) -> bool:
+        return (self.max_bytes is not None and self.bytes >= self.max_bytes) or (
+            self.max_messages is not None and self.messages >= self.max_messages
+        )
+
+    def deadline(self) -> Optional[float]:
+        return None if self.timeout is None else asyncio.get_running_loop().time() + self.timeout
+
+    async def wait_for_space(self, check_open: Callable[[], None], deadline: Optional[float]) -> None:
+        while self.is_full():
+            check_open()
+            self.updated.clear()
+            if deadline is None:
+                await self.updated.wait()
+                continue
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                assert self.timeout is not None
+                raise TopicWriterBufferFullError(
+                    "Topic writer buffer full: no free space within %.1f s"
+                    " (buffer_bytes=%d, max_bytes=%s, buffer_msgs=%d, max_msgs=%s)"
+                    % (self.timeout, self.bytes, self.max_bytes, self.messages, self.max_messages)
+                )
+            try:
+                await asyncio.wait_for(self.updated.wait(), remaining)
+            except asyncio.TimeoutError:
+                pass
+        check_open()
+
+    def add(self, size: int, count: int) -> None:
+        self.bytes += size
+        self.messages += count
+
+    def release(self, size: int) -> None:
+        self.bytes -= size
+        self.messages -= 1
+        self.updated.set()
 
 
 class WriterAsyncIO:
@@ -146,12 +204,9 @@ class WriterAsyncIO:
             len(messages) if isinstance(messages, list) else 1,
         )
         input_single_message = not isinstance(messages, list)
-        converted_messages = []
-        if isinstance(messages, list):
-            for m in messages:
-                converted_messages.append(PublicMessage._create_message(m))
-        else:
-            converted_messages = [PublicMessage._create_message(messages)]
+        _check_unkeyed(messages)
+        batch = messages if isinstance(messages, list) else [messages]
+        converted_messages = [PublicMessage._create_message(source) for source in batch]
 
         futures = await self._reconnector.write_with_ack_future(converted_messages)
         if input_single_message:
@@ -184,6 +239,10 @@ class WriterAsyncIO:
         """
         logger.debug("flush writer")
         return await self._reconnector.flush()
+
+    async def _write_routed_message(self, message: PublicMessage) -> asyncio.Future:
+        (ack,) = await self._reconnector.write_with_ack_future([message])
+        return ack
 
     async def wait_init(self) -> PublicWriterInitInfo:
         """
@@ -231,6 +290,7 @@ class TxWriterAsyncIO(WriterAsyncIO):
         For wait with timeout use asyncio.wait_for.
         """
         if self._first_write:
+            _check_unkeyed(messages)
             self._first_write = False
             return await super().write_with_ack(messages)
         return await super().write(messages)
@@ -279,9 +339,6 @@ class WriterAsyncIOReconnector:
     else:
         _stop_reason: asyncio.Future
     _init_info: Optional[PublicWriterInitInfo]
-    _buffer_bytes: int
-    _buffer_messages: int
-    _buffer_updated: asyncio.Event
 
     def __init__(
         self, driver: SupportedDriverType, settings: WriterSettings, tx: Optional["BaseQueryTxContext"] = None
@@ -322,12 +379,11 @@ class WriterAsyncIOReconnector:
         self._messages = deque()
         self._messages_future = deque()
         self._new_messages = asyncio.Queue()
-        self._backpressure_enabled = (
-            settings.max_buffer_size_bytes is not None or settings.max_buffer_messages is not None
-        )
-        self._buffer_bytes = 0
-        self._buffer_messages = 0
-        self._buffer_updated = asyncio.Event()
+        self._buffer = None
+        if settings.max_buffer_size_bytes is not None or settings.max_buffer_messages is not None:
+            self._buffer = WriterBuffer(
+                settings.max_buffer_size_bytes, settings.max_buffer_messages, settings.buffer_wait_timeout_sec
+            )
         self._stop_reason = self._loop.create_future()
         connection_task = asyncio.create_task(self._connection_loop())
         connection_task.set_name("connection_loop")
@@ -344,14 +400,14 @@ class WriterAsyncIOReconnector:
         self._closed = True
         logger.debug("Close writer reconnector id=%s", self._id)
 
-        if flush:
-            await self.flush()
-
-        self._stop(TopicWriterStopped())
-
-        for task in self._background_tasks:
-            task.cancel()
-        await asyncio.wait(self._background_tasks)
+        try:
+            if flush:
+                await self.flush()
+        finally:
+            self._stop(TopicWriterStopped())
+            for task in self._background_tasks:
+                task.cancel()
+            await asyncio.wait(self._background_tasks)
 
         # if work was stopped before close by error - raise the error
         try:
@@ -390,8 +446,9 @@ class WriterAsyncIOReconnector:
         internal_messages = self._prepare_internal_messages(messages)
         messages_future = [self._loop.create_future() for _ in internal_messages]
 
-        if self._backpressure_enabled:
-            await self._acquire_buffer_space(internal_messages)
+        if self._buffer is not None:
+            await self._buffer.wait_for_space(self._check_stop, self._buffer.deadline())
+            self._buffer.add(sum(internal_message_size_bytes(m) for m in internal_messages), len(internal_messages))
 
         self._messages_future.extend(messages_future)
 
@@ -401,46 +458,6 @@ class WriterAsyncIOReconnector:
             self._messages_for_encode.put_nowait(internal_messages)
 
         return messages_future
-
-    async def _acquire_buffer_space(self, internal_messages: List[InternalMessage]) -> None:
-        """Wait until the buffer is below its limit, then admit the batch (soft-limit semantics).
-
-        Blocking starts only when the buffer is already at or above the limit at call time.
-        Once unblocked, the entire batch is admitted regardless of its size, so callers that
-        batch messages never get a permanent deadlock.
-        """
-        max_buf = self._settings.max_buffer_size_bytes
-        max_msgs = self._settings.max_buffer_messages
-        timeout_sec = self._settings.buffer_wait_timeout_sec
-        deadline = self._loop.time() + timeout_sec if timeout_sec is not None else None
-
-        while True:
-            self._buffer_updated.clear()
-            if (max_buf is None or self._buffer_bytes < max_buf) and (
-                max_msgs is None or self._buffer_messages < max_msgs
-            ):
-                break
-            self._check_stop()
-            if deadline is not None:
-                assert timeout_sec is not None
-                remaining = deadline - self._loop.time()
-                if remaining <= 0:
-                    raise TopicWriterBufferFullError(
-                        "Topic writer buffer full: no free space within %.1f s"
-                        " (buffer_bytes=%d, max_bytes=%s, buffer_msgs=%d, max_msgs=%s)"
-                        % (timeout_sec, self._buffer_bytes, max_buf, self._buffer_messages, max_msgs)
-                    )
-                try:
-                    await asyncio.wait_for(self._buffer_updated.wait(), timeout=min(0.5, remaining))
-                except asyncio.TimeoutError:
-                    pass
-            else:
-                await self._buffer_updated.wait()
-
-        self._check_stop()
-        new_bytes = sum(internal_message_size_bytes(m) for m in internal_messages)
-        self._buffer_bytes += new_bytes
-        self._buffer_messages += len(internal_messages)
 
     def _add_messages_to_send_queue(self, internal_messages: List[InternalMessage]):
         self._messages.extend(internal_messages)
@@ -533,9 +550,21 @@ class WriterAsyncIOReconnector:
                 done.pop().result()  # need for raise exception - reason of stop task
             except (asyncio.CancelledError, issues.Error) as err:
                 if isinstance(err, asyncio.CancelledError):
-                    if self._closed:
+                    # close(flush=True) still needs reconnects until pending writes are acked.
+                    if self._stop_reason.done():
                         return
                     err = issues.ConnectionLost("gRPC stream cancelled")
+
+                if self._settings._on_check_retriable_error is not None and self._settings._on_check_retriable_error(
+                    err
+                ):
+                    logger.debug(
+                        "writer reconnector %s stop connection loop by on_check_retriable_error hook due to %s",
+                        self._id,
+                        err,
+                    )
+                    self._stop(TopicWriterPartitionSplitError())
+                    return
 
                 err_info = check_retriable_error(err, retry_settings, attempt)
                 if not err_info.is_retriable or self._tx is not None:  # no retries in tx writer
@@ -701,10 +730,8 @@ class WriterAsyncIOReconnector:
                 "internal error - receive unexpected ack. Expected seqno: %s, received seqno: %s"
                 % (current_message.seq_no, ack.seq_no)
             )
-        if self._backpressure_enabled:
-            self._buffer_bytes = max(0, self._buffer_bytes - internal_message_size_bytes(current_message))
-            self._buffer_messages = max(0, self._buffer_messages - 1)
-            self._buffer_updated.set()
+        if self._buffer is not None:
+            self._buffer.release(internal_message_size_bytes(current_message))
         write_ack_msg = StreamWriteMessage.WriteResponse.WriteAck
         status = ack.message_write_status
         if isinstance(status, write_ack_msg.StatusSkipped):
@@ -770,12 +797,16 @@ class WriterAsyncIOReconnector:
             return
 
         self._stop_reason.set_exception(reason)
+        self._stop_reason.exception()  # close() may itself have been cancelled.
 
         for f in self._messages_future:
+            if f.done():
+                continue
             f.set_exception(reason)
             f.exception()  # mark as retrieved so asyncio does not log "Future exception was never retrieved"
 
-        self._buffer_updated.set()  # wake any tasks blocked in _acquire_buffer_space
+        if self._buffer is not None:
+            self._buffer.updated.set()
         self._state_changed.set()
         logger.info("Stop topic writer %s: %s" % (self._id, reason))
 

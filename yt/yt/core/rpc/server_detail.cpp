@@ -248,7 +248,9 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
 
     auto responseMessageError = CheckBusMessageLimits(message);
     if (!responseMessageError.IsOK()) {
-        return CreateErrorResponseMessage(responseMessageError);
+        Error_ = std::move(responseMessageError);
+        ToProto(header.mutable_error(), Error_);
+        return CreateErrorResponseMessage(header);
     }
 
     return message;

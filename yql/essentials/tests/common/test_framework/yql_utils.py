@@ -369,6 +369,7 @@ def normalize_yson(y):
 
 
 volatile_attrs = {'DataSize', 'ModifyTime', 'Id', 'Revision'}
+_volatile_attr_keys = volatile_attrs | {attr.encode('ascii') for attr in volatile_attrs}
 current_user = getpass.getuser()
 
 
@@ -376,7 +377,7 @@ def _replace_vals_impl(y):
     if isinstance(y, list):
         return [_replace_vals_impl(i) for i in y]
     if isinstance(y, dict):
-        return {_replace_vals_impl(k): _replace_vals_impl(v) for k, v in six.iteritems(y) if k not in volatile_attrs}
+        return {_replace_vals_impl(k): _replace_vals_impl(v) for k, v in six.iteritems(y) if k not in _volatile_attr_keys}
     if isinstance(y, bytes):
         s = y.replace(b'tmp/yql/' + current_user.encode('ascii') + b'/', b'tmp/')
         s = re.sub(b'tmp/[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+', b'tmp/<temp_table_guid>', s)

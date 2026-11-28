@@ -39,6 +39,8 @@ public:
         const IClientRequestPtr& request,
         const std::optional<THedgingChannelOptions>& hedgingOptions = std::nullopt);
 
+    //! Includes peers temporarily banned by discovery backoff.
+    bool ContainsPeer(TStringBuf address) const;
     void SetPeers(const std::vector<std::string>& addresses);
 
     void SetPeerDiscoveryError(const TError& error);

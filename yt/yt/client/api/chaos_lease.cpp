@@ -122,11 +122,11 @@ TFuture<void> TChaosLease::Abort(const TPrerequisiteAbortOptions& options)
     {
         auto guard = Guard(SpinLock_);
         if (AbortPromise_) {
-            return AbortPromise_.ToFuture();
+            return AbortPromise_.ToFuture().ToImmediatelyCancelable(/*propagateCancelation*/ false);
         }
 
         AbortPromise_ = NewPromise<void>();
-        futureAbort = AbortPromise_.ToFuture();
+        futureAbort = AbortPromise_.ToFuture().ToImmediatelyCancelable(/*propagateCancelation*/ false);
     }
 
     auto chaosLeasePath = FromObjectId(GetId());

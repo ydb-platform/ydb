@@ -2,6 +2,7 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_tier_predicate.h>
@@ -850,7 +851,26 @@ bool TCheckSchemeTxUnit::CheckFinalizeBuildIndex(TActiveTransaction *activeTx) {
     const auto pathId = GetPathId(finalize);
     const auto snapshotKey = TSnapshotKey(pathId, finalize.GetSnapshotStep(), finalize.GetSnapshotTxId());
 
-    if (DataShard.GetSnapshotManager().FindAvailable(snapshotKey) == nullptr) {
+    const auto table = DataShard.FindUserTable(pathId);
+    bool sourceSnapshot = false;
+    if (table && !finalize.GetSnapshotStep() && !finalize.GetSnapshotTxId()
+        && !finalize.GetBuildIndexId() && finalize.GetOutcome().GetSkipLocalSnapshot()
+        && (finalize.GetOutcome().HasApply() || finalize.GetOutcome().HasCancel())
+        && table->ReplicationConfig.Mode != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
+    {
+        const auto& outcome = finalize.GetOutcome();
+        const auto indexId = TPathId::FromProto(outcome.HasApply()
+            ? outcome.GetApply().GetIndexPathId() : outcome.GetCancel().GetIndexPathId());
+        NKikimrSchemeOp::TTableDescription schema;
+        table->GetSchema(schema);
+        for (const auto& index : schema.GetTableIndexes()) {
+            if (TPathId(index.GetPathOwnerId(), index.GetLocalPathId()) == indexId) {
+                sourceSnapshot = NTableIndex::IsOnlineReplicationIndex(index.GetType());
+                break;
+            }
+        }
+    }
+    if (!sourceSnapshot && DataShard.GetSnapshotManager().FindAvailable(snapshotKey) == nullptr) {
         YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TCheckSchemeTxUnit::CheckFinalizeBuildIndex: description has nonexistent snapshot key",
             {"tabletId", DataShard.TabletID()},
             {"activeTxId", activeTx->GetTxId()},

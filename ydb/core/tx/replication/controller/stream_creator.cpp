@@ -118,7 +118,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
-            if (IsRetryableError(result)) {
+            if (IsRetryableError(result) || (RetryOnSchemeError && result.GetStatus() == NYdb::EStatus::SCHEME_ERROR)) {
                 YDB_LOG_DEBUG("Retry CreateStream");
                 return Retry();
             }
@@ -208,7 +208,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
 
         if (!result.IsSuccess()) {
-            if (IsRetryableError(result)) {
+            if (IsRetryableError(result) || (RetryOnSchemeError && result.GetStatus() == NYdb::EStatus::SCHEME_ERROR)) {
                 YDB_LOG_DEBUG("Retry AlterTopic");
                 return Retry();
             }
@@ -254,7 +254,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
-            if (IsRetryableError(result)) {
+            if (IsRetryableError(result) || (RetryOnSchemeError && result.GetStatus() == NYdb::EStatus::SCHEME_ERROR)) {
                 YDB_LOG_WARN("Error of resolving topic",
                     {"streamPath", SrcStreamPath},
                     {"ev", ev->Get()->ToString()},
@@ -327,7 +327,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
-            if (IsRetryableError(result)) {
+            if (IsRetryableError(result) || (RetryOnSchemeError && result.GetStatus() == NYdb::EStatus::SCHEME_ERROR)) {
                 return Retry();
             }
 
@@ -415,7 +415,8 @@ public:
             TDuration streamRetentionPeriod,
             TDuration consumerAvailabilityPeriod,
             bool consumerImportant,
-            bool enableOmitBackupAttribute)
+            bool enableOmitBackupAttribute,
+            bool retryOnSchemeError)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -436,6 +437,7 @@ public:
         , ConsumerImportant(consumerImportant)
         , NeedCreate(needCreate)
         , DescribeOnly(describeOnly)
+        , RetryOnSchemeError(retryOnSchemeError)
         , LogPrefix(CreateActorLogPrefix("StreamCreator", ReplicationId, TargetId))
     {
     }
@@ -486,6 +488,7 @@ private:
     bool VerifyConsumerSettings = false;
     const bool NeedCreate;
     const bool DescribeOnly;
+    const bool RetryOnSchemeError;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
 }; // TStreamCreator
@@ -496,8 +499,9 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
 
     const auto& config = replication->GetConfig();
     const auto& consistency = config.GetConsistencySettings();
-    const auto resolvedTimestamps = consistency.HasGlobal()
-        ? std::make_optional(TDuration::MilliSeconds(consistency.GetGlobal().GetCommitIntervalMilliSeconds()))
+    const auto resolvedTimestamps = consistency.HasGlobal() || target->IsIndexBuild()
+        ? std::make_optional(TDuration::MilliSeconds(consistency.HasGlobal()
+            ? consistency.GetGlobal().GetCommitIntervalMilliSeconds() : 1000))
         : std::nullopt;
     const bool needCreate = !config.HasTransferSpecific() || !config.GetTransferSpecific().GetTarget().HasConsumerName();
     const bool supportsTopicAutopartitioning = !consistency.HasGlobal() && AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication();
@@ -509,13 +513,16 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         : config.GetAvailabilityPeriod().HasDuration() ? GetDuration(config.GetAvailabilityPeriod().GetDuration())
         : TDuration::Seconds(AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds());
 
+    const auto* base = replication->FindBaseTableTarget(*target);
+    const bool retryOnSchemeError = base && base->GetStreamSchemaChanges().value_or(false);
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),
         target->GetConfig(), target->GetStreamName(), target->GetStreamPath(), target->GetStreamConsumerName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
         supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly,
         TDuration::Seconds(AppData()->ReplicationConfig.GetStreamRetentionPeriodSeconds()),
-        consumerAvailabilityPeriod, consumerImportant, AppData()->ReplicationConfig.GetEnableOmitBackupAttribute());
+        consumerAvailabilityPeriod, consumerImportant, AppData()->ReplicationConfig.GetEnableOmitBackupAttribute(),
+        retryOnSchemeError);
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
@@ -523,12 +530,13 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
         const TString& streamName, const TString& streamPath, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
-        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant, bool enableOmitBackupAttribute)
+        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant, bool enableOmitBackupAttribute,
+        bool retryOnSchemeError)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
         streamName, streamPath, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
         schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant,
-        enableOmitBackupAttribute);
+        enableOmitBackupAttribute, retryOnSchemeError);
 }
 
 }

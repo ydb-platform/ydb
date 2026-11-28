@@ -1,4 +1,5 @@
 #include "dst_creator.h"
+#include "index_replication.h"
 #include "logging.h"
 #include "private_events.h"
 #include "util.h"
@@ -24,6 +25,10 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+
+#include <util/string/join.h>
+
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -282,6 +287,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
+                ReportStatus(TStringBuilder() << "Cannot describe source table " << SrcPath
+                    << ": " << result.GetStatus() << ", " << result.GetIssues().ToOneLineString());
                 return Retry();
             }
 
@@ -290,14 +297,48 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 << ", issue: " << result.GetIssues().ToOneLineString());
         }
 
-        Ydb::Table::CreateTableRequest scheme;
         const auto description = result.GetTableDescription();
+        const auto& sourceTable = NYdb::TProtoAccessor::GetProto(description);
+        if (Kind == TReplication::ETargetKind::Table
+            && AppData()->FeatureFlags.GetEnableIndexCreateReplication())
+        {
+            const auto pendingIndexes = GetBuildingReplicationIndexes(sourceTable);
+            if (!pendingIndexes.empty()) {
+                ReportStatus(TStringBuilder() << "Waiting for source index builds on "
+                    << SrcPath << ": " << JoinSeq(", ", pendingIndexes));
+                return Retry();
+            }
+        }
+        ReportStatus({});
+
+        Ydb::Table::CreateTableRequest scheme;
         description.SerializeTo(scheme);
+        if (DiscoveredIndexes && AppData()->FeatureFlags.GetEnableIndexCreateReplication()) {
+            // An index added after discovery has no bootstrap target.
+            // Its schema barrier will create the index and register its targets.
+            for (const auto& source : sourceTable.indexes()) {
+                if (DiscoveredIndexes->contains(source.name())
+                    || !IsOnlineReplicationIndex(source))
+                {
+                    continue;
+                }
+                if (!CanDeferIndexCreation) {
+                    return Error(NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+                        << "Source index " << source.name() << " appeared after discovery and the stream has no schema changes");
+                }
+                auto* indexes = scheme.mutable_indexes();
+                const auto index = std::find_if(indexes->begin(), indexes->end(), [&](const auto& candidate) {
+                    return candidate.name() == source.name();
+                });
+                if (index != indexes->end()) {
+                    indexes->erase(index);
+                }
+            }
+        }
 
         // SDK table descriptions do not retain literal defaults when serialized.
-        const auto& source = NYdb::TProtoAccessor::GetProto(description);
         THashMap<TStringBuf, const Ydb::TypedValue*> literalDefaults;
-        for (const auto& column : source.columns()) {
+        for (const auto& column : sourceTable.columns()) {
             if (column.has_from_literal()) {
                 literalDefaults.emplace(column.name(), &column.from_literal());
             }
@@ -355,6 +396,24 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (!FillIndexDescription(*TxBody.MutableCreateIndexedTable(), scheme, AppData()->FeatureFlags.GetEnableCompactFulltextIndex(), status, error)) {
                 return Error(NKikimrScheme::StatusSchemeError, error);
             }
+            for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
+                if (!NTableIndex::IsFulltextOrJsonIndex(index.GetType())) {
+                    continue;
+                }
+                for (const auto& source : sourceTable.indexes()) {
+                    if (source.name() != index.GetName()) {
+                        continue;
+                    }
+                    if (source.has_global_fulltext_plain_index()) {
+                        *index.MutableFulltextIndexDescription()->MutableSettings()
+                            = source.global_fulltext_plain_index().fulltext_settings();
+                    } else if (source.has_global_fulltext_relevance_index()) {
+                        *index.MutableFulltextIndexDescription()->MutableSettings()
+                            = source.global_fulltext_relevance_index().fulltext_settings();
+                    }
+                    break;
+                }
+            }
         } else {
             TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
             desc = TxBody.MutableCreateTable();
@@ -362,6 +421,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         Y_ABORT_UNLESS(desc);
         desc->SetName(pathPair.second);
+
+        // Column conversion already copies the row-id default and its sequence.
+        for (const auto& column : desc->GetColumns()) {
+            if (column.GetName() == NTableIndex::NFulltext::RowIdColumn) {
+                desc->SetSystemColumnNamesAllowed(true);
+                break;
+            }
+        }
 
         FillReplicationConfig(*desc->MutableReplicationConfig());
         if (scheme.indexes_size()) {
@@ -874,6 +941,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return false;
             }
 
+            if (NTableIndex::IsFulltextOrJsonIndex(index.GetType())
+                && !EqualFulltextSettings(index.GetFulltextIndexDescription().GetSettings(),
+                    it->second->GetFulltextIndexDescription().GetSettings()))
+            {
+                error = TStringBuilder() << "Fulltext/JSON settings mismatch: " << index.GetName();
+                return false;
+            }
+
             if (index.KeyColumnNamesSize() != it->second->KeyColumnNamesSize()) {
                 error = TStringBuilder() << "Index key columns size mismatch"
                     << ": name: " << index.GetName()
@@ -985,6 +1060,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Retry();
     }
 
+    void ReportStatus(const TString& issue) {
+        if (LastStatus != issue) {
+            LastStatus = issue;
+            Send(Parent, new TEvPrivate::TEvSourceStatus(ReplicationId, TargetId, issue));
+        }
+    }
+
     void Success() {
         Y_ABORT_UNLESS(DstPathId);
         YDB_LOG_INFO("Success",
@@ -1076,7 +1158,9 @@ public:
             bool initialScan,
             TReplication::EState desiredState,
             bool switchover,
-            TTopicMirrorSettings&& topicMirror)
+            TTopicMirrorSettings&& topicMirror,
+            std::optional<THashSet<TString>> discoveredIndexes = {},
+            bool canDeferIndexCreation = false)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -1089,6 +1173,8 @@ public:
         , Mode(mode)
         , Consistency(consistency)
         , InitialScan(initialScan)
+        , DiscoveredIndexes(std::move(discoveredIndexes))
+        , CanDeferIndexCreation(canDeferIndexCreation)
         , Switchover(switchover)
         // A switchover destination already exists and holds its data: there is no placeholder to
         // create for it, paused or not.
@@ -1144,6 +1230,8 @@ private:
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
     const bool InitialScan;
+    const std::optional<THashSet<TString>> DiscoveredIndexes;
+    const bool CanDeferIndexCreation;
     const bool Switchover;
     const bool CreatePlaceholder;
     const TReplication::EState DesiredState;
@@ -1171,6 +1259,7 @@ private:
     ui64 RetryGeneration = 0;
     TPathId DstPathId;
     TActorId Subscriber;
+    TString LastStatus;
 
 }; // TDstCreator
 
@@ -1245,21 +1334,37 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
             replication->GetId(), target->GetId(), target->GetSrcPath(), target->GetDstPath(), std::move(topicMirror));
     }
 
+    std::optional<THashSet<TString>> discoveredIndexes;
+    if (target->GetKind() == TReplication::ETargetKind::Table && replication->GetConfig().GetInitialScan()) {
+        discoveredIndexes.emplace();
+        for (const auto* peer : replication->GetTargets()) {
+            if (peer->GetKind() == TReplication::ETargetKind::IndexTable
+                && replication->FindBaseTableTarget(*peer) == target)
+            {
+                const auto indexPath = SplitPath(peer->GetSrcIndexPath());
+                discoveredIndexes->insert(indexPath.back());
+            }
+        }
+    }
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
-        replication->GetConfig().GetInitialScan(), replication->GetDesiredState(),
-        IsSwitchover(replication->GetConfig()));
+        replication->GetConfig().GetInitialScan() || target->IsIndexBuild(), replication->GetDesiredState(),
+        IsSwitchover(replication->GetConfig()), std::move(discoveredIndexes),
+        target->GetStreamSchemaChanges().value_or(false));
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        TReplication::EState desiredState, bool switchover)
+        TReplication::EState desiredState, bool switchover,
+        std::optional<THashSet<TString>> discoveredIndexes, bool canDeferIndexCreation)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState, switchover, {});
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency,
+        database, initialScan, desiredState, switchover, {}, std::move(discoveredIndexes),
+        canDeferIndexCreation);
 }
 
 IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,

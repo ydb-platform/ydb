@@ -1,4 +1,5 @@
 #include "logging.h"
+#include "index_replication.h"
 #include "private_events.h"
 #include "target_discoverer.h"
 #include "target_table.h"
@@ -16,10 +17,12 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/naming_conventions/scheme_object_names.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -123,6 +126,24 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         MaybeReply();
     }
 
+    void ReportStatus(ui32 idx, const TString& issue) {
+        if (issue.empty()) {
+            PendingSourceIssues.erase(idx);
+        } else {
+            PendingSourceIssues[idx] = issue;
+        }
+        TVector<TString> issues;
+        for (const auto& [_, pending] : PendingSourceIssues) {
+            issues.push_back(pending);
+        }
+        Sort(issues);
+        const auto combined = JoinSeq("; ", issues);
+        if (combined != LastStatus) {
+            LastStatus = combined;
+            Send(Parent, new TEvPrivate::TEvSourceStatus(ReplicationId, std::nullopt, combined));
+        }
+    }
+
     void DescribeTable(ui32 idx) {
         Y_ABORT_UNLESS(idx < Paths.size());
         Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(Paths.at(idx).first, {}), 0, idx);
@@ -148,6 +169,19 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             YDB_LOG_DEBUG("Describe table succeeded",
                 {"path", path.first});
 
+            const auto description = result.GetTableDescription();
+            const auto& sourceTable = NYdb::TProtoAccessor::GetProto(description);
+            if (AppData()->FeatureFlags.GetEnableIndexCreateReplication()) {
+                const auto pendingIndexes = GetBuildingReplicationIndexes(sourceTable);
+                if (!pendingIndexes.empty()) {
+                    ReportStatus(*it, TStringBuilder() << "Waiting for source index builds on "
+                        << path.first << ": " << JoinSeq(", ", pendingIndexes));
+                    Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup(ui64(*it) + 1));
+                    return;
+                }
+            }
+            ReportStatus(*it, {});
+
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
                 std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
             YDB_LOG_INFO("Add target",
@@ -155,7 +189,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"dstPath", target.Config->GetDstPath()},
                 {"kind", target.Kind});
 
-            for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
+            for (const auto& index : description.GetIndexDescriptions()) {
                 const auto indexSrcPath = CanonizePath(ChildPath(SplitPath(path.first),
                     TString{index.GetIndexName()}));
                 const auto indexDstPath = CanonizePath(ChildPath(SplitPath(path.second),
@@ -217,8 +251,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"issues", result.GetIssues().ToOneLineString()});
 
             if (IsRetryableError(result, Backoff)) {
+                ReportStatus(*it, TStringBuilder() << "Cannot describe source table " << path.first
+                    << ": " << result.GetStatus() << ", " << result.GetIssues().ToOneLineString());
                 return RetryDescribe(*it);
             } else {
+                ReportStatus(*it, {});
                 Failed.emplace_back(path.first, result);
             }
         }
@@ -414,7 +451,15 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         ListingRetries.insert(id);
     }
 
-    void Retry() {
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (const ui64 tag = ev->Get()->Tag) {
+            const ui32 idx = tag - 1;
+            if (Pending.contains(idx)) {
+                DescribeTable(idx);
+            }
+            return;
+        }
+
         for (const ui32 idx : DescribeRetries) {
             DescribePath(idx);
         }
@@ -478,7 +523,7 @@ public:
             hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
-            sFunc(TEvents::TEvWakeup, Retry);
+            hFunc(TEvents::TEvWakeup, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -502,6 +547,8 @@ private:
     TVector<TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry> Failed;
 
     TBackoff Backoff;
+    THashMap<ui32, TString> PendingSourceIssues;
+    TString LastStatus;
 
 }; // TTargetDiscoverer
 

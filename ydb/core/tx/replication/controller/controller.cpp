@@ -6,6 +6,7 @@
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tx/replication/common/schema_change.h>
 
 #include <algorithm>
 
@@ -86,6 +87,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvCancelCreateStream, Handle);
         HFunc(TEvPrivate::TEvCancelDropStream, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
+        HFunc(TEvPrivate::TEvSourceStatus, Handle);
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
         HFunc(TEvPrivate::TEvSchemaChangeDstAlterResult, Handle);
         HFunc(TEvPrivate::TEvSchemaChangeDstAlterTxId, Handle);
@@ -389,6 +391,32 @@ void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorC
     RunTxCreateDstResult(ev, ctx);
 }
 
+void TController::Handle(TEvPrivate::TEvSourceStatus::TPtr& ev, const TActorContext&) {
+    const auto replication = Find(ev->Get()->ReplicationId);
+    if (!replication) {
+        return;
+    }
+    if (!ev->Get()->TargetId) {
+        const auto state = replication->GetState();
+        if (replication->IsExpectedTargetDiscoverer(ev->Sender)
+            && (state == TReplication::EState::Ready || state == TReplication::EState::Paused))
+        {
+            replication->SetState(state, ev->Get()->Issue);
+        }
+        return;
+    }
+    auto* target = replication->FindTarget(*ev->Get()->TargetId);
+    if (!target || !target->IsExpectedDstCreator(ev->Sender)
+        || (target->GetDstState() != TReplication::EDstState::Creating
+            && target->GetDstState() != TReplication::EDstState::Alter))
+    {
+        return;
+    }
+    // Transient creator diagnostics are visible in the monitoring target table.
+    // A restarted creator reports its current wait again; completion clears it.
+    target->SetIssue(ev->Get()->Issue);
+}
+
 void TController::Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
@@ -501,6 +529,7 @@ void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
 
     auto ev = MakeHolder<TEvService::TEvHandshake>(TabletID(), Executor()->Generation());
     ev->Record.SetSupportsIndexMetadata(true);
+    ev->Record.SetSchemaCapabilities(SchemaIndexMetadata | SchemaFulltextIndexSettings);
     ev->Record.SetSupportsSourceOffsets(true);
     ui32 flags = 0;
     if (SelfId().NodeId() != nodeId) {
@@ -1027,9 +1056,7 @@ void TController::ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id) {
     auto result = MakeHolder<TEvService::TEvSchemaChangeResult>();
     id.Serialize(*result->Record.MutableWorker());
     result->Record.MutableSchema()->CopyFrom(barrier->second.Schema);
-    if (!barrier->second.IndexMetadataWorkers.contains(id)) {
-        result->Record.MutableSchema()->ClearIndexes();
-    }
+    FilterSchemaMetadata(*result->Record.MutableSchema(), state.GetWorkerSchemaCapabilities(id));
 
     result->Record.SetOffset(offset->second);
 

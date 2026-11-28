@@ -31,11 +31,12 @@ public:
             , SrcIsImpl(srcIsImpl)
         {}
 
-        bool GetSrcIsImpl() const {
+        bool GetSrcIsImpl() const override {
             return SrcIsImpl;
         }
 
-        bool SrcIsImpl = false;
+    private:
+        const bool SrcIsImpl;
     };
 
     explicit TTargetIndexTable(TReplication* replication,

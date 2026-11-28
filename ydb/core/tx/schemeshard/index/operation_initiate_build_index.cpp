@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -51,7 +52,11 @@ public:
         NKikimrTxDataShard::TFlatSchemeTransaction txTemplate;
         auto initiate = txTemplate.MutableInitiateBuildIndex();
         pathId.ToProto(initiate->MutablePathId());
-        initiate->SetSnapshotName("Snapshot0");
+        if (context.SS->HasTableSnapshot(pathId, OperationId.GetTxId())) {
+            initiate->SetSnapshotName("Snapshot0");
+        } else {
+            Y_ABORT_UNLESS(tableInfo->IsAsyncReplica());
+        }
         initiate->SetTableSchemaVersion(tableInfo->AlterVersion + 1);
 
         bool found = false;
@@ -147,8 +152,10 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxInitializeBuildIndex);
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
-        context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
+        if (context.SS->HasTableSnapshot(txState->TargetPathId, OperationId.GetTxId())) {
+            context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
+            context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
+        }
 
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
@@ -325,17 +332,20 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        if (!context.SS->CanCreateSingleSnapshot(tablePathId, OperationId.GetTxId(), status, errStr)) {
+        const bool sourceSnapshot = schema.GetSkipLocalSnapshot();
+        if (!sourceSnapshot && !context.SS->CanCreateSingleSnapshot(tablePathId, OperationId.GetTxId(), status, errStr)) {
             result->SetError(status, errStr);
             return result;
         }
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, tablePathId);
-        context.MemChanges.GrabNewTableSnapshot(context.SS, tablePathId, OperationId.GetTxId());
+        if (!sourceSnapshot) {
+            context.MemChanges.GrabNewTableSnapshot(context.SS, tablePathId, OperationId.GetTxId());
+            context.DbChanges.PersistTableSnapshot(tablePathId, OperationId.GetTxId());
+        }
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
-        context.DbChanges.PersistTableSnapshot(tablePathId, OperationId.GetTxId());
         context.DbChanges.PersistTxState(OperationId);
 
         pathEl->LastTxId = OperationId.GetTxId();
@@ -349,8 +359,10 @@ public:
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
-        context.SS->AddTableSnapshot(tablePathId, OperationId.GetTxId());
-        context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Add(1);
+        if (!sourceSnapshot) {
+            context.SS->AddTableSnapshot(tablePathId, OperationId.GetTxId());
+            context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Add(1);
+        }
 
         context.OnComplete.ActivateTx(OperationId);
 

@@ -28,7 +28,6 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
 void FilterIndexTableTierIds(NKikimrSchemeOp::TPartitionConfig& config);
 
 // Compact posting lists encode integer document ids and cannot represent NULL.
-bool IsCompactFulltextIndex(NKikimrSchemeOp::EIndexType indexType);
 
 // Fulltext index key columns are ordered [prefix..., text]; the text column is always last.
 // Returns the leading prefix columns (empty for a non-prefixed index).

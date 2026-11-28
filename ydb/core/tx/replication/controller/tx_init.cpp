@@ -3,6 +3,7 @@
 #include "target_topic.h"
 #include "target_transfer.h"
 
+#include <ydb/core/tx/replication/common/schema_change.h>
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -300,8 +301,11 @@ class TController::TTxInit: public TTxBase {
                 it->second.WorkerOffsets[id] = workers.GetValue<Schema::SchemaBarrierWorkers::Offset>();
             }
 
-            if (workers.GetValueOrDefault<Schema::SchemaBarrierWorkers::IndexMetadata>(false)) {
-                it->second.IndexMetadataWorkers.insert(id);
+            const ui64 legacyCapabilities = workers.GetValueOrDefault<Schema::SchemaBarrierWorkers::IndexMetadata>(false)
+                ? ui64(SchemaIndexMetadata) : 0;
+            const ui64 capabilities = workers.GetValueOrDefault<Schema::SchemaBarrierWorkers::SchemaCapabilities>(legacyCapabilities);
+            if (capabilities) {
+                it->second.WorkerSchemaCapabilities.emplace(id, capabilities);
             }
 
             if (workers.GetValue<Schema::SchemaBarrierWorkers::Applied>()) {

@@ -457,9 +457,13 @@ const TReplication::ITarget* TReplication::FindBaseTableTarget(const ITarget& in
         return nullptr;
     }
 
-    const auto path = CanonizePath(TString(ExtractParent(indexTarget.GetSrcIndexPath())));
+    const auto src = CanonizePath(TString(ExtractParent(indexTarget.GetSrcIndexPath())));
+    const auto dstIndex = TString(ExtractParent(indexTarget.GetDstPath()));
+    const auto dst = CanonizePath(TString(ExtractParent(dstIndex)));
     for (const auto* target : GetTargets()) {
-        if (target->GetKind() == TReplication::ETargetKind::Table && CanonizePath(target->GetSrcPath()) == path) {
+        if (target->GetKind() == TReplication::ETargetKind::Table
+            && CanonizePath(target->GetSrcPath()) == src && CanonizePath(target->GetDstPath()) == dst)
+        {
             return target;
         }
     }

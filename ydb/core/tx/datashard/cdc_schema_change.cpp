@@ -1,11 +1,19 @@
 #include "cdc_schema_change.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr::NDataShard {
 
+bool IsCdcSchemaColumnVisible(const TUserTable::TUserColumn& column) {
+    return !column.IsBuildInProgress
+        || (column.Name == NTableIndex::NFulltext::RowIdColumn
+            && column.Type.GetTypeId() == NScheme::NTypeIds::Uint64
+            && column.DefaultFromSequence == NTableIndex::NFulltext::RowIdSequenceName);
+}
+
 void PersistCdcSchemaChange(TDataShard& dataShard, NTabletFlatExecutor::TTransactionContext& txc,
-    TOperation::TPtr op, const TPathId& tableId, const TUserTable& table)
+    TOperation::TPtr op, const TPathId& tableId, const TUserTable& table, const TPathId& onlyStream)
 {
     if (table.GetSchemaChangesCdcStreams().empty()) {
         return;
@@ -13,6 +21,9 @@ void PersistCdcSchemaChange(TDataShard& dataShard, NTabletFlatExecutor::TTransac
 
     NIceDb::TNiceDb db(txc.DB);
     for (const auto& streamPathId : table.GetSchemaChangesCdcStreams()) {
+        if (onlyStream && streamPathId != onlyStream) {
+            continue;
+        }
         auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::CdcSchemaChange)
             .WithOrder(dataShard.AllocateChangeRecordOrder(db))
             .WithGroup(0)

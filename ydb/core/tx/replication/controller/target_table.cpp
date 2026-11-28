@@ -21,8 +21,6 @@ TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const I
 }
 
 TString TTargetIndexTable::GetSrcIndexPath() const {
-    const auto srcParts = SplitPath(GetSrcPath());
-    const auto dstParts = SplitPath(GetDstPath());
     if (SrcIsImpl) {
         return CanonizePath(TString(ExtractParent(GetSrcPath())));
     }

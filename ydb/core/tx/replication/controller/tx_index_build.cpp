@@ -3,6 +3,8 @@
 
 #include <ydb/core/base/path.h>
 
+#include <util/generic/algorithm.h>
+
 #include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -60,6 +62,20 @@ bool TController::IsJoinedIndexBuild(const TBuild& build, const TRowVersion& ver
     return !IsCancelledIndexBuild(build)
         && build.GetPhase() != TBuild::FILLING
         && version >= TRowVersion::FromProto(build.GetJoinVersion());
+}
+
+TVector<std::pair<ui64, ui64>> TController::GetIndexBuildGroup(const std::pair<ui64, ui64>& key) const {
+    const auto& build = IndexBuilds.at(key);
+    if (!build.HasIndexGroupId()) {
+        return {key};
+    }
+    TVector<std::pair<ui64, ui64>> result;
+    for (const auto& [peerKey, peer] : IndexBuilds) {
+        if (peerKey.first == key.first && peer.GetIndexGroupId() == build.GetIndexGroupId()) {
+            result.push_back(peerKey);
+        }
+    }
+    return result;
 }
 
 void TController::SaveIndexBuild(NIceDb::TNiceDb& db, const std::pair<ui64, ui64>& key, const TBuild& build) {
@@ -289,6 +305,10 @@ class TController::TTxIndexBuild: public TTxBase {
     }
 
     void Progress(NIceDb::TNiceDb& db) {
+        const auto needsCancellation = [](const TBuild& build) {
+            const auto phase = build.GetPhase();
+            return phase == TBuild::FILLING || phase == TBuild::JOINING || IsCancelledIndexBuild(build);
+        };
         for (auto& [key, build] : Self->IndexBuilds) {
             auto replication = Self->Find(key.first);
             auto* target = replication ? replication->FindTarget(key.second) : nullptr;
@@ -298,9 +318,17 @@ class TController::TTxIndexBuild: public TTxBase {
                 continue;
             }
 
-            const bool unfinished = build.GetPhase() == TBuild::FILLING || build.GetPhase() == TBuild::JOINING;
             const bool finishing = replication->GetDesiredState() == TReplication::EState::Done;
-            if (unfinished && finishing && !Self->HasActiveSchemaBarrier(key.first)) {
+            const auto* base = replication->FindBaseTableTarget(*target);
+            const auto dependency = Self->IndexBuilds.find({key.first, build.GetDependsOnTargetId()});
+            const bool lostDependency = build.GetPhase() != TBuild::READY
+                && dependency != Self->IndexBuilds.end() && needsCancellation(dependency->second);
+            if (finishing && !IsCancelledIndexBuild(build) && !Self->HasActiveSchemaBarrier(key.first)
+                && (lostDependency || AnyOf(Self->GetIndexBuildGroup(key), [&](const auto& peerKey) {
+                    // A cancellation decision applies to every backing table in the group.
+                    return needsCancellation(Self->IndexBuilds.at(peerKey));
+                })))
+            {
                 // Stop every writer before dropping its table. Persist this
                 // phase and its paused destination before starting cancellation.
                 build.SetPhase(TBuild::CANCELLING);
@@ -309,6 +337,18 @@ class TController::TTxIndexBuild: public TTxBase {
                     NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
                 );
                 Self->SaveIndexBuild(db, key, build);
+            }
+
+            if (build.GetPhase() == TBuild::CANCELLING && base && !base->GetDstPathId()
+                && base->GetDstState() == TReplication::EDstState::Creating
+                && base->GetStreamState() == TReplication::EStreamState::Creating)
+            {
+                // A creating base must persist a ready source stream before
+                // it can register its destination creator. Fence future creation.
+                auto* creatingBase = replication->FindTarget(base->GetId());
+                creatingBase->SetDstState(TReplication::EDstState::Paused);
+                db.Table<Schema::Targets>().Key(key.first, base->GetId()).Update(
+                    NIceDb::TUpdate<Schema::Targets::DstState>(creatingBase->GetDstState()));
             }
 
             if (IsCancelledIndexBuild(build)) {
@@ -359,7 +399,16 @@ class TController::TTxIndexBuild: public TTxBase {
                 continue;
             }
 
-            if (build.GetPhase() == TBuild::FILLING && heartbeat > maxVersion && !Self->AllocatedTxIds.empty()) {
+            if (build.GetPhase() == TBuild::FILLING && heartbeat > maxVersion
+                && !replication->GetConfig().GetConsistencySettings().HasGlobal())
+            {
+                build.SetPhase(TBuild::MAKING_READY);
+                Self->SaveIndexBuild(db, key, build);
+            }
+
+            if (build.GetPhase() == TBuild::FILLING && heartbeat > maxVersion && !Self->AllocatedTxIds.empty()
+                && replication->GetConfig().GetConsistencySettings().HasGlobal())
+            {
                 const auto interval = GetCommitInterval(*replication);
                 // Every already issued interval ends before or at C. Taking
                 // the next boundary after the last global interval also
@@ -480,6 +529,42 @@ void TController::StartIndexReady(const std::pair<ui64, ui64>& key, const TActor
     }
 
     const auto& build = IndexBuilds.at(key);
+    if (build.GetPhase() == TBuild::CANCELLING) {
+        // Cancel dependent builds before removing the backing table they need.
+        auto peer = IndexBuilds.lower_bound({key.first, 0});
+        for (; peer != IndexBuilds.end() && peer->first.first == key.first; ++peer) {
+            const auto& dependent = peer->second;
+            if (dependent.GetDependsOnTargetId() != key.second
+                || dependent.GetPhase() == TBuild::READY || dependent.GetPhase() == TBuild::CANCELLED)
+            {
+                continue;
+            }
+            const auto* peerTarget = replication->FindTarget(peer->first.second);
+            if (peerTarget && peerTarget->GetDstState() != TReplication::EDstState::Removing) {
+                return;
+            }
+        }
+    } else if (build.HasDependsOnTargetId()) {
+        const auto dependency = IndexBuilds.find({key.first, build.GetDependsOnTargetId()});
+        if (dependency != IndexBuilds.end() && dependency->second.GetPhase() != TBuild::READY) {
+            return;
+        }
+    }
+    if (build.HasIndexGroupId()) {
+        const auto leader = std::make_pair(key.first, build.GetIndexGroupId());
+        if (leader != key) {
+            return StartIndexReady(leader, ctx);
+        }
+        for (const auto& peerKey : GetIndexBuildGroup(key)) {
+            const auto& peer = IndexBuilds.at(peerKey);
+            const auto* peerTarget = replication->FindTarget(peerKey.second);
+            if (!peerTarget || peer.GetPhase() != build.GetPhase()
+                || (build.GetPhase() == TBuild::CANCELLING && !peerTarget->GetWorkers().empty()))
+            {
+                return;
+            }
+        }
+    }
     const bool cancelling = build.GetPhase() == TBuild::CANCELLING;
     const bool finishing = replication->GetDesiredState() == TReplication::EState::Done;
     const auto state = replication->GetState();
@@ -496,9 +581,17 @@ void TController::StartIndexReady(const std::pair<ui64, ui64>& key, const TActor
         return;
     }
 
+    const bool noDestinationToCancel = cancelling && !build.GetReadyTxId()
+        && base->GetDstState() == TReplication::EDstState::Paused;
+    if (!base->GetDstPathId() && !noDestinationToCancel) {
+        // A destination CREATE may be in flight. Its result will resume
+        // cancellation with the persisted path ID.
+        return;
+    }
+
     const TSchemaChangeDstAlterSettings settings{
         .TxId = build.GetReadyTxId(),
-        .GlobalConsistency = true,
+        .GlobalConsistency = replication->GetConfig().GetConsistencySettings().HasGlobal(),
         .IndexName = SplitPath(target->GetSrcIndexPath()).back(),
         .SnapshotTxId = build.GetSnapshotTxId(),
         .CancelIndex = cancelling,
@@ -588,6 +681,31 @@ public:
                 } else {
                     build.SetPhase(TBuild::READY);
                 }
+                for (const auto& peerKey : Self->GetIndexBuildGroup(key)) {
+                    if (peerKey == key) {
+                        continue;
+                    }
+                    auto& peer = Self->IndexBuilds.at(peerKey);
+                    peer.SetPhase(build.GetPhase());
+                    if (build.GetPhase() == TBuild::CANCELLED) {
+                        peer.ClearAssignments();
+                        auto* peerTarget = Replication->FindTarget(peerKey.second);
+                        peerTarget->SetDstPathId({});
+                        db.Table<Schema::Targets>().Key(peerKey.first, peerKey.second).Update(
+                            NIceDb::TUpdate<Schema::Targets::DstPathOwnerId>(InvalidOwnerId),
+                            NIceDb::TUpdate<Schema::Targets::DstPathLocalId>(InvalidLocalPathId));
+                        for (auto progress = Self->IndexBuildProgress.begin(); progress != Self->IndexBuildProgress.end();) {
+                            const auto& id = progress->first;
+                            if (id.ReplicationId() == peerKey.first && id.TargetId() == peerKey.second) {
+                                db.Table<Schema::IndexBuildWorkers>().Key(peerKey.first, peerKey.second, id.WorkerId()).Delete();
+                                Self->IndexBuildProgress.erase(progress++);
+                            } else {
+                                ++progress;
+                            }
+                        }
+                    }
+                    Self->SaveIndexBuild(db, peerKey, peer);
+                }
             } else {
                 target->SetDstState(TReplication::EDstState::Error);
                 target->SetIssue(ResultEvent->Get()->Error);
@@ -615,6 +733,7 @@ public:
         if (Finished) {
             Self->IndexReadyActors.erase(std::make_pair(ResultEvent->Get()->ReplicationId, ResultEvent->Get()->TargetId));
             Replication->Progress(ctx);
+            Self->RunTxIndexBuild(ctx);
             if (Self->DeferredAlters.contains(Replication->GetId()) && !Self->HasPendingAlter(Replication->GetId())) {
                 ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(Replication->GetId()));
             }

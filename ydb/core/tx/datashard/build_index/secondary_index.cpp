@@ -537,7 +537,11 @@ public:
                       const NKikimrIndexBuilder::TColumnBuildSettings& columnBuildSettings,
                       const TUserTable& tableInfo,
                       const TIndexBuildScanSettings& scanSettings)
-        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings, true) {
+        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings,
+            !(columnBuildSettings.columnSize() == 1
+                && columnBuildSettings.column(0).GetColumnName() == NTableIndex::NFulltext::RowIdColumn
+                && (!tableInfo.GetSchemaChangesCdcStreams().empty()
+                    || AppData()->FeatureFlags.GetEnableIndexCreateReplication()))) {
         Y_ENSURE(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;

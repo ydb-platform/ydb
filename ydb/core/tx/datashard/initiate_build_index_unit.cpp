@@ -2,6 +2,7 @@
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
+#include <ydb/core/base/table_index.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -68,8 +69,14 @@ public:
         const TSnapshotKey key(pathId, step, txId);
         const ui64 flags = TSnapshot::FlagScheme;
 
-        DataShard.GetSnapshotManager().AddSnapshot(
-            txc.DB, key, params.GetSnapshotName(), flags, TDuration::Zero());
+        if (params.HasSnapshotName()) {
+            DataShard.GetSnapshotManager().AddSnapshot(
+                txc.DB, key, params.GetSnapshotName(), flags, TDuration::Zero());
+        } else {
+            Y_ENSURE(tableInfo->ReplicationConfig.Mode
+                != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+            Y_ENSURE(NTableIndex::IsOnlineReplicationIndex(params.GetIndexDescription().GetType()));
+        }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

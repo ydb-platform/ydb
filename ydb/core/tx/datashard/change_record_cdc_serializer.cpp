@@ -1,6 +1,8 @@
 #include "change_record_cdc_serializer.h"
 #include "change_record.h"
+#include "cdc_schema_change.h"
 #include "type_serialization.h"
+#include <ydb/core/base/table_index.h>
 
 #include <ydb/core/change_exchange/visitor.h>
 #include <ydb/core/io_formats/json/json.h>
@@ -484,8 +486,12 @@ protected:
             table["primaryKeyColumnNames"].AppendValue(it->second.Name);
         }
 
+        const auto stream = schema->CdcStreams.find(record.GetPathId());
+        const bool exposeBuildingRowId = stream != schema->CdcStreams.end()
+            && stream->second.SchemaChanges && stream->second.Mode == NKikimrSchemeOp::ECdcStreamModeUpdate;
         for (const auto& [tag, column] : schema->Columns) {
-            if (column.IsBuildInProgress) {
+            const bool visible = exposeBuildingRowId ? IsCdcSchemaColumnVisible(column) : !column.IsBuildInProgress;
+            if (!visible) {
                 continue;
             }
             table["columns"][column.Name]["type"] = NScheme::TypeName(column.Type, column.TypeMod);
@@ -543,6 +549,16 @@ protected:
                 "Unknown index type: " << type);
             value["type"] = type == NKikimrSchemeOp::EIndexTypeGlobal
                 ? "GlobalSync" : TString(typeSuffix);
+            if (NTableIndex::IsCompactFulltextIndex(type)) {
+                const auto& fulltext = index.GetFulltextIndexDescription();
+                const bool needsRowId = schema->KeyColumnTypes.size() != 1
+                    || !NTableIndex::IsIntegerPrimaryKeyType(schema->KeyColumnTypes.front().GetTypeId());
+                // Only publish settings for an index whose document IDs follow
+                // the primary-key convention understood by online replication.
+                if (fulltext.GetUseRowIdAsDocId() == needsRowId) {
+                    value["fulltextSettings"] = Base64Encode(fulltext.GetSettings().SerializeAsString());
+                }
+            }
             auto& indexColumns = value["indexColumns"];
             indexColumns.SetType(NJson::JSON_ARRAY);
             for (const auto& column : index.GetKeyColumnNames()) {

@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -39,8 +40,11 @@ TTxId GetExtraSnapshotTxId(TSchemeShard* ss, TTxState* txState, const TPathId& p
 
 // TFinalizeBuildIndex is called without buildId from replication.
 // It's also called not just for the main table but also for index tables with snapshots.
-TTxId ResolveFinalizeSnapshotTxId(TSchemeShard* ss, const TPathId& pathId, TTxId buildId) {
-    if (buildId) {
+TTxId ResolveFinalizeSnapshotTxId(TSchemeShard* ss, const TPathId& pathId, const TTxState& txState) {
+    if (txState.BuildIndexOutcome && txState.BuildIndexOutcome->GetSkipLocalSnapshot()) {
+        return {};
+    }
+    if (const TTxId buildId = txState.BuildIndexId) {
         if (const auto* buildInfoPtr = ss->IndexBuilds.FindPtr(TIndexBuildId(ui64(buildId)));
                 buildInfoPtr && *buildInfoPtr && (*buildInfoPtr)->TablePathId == pathId) {
             Y_ABORT_UNLESS((*buildInfoPtr)->InitiateTxId);
@@ -75,15 +79,14 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
-        Y_ABORT_UNLESS(txState->BuildIndexId);
 
         TPathId pathId = txState->TargetPathId;
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
 
         txState->ClearShardsInProgress();
 
-        const TTxId snapshotTxId = ResolveFinalizeSnapshotTxId(context.SS, pathId, txState->BuildIndexId);
-        const TStepId snapshotStepId = context.SS->SnapshotsStepIds.at(snapshotTxId);
+        const TTxId snapshotTxId = ResolveFinalizeSnapshotTxId(context.SS, pathId, *txState);
+        const TStepId snapshotStepId = snapshotTxId ? context.SS->SnapshotsStepIds.at(snapshotTxId) : TStepId{};
 
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             TShardIdx shardIdx = txState->Shards[i].Idx;
@@ -158,10 +161,12 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
         TPathId tableId = txState->TargetPathId;
-        const TTxId snapshotTxId = ResolveFinalizeSnapshotTxId(context.SS, tableId, txState->BuildIndexId);
-        context.SS->RemoveTableSnapshot(tableId, snapshotTxId);
+        if (const TTxId snapshotTxId = ResolveFinalizeSnapshotTxId(context.SS, tableId, *txState)) {
+            context.SS->RemoveTableSnapshot(tableId, snapshotTxId);
 
-        context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
+            context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
+            context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
+        }
 
         if (const TTxId extraTxId = GetExtraSnapshotTxId(context.SS, txState, tableId)) {
             context.SS->RemoveTableSnapshot(tableId, extraTxId);
@@ -190,7 +195,6 @@ public:
 
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
 
-        context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
 
         auto tablePath = context.SS->PathsById.at(tableId);
         context.SS->ClearDescribePathCaches(tablePath);
@@ -369,8 +373,19 @@ public:
             return result;
         }
 
+        const auto& outcome = finalizeMainTable.GetOutcome();
+        const bool sourceSnapshot = outcome.GetSkipLocalSnapshot();
+        if (sourceSnapshot && (!Transaction.GetInternal() || !path.IsAsyncReplicaTable()
+            || (!outcome.HasApply() && !outcome.HasCancel()) || finalizeMainTable.GetSnapshotTxId()
+            || finalizeMainTable.GetBuildIndexId() || finalizeMainTable.HasExtraSnapshotTxId()))
+        {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "Only source-CDC index finalization on a replica can skip the local snapshot");
+            return result;
+        }
+
         const TTxId snapshotTxId = TTxId(finalizeMainTable.GetSnapshotTxId());
-        if (!context.SS->HasTableSnapshot(tablePathId, snapshotTxId)) {
+        if (!sourceSnapshot && !context.SS->HasTableSnapshot(tablePathId, snapshotTxId)) {
             errStr = TStringBuilder()
                 << "No snapshot with requested txId presents for table"
                 << ", tableId:" << tablePathId

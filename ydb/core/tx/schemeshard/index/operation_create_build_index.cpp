@@ -114,11 +114,17 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
     const bool forReplication = op.GetForReplication();
-    if (forReplication && (!tx.GetInternal() || !table.IsAsyncReplicaTable()
-        || GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobal || op.GetIsRebuild()))
+    const auto& flags = AppData()->FeatureFlags;
+    const auto indexType = GetIndexType(indexDesc);
+    const bool onlineReplication = flags.GetEnableIndexCreateReplication()
+        && NTableIndex::IsOnlineReplicationIndex(indexType);
+    const bool replicatedFulltext = forReplication && NTableIndex::IsCompactFulltextIndex(indexType);
+    if (forReplication && (!tx.GetInternal() || !table.IsAsyncReplicaTable() || op.GetIsRebuild()
+        || (indexType != NKikimrSchemeOp::EIndexTypeGlobal && !onlineReplication)
+        || (replicatedFulltext && (!flags.GetEnableCompactFulltextIndex() || !flags.GetEnableFulltextIndexRowId()))))
     {
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
-            "Replication index creation requires an internal SYNC index on a replica")};
+            "Replication index creation requires an internal supported index on a replica")};
     }
 
     auto domainInfo = table.DomainInfo();
@@ -203,7 +209,41 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     TString errStr;
     if (!isRebuild) {
-        if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes.AsMap(), indexDesc, errStr)) {
+        const bool replicatedRowId = replicatedFulltext && (tableInfo->KeyColumnIds.size() != 1
+            || !NTableIndex::IsIntegerPrimaryKeyType(tableInfo->Columns.at(tableInfo->KeyColumnIds.front()).PType.GetTypeId()));
+        if (replicatedFulltext) {
+            indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(replicatedRowId);
+        }
+        if (replicatedRowId) {
+            // The dependency's CDC scan may still be filling. Waiting here for
+            // Ready would park the base-table schema barrier and prevent that
+            // dependency from joining global commits. The controller keeps the
+            // fulltext index WriteOnly until both scans have joined.
+            bool validColumn = false;
+            for (const auto& [id, column] : tableInfo->Columns) {
+                Y_UNUSED(id);
+                validColumn |= !column.IsDropped() && column.Name == NTableIndex::NFulltext::RowIdColumn
+                    && column.PType.GetTypeId() == NScheme::NTypeIds::Uint64 && column.NotNull;
+            }
+            bool validIndex = false;
+            for (const auto& [name, pathId] : table.Base()->GetChildren()) {
+                Y_UNUSED(name);
+                const auto it = context.SS->Indexes.find(pathId);
+                if (it == context.SS->Indexes.end()) {
+                    continue;
+                }
+                const auto& dependency = *it->second;
+                validIndex |= dependency.Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+                    && dependency.IndexKeys.size() == 1
+                    && dependency.IndexKeys.front() == NTableIndex::NFulltext::RowIdColumn
+                    && (dependency.State == NKikimrSchemeOp::EIndexStateReady
+                        || dependency.State == NKikimrSchemeOp::EIndexStateWriteOnly);
+            }
+            if (!validColumn || !validIndex) {
+                return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    "Replicated fulltext/JSON index requires its Uint64 NOT NULL row-id column and unique index")};
+            }
+        } else if (!replicatedFulltext && !NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes.AsMap(), indexDesc, errStr)) {
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusInvalidParameter, errStr)};
         }
     }
@@ -262,6 +302,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
         snapshot.SetTableName(table.LeafName());
+        snapshot.SetSkipLocalSnapshot(forReplication && onlineReplication);
 
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
     }
@@ -314,7 +355,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx, localSequences);
     };
 
-    const auto indexType = GetIndexType(indexDesc);
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -384,7 +424,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames());
             auto implTableDesc = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
                 indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType, prefixColumns, false);
-            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(!forReplication);
             // Set index table partitions to at least the same number of partitions at the main table
             if (!indexTableDesc.GetPartitionConfig().HasPartitioningPolicy()) {
                 auto& policy = *implTableDesc.MutablePartitionConfig()->MutablePartitioningPolicy();
@@ -425,7 +465,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
                 indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
                 NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));
-            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(!forReplication);
             result.push_back(createImplTable(std::move(implTableDesc)));
             break;
         }
@@ -441,7 +481,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames());
             auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
                 indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType, prefixColumns);
-            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(!forReplication);
             result.push_back(createImplTable(std::move(implTableDesc)));
             result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
             result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));

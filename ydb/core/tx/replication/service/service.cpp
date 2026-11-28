@@ -11,6 +11,7 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/tx/replication/common/schema_change.h>
 #include <ydb/core/tx/replication/common/transfer_writer_stats.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -179,7 +180,9 @@ public:
 
         ActorId = ev->Sender;
         Generation = generation;
-        SupportsIndexMetadata = ev->Get()->Record.GetSupportsIndexMetadata();
+        const auto& handshake = ev->Get()->Record;
+        SchemaCapabilities = handshake.HasSchemaCapabilities() ? handshake.GetSchemaCapabilities()
+            : (handshake.GetSupportsIndexMetadata() ? ui64(SchemaIndexMetadata) : 0);
         SupportsSourceOffsets = ev->Get()->Record.GetSupportsSourceOffsets();
 
         auto status = MakeHolder<TEvService::TEvStatus>();
@@ -525,9 +528,7 @@ public:
         }
 
         id.Serialize(*ev->Get()->Record.MutableWorker());
-        if (!SupportsIndexMetadata) {
-            ev->Get()->Record.MutableSchema()->ClearIndexes();
-        }
+        FilterSchemaMetadata(*ev->Get()->Record.MutableSchema(), SchemaCapabilities);
 
         ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
     }
@@ -566,7 +567,7 @@ private:
 private:
     TActorId ActorId;
     ui64 Generation;
-    bool SupportsIndexMetadata = false;
+    ui64 SchemaCapabilities = 0;
     bool SupportsSourceOffsets = false;
     const ui64 ControllerTabletId;
     THashMap<TWorkerId, TWorkerInfo> Workers;

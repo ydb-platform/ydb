@@ -281,6 +281,16 @@ void TTargetBase::Progress(const TActorContext& ctx) {
             if (canAttach) {
                 DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
             } else if (!DstAlterer) {
+                if (Kind == ETargetKind::Table && Replication->GetDesiredState() == TReplication::EState::Done) {
+                    for (const auto* peer : Replication->GetTargets()) {
+                        if (Replication->FindBaseTableTarget(*peer) == this
+                            && peer->GetDstState() != EDstState::Done && peer->GetDstState() != EDstState::Removing)
+                        {
+                            // Release the base table after its backing tables can accept writes.
+                            return;
+                        }
+                    }
+                }
                 DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
             }
         }

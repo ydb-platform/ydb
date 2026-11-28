@@ -1,4 +1,5 @@
 #include "dst_creator.h"
+#include "index_replication.h"
 #include "private_events.h"
 
 
@@ -9,6 +10,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -26,6 +28,85 @@ namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
+
+    Y_UNIT_TEST_TWIN(PreservesExistingFulltextRowIdSequence, Compact) {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableIndexCreateReplication(true);
+        flags.FeatureFlags.SetEnableCompactFulltextIndex(Compact);
+        TEnv env(flags, true, ERuntimeMode::Simulated);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto sessionResult = env.RunCall([&] { return client.GetSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto create = env.RunCall([&] {
+            return session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Source` (key Utf8 NOT NULL, value Utf8, PRIMARY KEY(key),
+                    INDEX idx GLOBAL USING fulltext_plain ON (value) WITH (tokenizer=standard));
+            )").GetValueSync();
+        });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto source = env.GetDescription("/Root/Source").GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(source.SequencesSize(), 1);
+        env.GetRuntime().Register(CreateDstCreator(env.GetSender(), env.GetSchemeshardId("/Root/Source"),
+            env.GetYdbProxy(), "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Replica"));
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+        const auto replica = env.GetDescription("/Root/Replica").GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(replica.SequencesSize(), 1);
+        const auto& sequence = replica.GetSequences(0);
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetName(), NTableIndex::NFulltext::RowIdSequenceName);
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetDataType(), source.GetSequences(0).GetDataType());
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetMinValue(), source.GetSequences(0).GetMinValue());
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetMaxValue(), source.GetSequences(0).GetMaxValue());
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetIncrement(), source.GetSequences(0).GetIncrement());
+        const auto* rowId = FindIfPtr(replica.GetColumns(), [](const auto& column) {
+            return column.GetName() == NTableIndex::NFulltext::RowIdColumn;
+        });
+        UNIT_ASSERT(rowId);
+        UNIT_ASSERT_VALUES_EQUAL(rowId->GetType(), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(rowId->GetDefaultFromSequence(), sequence.GetName());
+    }
+
+    Y_UNIT_TEST(ReportsPendingSourceIndexAndClearsStatus) {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableIndexCreateReplication(true);
+        TEnv env(flags, true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto sessionResult = env.RunCall([&] { return client.GetSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto create = env.RunCall([&] {
+            return session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Source` (key Uint64 NOT NULL, value Utf8, PRIMARY KEY(key),
+                    INDEX idx GLOBAL USING fulltext_plain ON (value) WITH (tokenizer=standard));
+            )").GetValueSync();
+        });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto description = env.RunCall([&] { return session.DescribeTable("/Root/Source").GetValueSync(); });
+        UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+        auto table = NYdb::TProtoAccessor::GetProto(description.GetTableDescription());
+        table.mutable_indexes(0)->set_status(Ydb::Table::TableIndexDescription::STATUS_BUILDING);
+        const auto proxy = runtime.AllocateEdgeActor();
+        const auto creator = runtime.Register(CreateDstCreator(env.GetSender(), env.GetSchemeshardId("/Root/Source"),
+            proxy, "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Replica"));
+        const auto request = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(proxy);
+        runtime.Send(new IEventHandle(creator, proxy, new TEvYdbProxy::TEvDescribeTableResponse(
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(table), NYdb::NTable::TDescribeTableSettings()),
+            0, request->Cookie));
+        const auto waiting = runtime.GrabEdgeEvent<TEvPrivate::TEvSourceStatus>(env.GetSender());
+        UNIT_ASSERT_STRING_CONTAINS(waiting->Get()->Issue, "Waiting for source index builds");
+        UNIT_ASSERT_STRING_CONTAINS(waiting->Get()->Issue, "/Root/Source: idx");
+        runtime.Send(creator, env.GetSender(), new TEvents::TEvWakeup());
+        const auto retry = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(proxy);
+        runtime.Send(retry->Forward(env.GetYdbProxy()));
+        const auto cleared = runtime.GrabEdgeEvent<TEvPrivate::TEvSourceStatus>(env.GetSender());
+        UNIT_ASSERT(cleared->Get()->Issue.empty());
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+    }
 
     void SetImportState(TEnv<>& env, const TString& path,
             NKikimrSchemeOp::TTableReplicationConfig::EImportState state,
@@ -1650,6 +1731,40 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 {.Name = "value", .Type = "Utf8"},
             },
         });
+    }
+
+    Y_UNIT_TEST_TWIN(FulltextAttachment, Compact) {
+        for (bool mismatch : {false, true}) {
+            TFeatureFlags flags;
+            flags.FeatureFlags.SetEnableIndexCreateReplication(true);
+            flags.FeatureFlags.SetEnableCompactFulltextIndex(Compact);
+            TEnv env(flags);
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            auto session = client.GetSession().GetValueSync().GetSession();
+            for (const TString name : {"Source", "Replica"}) {
+                const auto result = session.ExecuteSchemeQuery(TStringBuilder()
+                    << "CREATE TABLE `/Root/" << name << "` (key Uint64 NOT NULL, value Utf8, PRIMARY KEY(key), "
+                    << "INDEX idx GLOBAL USING fulltext_relevance ON (value) "
+                    << "WITH (tokenizer=standard, use_filter_lowercase="
+                    << (mismatch && name == "Replica" ? "false" : "true") << "));").GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+            SetImportState(env, "/Root/Replica", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+            env.GetRuntime().Register(CreateDstCreator(env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                "/Root/Source", "/Root/Replica", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+            const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status,
+                mismatch ? NKikimrScheme::StatusSchemeError : NKikimrScheme::StatusSuccess);
+            if (mismatch) {
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "Fulltext/JSON settings mismatch: idx");
+            } else {
+                const auto table = env.GetDescription("/Root/Replica").GetPathDescription().GetTable();
+                UNIT_ASSERT_VALUES_EQUAL(table.GetTableIndexes(0).GetState(), NKikimrSchemeOp::EIndexStateReady);
+                UNIT_ASSERT_VALUES_EQUAL(table.GetReplicationConfig().GetMode(),
+                    NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+            }
+        }
     }
 
     Y_UNIT_TEST(ColumnTypeMismatch) {

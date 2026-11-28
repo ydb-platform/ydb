@@ -7,8 +7,8 @@
 #include <ydb/core/tx/columnshard/counters/thread_safe_value.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
-#include <ydb/core/tx/columnshard/resources/memory.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/signals/histogram.h>
 #include <ydb/library/signals/owner.h>
 

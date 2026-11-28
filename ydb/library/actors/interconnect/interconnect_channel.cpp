@@ -93,13 +93,20 @@ namespace NActors {
         }
     }
 
-    bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event) {
+    bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 serial) {
         const size_t amount = sizeof(TChannelPart) + sizeof(TEventDescr2);
         if (task.GetInternalFreeAmount() < amount) {
             return false;
         }
 
         auto traceId = event.Span.GetTraceId();
+        if (auto* wilson = event.Span.GetWilsonSpanPtr(); wilson && *wilson) {
+            wilson->Event("descriptor buffered", {
+                {"monotonic_us", static_cast<i64>(TMonotonic::Now().MicroSeconds())},
+                {"descriptor_packet_serial", static_cast<i64>(serial)},
+                {"serialized_bytes", static_cast<i64>(event.EventSerializedSize)},
+            });
+        }
         event.Span.EndOk();
 
         Y_ABORT_UNLESS(SerializationInfo);
@@ -160,7 +167,9 @@ namespace NActors {
                         Metrics->UpdateIcQueueTimeHistogram(duration.MicroSeconds());
                     }
                     if (NWilson::TSpan* wilsonSpan = event.Span.GetWilsonSpanPtr()) {
-                        wilsonSpan->Event("FeedBuf:INITIAL");
+                        wilsonSpan->Event("FeedBuf:INITIAL", {
+                            {"monotonic_us", static_cast<i64>(TMonotonic::Now().MicroSeconds())},
+                        });
                     }
                     UseRdmaForCurrentEvent = false;
                     RdmaCredsBuffer.Clear();
@@ -224,7 +233,7 @@ namespace NActors {
                     break;
 
                 case EState::DESCRIPTOR:
-                    if (!FeedDescriptor(task, event)) {
+                    if (!FeedDescriptor(task, event, serial)) {
                         return false;
                     }
                     event.Serial = serial;

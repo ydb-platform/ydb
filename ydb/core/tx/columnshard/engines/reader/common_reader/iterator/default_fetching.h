@@ -98,8 +98,15 @@ private:
         auto columnChunks = source.GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
         IsEmptyChunks.emplace(columnChunks.empty());
         if (columnChunks.empty()) {
-            ColumnChunks.emplace_back(source.GetRecordsCount(),
-                TPortionDataAccessor::TAssembleBlobInfo(source.GetRecordsCount(), GetColumnLoader(context.GetSource())->GetDefaultValue()));
+            const auto fill = ISnapshotSchema::GetAbsentColumnFill(
+                *source.GetSourceSchema(), *source.GetContext()->GetReadMetadata()->GetResultSchema(), GetEntityId());
+            const ui32 recordsCount = source.GetRecordsCount();
+            const ui32 chunkRecords =
+                ISnapshotSchema::GetAbsentColumnChunkRecords(GetColumnLoader(source)->GetField()->type(), fill, recordsCount);
+            for (ui32 pos = 0; pos < recordsCount; pos += chunkRecords) {
+                const ui32 count = std::min(chunkRecords, recordsCount - pos);
+                ColumnChunks.emplace_back(count, TPortionDataAccessor::TAssembleBlobInfo(count, fill));
+            }
             return;
         }
         StorageId = source.GetColumnStorageId(GetEntityId());
@@ -119,7 +126,8 @@ private:
             } else {
                 ColumnChunks.emplace_back(
                     c->GetMeta().GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
-                                                        source.GetSourceSchema()->GetExternalDefaultValueVerified(c->GetEntityId())));
+                                                        ISnapshotSchema::GetAbsentColumnFill(*source.GetSourceSchema(),
+                                                            *source.GetContext()->GetReadMetadata()->GetResultSchema(), c->GetEntityId())));
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }

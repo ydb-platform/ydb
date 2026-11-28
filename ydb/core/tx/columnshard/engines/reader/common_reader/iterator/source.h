@@ -382,6 +382,9 @@ public:
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const = 0;
 
+    static ui64 GetAbsentColumnsRawBytes(const TPortionDataAccessor& accessor, const ISnapshotSchema& sourceSchema,
+        const ISnapshotSchema& resultSchema, const std::set<ui32>& columnIds);
+
     void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false);
 
     TExecutionResult StartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {

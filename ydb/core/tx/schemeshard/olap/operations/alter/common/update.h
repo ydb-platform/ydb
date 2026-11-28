@@ -73,15 +73,15 @@ protected:
         return result;
     }
 
-    bool CheckTargetSchema(const TOlapSchema& targetSchema) {
+    TConclusionStatus CheckTargetSchema(const TOlapSchema& targetSchema) {
         if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
             for (auto& [_, column] : targetSchema.GetColumns().GetColumns()) {
-                if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
-                    return false;
+                if (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName) {
+                    return TConclusionStatus::Fail("schema update error: sparsed columns are disabled");
                 }
             }
         }
-        return true;
+        return TConclusionStatus::Success();
     }
 
 public:

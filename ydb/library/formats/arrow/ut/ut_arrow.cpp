@@ -341,6 +341,20 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
             UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::StringArray&>(*copy).GetString(2), std::string());
         }
     }
+
+    Y_UNIT_TEST(ScalarIdenticalNullable) {
+        const auto nan = std::make_shared<arrow::DoubleScalar>(std::numeric_limits<double>::quiet_NaN());
+        const auto otherNan = std::make_shared<arrow::DoubleScalar>(std::numeric_limits<double>::quiet_NaN());
+        const auto five = std::make_shared<arrow::DoubleScalar>(5.0);
+
+        UNIT_ASSERT(NArrow::ScalarIdenticalNullable(nan, otherNan));
+        UNIT_ASSERT(!NArrow::ScalarIdenticalNullable(nan, five));
+        UNIT_ASSERT_VALUES_EQUAL(NArrow::ScalarCompareNullable(nan, five), 0);
+        UNIT_ASSERT(NArrow::ScalarIdenticalNullable(five, std::make_shared<arrow::DoubleScalar>(5.0)));
+        UNIT_ASSERT(NArrow::ScalarIdenticalNullable(nullptr, nullptr));
+        UNIT_ASSERT(!NArrow::ScalarIdenticalNullable(nullptr, five));
+        UNIT_ASSERT(!NArrow::ScalarIdenticalNullable(five, nullptr));
+    }
 }
 
 }

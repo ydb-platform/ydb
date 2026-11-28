@@ -7,6 +7,8 @@ PEERDIR(
     ydb/core/persqueue/public/partition_key_range
     ydb/core/protos
     ydb/core/sys_view/common
+    ydb/core/formats/arrow
+    ydb/core/tx/columnshard/engines/scheme/defaults/common
     ydb/core/tx/scheme_cache
     ydb/core/util
     ydb/library/aclib

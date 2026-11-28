@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
@@ -55,7 +56,8 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
         }
         if ((it == portionData.GetRecordsVerified().end() || i < it->GetColumnId())) {
             if (restoreAbsent || IIndexInfo::IsSpecialColumn(i)) {
-                columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
+                columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i),
+                    ISnapshotSchema::GetAbsentColumnFill(dataSchema, resultSchema, i));
                 portionInfo.FillDefaultColumn(columns.back(), defaultSnapshot);
             }
         }
@@ -65,7 +67,8 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
             YDB_LOG_VERIFY(i < it->GetColumnId());
             continue;
         }
-        columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
+        columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i),
+            ISnapshotSchema::GetAbsentColumnFill(dataSchema, resultSchema, i));
         while (it != portionData.GetRecordsVerified().end() && it->GetColumnId() == i) {
             auto itBlobs = blobsData.find(it->GetAddress());
             YDB_LOG_VERIFY(itBlobs != blobsData.end(),
@@ -801,6 +804,22 @@ TConclusion<std::shared_ptr<TPortionDataAccessor>> TPortionDataAccessor::BuildFr
             return parse;
         }
         return result;
+    }
+}
+
+NAssembling::TPreparedColumn NAssembling::TColumnAssemblingInfo::Compile() {
+    if (BlobsInfo.empty()) {
+        const ui32 chunkRecords = ISnapshotSchema::GetAbsentColumnChunkRecords(ResultLoader->GetField()->type(), AbsentFill, RecordsCount);
+        for (ui32 pos = 0; pos < RecordsCount; pos += chunkRecords) {
+            BlobsInfo.emplace_back(TAssembleBlobInfo(std::min(chunkRecords, RecordsCount - pos), AbsentFill));
+        }
+        return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
+    } else {
+        YDB_LOG_VERIFY(RecordsCountByChunks == RecordsCount,
+            {"byChunks", RecordsCountByChunks},
+            {"expected", RecordsCount});
+        YDB_LOG_VERIFY(DataLoader);
+        return TPreparedColumn(std::move(BlobsInfo), DataLoader);
     }
 }
 

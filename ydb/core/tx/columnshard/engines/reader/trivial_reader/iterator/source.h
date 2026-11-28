@@ -321,7 +321,9 @@ private:
 public:
     virtual void InitUsedRawBytes() override {
         YDB_LOG_VERIFY(!UsedRawBytes);
-        UsedRawBytes = GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
+        const auto& columnIds = GetContext()->GetAllUsageColumns()->GetColumnIds();
+        UsedRawBytes = GetPortionAccessor().GetColumnRawBytes(columnIds, false) +
+                       GetAbsentColumnsRawBytes(GetPortionAccessor(), *Schema, *GetContext()->GetReadMetadata()->GetResultSchema(), columnIds);
     }
 
     static bool CheckTypeCast(const EType type) {
@@ -400,7 +402,7 @@ public:
         YDB_LOG_VERIFY(columnIds.size());
         switch (type) {
             case EMemType::Raw:
-                return GetPortionAccessor().GetColumnRawBytes(columnIds, false);
+                return GetColumnRawBytes(columnIds);
             case EMemType::Blob:
                 return GetPortionAccessor().GetColumnBlobBytes(columnIds, false);
             case EMemType::RawSequential:
@@ -410,7 +412,8 @@ public:
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
         YDB_LOG_VERIFY(columnsIds.size());
-        return GetPortionAccessor().GetColumnRawBytes(columnsIds, false);
+        return GetPortionAccessor().GetColumnRawBytes(columnsIds, false) +
+               GetAbsentColumnsRawBytes(GetPortionAccessor(), *Schema, *GetContext()->GetReadMetadata()->GetResultSchema(), columnsIds);
     }
 
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const override {

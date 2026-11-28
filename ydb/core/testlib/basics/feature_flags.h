@@ -53,6 +53,7 @@ public:
     FEATURE_FLAG_SETTER(DisablePgCompatibility)
     FEATURE_FLAG_SETTER(EnableServerlessExclusiveDynamicNodes)
     FEATURE_FLAG_SETTER(EnableAddColumsWithDefaults)
+    FEATURE_FLAG_SETTER(EnableCsDefaultValues)
     FEATURE_FLAG_SETTER(EnableReplaceIfExistsForExternalEntities)
     FEATURE_FLAG_SETTER(EnableCMSRequestPriorities)
     FEATURE_FLAG_SETTER(EnableTableDatetime64)

@@ -22,6 +22,7 @@ SRCS(
     peephole_ut.cpp
     sys_view_ut.cpp
     tiering_ut.cpp
+    column_defaults_ut.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(tiering_test_enums.h)

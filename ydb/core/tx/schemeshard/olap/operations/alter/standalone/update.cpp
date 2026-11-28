@@ -80,8 +80,8 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
         }
     }
 
-    if (!CheckTargetSchema(targetSchema)) {
-        return TConclusionStatus::Fail("schema update error: sparsed columns are disabled");
+    if (auto schemaCheck = CheckTargetSchema(targetSchema); schemaCheck.IsFail()) {
+        return schemaCheck;
     }
     auto description = originalTable.GetTableInfoVerified().Description;
     targetSchema.Serialize(*description.MutableSchema());

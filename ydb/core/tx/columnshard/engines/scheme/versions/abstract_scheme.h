@@ -21,6 +21,7 @@ class TIndexMetaContainer;
 }
 
 struct TIndexInfo;
+class IPortionDataChunk;
 class TSaverContext;
 class TWritePortionInfoWithBlobsResult;
 
@@ -57,6 +58,17 @@ public:
 
     std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const std::string& columnName) const;
     std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const ui32 columnId) const;
+    static std::shared_ptr<arrow::Scalar> GetAbsentColumnFill(
+        const ISnapshotSchema& portionSchema, const ISnapshotSchema& resultSchema, const ui32 columnId);
+    static ui64 GetAbsentColumnValueBytes(const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill);
+    static ui32 GetAbsentColumnChunkRecords(
+        const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount);
+    static std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildAbsentColumnChunks(
+        const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount);
+    static std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildAbsentColumnArray(
+        const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount);
+    static TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> BuildAbsentColumnPortionChunks(
+        const TIndexInfo& indexInfo, const ui32 columnId, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount);
 
     TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(
         const NArrow::TSchemaLiteView& schema, const ui32 rowsCount, const bool force) const;

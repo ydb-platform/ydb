@@ -19,6 +19,7 @@
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
+#include <yql/essentials/utils/parse_double.h>
 
 namespace NYql {
 
@@ -836,10 +837,10 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_text_value(ToString(value));
             break;
         case EDataSlot::Double:
-            protoValue.set_double_value(FromString<double>(value));
+            protoValue.set_double_value(DoubleFromString(value));
             break;
         case EDataSlot::Float:
-            protoValue.set_float_value(FromString<float>(value));
+            protoValue.set_float_value(FloatFromString(value));
             break;
         case EDataSlot::Yson:
             protoValue.set_bytes_value(ToString(value));

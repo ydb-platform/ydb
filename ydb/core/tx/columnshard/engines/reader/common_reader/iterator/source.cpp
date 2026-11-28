@@ -1,6 +1,7 @@
 #include "constructor.h"
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 
@@ -8,6 +9,20 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 LWTRACE_USING(YDB_CS_SCAN);
+
+ui64 IDataSource::GetAbsentColumnsRawBytes(const TPortionDataAccessor& accessor, const ISnapshotSchema& sourceSchema,
+    const ISnapshotSchema& resultSchema, const std::set<ui32>& columnIds) {
+    ui64 result = 0;
+    for (const ui32 columnId : columnIds) {
+        if (IIndexInfo::IsSpecialColumn(columnId) || !resultSchema.HasColumnId(columnId) || accessor.GetColumnChunksPointers(columnId).size()) {
+            continue;
+        }
+        const auto field = resultSchema.GetIndexInfo().GetColumnFieldVerified(columnId);
+        const auto fill = ISnapshotSchema::GetAbsentColumnFill(sourceSchema, resultSchema, columnId);
+        result += ISnapshotSchema::GetAbsentColumnValueBytes(field->type(), fill) * accessor.GetPortionInfo().GetRecordsCount();
+    }
+    return result;
+}
 
 void TExecutionContext::OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals) {
     if (!CurrentProgramNodeId) {

@@ -30,6 +30,7 @@ struct TTestEnvSettings {
     bool EnablePgCompatibility = false;
     bool AlterObjectEnabled = false;
     bool EnableSparsedColumns = false;
+    bool EnableCsDefaultValues = false;
     bool EnableOlapCompression = false;
     bool EnableTableCacheModes = false;
     bool EnableFulltextIndex = false;

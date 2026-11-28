@@ -19,12 +19,14 @@ PEERDIR(
     ydb/core/base
     ydb/core/engine
     ydb/core/external_sources
+    ydb/core/formats/arrow
     ydb/core/formats/arrow/switch
     ydb/core/local_indexes/bloom
     ydb/core/persqueue/events
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tablet_flat/base
+    ydb/core/tx/columnshard/engines/scheme/defaults/common
     ydb/core/util
     ydb/library/conclusion
     ydb/library/mkql_proto/protos

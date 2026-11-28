@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
@@ -21,8 +22,15 @@ TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByC
                 {"columnId", i},
                 {"indexName", GetIndexName()},
                 {"indexId", GetIndexId()});
-            // Possible situation during a merge operation when a column is added to the table in the new schema
-            // indexData can't be empty in this case, because merger saves it, so set it to 0 (skip all values)
+            const auto fill = indexInfo.GetColumnExternalDefaultValueVerified(i);
+            if (fill) {
+                auto constChunks = ISnapshotSchema::BuildAbsentColumnPortionChunks(indexInfo, i, fill, recordsCount);
+                if (constChunks.IsFail()) {
+                    return TConclusionStatus::Fail(constChunks.GetErrorMessage());
+                }
+                columnReaders.emplace_back(constChunks.DetachResult(), indexInfo.GetColumnLoaderVerified(i));
+                continue;
+            }
             TString indexData(1, '\0');
             return std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>(
                 { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) });

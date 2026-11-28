@@ -23,6 +23,7 @@ message TScalar {
 
         float Float = 12;
         string String = 13;
+        bytes Bytes = 14;
     }
 }
 

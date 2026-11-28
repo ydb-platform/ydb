@@ -108,6 +108,15 @@ struct TSpillTest : public TSessionTest {
         RunInActor(NodeIndex0, [storage = Storage]() { storage->WakeUp(); });
     }
 
+    // the next TEvResumeExecution of an edge actor producer, nullptr if none comes: the runtime throws on a timeout
+    TEvDqCompute::TEvResumeExecution::TPtr GrabWakeup(const NActors::TActorId& producer) {
+        try {
+            return Runtime->GrabEdgeEvent<TEvDqCompute::TEvResumeExecution>(producer, TDuration::Seconds(1));
+        } catch (const NActors::TEmptyEventQueueException&) {
+            return nullptr;
+        }
+    }
+
     void WaitSpilled() {
         UNIT_ASSERT_C(WaitFor([&]() { return Bind() && SpilledBytes() > 0; }, TDuration::Seconds(10)),
             TStringBuilder() << "nothing was spilled, " << Details());
@@ -235,6 +244,118 @@ struct TStorageFullTest : public TSpillTest {
 
         WaitChannel([&]() { return Details(); });
         CheckDrained();
+        Finish();
+    }
+};
+
+// A producer can remain blocked at SoftLimit after the storage has lifted HardLimit.
+// Draining below the low watermark must wake it again, even without another push or finish check.
+struct TSpillSoftLimitWakeupTest : public TSpillTest {
+    void Run() override {
+        Window = ColdWindow = 200;
+        WaitTimeout = TDuration::Seconds(5);
+        Prepare();
+        Init();
+
+        auto producer = Runtime->AllocateEdgeActor(NodeIndex0);
+        auto consumer = Runtime->AllocateEdgeActor(NodeIndex1);
+        TChannelFullInfo info(1, producer, consumer, 0, 1, TCollectStatsLevel::Profile);
+        auto output = Service0->GetOutputBuffer(info, OutputQuotaManager, Storage);
+        auto input = Service1->GetInputBuffer(info, InputQuotaManager);
+        Storage->SetFull(true);
+
+        auto drained = std::make_shared<std::atomic<bool>>(false);
+        RunInActor(NodeIndex0, [output, input, storage = Storage, local = Local, drained] {
+            for (ui32 i = 0; i < 3; ++i) {
+                output->Push(TProducerActor::BuildData(i, 100));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(output->GetFillLevel(), EDqFillLevel::HardLimit);
+
+            storage->SetFull(false);
+            storage->WakeUp();
+            UNIT_ASSERT_VALUES_EQUAL(output->GetFillLevel(), EDqFillLevel::SoftLimit);
+
+            if (local) {
+                TDataChunk chunk;
+                UNIT_ASSERT(input->Pop(chunk));
+                UNIT_ASSERT(input->Pop(chunk));
+            } else {
+                auto buffer = std::dynamic_pointer_cast<TOutputBuffer>(output);
+                UNIT_ASSERT(buffer);
+                // The remote consumer acknowledges the same two chunks.
+                for (ui64 bytes : {100, 200}) {
+                    buffer->Descriptor->UpdatePopBytes(bytes, buffer->NodeState.get(), buffer->Descriptor);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(output->GetFillLevel(), EDqFillLevel::NoLimit);
+            drained->store(true);
+        });
+        UNIT_ASSERT(WaitFor([&] { return drained->load(); }, TDuration::Seconds(5)));
+
+        UNIT_ASSERT_C(GrabWakeup(producer), "No notification when the storage released HardLimit");
+        UNIT_ASSERT_C(GrabWakeup(producer), "No notification when the buffer released SoftLimit");
+
+        if (!Local) {
+            // all of the chunks reach the input before it goes, a late one would create it again unbound
+            UNIT_ASSERT(WaitFor([&] {
+                auto receiver = FindNodeState(Service1, Runtime->GetNodeId(0));
+                return receiver && GetInputPushBytes(receiver) == 303;
+            }, TDuration::Seconds(5)));
+        }
+        input.reset();
+        output.reset();
+        Finish();
+    }
+};
+
+// The consumer empties the queue at HardLimit while the spilled chunk is still loading: the producer is woken
+// up, finds HardLimit and parks again without asking to be notified, as a compute actor does. The storage
+// leaving HardLimit must wake it up once more: a producer of several outputs may run again at SoftLimit
+struct TSpillHardLimitWakeupTest : public TSpillTest {
+    void Run() override {
+        Window = ColdWindow = 200;
+        WaitTimeout = TDuration::Seconds(5);
+        Prepare();
+        Init();
+
+        auto producer = Runtime->AllocateEdgeActor(NodeIndex0);
+        auto consumer = Runtime->AllocateEdgeActor(NodeIndex1);
+        TChannelFullInfo info(1, producer, consumer, 0, 1, TCollectStatsLevel::Profile);
+        auto output = Service0->GetOutputBuffer(info, OutputQuotaManager, Storage);
+        auto input = Service1->GetInputBuffer(info, InputQuotaManager);
+        Storage->SetFull(true);
+        // the first load of a blob is not ready at once, as with the real storage
+        Storage->SetBlankGetRequests(1);
+
+        auto drained = std::make_shared<std::atomic<bool>>(false);
+        RunInActor(NodeIndex0, [output, input, drained] {
+            for (ui32 i = 0; i < 3; ++i) {
+                output->Push(TProducerActor::BuildData(i, 100));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(output->GetFillLevel(), EDqFillLevel::HardLimit);
+
+            TDataChunk chunk;
+            UNIT_ASSERT(input->Pop(chunk));
+            UNIT_ASSERT(input->Pop(chunk));
+            // the queue is empty, the spilled chunk is loading, the storage is still full
+            UNIT_ASSERT_VALUES_EQUAL(output->GetFillLevel(), EDqFillLevel::HardLimit);
+            drained->store(true);
+        });
+        UNIT_ASSERT(WaitFor([&] { return drained->load(); }, TDuration::Seconds(5)));
+        UNIT_ASSERT_C(GrabWakeup(producer), "No notification when the queue became empty");
+
+        auto released = std::make_shared<std::atomic<bool>>(false);
+        RunInActor(NodeIndex0, [output, storage = Storage, released] {
+            storage->SetFull(false);
+            storage->WakeUp();
+            UNIT_ASSERT_VALUES_EQUAL(output->GetFillLevel(), EDqFillLevel::SoftLimit);
+            released->store(true);
+        });
+        UNIT_ASSERT(WaitFor([&] { return released->load(); }, TDuration::Seconds(5)));
+        UNIT_ASSERT_C(GrabWakeup(producer), "No notification when the storage released HardLimit");
+
+        input.reset();
+        output.reset();
         Finish();
     }
 };
@@ -414,6 +535,24 @@ struct TSpillQuotaTest : public TSpillTest {
 };
 
 Y_UNIT_TEST_SUITE(Channels20Spilling) {
+
+    Y_UNIT_TEST(SpillSoftLimitWakeup1n) {
+        TSpillSoftLimitWakeupTest test;
+        test.Local = true;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(SpillSoftLimitWakeup2n) {
+        TSpillSoftLimitWakeupTest test;
+        test.Local = false;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(SpillHardLimitWakeup1n) {
+        TSpillHardLimitWakeupTest test;
+        test.Local = true;
+        test.Run();
+    }
 
     Y_UNIT_TEST(RemoteSpillAndReload2n) {
         TSpillAndReloadTest test;

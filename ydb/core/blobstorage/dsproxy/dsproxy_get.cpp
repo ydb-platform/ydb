@@ -73,8 +73,14 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         AcceleratePut();
     }
 
+    ui32 GetMaxGetAccelerations() const {
+        return AccelerationParams.MaxGetAccelerations
+            ? AccelerationParams.MaxGetAccelerations
+            : Min(AccelerationParams.MaxNumOfSlowDisks, 2u);
+    }
+
     void AccelerateGet() {
-        if (GetsAccelerated == 2) {
+        if (GetsAccelerated >= GetMaxGetAccelerations()) {
             return;
         }
         GetsAccelerated++;
@@ -343,7 +349,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     }
 
     void TryScheduleGetAcceleration() {
-        if (!IsGetAccelerateScheduled && GetsAccelerated < AccelerationParams.MaxNumOfSlowDisks) {
+        if (!IsGetAccelerateScheduled && GetsAccelerated < GetMaxGetAccelerations()) {
             // Count VDisks with requests in flight, if there are <= the maximum number of slow VDisks, Accelerate
             if (CountDisksWithActiveRequests() <= AccelerationParams.MaxNumOfSlowDisks) {
                 ui64 timeToAccelerateUs = GetImpl.GetTimeToAccelerateGetNs(LogCtx) / 1000;
@@ -416,6 +422,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                     {"requestTotalSize", requestSize},
                     {"handleClass", NKikimrBlobStorage::EGetHandleClass_Name(handleClass)},
                     {"restartCounter", RestartCounter},
+                    {"maxGetAccelerations", GetMaxGetAccelerations()},
                     {"history", GetImpl.PrintHistory()});
             }
 

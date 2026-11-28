@@ -127,6 +127,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxNumOfSlowDisks(DefaultMaxNumOfSlowDisks, 1, 2)
     , MaxNumOfSlowDisksHDD(DefaultMaxNumOfSlowDisks, 1, 2)
     , MaxNumOfSlowDisksSSD(DefaultMaxNumOfSlowDisks, 1, 2)
+    , MaxGetAccelerations(DefaultMaxGetAccelerations, 0, MaxGetAccelerationsLimit)
     , LongRequestThresholdMs(50'000, 1, 1'000'000)
     , ReportingControllerBucketSize(1, 1, 100'000)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
@@ -632,6 +633,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(MaxNumOfSlowDisks, icb->DSProxyControls.MaxNumOfSlowDisks);
         TControlBoard::RegisterSharedControl(MaxNumOfSlowDisksHDD, icb->DSProxyControls.MaxNumOfSlowDisksHDD);
         TControlBoard::RegisterSharedControl(MaxNumOfSlowDisksSSD, icb->DSProxyControls.MaxNumOfSlowDisksSSD);
+        TControlBoard::RegisterSharedControl(MaxGetAccelerations, icb->DSProxyControls.MaxGetAccelerations);
 
         TControlBoard::RegisterSharedControl(EnableDeepScrubbing, icb->VDiskControls.EnableDeepScrubbing);
 

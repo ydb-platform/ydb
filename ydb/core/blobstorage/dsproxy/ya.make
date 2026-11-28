@@ -90,5 +90,6 @@ RECURSE_FOR_TESTS(
     ut
     ut_fat
     ut_ftol
+    ut_get_acceleration_limit
     ut_strategy
 )

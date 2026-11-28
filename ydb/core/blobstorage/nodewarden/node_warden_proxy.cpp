@@ -50,6 +50,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
                 ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
                 ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
+                .MaxGetAccelerations = MaxGetAccelerations,
             }
         };
     };

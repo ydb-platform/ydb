@@ -389,6 +389,7 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxNumOfSlowDisks;
         TControlWrapper MaxNumOfSlowDisksHDD;
         TControlWrapper MaxNumOfSlowDisksSSD;
+        TControlWrapper MaxGetAccelerations;
 
         TControlWrapper LongRequestThresholdMs;
         TControlWrapper ReportingControllerBucketSize;

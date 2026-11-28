@@ -2239,6 +2239,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 68719476736,
             DefaultValue: 268435456 }];
+
+        optional uint64 MaxGetAccelerations = 20 [(ControlOptions) = {
+            Description: "Maximum GET acceleration calls per request; 0 inherits the legacy MaxNumOfSlowDisks limit. Does not change the slow-disk count or PUT acceleration budget",
+            MinValue: 0,
+            MaxValue: 16,
+            DefaultValue: 0 }];
     }
 
     message TBlobDepotControls {

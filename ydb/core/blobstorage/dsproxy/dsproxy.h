@@ -161,6 +161,7 @@ struct TAccelerationParams {
     double SlowDiskThreshold = DefaultSlowDiskThreshold;
     double PredictedDelayMultiplier = DefaultPredictedDelayMultiplier;
     ui32 MaxNumOfSlowDisks = DefaultMaxNumOfSlowDisks;
+    ui32 MaxGetAccelerations = DefaultMaxGetAccelerations;
 };
 
 class TBlobStorageGroupRequestActor : public TActor<TBlobStorageGroupRequestActor> {
@@ -596,6 +597,8 @@ struct TBlobStorageProxyControlWrappers {
     DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(SlowDiskThreshold);
     DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(PredictedDelayMultiplier);
     DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(MaxNumOfSlowDisks);
+
+    TMemorizableControlWrapper MaxGetAccelerations = MaxGetAccelerationsDefaultControl;
 
 #undef DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS
 

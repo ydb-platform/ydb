@@ -456,6 +456,7 @@ namespace NKikimr {
             .SlowDiskThreshold = .001f * SELECT_CONTROL_BY_DEVICE_TYPE(SlowDiskThreshold, Info),
             .PredictedDelayMultiplier = .001f * SELECT_CONTROL_BY_DEVICE_TYPE(PredictedDelayMultiplier, Info),
             .MaxNumOfSlowDisks = static_cast<ui32>(SELECT_CONTROL_BY_DEVICE_TYPE(MaxNumOfSlowDisks, Info)),
+            .MaxGetAccelerations = static_cast<ui32>(Controls.MaxGetAccelerations.Update(TActivationContext::Now())),
         };
     }
 

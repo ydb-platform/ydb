@@ -472,18 +472,35 @@ private:
         };
 
         NYdb::TResultSetParser parser(resultSet);
+        // SELECT A.* succeeds on a table that CM has not migrated. ColumnParser throws
+        // TContractViolation for a missing column, and the actor does not catch it.
+        // A missing required column keeps the previous cache, as a failed explicit query did.
+        // writeWeights stays optional.
+        for (const char* column : {"name", "readClusters", "writeClusters", "version"}) {
+            if (parser.ColumnIndex(column) < 0) {
+                YDB_LOG_ERROR_CTX(Ctx(), "Account list misses a required column, keep the previous account cache",
+                    {"column", column});
+                FinishWithCachedAccounts();
+                return;
+            }
+        }
+        const bool hasWriteWeights = parser.ColumnIndex("writeWeights") >= 0;
         TString pageLastName;
         while (parser.TryNextRow()) {
-            TString name(parser.ColumnParser(0).GetOptionalUtf8().value_or(""));
+            TString name(parser.ColumnParser("name").GetOptionalUtf8().value_or(""));
             if (name.empty()) {
                 continue;
             }
             pageLastName = name;
             name.to_lower();
             auto& account = PendingClustersList->Accounts[name];
-            account.Read = parseNames(parser.ColumnParser(1).GetOptionalUtf8().value_or(""));
-            account.Write = parseNames(parser.ColumnParser(2).GetOptionalUtf8().value_or(""));
-            account.Version = parser.ColumnParser(3).GetOptionalInt64().value_or(0);
+            account.Read = parseNames(parser.ColumnParser("readClusters").GetOptionalUtf8().value_or(""));
+            account.Write = parseNames(parser.ColumnParser("writeClusters").GetOptionalUtf8().value_or(""));
+            account.Version = parser.ColumnParser("version").GetOptionalInt64().value_or(0);
+            if (hasWriteWeights) {
+                account.WriteWeights = ParseClusterWeightsCsv(
+                    parser.ColumnParser("writeWeights").GetOptionalUtf8().value_or(""));
+            }
         }
 
         if (resultSet.truncated()) {

@@ -1,0 +1,7 @@
+items:
+- name: Choosing a migration method
+  href: index.md
+- name: Migration using asynchronous replication
+  href: async-replication.md
+- name: Initial synchronization using a backup
+  href: ../async-replication-initial-sync.md

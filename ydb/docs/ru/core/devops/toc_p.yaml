@@ -26,5 +26,8 @@ items:
     path: observability/toc_p.yaml
 - name: Резервное копирование и восстановление
   href: backup-and-recovery/index.md
-- name: Первоначальная синхронизация асинхронной репликации
-  href: async-replication-initial-sync.md
+- name: Миграция между кластерами
+  href: migration/index.md
+  include:
+    mode: link
+    path: migration/toc_p.yaml

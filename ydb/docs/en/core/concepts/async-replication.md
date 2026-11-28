@@ -70,7 +70,7 @@ The user account that is used to connect to the source database must have the fo
 
 Replica objects are created or attached using the account that created the asynchronous replication instance.
 
-When replica objects are created automatically (`INITIAL_SCAN = TRUE`), access rights are not copied from the source to the target. When initial synchronization uses backup and restore, access rights may be restored from the backup, depending on its contents and the import settings. For more information about access rights, see the [reference](../security/short-access-control-notation.md#access-rights).
+When replica objects are created automatically (`INITIAL_SCAN = TRUE`), access rights are not copied from the source to the target. When initial synchronization uses backup and restore, access rights and object ownership may be restored from the backup, depending on its contents and the import settings. For more information about access rights, see the [reference](../security/short-access-control-notation.md#access-rights).
 
 {% endnote %}
 
@@ -96,7 +96,7 @@ After the restore is complete, the user switches replication to `STANDBY` using 
 
 To ensure data completeness, changefeeds must be ready before the backup is created, and accumulated records must remain available until their processing is acknowledged. The availability period is set with the [AVAILABILITY_PERIOD](#availability-period) parameter. For the procedure and checks, see the [guide to initial synchronization using backup and restore](../devops/async-replication-initial-sync.md).
 
-#### Choosing an Initial Synchronization Method {#initial-sync-comparison}
+#### Initial Synchronization Methods {#initial-sync-comparison}
 
 Both methods require reading the source data and writing it to the target. Their additional costs differ:
 
@@ -107,7 +107,7 @@ Both methods require reading the source data and writing it to the target. Their
 | Network transfer | Initial data is transferred from the source changefeeds to the target | Data is transferred from the source to S3 and then from S3 to the target; export compression can reduce the transfer volume |
 | Setup and operation | Synchronization starts automatically when replication is created | Requires S3 storage, separate backup and restore operations, checking their completion, and starting replication |
 
-An initial scan is simpler to set up and suits small datasets. For large datasets, backup and restore can reduce the cost of processing the initial data through CDC, but require additional storage and S3 operations. Actual costs and duration depend on data volume, the rate of changes, cluster resources, compression, and the terms of S3 usage.
+For selection criteria and resource preparation, see the [migration planning guide](../devops/migration/index.md#initial-sync).
 
 ### Change Data Replication {#replication-of-changes}
 
@@ -122,6 +122,8 @@ $$
 You can also get the replication lag from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance with the `--stats` option. If a consumer stops, loses its session, or does not report fresh statistics for 60 seconds, the lag value becomes unavailable. A missing value means that the lag is unknown, not zero.
 
 ## Storing Changes in the Source {#availability-period}
+
+Messages in changefeeds consume storage in the source database. Their volume can grow substantially during initial scanning or replication lag; storage usage depends on processing acknowledgments and the message availability period. {#changefeed-storage}
 
 The [AVAILABILITY_PERIOD](../yql/reference/syntax/create-async-replication.md#params) parameter determines how long changefeeds retain messages whose processing has not yet been acknowledged by replication. It is set when replication is created and cannot be changed using `ALTER ASYNC REPLICATION`.
 
@@ -140,18 +142,26 @@ The availability period applies to the age of messages, not the duration of the 
 
 With `'UNLIMITED'`, replication uses an [important consumer](datamodel/topic.md#important-consumer). With a finite period, it uses a consumer with a specified [message availability period](datamodel/topic.md#availability-period-consumer). This allows unacknowledged messages to be retained longer than the [topic message retention period](datamodel/topic.md#retention-time).
 
+## Replication Scope {#replication-scope}
+
+See [Restrictions](#restrictions) for supported objects and rules governing changes to the object set.
+
 ## Restrictions {#restrictions}
 
-* The set of replicated objects is immutable and is generated when {{ ydb-short-name }} creates an asynchronous replication instance.
-* {{ ydb-short-name }} supports the following types of replicated objects:
+* The source object set is fixed when the asynchronous replication instance is created. For table grouping criteria, see the [migration planning guide](../devops/migration/index.md#replication-scope).
+* Object support depends on the object type:
 
-  * [row-based tables](datamodel/table.md#row-oriented-tables), including those with synchronous secondary indexes (unique indexes are supported; vector indexes are excluded)
-  * [directories](datamodel/dir.md)
+  | Object type | Replication support |
+  | --- | --- |
+  | [Row-based tables](datamodel/table.md#row-oriented-tables) | Supported, including synchronous secondary indexes and unique indexes. In main starting with [change #59486](https://github.com/ydb-platform/ydb/pull/59486), vector indexes are transferred by an initial scan; indexes restored from a backup are preserved when switching to `STANDBY` and continue replicating. Restore index data from the backup rather than rebuilding indexes independently. Do not rely on this behavior in earlier versions. Availability of other index types and sequences depends on both database versions |
+  | [Directories](datamodel/dir.md) | Replicates row-based tables in the directory and its subdirectories that existed when the instance was created. Empty directories are not transferred |
+  | Other schema objects | Not transferred by row-table replication: column-oriented tables and their stores, coordination nodes, secrets, views, external data sources and tables, transfers, streaming queries, backup collections, resource pools and their classifiers |
+  | User topics and changefeeds | The initial scan does not transfer their definitions. Restoring a backup may restore definitions, but row-table replication does not transfer their messages or subsequent changes |
 
-    {{ ydb-short-name }} will replicate all row-based tables that are located in the given directories and subdirectories at the time the asynchronous replication instance is created.
-
-* During asynchronous replication, you cannot [add or delete columns](../yql/reference/syntax/alter_table/columns.md) in the source tables.
-* During asynchronous replication, replicas are available only for reading.
+* Replication creates service changefeeds on the source to transfer tables. The restriction on transferring user topic messages does not apply to these service changefeeds: they carry the replicated table data.
+* During asynchronous replication, replica objects are read-only.
+* Initial permissions and ownership depend on [how replica objects are created](#init). Permission and ownership changes made after replication starts are not automatically transferred to the target.
+* This article describes the mode with the server flag `EnableAsyncReplicationSchemaChanges` disabled (its default value is `false`). In this mode, schema changes are not transferred automatically, and [adding or deleting columns](../yql/reference/syntax/alter_table/columns.md) in source tables is blocked during replication. Schema change replication is outside the scope of this article.
 
 ## Error Handling During Asynchronous Replication {#error-handling}
 
@@ -162,14 +172,7 @@ Possible errors during asynchronous replication can be grouped into the followin
 
 {% note warning %}
 
-After fixing the cause of a critical error, you can resume asynchronous replication without dropping the instance. First pause it, then set its state to `STANDBY`:
-
-```yql
-ALTER ASYNC REPLICATION my_replication SET (STATE = 'PAUSED');
-ALTER ASYNC REPLICATION my_replication SET (STATE = 'STANDBY');
-```
-
-Make sure the pause and processing of accumulated changes fit within the [record retention period](cdc.md#retention-period). For details, see [ALTER ASYNC REPLICATION](../yql/reference/syntax/alter-async-replication.md).
+After the cause of a critical error is resolved, replication can resume without dropping the instance if the required changes remain available on the source. For recovery steps and state checks, see the [guide](../devops/migration/async-replication.md#replication-overload).
 
 {% endnote %}
 
@@ -201,9 +204,9 @@ The change commit interval directly affects the barrier emission interval in the
 
 ## Asynchronous Replication Completion {#done}
 
-Completion of asynchronous replication might be an end goal of data migration from one database to another. In this case the client stops writing data to the source, waits for the zero replication lag, and completes replication. After the replication process is completed, replicas become available both for reading and writing. Then you can switch the load from the source database to the target database and complete data migration.
+Completing asynchronous replication makes replica objects readable and writable. This transition is used to switch an application to the target during migration. For a continuously updated copy, replication remains running after initial synchronization.
 
-Before completing replication, get an up-to-date lag value using `scheme describe --stats`. If the value is unavailable, wait for reporting to resume: a missing value or a previously displayed zero does not confirm that all changes have been transferred.
+For stopping writes, verifying applied changes, and switching the application, see the [migration recipe](../devops/migration/async-replication.md#readiness).
 
 {% note info %}
 
@@ -235,3 +238,9 @@ If asynchronous replication is dropped without prior [completion](#done) and rep
 {% endnote %}
 
 To drop an asynchronous replication instance, use the [DROP ASYNC REPLICATION](../yql/reference/syntax/drop-async-replication.md) YQL expression.
+
+## Practical Guides {#guides}
+
+- [Choosing a migration method](../devops/migration/index.md).
+- [Migration using asynchronous replication](../devops/migration/async-replication.md).
+- [Initial synchronization using a backup](../devops/async-replication-initial-sync.md).

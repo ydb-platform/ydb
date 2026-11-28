@@ -15,7 +15,7 @@ Before you begin:
 - On the target, [create a secret](../yql/reference/syntax/create-secret.md) named `source_token` containing the token that replication will use to connect to the source.
 - Prepare the `mybucket` bucket and [S3 authentication](../reference/ydb-cli/export-import/auth-s3.md). The examples use the `storage.yandexcloud.net` endpoint and read access keys from environment variables or the `~/.aws/credentials` file. The endpoint must be accessible from the servers of both databases: the source writes the backup, and the target reads it.
 - Choose an unused prefix, `replication-bootstrap`, in the bucket. Do not modify the exported files until the import is complete.
-- Make sure that `replica_table` does not exist on the target. The `import s3` command creates the table together with its data and does not overwrite existing tables. Use `scheme ls` to check the path.
+- **Before creating replication**, make sure that the `replica_table` path is unused on the target. Use `scheme ls` to check it. After replication is created, a table prepared for import may appear at this path; it is not an unrelated pre-existing table.
 
 Keep the set of replicated tables, their columns, and their indexes unchanged during initial synchronization. The table schemas in the backup must match the source schemas when replication starts.
 
@@ -44,7 +44,7 @@ The `source.example.com:2135` address in the example is the source endpoint. The
 
 The example explicitly selects the `'UNLIMITED'` availability period, which is also the default. For a finite period, specify a positive value of type `Interval`, for example, `AVAILABILITY_PERIOD = Interval('PT48H')`. This parameter cannot be changed using `ALTER ASYNC REPLICATION` after creation.
 
-Replication is created in the `PAUSED` state and prepares changefeeds in the source without exporting the initial data. The `replica_table` table is not created or attached to replication yet. The import operation will create it.
+Replication is created in the `PAUSED` state and prepares changefeeds in the source without exporting the initial data. On the target, replication asynchronously prepares `replica_table` in the `WAITING_IMPORT` state. The import operation accepts this waiting table; its appearance at the previously unused path does not prevent import. Changes start being applied after the import succeeds and replication switches to `STANDBY`.
 
 ## 2. Wait for the Changefeeds to Be Ready {#wait-for-changefeeds}
 
@@ -163,7 +163,7 @@ Make sure that `ready = true`, `status = SUCCESS`, and `progress = Done`. Check 
 {{ ydb-cli }} -p target scheme describe replica_table
 ```
 
-Until replication starts, the restored table is a regular table. Do not write application data to it: these writes are not synchronized with the source and may be overwritten when changes are applied.
+Until replication starts, do not write application data to the restored table: these writes are not synchronized with the source and may be overwritten when changes are applied.
 
 ## 5. Start Change Data Replication {#start-replication}
 
@@ -175,7 +175,7 @@ ALTER ASYNC REPLICATION my_replication SET (STATE = 'STANDBY');
 
 The target checks that the restored table schemas match the source schemas and attaches the tables as replica objects. The check covers the primary key, columns, their types, column families, and indexes. Attached tables become read-only, and replication starts applying accumulated changes.
 
-Synchronous secondary indexes, including unique indexes, are supported. Restored vector indexes are deleted when tables are attached to replication. For more information, see [Restrictions](../concepts/async-replication.md#restrictions).
+Synchronous secondary indexes, including unique indexes, are supported. In main with vector index replication support, restored vector indexes are preserved when switching to `STANDBY`, and their implementation tables are attached to replication. Restore the index data from the backup using `--index-population-mode import` instead of rebuilding it independently on the target. For the applicability boundary, see [Restrictions](../concepts/async-replication.md#restrictions).
 
 Records are read from the changefeeds created before the export. They may include changes already reflected in the backup. Until the accumulated records have been processed, the target data may change and does not yet match the current source state.
 
@@ -191,7 +191,7 @@ Replication then continues transferring new changes. If the transfer is part of 
 
 ## Errors and Retries {#errors}
 
-- If an export or import fails, check its status and error description using `operation get`. Keep replication in the `PAUSED` state until all table imports succeed. When retrying an import, remember that target tables must not exist; a failed operation does not confirm that no objects were created.
+- If an export or import fails, check its status and error description using `operation get`. Keep replication in the `PAUSED` state until all table imports succeed. Before retrying an import, check the previous operation and the target objects. A table in `WAITING_IMPORT` prepared by this replication instance is a valid import target. Do not delete it just because the path is occupied. Another existing or partially restored table is not equivalent to `WAITING_IMPORT`; do not import over it, and agree on recovery with support. An operation failure does not prove that no objects were created.
 - If starting replication fails, get its JSON description and check the `error` field. In particular, check that all target tables exist, their schemas match, and permissions are sufficient. Do not import over tables already attached as replicas.
 - If required CDC records have been deleted because their retention period expired, continuing to read cannot ensure data completeness. Repeat initial synchronization with new changefeeds and a new backup.
 - Restarting the replication controller preserves the `PAUSED` state; it does not replace an explicit transition to `STANDBY`. If a CLI session is interrupted, check previously started server-side operations by their IDs before starting new ones.

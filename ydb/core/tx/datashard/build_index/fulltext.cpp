@@ -772,6 +772,8 @@ public:
     {
     }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext&, const TActorContext& ctx) final
     {
         Self->HandleSafe(Ev, ctx);

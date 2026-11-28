@@ -573,6 +573,7 @@ public:
     }
 
     TTxType GetTxType() const override { return TXTYPE_CDC_STREAM_SCAN_RUN; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;

@@ -16,6 +16,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_COMPACT_TABLE; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto& record = Ev->Get()->Record;
@@ -180,6 +181,8 @@ public:
 
     // note, that type is the same as in TTxCompactTable
     TTxType GetTxType() const override { return TXTYPE_COMPACT_TABLE; }
+
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);

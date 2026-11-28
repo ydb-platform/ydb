@@ -38,6 +38,8 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_PATH_ID; }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Self->CurrentSchemeShardId == SchemeShardId &&
             !Self->SubDomainPathId || Self->SubDomainPathId->OwnerId != SchemeShardId)
@@ -151,6 +153,8 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_OUT_OF_SPACE; }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
 
@@ -178,6 +182,8 @@ public:
     { }
 
     TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_TABLES_METRICS_LEVEL; }
+
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);

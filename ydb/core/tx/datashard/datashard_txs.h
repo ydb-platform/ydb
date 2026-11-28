@@ -26,6 +26,7 @@ public:
     void Complete(const TActorContext& ctx) override;
 
     TTxType GetTxType() const override { return TXTYPE_STOP_GUARD; }
+    bool IsKeyedOperation() const override { return false; }
 };
 
 class TDataShard::TTxGetShardState : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -34,6 +35,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_GET_STARD_STATE; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     TEvDataShard::TEvGetShardState::TPtr Ev;
     THolder<TEvDataShard::TEvGetShardStateResult> Result;
@@ -45,6 +47,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PLAN_STEP; }
+    bool IsKeyedOperation() const override { return false; }
 
 private:
     TEvTxProcessing::TEvPlanStep::TPtr Ev;
@@ -59,11 +62,13 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROGRESS_START; }
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
 private:
     TOperation::TPtr ActiveOp;
     TVector<EExecutionUnitKind> CompleteList;
     TInstant CommitStart;
+    bool KeyedOperation = false;
     bool Rescheduled = false;
     bool WaitComplete = false;
 };
@@ -81,6 +86,7 @@ public:
                  const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
 private:
     bool SyncSchemeOnFollower(TOutputOpData::TResultPtr &result,
@@ -96,6 +102,7 @@ protected:
     ui64 TxId;
     TVector<EExecutionUnitKind> CompleteList;
     TInstant CommitStart;
+    bool KeyedOperation = false;
     bool Acked;
     bool Rescheduled = false;
     bool WaitComplete = false;
@@ -114,6 +121,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_WRITE; }
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 protected:
     TOperation::TPtr Op;
     NEvents::TDataEvents::TEvWrite::TPtr Ev;
@@ -122,6 +130,7 @@ protected:
     ui64 TxId;
     TVector<EExecutionUnitKind> CompleteList;
     TInstant CommitStart;
+    bool KeyedOperation = false;
     bool Acked;
     bool Rescheduled = false;
     bool WaitComplete = false;
@@ -134,6 +143,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_READSET; }
+    bool IsKeyedOperation() const override { return false; }
 
 private:
     TEvTxProcessing::TEvReadSet::TPtr Ev;
@@ -152,6 +162,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROGRESS_RESEND_RS; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     const ui64 Seqno;
 };
@@ -174,6 +185,7 @@ public:
                  const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_STORE_TABLE_PATH; }
+    bool IsKeyedOperation() const override { return false; }
 
 private:
     ui64 PathId;
@@ -186,6 +198,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_STORE_SCAN_STATE; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     TEvPrivate::TEvPersistScanState::TPtr Ev;
     TActorId Sender;
@@ -197,6 +210,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_REFRESH_VOLATILE_SNAPSHOT; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr Ev;
     THolder<TEvDataShard::TEvRefreshVolatileSnapshotResponse> Reply;
@@ -208,6 +222,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_DISCARD_VOLATILE_SNAPSHOT; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr Ev;
     THolder<TEvDataShard::TEvDiscardVolatileSnapshotResponse> Reply;
@@ -219,6 +234,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_CLEANUP_REMOVED_SNAPSHOTS; }
+    bool IsKeyedOperation() const override { return false; }
 };
 
 class TDataShard::TTxMigrateSchemeShard : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -227,6 +243,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_MIGRATE_SCHEMESHARD; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     TEvDataShard::TEvMigrateSchemeShardRequest::TPtr Ev;
     THolder<TEvDataShard::TEvMigrateSchemeShardResponse> Reply;
@@ -238,6 +255,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_GET_S3_UPLOAD_ID; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     TEvDataShard::TEvGetS3Upload::TPtr Ev;
     THolder<TEvDataShard::TEvS3Upload> Reply;
@@ -249,6 +267,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_STORE_S3_UPLOAD_ID; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     TEvDataShard::TEvStoreS3UploadId::TPtr Ev;
     THolder<TEvDataShard::TEvS3Upload> Reply;
@@ -260,6 +279,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_CHANGE_S3_UPLOAD_STATUS; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     TEvDataShard::TEvChangeS3UploadStatus::TPtr Ev;
     THolder<TEvDataShard::TEvS3Upload> Reply;
@@ -271,6 +291,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_GET_S3_DOWNLOAD_INFO; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     TEvDataShard::TEvGetS3DownloadInfo::TPtr Ev;
     THolder<TEvDataShard::TEvS3DownloadInfo> Reply;
@@ -282,6 +303,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_STORE_S3_DOWNLOAD_INFO; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     TEvDataShard::TEvStoreS3DownloadInfo::TPtr Ev;
     THolder<TEvDataShard::TEvS3DownloadInfo> Reply;
@@ -296,6 +318,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_S3_UPLOAD_ROWS; }
+    bool IsKeyedOperation() const override { return GetRequest()->Record.RowsSize() != 0; }
 
 private:
     TRowVersion MvccVersion = TRowVersion::Min();
@@ -311,6 +334,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_S3_DIRECT_WRITE_FINISH; }
+    bool IsKeyedOperation() const override { return false; }
 
 private:
     TEvDataShard::TEvS3DirectWriteFinish::TPtr Ev;

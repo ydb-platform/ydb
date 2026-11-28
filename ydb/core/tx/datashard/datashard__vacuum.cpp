@@ -16,6 +16,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_VACUUM; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto& record = Ev->Get()->Record;
@@ -94,6 +95,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_COMPLETE_VACUUM; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);

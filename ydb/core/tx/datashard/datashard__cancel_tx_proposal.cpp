@@ -11,6 +11,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_CANCEL_TX_PROPOSAL; }
+    bool IsKeyedOperation() const override { return false; }
 private:
     const ui64 TxId;
     std::vector<std::unique_ptr<IEventHandle>> Replies;

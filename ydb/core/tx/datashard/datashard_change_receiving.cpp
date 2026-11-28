@@ -19,6 +19,7 @@ public:
     TTxType GetTxType() const override {
         return TXTYPE_CHANGE_EXCHANGE_HANDSHAKE;
     }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Precharge(NIceDb::TNiceDb& db) {
         bool ok = true;
@@ -309,6 +310,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
                 return false;
         }
 
+        KeyedOperation = true;
         if (!UseStepTxId(record) && !MvccVersion) {
             MvccVersion = Self->GetMvccVersion();
             Pipeline.AddCommittingOp(*MvccVersion);
@@ -344,6 +346,8 @@ public:
     TTxType GetTxType() const override {
         return TXTYPE_APPLY_CHANGE_RECORDS;
     }
+
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (!Self->CanReceiveChangeRecords()) {
@@ -432,6 +436,7 @@ private:
     TEvChangeExchange::TEvApplyRecords::TPtr Ev;
     THolder<TEvChangeExchange::TEvStatus> Status;
     std::optional<TRowVersion> MvccVersion;
+    bool KeyedOperation = false;
 
     TSerializedCellVec KeyCells;
     TSerializedCellVec ValueCells;

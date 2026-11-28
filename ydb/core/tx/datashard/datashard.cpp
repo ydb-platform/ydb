@@ -2912,6 +2912,8 @@ public:
         , ObservedStep(observedStep)
     {}
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Y_ENSURE(Self->MediatorStateRestoreTxPending);
         Self->MediatorStateRestoreTxPending = false;
@@ -4932,6 +4934,8 @@ public:
         , Ev(std::move(ev))
     { }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         auto pathId = Ev->Get()->PathId;
         auto it = pathId ? Self->GetUserTables().find(pathId.LocalPathId) : Self->GetUserTables().begin();
@@ -5081,6 +5085,8 @@ public:
         : TTransactionBase(self)
         , Ev(std::move(ev))
     { }
+
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         auto pathId = Ev->Get()->PathId;

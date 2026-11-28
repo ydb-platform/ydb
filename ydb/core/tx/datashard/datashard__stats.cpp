@@ -247,6 +247,8 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_GET_TABLE_STATS; }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
@@ -392,7 +394,16 @@ public:
         auto* resourceMetrics = Self->Executor()->GetResourceMetrics();
 
         if (resourceMetrics != nullptr) {
+            const TInstant now = AppData(ctx)->TimeProvider->Now();
+            resourceMetrics->CPUWithKeys.Increment(0, now);
+            resourceMetrics->CPUWithoutKeys.Increment(0, now);
             resourceMetrics->Fill(*(Result->Record.MutableTabletMetrics()));
+            // Report split CPU usage only together with the total one, so that
+            // schemeshard can tell "not measured yet" from "no keyed load"
+            if (resourceMetrics->CPU.IsValueReady()) {
+                Result->Record.MutableTableStats()->SetCPUWithKeys(resourceMetrics->CPUWithKeys.GetValue());
+                Result->Record.MutableTableStats()->SetCPUWithoutKeys(resourceMetrics->CPUWithoutKeys.GetValue());
+            }
         }
 
         return true;
@@ -609,6 +620,8 @@ public:
         }
     }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Self->State != TShardState::Ready)
             return true;
@@ -783,8 +796,11 @@ void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
     auto* metrics = Executor()->GetResourceMetrics();
     TInstant now = AppData(ctx)->TimeProvider->Now();
 
-    // advance CPU usage collector to the current time and report very-very small usage
+    // Advance CPU usage collectors to the current time and report very small
+    // keyless usage from this bookkeeping operation.
     metrics->CPU.Increment(10, now);
+    metrics->CPUWithKeys.Increment(0, now);
+    metrics->CPUWithoutKeys.Increment(10, now);
     metrics->TryUpdate(ctx);
 
     if (!metrics->CPU.IsValueReady()) {

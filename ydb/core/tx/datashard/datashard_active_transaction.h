@@ -307,7 +307,7 @@ public:
     using TPtr = TIntrusivePtr<TActiveTransaction>;
 
     explicit TActiveTransaction(const TBasicOpInfo &op)
-        : TOperation(op)
+        : TOperation(op, !op.IsSchemeTx() && !op.IsSnapshotTx())
         , ArtifactFlags(0)
         , TxCacheUsage(0)
         , ReleasedTxDataSize(0)
@@ -373,7 +373,10 @@ public:
     TValidatedDataTx::TPtr BuildDataTx(TDataShard *self,
                                        TTransactionContext &txc,
                                        const TActorContext &ctx, TIntrusivePtr<NACLib::TUserContext> userCtx, bool isPropose = false);
-    void ClearDataTx() { DataTx = nullptr; }
+    void ClearDataTx() {
+        KeyedWithoutValidation = HasUserTableKeys();
+        DataTx = nullptr;
+    }
 
     const NKikimrTxDataShard::TFlatSchemeTransaction &GetSchemeTx() const
     {

@@ -21,6 +21,8 @@ public:
         , Ev(ev)
     {}
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &) override {
         NIceDb::TNiceDb db(txc.DB);
 

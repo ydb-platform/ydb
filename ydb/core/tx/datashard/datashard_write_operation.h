@@ -276,6 +276,7 @@ public:
     bool BuildWriteTx(TDataShard* self);
 
     void ClearWriteTx() {
+        KeyedWithoutValidation = HasUserTableKeys();
         WriteTx = nullptr;
     }
 

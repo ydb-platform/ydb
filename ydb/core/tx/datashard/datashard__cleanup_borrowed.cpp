@@ -211,6 +211,8 @@ public:
         , Ev(ev)
     {}
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(NTabletFlatExecutor::TTransactionContext &, const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "HTTP request",
             {"tabletId", Self->TabletID()},

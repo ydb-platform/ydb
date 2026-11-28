@@ -25,6 +25,8 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_INIT; }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext &ctx) override;
 
@@ -756,6 +758,8 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA; }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         Y_UNUSED(txc);
         YDB_LOG_DEBUG_CTX(ctx, "TxInitSchema.Execute");
@@ -837,6 +841,8 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA_DEFAULTS; }
+
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TxInitSchemaDefaults.Execute");
@@ -1055,6 +1061,7 @@ public:
     { }
 
     TTxType GetTxType() const override { return TXTYPE_SYNC_SCHEME_ON_FOLLOWER; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         // The follower might have been promoted to the leader meanwhile

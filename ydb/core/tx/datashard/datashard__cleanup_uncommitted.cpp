@@ -12,6 +12,8 @@ public:
         : TTransactionBase(self)
     {}
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Self->State != TShardState::Ready) {
             // We need to be very careful about cleaning up uncommitted changes

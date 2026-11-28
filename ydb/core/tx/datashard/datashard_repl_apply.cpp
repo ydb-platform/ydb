@@ -210,6 +210,8 @@ public:
         return TXTYPE_APPLY_REPLICATION_CHANGES;
     }
 
+    bool IsKeyedOperation() const override { return KeyedOperation; }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Result.Reset();
         MvccVersion.reset();
@@ -416,6 +418,8 @@ public:
             return false;
         }
 
+        // Even duplicate changes look up the source offset by the user-table key.
+        KeyedOperation = true;
         auto offset = source.Offsets.upper_bound(keyCellVec.GetCells());
         Y_ENSURE(offset != source.Offsets.begin());
         if (sourceOffset <= (*std::prev(offset))->MaxOffset) {
@@ -558,6 +562,7 @@ private:
     THolder<TEvDataShard::TEvApplyReplicationChangesResult> Result;
     std::optional<TRowVersion> MvccVersion;
     bool CommittingOpRegistered = false;
+    bool KeyedOperation = false;
     TVector<IDataShardChangeCollector::TChange> Changes;
 }; // TTxApplyReplicationChanges
 

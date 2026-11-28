@@ -21,6 +21,8 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_INITIATE_BORROWED_PARTS_RETURN; }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(txc);
         Y_UNUSED(ctx);
@@ -75,6 +77,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_RETURN_BORROWED_PART; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
@@ -120,6 +123,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_RETURN_BORROWED_PART_ACK; }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
@@ -173,6 +177,8 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_GO_OFFLINE; }
+
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);

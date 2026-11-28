@@ -72,6 +72,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
 
     Y_ENSURE(ActiveOp && ActiveOp->IsInProgress());
     auto status = Self->Pipeline.RunExecutionPlan(ActiveOp, CompleteList, txc, ctx);
+    KeyedOperation = ActiveOp->HasUserTableKeys();
 
     if (Self->Pipeline.CanRunAnotherOp())
         Self->PlanQueue.Progress(ctx);

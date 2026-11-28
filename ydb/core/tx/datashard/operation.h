@@ -766,6 +766,23 @@ public:
     {
         return GetKeysInfo().ReadsCount + GetKeysInfo().WritesCount;
     }
+    /**
+     * Classifies CPU usage for split-by-load. Loaded validation info identifies
+     * user-table keys and excludes operations on system tables alone.
+     * Until the keys are known, operations count towards split-by-load by default.
+     */
+    bool HasUserTableKeys() const
+    {
+        if (!HasKeysInfo()) {
+            return KeyedWithoutValidation;
+        }
+        for (const auto& key : GetKeysInfo().Keys) {
+            if (!TSysTables::IsSystemTable(key.Key->TableId)) {
+                return true;
+            }
+        }
+        return false;
+    }
     virtual ui64 LockTxId() const { return 0; }
     virtual ui32 LockNodeId() const { return 0; }
     virtual bool HasLockedWrites() const { return false; }
@@ -926,8 +943,9 @@ protected:
     {
     }
 
-    TOperation(const TBasicOpInfo &op)
+    TOperation(const TBasicOpInfo &op, bool keyedWithoutValidation = true)
         : TBasicOpInfo(op)
+        , KeyedWithoutValidation(keyedWithoutValidation)
         , Cookie(0)
         , CurrentUnit(0)
     {
@@ -952,6 +970,8 @@ protected:
     void ClearInputData() { InputData = nullptr; }
 
     TActorId Target;
+    // Used before validation and retained when validated keys are unloaded.
+    bool KeyedWithoutValidation;
 
 private:
     THPTimer TotalTimer;

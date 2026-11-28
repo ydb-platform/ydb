@@ -23,6 +23,8 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_INIT_SPLIT_MERGE_DESTINATION; }
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
@@ -133,6 +135,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_TRANSFER_SNAPSHOT; }
+    bool IsKeyedOperation() const override { return false; }
 
     /**
      * Initialize schema based on the first received snapshot
@@ -411,6 +414,8 @@ public:
             : TTransactionBase(self)
         {}
 
+        bool IsKeyedOperation() const override { return false; }
+
         bool Execute(TTransactionContext&, const TActorContext&) override {
             return true;
         }
@@ -452,6 +457,7 @@ public:
 class TDataShard::TTxSplitReplicationSourceOffsets : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvPrivate::TEvReplicationSourceOffsets::TPtr Ev;
+    bool ProcessesSplitKeys = false;
 
 public:
     TTxSplitReplicationSourceOffsets(TDataShard* ds, TEvPrivate::TEvReplicationSourceOffsets::TPtr& ev)
@@ -460,6 +466,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_REPLICATION_SOURCE_OFFSETS; }
+    bool IsKeyedOperation() const override { return ProcessesSplitKeys; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto* msg = Ev->Get();
@@ -597,6 +604,7 @@ public:
             return r < 0;
         };
 
+        ProcessesSplitKeys = !msg->SourceOffsets.empty();
         for (auto& kvSource : msg->SourceOffsets) {
             const TString& sourceName = kvSource.first;
             auto& source = replTable->EnsureSource(rdb, sourceName);

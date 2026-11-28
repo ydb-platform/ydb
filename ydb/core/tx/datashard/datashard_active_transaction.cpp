@@ -467,7 +467,11 @@ bool TDistributedEraseTx::TryParse(const TString& serialized) {
 bool TActiveTransaction::BuildDistributedEraseTx() {
     Y_ENSURE(TxBody);
     DistributedEraseTx.Reset(new TDistributedEraseTx);
-    return DistributedEraseTx->TryParse(TxBody);
+    if (!DistributedEraseTx->TryParse(TxBody)) {
+        return false;
+    }
+    KeyedWithoutValidation = DistributedEraseTx->GetRequest().KeyColumnsSize() != 0;
+    return true;
 }
 
 //
@@ -599,6 +603,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
         LocksCache().Locks[lock.LockId] = lock;
 
     bool extractKeys = DataTx->IsTxInfoLoaded();
+    KeyedWithoutValidation = HasUserTableKeys();
     DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
                                                 GetReceivedAt(), TxBody, IsMvccSnapshotRead(), userCtx);
     if (DataTx->Ready() && extractKeys) {

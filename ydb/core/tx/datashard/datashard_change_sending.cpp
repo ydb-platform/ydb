@@ -252,6 +252,7 @@ public:
     TTxType GetTxType() const override {
         return TXTYPE_REQUEST_CHANGE_RECORDS;
     }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxRequestChangeRecords Execute",
@@ -367,6 +368,7 @@ public:
     TTxType GetTxType() const override {
         return TXTYPE_REMOVE_CHANGE_RECORDS;
     }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxRemoveChangeRecords Execute",
@@ -435,6 +437,7 @@ public:
     TTxType GetTxType() const override {
         return TXTYPE_CHANGE_EXCHANGE_SPLIT_ACK;
     }
+    bool IsKeyedOperation() const override { return false; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         YDB_LOG_NOTICE_CTX(ctx, "TTxChangeExchangeSplitAck Execute",

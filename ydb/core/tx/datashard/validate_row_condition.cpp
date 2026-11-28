@@ -155,6 +155,8 @@ public:
         , Ev(std::move(ev))
     {}
 
+    bool IsKeyedOperation() const override { return false; }
+
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         Self->HandleSafe(Ev, ctx);
         return true;

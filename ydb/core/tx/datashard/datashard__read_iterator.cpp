@@ -2198,10 +2198,11 @@ class TDataShard::TReadOperation : public TOperation, public IReadOperation {
     static constexpr ui32 Flags = NTxDataShard::TTxFlags::ReadOnly | NTxDataShard::TTxFlags::Immediate;
 
 public:
-    TReadOperation(TDataShard* ds, TInstant receivedAt, ui64 localReadId)
-        : TOperation(TBasicOpInfo(EOperationKind::ReadTx, Flags, 0, receivedAt, localReadId))
+    TReadOperation(TDataShard* ds, TInstant receivedAt, const TReadIteratorState& state)
+        : TOperation(TBasicOpInfo(EOperationKind::ReadTx, Flags, 0, receivedAt, state.LocalReadId),
+                     state.PathId.OwnerId != ds->TabletID())
         , Self(ds)
-        , LocalReadId(localReadId)
+        , LocalReadId(state.LocalReadId)
     {}
 
     void BuildExecutionPlan(bool loaded) override
@@ -2216,6 +2217,10 @@ public:
         plan.push_back(EExecutionUnitKind::CompletedOperations);
 
         RewriteExecutionPlan(plan);
+    }
+
+    bool HasKeysInfo() const override {
+        return ValidationInfo.Loaded;
     }
 
     const NMiniKQL::IEngineFlat::TValidationInfo& GetKeysInfo() const override {
@@ -3547,6 +3552,7 @@ class TDataShard::TTxReadViaPipeline : public NTabletFlatExecutor::TTransactionB
 
     TOperation::TPtr Op;
     TVector<EExecutionUnitKind> CompleteList;
+    bool KeyedOperation = false;
     bool WaitComplete = false;
 
 public:
@@ -3556,6 +3562,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_READ; }
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_TRACE_CTX(ctx, "TTxReadViaPipeline execute",
@@ -3812,7 +3819,7 @@ public:
                 state.SnapshotAcquired = Self->GetSnapshotManager().IsSnapshotRetentionEnabled();
             }
 
-            Op = new TReadOperation(Self, ctx.Now(), LocalReadId);
+            Op = new TReadOperation(Self, ctx.Now(), state);
 
             Op->BuildExecutionPlan(false);
             Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op);
@@ -3832,6 +3839,7 @@ public:
         Y_ENSURE(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
+        KeyedOperation = Op->HasUserTableKeys();
 
         YDB_LOG_TRACE_CTX(ctx, "TTxReadViaPipeline Execute",
             {"txType", GetTxType()},
@@ -3930,6 +3938,7 @@ class TDataShard::TTxReadContinue : public NTabletFlatExecutor::TTransactionBase
     TShortTableInfo TableInfo;
     std::unique_ptr<TReader> Reader;
     bool DelayedResult = false;
+    bool KeyedOperation = false;
 
 public:
     TTxReadContinue(TDataShard* ds, ui64 localReadId, NWilson::TTraceId &&traceId)
@@ -3939,6 +3948,8 @@ public:
 
     // note that intentionally the same as TEvRead
     TTxType GetTxType() const override { return TXTYPE_READ; }
+
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         // note that we don't need to check shard state here:
@@ -3966,6 +3977,9 @@ public:
         }
 
         auto& state = *it->second;
+
+        // Same as in TReadOperation: reads of system tables have no keys
+        KeyedOperation = state.PathId.OwnerId != Self->TabletID();
 
         if (state.IsExhausted()) {
             // iterator quota reduced and exhausted while ReadContinue was inflight

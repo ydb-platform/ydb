@@ -224,12 +224,14 @@ public:
         , Ev(std::move(ev)) {
     }
 
-    bool Execute(TTransactionContext&, const TActorContext& ctx) {
+    bool IsKeyedOperation() const override { return false; }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         Self->HandleSafe(Ev, ctx);
         return true;
     }
 
-    void Complete(const TActorContext&) {
+    void Complete(const TActorContext&) override {
         // nothing
     }
 

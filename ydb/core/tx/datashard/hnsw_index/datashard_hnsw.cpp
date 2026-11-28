@@ -250,6 +250,7 @@ namespace NKikimr::NDataShard {
         TTxType GetTxType() const override {
             return TXTYPE_READ;
         }
+        bool IsKeyedOperation() const override { return false; }
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             if (auto* entry = Self->FindHnswIndexEntry(LocalTid, IndexId)) {

@@ -39,7 +39,7 @@ A database corresponds to a directory in the file structure, which contains:
 
 ## Schema mapping {#schema-mapping}
 
-When exporting data to S3-compatible object storage with a common prefix, a `SchemaMapping/mapping.json` file is generated. This file contains a list of schema objects in the export, mapped to the paths in the S3 storage.
+A full backup in a file system or S3-compatible object storage contains a `SchemaMapping/mapping.json` file. This file contains the list of schema objects and maps them to their paths in the export.
 
 For encrypted exports, this mapping serves two purposes: it anonymizes the original object names and stores additional metadata required for decryption.
 
@@ -87,11 +87,7 @@ The format of data files is `.csv`, where each row corresponds to a record in th
 
 ## Checksums {#checksums}
 
-{% note info %}
-
-File checksums are only generated when exporting to S3-compatible object storage.
-
-{% endnote %}
+File checksums are generated for exports to both a file system and S3-compatible object storage.
 
 {{ ydb-short-name }} generates a checksum for each export file and saves it to a corresponding file with the `.sha256` suffix.
 

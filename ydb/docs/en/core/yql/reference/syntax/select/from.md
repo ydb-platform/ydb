@@ -2,6 +2,12 @@
 
 Data source for `SELECT`. The argument can accept the table name, the result of another `SELECT`, or a [named expression](../expressions.md#named-nodes). Between `SELECT` and `FROM`, list the comma-separated column names from the source (or `*` to select all columns).
 
+{% if backend_name == "YDB" %}
+
+To combine the results of reading several tables, use [UNION ALL](union.md#union-all). Each part of the query specifies its own source in `FROM`.
+
+{% endif %}
+
 {% if feature_mapreduce %}The table is searched by name in the database specified by the operator [USE](../use.md).{% endif %}
 
 ### Examples

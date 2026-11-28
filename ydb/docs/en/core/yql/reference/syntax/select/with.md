@@ -2,6 +2,12 @@
 
 Specified after the data source in `FROM` and used to provide additional hints for table usage. Hints cannot be specified for subqueries and [named expressions](../expressions.md#named-nodes).
 
+{% if backend_name == "YDB" %}
+
+In {{ backend_name }}, the available `WITH` parameters depend on the data source type. Format and schema parameters apply when reading external files and topic messages. They do not change the schema of a row-oriented or column-oriented table: use [ALTER TABLE](../alter_table/index.md) for that.
+
+{% else %}
+
 The following values are supported:
 
 * `INFER_SCHEMA` — sets the flag for inferring the table schema. The behavior is similar to setting the yt.InferSchema pragma, but only for a specific data source. You can specify the number of rows to infer (a number from 1 to 1000).
@@ -14,12 +20,15 @@ The following values are supported:
 * `COLUMNS` type — indicates that the specified types should be used for columns whose names match the column names in the table metadata, as well as which additional columns are present in the table.
 * `IGNORETYPEV3`, `IGNORE_TYPE_V3` — sets the flag to ignore type_v3 types in the table. The behavior is similar to setting the yt.IgnoreTypeV3 pragma, but only for a specific data source.
 
+{% endif %}
+
 {% if feature_federated_queries %}
 
 When working with [external file data sources](../../../../concepts/datamodel/external_data_source.md), you can additionally specify a number of parameters:
 
+* `SCHEMA`: schema of the data being read, specified as a [structure](../../types/containers.md). You can use a `Struct<...>` type or a column list, for example, `SCHEMA = (key String, value Int32)`.
 * `FORMAT`: data storage format in file storages in [federated queries](../../../../concepts/query_execution/federated_query/s3/formats.md). Allowed values: `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row`, `json_as_string`, `parquet`, `raw`.
-* `COMPRESSION`: file compression format in file storages in [federated queries](../../../../concepts/query_execution/federated_query/s3/partition_projection). Valid values: [gzip](https://en.wikipedia.org/wiki/Gzip), [zstd](https://en.wikipedia.org/wiki/Zstd), [lz4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)), [brotli](https://en.wikipedia.org/wiki/Brotli), [bzip2](https://en.wikipedia.org/wiki/Bzip2), [xz](https://en.wikipedia.org/wiki/XZ_Utils).
+* `COMPRESSION`: file compression format in file storages in [federated queries](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Valid values: [gzip](https://en.wikipedia.org/wiki/Gzip), [zstd](https://en.wikipedia.org/wiki/Zstd), [lz4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)), [brotli](https://en.wikipedia.org/wiki/Brotli), [bzip2](https://en.wikipedia.org/wiki/Bzip2), [xz](https://en.wikipedia.org/wiki/XZ_Utils).
 * `PARTITIONED_BY` - a list of [partitioning columns](../../../../concepts/query_execution/federated_query/s3/partitioning.md) of data in file storages in federated queries. Contains a list of columns in the order they are placed in the file storage.
 * `projection.enabled` - a flag for enabling [extended data partitioning](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Valid values: `true`, `false`.
 * `projection.<field_name>.type` - field type of [extended data partitioning](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Valid values: `integer`, `enum`, `date`.
@@ -31,6 +40,8 @@ When reading from a [topic](../../../../concepts/datamodel/topic.md) in [streami
 
 {% include notitle [x](../../../../_includes/watermark_parameters.md) %}
 
+{% if backend_name != "YDB" %}
+
 When specifying hints `SCHEMA` and `COLUMNS`, the type value must be a [structure](../../types/containers.md) type.
 
 {% if feature_bulk_tables %}
@@ -39,8 +50,12 @@ If the hint `SCHEMA` is specified, then when using table functions [EACH](concat
 
 {% endif %}
 
+{% endif %}
+
 ## Examples
 
+
+{% if backend_name != "YDB" %}
 
 ```yql
 SELECT key FROM my_table WITH INFER_SCHEMA;
@@ -70,6 +85,21 @@ SELECT key, value FROM my_table WITH COLUMNS Struct<value:Int32?>;
 SELECT key, value FROM EACH($my_tables) WITH SCHEMA Struct<key:String, value:List<Int32>>;
 ```
 
+
+{% endif %}
+
+{% if backend_name == "YDB" and feature_federated_queries %}
+
+```yql
+SELECT key, value
+FROM my_source.`path/to/data/`
+WITH (
+    FORMAT = json_each_row,
+    SCHEMA = (key String, value Int32)
+);
+```
+
+{% endif %}
 
 ```yql
 SELECT

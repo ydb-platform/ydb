@@ -78,6 +78,8 @@ PRAGMA RelativePathPrefix = "folder";
 SELECT * FROM test;
 ```
 
+{% if feature_bulk_tables and backend_name != "YDB" %}
+
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 
 | Тип значения | По умолчанию |
@@ -85,6 +87,12 @@ SELECT * FROM test;
 | Флаг | false |
 
 `EACH` использует [TablePathPrefix](#table-path-prefix) для каждого элемента списка.
+
+{% else %}
+
+<a id="use-table-prefix-for-each"></a>
+
+{% endif %}
 
 ### Warning {#warning}
 
@@ -281,6 +289,31 @@ UnicodeLiterals является [scoped](#pragmascope) настройкой.
 
 При включенном режиме для строковых литералов без суффиксов вида "foo"/'bar'/@@multiline@@ будет генерироваться предупреждение. Его можно подавить, если явно выбрать суффикс `s` для типа `String`, либо `u` для типа `Utf8`.
 WarnUntypedStringLiterals является [scoped](#pragmascope) настройкой.
+
+{% if backend_name != "YDB" %}
+
+### RuntimeLogLevel {#runtime-log-level}
+
+| Тип значения | По умолчанию | Статическая /<br/>динамическая |
+| --- | --- | --- |
+| Строка, одно из `Trace`, `Debug`, `Info`, `Notice`, `Warn`, `Error`, `Fatal` | `Info` | Статическая |
+
+Позволяет поменять уровень логирования вычислений (например, для UDF) во время выполнения запроса или на этапе декларации сигнатуры UDF.
+
+{% endif %}
+
+### SimplePg
+
+`SimplePg`/`DisableSimplePg`
+
+| Тип значения | По умолчанию |
+| --- | --- |
+| Флаг | false |
+
+При включенном режиме в глобальное пространство функций импортируются все функции из модуля [SimplePg](../udf/list/simple_pg.md).
+При выключенном режиме для вызова этих функций требуется префикс `SimplePg::`.
+
+`SimplePg` является [scoped](#pragmascope) настройкой.
 
 ### AllowDotInAlias
 
@@ -561,5 +594,14 @@ SELECT $foo;
 | Флаг | false |
 
 Получение диагностической информации от YQL в виде дополнительного результата запроса.
+
+{% if backend_name != "YDB" %}
+
+### `DebugPositions`
+
+Отключение дедубликации вычисления выражений, которые могут приводить к ошибкам (`Ensure`/`Unwrap` или вызов UDF).
+Это может привести к замедлению запроса ценой увеличения точности позиции, которая будет привязана к runtime ошибке.
+
+{% endif %}
 
 {% endif %}

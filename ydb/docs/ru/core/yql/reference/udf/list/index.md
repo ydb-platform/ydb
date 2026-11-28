@@ -22,6 +22,7 @@
 * [Pire](pire.md)
 * [Re2](re2.md)
 * [Roaring](roaring.md)
+* [SimplePg](simple_pg.md)
 * [String](string.md)
 * [Unicode](unicode.md)
 * [Url](url.md)

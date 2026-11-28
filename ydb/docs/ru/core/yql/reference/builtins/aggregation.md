@@ -1,5 +1,11 @@
 # Агрегатные функции
 
+{% note info %}
+
+Большинство агрегатных функций пропускают значения `NULL`. `COUNT(*)` учитывает все строки, а `BOOL_AND` / `BOOL_OR` / `BOOL_XOR` учитывают `NULL` без пропусков. Поведение функций с несколькими аргументами зависит от назначения аргумента: например, `MIN_BY` и `MAX_BY` пропускают строки с `NULL` во втором аргументе, но могут вернуть `NULL` из первого аргумента.
+
+{% endnote %}
+
 ## COUNT {#count}
 
 ### Сигнатура
@@ -97,7 +103,7 @@ SELECT AVG(value) FROM my_table;
 ### Сигнатура
 
 ```yql
-COUNT_IF(Bool?)->Uint64?
+COUNT_IF(Bool?)->Uint64
 ```
 
 Количество строк, для которых указанное в качестве аргумента выражение истинно (результат вычисления выражения — true).
@@ -823,3 +829,49 @@ SELECT
 FROM my_table;
 ```
 
+
+{% if backend_name != "YDB" %}
+
+## RANDOM_SAMPLE и RANDOM_VALUE
+
+### Сигнатура
+
+Функции доступны начиная с версии [YQL 2025.04](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.04.md).
+
+```yql
+RANDOM_SAMPLE(T?, limit:Uint64)->List<T>
+RANDOM_SAMPLE(T, limit:Uint64)->List<T>
+RANDOM_VALUE(T)->T
+RANDOM_VALUE(T?)->Optional<T>
+```
+
+Выбрать не более `limit` случайных значений. `RANDOM_VALUE` эквивалентен `RANDOM_SAMPLE` с `limit=1`, за исключением того, что возвращает элемент, а не список. Значения NULL пропускаются. При `N > 0` входных значений, отличных от NULL, вероятность попадания каждого значения в результат равна `min(1, limit/N)`.
+
+{% note info %}
+
+`RANDOM_SAMPLE` на пустой таблице без группировки по ключам возвращает пустой список, а не `NULL`.
+
+{% endnote %}
+
+### Примеры
+
+```yql
+SELECT
+   RANDOM_SAMPLE(region, 5) as five_random_regions,
+   RANDOM_VALUE(region) as random_region
+FROM users
+```
+
+{% note warning %}
+
+Итоговый результат не детерминирован (нельзя сделать два запуска, получающих гарантированно один и тот же результат).
+
+{% endnote %}
+
+{% note warning %}
+
+В процессе вычисления агрегационная функция удерживает в памяти `limit` элементов. При использовании большого `limit` и элементов большого размера, вычисления могут упасть по превышению лимита памяти.
+
+{% endnote %}
+
+{% endif %}

@@ -11,6 +11,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <set>
 #include <util/generic/overloaded.h>
 
 namespace NActors::NStructuredLog {
@@ -717,6 +718,31 @@ Y_UNIT_TEST_SUITE(StructLog) {
         CheckJsonTypeLimits<double>(R"({"max":"1.797693135e+308","min":"2.225073859e-308"})");
     }
 
+    Y_UNIT_TEST(SelectAttachedValues) {
+        auto message = YDB_LOG_CREATE_MESSAGE(
+            {"keep1", "a"},
+            {"keep2", ui32{42}},
+            {"drop", "x"});
+
+        const std::set<std::vector<TKeyName>> requiredKeys{
+            std::vector<TKeyName>{"keep1"},
+            std::vector<TKeyName>{"keep2"},
+            std::vector<TKeyName>{"keep3"},
+        };
+
+        auto filtered = message.SelectAttachedValues(requiredKeys);
+
+        UNIT_ASSERT_VALUES_EQUAL(filtered.GetValuesCount(), 2);
+        UNIT_ASSERT(filtered.HasValue("keep1"));
+        UNIT_ASSERT(filtered.HasValue("keep2"));
+        UNIT_ASSERT(!filtered.HasValue("drop"));
+        UNIT_ASSERT_VALUES_EQUAL(filtered.GetValue<TString>("keep1"), "a");
+        UNIT_ASSERT_VALUES_EQUAL(filtered.GetValue<ui32>("keep2"), 42u);
+        UNIT_ASSERT(!filtered.HasValue("keep3"));
+
+        auto empty = message.SelectAttachedValues({});
+        UNIT_ASSERT_VALUES_EQUAL(empty.GetValuesCount(), 0);
+    }
 
 }
 }  // namespace NActors::NStructuredLog

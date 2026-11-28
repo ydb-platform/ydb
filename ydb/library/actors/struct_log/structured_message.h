@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <initializer_list>
 #include <iterator>
+#include <set>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -182,6 +183,21 @@ public:
     }
 
     void Clear();
+
+    inline TStructuredMessage SelectAttachedValues(
+        const std::set<std::vector<TKeyName>>& allowedKeys) const {
+        TStructuredMessage result;
+
+        ForEachTyped([&](const std::vector<TKeyName>& name, const auto& value) {
+            if (allowedKeys.find(name) == allowedKeys.end()) {
+                return;
+            }
+            std::vector<TKeyName> keyName(name);
+            result.AppendValue(std::move(keyName), value);
+        });
+
+        return result;
+    }
 
 protected:
     struct TAttachedValue {

@@ -490,6 +490,37 @@ message TLogConfig {
     optional bool IgnoreUnknownComponents = 15 [default = true];
     optional string TenantName = 16;
     optional bool EnableStructuredLogInJson = 17 [default = false];
+
+    message TSink {
+        // General sin description: source and destination
+        optional string Source = 1;
+        optional string Destination = 2;
+
+        // Common reusable batching parameters
+        optional uint32 MaxQueueSize = 3 [default = 1000000];
+        optional uint32 FlushBatchSize = 4 [default = 1000];
+        optional uint32 FlushBatchTimeout = 5 [default = 1000];
+        optional uint32 MaxBatchSize = 6 [default = 1000];
+        optional uint32 MaxWriteAttempts = 7 [default = 10];
+        optional uint32 MaxActiveWrites = 8 [default = 10];
+
+        // Write to local columnshard database
+        optional string DatabasePath = 9;
+        optional string StoreName = 10;
+        optional string TableName = 11;
+        optional uint32 StoreShardsCount = 12 [default = 5];
+        optional uint32 TableShardsCount = 13 [default = 5];
+        optional uint32 TryCreateTimeout = 14 [default = 1000];
+
+        // Send to open telemetry
+        optional string CollectorUri = 15;
+        optional string ScopeName = 16 [default = "ydb"];
+        optional uint32 RpcTimeout = 17 [default = 5000];
+        optional uint32 FirstRetryTimeout = 18 [default = 100];
+        optional uint32 MaxRetryTimeout = 19 [default = 5000];
+
+    }
+    repeated TSink Sink = 18;
 }
 
 message TInterconnectConfig {

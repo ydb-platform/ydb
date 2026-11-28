@@ -2,14 +2,28 @@
 #include "console.h"
 #include "log_settings_configurator.h"
 
+#include <ydb/core/cms/console/grpc_library_helper.h>
+#include <ydb/core/kqp/event_log/audit_event_log_writer.h>
+#include <ydb/core/kqp/event_log/kqp_event_log_writer.h>
+#include <ydb/core/kqp/event_log/tli_event_log_writer.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+
+#include <ydb/library/actors/struct_log/otel/full_otel_log_sink.h>
+#include <ydb/library/actors/struct_log/otel/simple_otel_log_sink.h>
+
 #include <util/system/file.h>
 #include <util/system/fs.h>
 #include <util/stream/file.h>
 #include <google/protobuf/text_format.h>
-#include <ydb/core/cms/console/grpc_library_helper.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
+namespace {
+
+const TString DefaultSinkName("Default");
+
+}
 
 namespace NKikimr::NConsole {
 
@@ -38,6 +52,20 @@ public:
                              const TActorContext &ctx);
     void ApplyComponentSettings(const TVector<NLog::TComponentSettings> &settings,
                                 const TActorContext &ctx);
+
+    static std::pair<TString, TString> GetDefaultStoreTableName(const TString& eventSource);
+
+    static NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings
+    GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink,
+        const NKikimrConfig::TLogConfig_TSink* defaultSink);
+
+    static NActors::NStructuredLog::TBaseOtelLogSink::TOtelSettings
+    GetBaseOtelSettings(const NKikimrConfig::TLogConfig_TSink& sink,
+        const NKikimrConfig::TLogConfig_TSink* defaultSink);
+
+    NStructuredLog::ILogSinkSPtr CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
+        const NKikimrConfig::TLogConfig_TSink* defaultSink);
+    void ApplyLogSinkSettings(const NKikimrConfig::TLogConfig &config, const TActorContext &ctx);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -138,6 +166,8 @@ void TLogSettingsConfigurator::ApplyLogConfig(const NKikimrConfig::TLogConfig &c
 
     // TODO: support update for AllowDrop, Format, ClusterName, UseLocalTimestamps.
     // Options should either become atomic or update should be done via log service.
+
+    ApplyLogSinkSettings(config, ctx);
 }
 
 TVector<NLog::TComponentSettings>
@@ -205,6 +235,225 @@ void TLogSettingsConfigurator::ApplyComponentSettings(const TVector<NLog::TCompo
             YDB_LOG_CTX(ctx, prio, "TLogSettingsConfigurator",
                 {"message", msg});
         }
+    }
+}
+
+std::pair<TString, TString> TLogSettingsConfigurator::GetDefaultStoreTableName(const TString& eventSource) {
+    std::map<TString, std::pair<TString, TString>> defValues = {
+        {"kqp-requests", {"kqp_requests", "kqp_requests"}},
+        {"tli-datashard", {"tli_datashard", "tli_datashard"}},
+        {"tli-session", {"tli_session", "tli_session"}},
+        {"audit-schemeshard", {"audit_schemeshard", "audit_schemeshard"}},
+        {"audit-grpc-proxy", {"audit_grpc_proxy", "audit_grpc_proxy"}},
+        {"audit-grpc-conn", {"audit_grpc_conn", "audit_grpc_conn"}},
+        {"audit-grpc-login", {"audit_grpc_login", "audit_grpc_login"}},
+        {"audit-monitoring", {"audit_monitoring", "audit_monitoring"}},
+        {"audit-heartbeat", {"audit_heartbeat", "audit_heartbeat"}},
+        {"audit-bsc", {"audit_bsc", "audit_bsc"}},
+        {"audit-distconf", {"audit_distconf", "audit_distconf"}},
+        {"audit-web-login", {"audit_web_login", "audit_web_login"}},
+        {"audit-console", {"audit_console", "audit_console"}}};
+    auto it = defValues.find(eventSource);
+    if (it == end(defValues)) {
+        return {};
+    }
+    return it->second;
+}
+
+#define SET_PROPERTY_FROM(P, FROM)                                          \
+    if (sink.Has##FROM()) {                                                 \
+        settings.P = sink.Get##FROM();                                      \
+    } else if (defaultSink != nullptr && defaultSink->Has##FROM()) {        \
+        settings.P = defaultSink->Get##FROM();                              \
+    }
+
+#define SET_MS_PROPERTY_FROM(P, FROM)                                       \
+    if (sink.Has##FROM()) {                                                 \
+        settings.P = TDuration::MilliSeconds(sink.Get##FROM());             \
+    } else if (defaultSink != nullptr && defaultSink->Has##FROM()) {        \
+        settings.P = TDuration::MilliSeconds(defaultSink->Get##FROM());     \
+    }
+
+#define SET_PROPERTY(P) SET_PROPERTY_FROM(P, P)
+#define SET_MS_PROPERTY(P) SET_MS_PROPERTY_FROM(P, P)
+
+NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings
+TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink,
+    const NKikimrConfig::TLogConfig_TSink* defaultSink) {
+
+    NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings settings;
+
+    SET_PROPERTY(DatabasePath);
+    SET_PROPERTY(StoreName);
+    SET_PROPERTY(TableName);
+    SET_PROPERTY(MaxBatchSize);
+    SET_PROPERTY(FlushBatchSize);
+
+    SET_MS_PROPERTY_FROM(FlushTimeout, FlushBatchTimeout);
+
+    SET_PROPERTY(StoreShardsCount);
+    SET_PROPERTY(TableShardsCount);
+    SET_PROPERTY(MaxWriteAttempts);
+    SET_PROPERTY(MaxActiveWrites);
+
+    SET_MS_PROPERTY(TryCreateTimeout);
+
+    // Apply default store and table name
+    if (settings.StoreName.empty() || settings.TableName.empty()) {
+        auto defs = GetDefaultStoreTableName(sink.GetSource());
+
+        if (settings.StoreName.empty()) {
+            settings.StoreName = defs.first;
+        }
+
+        if (settings.TableName.empty()) {
+            settings.TableName = defs.second;
+        }
+    }
+    return settings;
+}
+
+NActors::NStructuredLog::TBaseOtelLogSink::TOtelSettings
+TLogSettingsConfigurator::GetBaseOtelSettings(const NKikimrConfig::TLogConfig_TSink& sink,
+    const NKikimrConfig::TLogConfig_TSink* defaultSink) {
+
+    NActors::NStructuredLog::TBaseOtelLogSink::TOtelSettings settings;
+
+    SET_PROPERTY(CollectorUri);
+    SET_PROPERTY(ScopeName);
+
+    SET_MS_PROPERTY(RpcTimeout);
+
+    SET_PROPERTY_FROM(MaxFlushBatchSize, MaxBatchSize);
+    SET_PROPERTY_FROM(AutoFlushBatchSize, FlushBatchSize);
+    SET_MS_PROPERTY_FROM(AutoFlushInterval, FlushBatchTimeout);
+    SET_PROPERTY_FROM(MaxActiveRequests, MaxActiveWrites);
+    SET_PROPERTY_FROM(MaxQueuedMessages, MaxQueueSize);
+
+    SET_MS_PROPERTY_FROM(FirstRetryBackoff, FirstRetryTimeout);
+    SET_MS_PROPERTY_FROM(LastRetryBackoff, MaxRetryTimeout);
+
+    return settings;
+}
+
+#undef SET_PROPERTY_FROM
+#undef SET_PROPERTY
+#undef SET_MS_PROPERTY_FROM
+#undef SET_MS_PROPERTY
+
+NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
+    const NKikimrConfig::TLogConfig_TSink* defaultSink) {
+
+    auto eventSource = sink.GetSource();
+
+    TString destination;
+    if (sink.HasDestination()) {
+        destination = sink.GetDestination();
+    } else if (defaultSink != nullptr && defaultSink->HasDestination()) {
+        destination = defaultSink->GetDestination();
+    }
+
+#define TRY_CREATE_SINK(EventSource, Dest, Class, GetSettings) if (eventSource == EventSource && destination == Dest) {        \
+        auto settings = GetSettings(sink, defaultSink);                                                                   \
+        return std::make_shared<Class>(settings);                                                                         \
+    }
+
+    // Common logs to otel
+    TRY_CREATE_SINK("full", "simple-otel", NActors::NStructuredLog::TSimpleOtelLogSink, GetBaseOtelSettings);
+    TRY_CREATE_SINK("full", "full-otel", NActors::NStructuredLog::TFullOtelLogSink, GetBaseOtelSettings);
+
+    // Create event sinks
+    #define TRY_CREATE_EVENT_SINK(TemplateClass, LogClass, GetSettings) \
+        TRY_CREATE_SINK(LogClass :: GetSinkSourceName(), TemplateClass <LogClass> :: GetSinkDestinationName(), TemplateClass <LogClass>, GetSettings);
+
+    #define TRY_CREATE_EVENT_SINKS(TemplateClass, GetSettings)                                                \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::TKqpEventLog, GetSettings);                     \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::TDataShardTliEventLog, GetSettings);            \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::TSessionTliEventLog, GetSettings);              \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TSchemeShardEventLog, GetSettings);     \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TGrpcProxyEventLog, GetSettings);       \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TGrpcConnEventLog, GetSettings);        \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TGrpcLoginEventLog, GetSettings);       \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TMonitoringEventLog, GetSettings);      \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TAuditServiceEventLog, GetSettings);    \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TBscEventLog, GetSettings);             \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TDistconfEventLog, GetSettings);        \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TWebLoginEventLog, GetSettings);        \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TConsoleEventLog, GetSettings);
+
+    // Write event logs to columnshard
+    TRY_CREATE_EVENT_SINKS(NKqp::NEventLog::TColumnShardLogWriter, GetColumnShardDatabaseSettings);
+
+    // Write event logs to columnshard otel (simple form)
+    TRY_CREATE_EVENT_SINKS(NKqp::NEventLog::TSimpleOtelLogWriter, GetBaseOtelSettings);
+
+    // Write event logs to columnshard otel (full form)
+    TRY_CREATE_EVENT_SINKS(NKqp::NEventLog::TFullOtelLogWriter, GetBaseOtelSettings);
+
+#undef TRY_CREATE_SINK
+#undef TRY_CREATE_EVENT_SINK
+#undef TRY_CREATE_EVENT_SINKS
+    return nullptr;
+}
+
+void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogConfig &config, const TActorContext &ctx) {
+    Y_UNUSED(config);
+
+    auto* logSettings = static_cast<NLog::TSettings*>(ctx.LoggerSettings());
+
+    NActors::NLog::TSettings::TLogSinkMap oldSinks, newSinks;
+
+    auto oldSinksPtr = logSettings->Sinks.atomic_load();
+    if (oldSinksPtr) {
+        oldSinks = *oldSinksPtr;
+    }
+
+    const NKikimrConfig::TLogConfig_TSink* defaultSinkPtr{nullptr};
+    for(const auto& sink: config.GetSink()) {
+        if (sink.GetSource() == DefaultSinkName) {
+            auto sinkConfig = sink.ShortDebugString();
+            YDB_LOG_INFO("LogSinksConfig: Found default sink settings",
+                {"sinkConfig", sinkConfig});
+            defaultSinkPtr = & sink;
+            break;
+        }
+    }
+
+    std::map<TString, NKikimrConfig::TLogConfig_TSink> result;
+    for(const auto& sink: config.GetSink()) {
+        if (&sink == defaultSinkPtr) {
+            continue;
+        }
+
+        auto sinkConfig = sink.ShortDebugString();
+        YDB_LOG_CREATE_CONTEXT({"sinkConfig", sinkConfig});
+
+        if (!sink.HasSource()) {
+            YDB_LOG_ERROR("LogSinksConfig: Source is not specified");
+            continue;
+        }
+
+        auto it = oldSinks.find(sinkConfig);
+        if (it != end(oldSinks)) {
+            YDB_LOG_INFO("LogSinksConfig: Don't reconfigure sink");
+
+            newSinks[sinkConfig] = it->second;
+            oldSinks.erase(it);
+        } else {
+            auto sinkPtr = CreateLogSink(sink, defaultSinkPtr);
+            if (sinkPtr != nullptr) {
+                YDB_LOG_INFO("LogSinksConfig: Create sink");
+
+                newSinks[sinkConfig] = sinkPtr;
+            } else {
+                YDB_LOG_ERROR("LogSinksConfig: Can't create sink");
+            }
+        }
+    }
+
+    logSettings->Sinks.atomic_store(MakeTrueAtomicShared<NLog::TSettings::TLogSinkMap>(std::move(newSinks)));
+    for(auto& oldSink: oldSinks) {
+        oldSink.second->Stop();
     }
 }
 

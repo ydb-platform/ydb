@@ -7,13 +7,26 @@
 #include <util/generic/vector.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/string_value_extractor.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
+#include <ydb/library/services/services.pb.h>
 
 #define AUDIT_LOG_S(sys, expr)                                                                                                  \
     do {                                                                                                                        \
         if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {                                                                      \
             TVector<std::pair<TString, TString>> auditParts;                                                                    \
+            NActors::NStructuredLog::TStructuredMessage auditStructuredMessage;                                                 \
             expr                                                                                                                \
             ::NKikimr::NAudit::SendAuditLog(sys, std::move(auditParts));                                                        \
+            ::NActors::NStructuredLog::TStringValueExtractor extractor;                                                         \
+            TStringBuilder auditStructuredMessageText;                                                                          \
+            auditStructuredMessageText << "Audit event";                                                                        \
+            auto operation = extractor.ExtractValue(auditStructuredMessage, {"operation"});                                     \
+            if (operation.has_value()) {                                                                                        \
+                auditStructuredMessageText << ": " << operation.value();                                                        \
+            }                                                                                                                   \
+            YDB_LOG_NOTICE_COMP(NKikimrServices::EServiceKikimr::AUDIT_LOG_WRITER, auditStructuredMessageText, auditStructuredMessage);  \
         }                                                                                                                       \
     } while (0) /**/
 
@@ -24,6 +37,8 @@
     do {                                                                                                                          \
         if (condition && !TStringBuf(value).empty()) {                                                                            \
             auditParts.emplace_back(key, value);                                                                                  \
+            auto update = YDB_LOG_CREATE_MESSAGE({key, value});                                                                   \
+            YDB_LOG_UPDATE_MESSAGE(auditStructuredMessage, update);                                                               \
         }                                                                                                                         \
     } while (0);
 

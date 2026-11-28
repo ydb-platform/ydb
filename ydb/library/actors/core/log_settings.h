@@ -4,6 +4,8 @@
 
 #include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
 
+#include <util/generic/vector.h>
+
 #include <util/digest/murmur.h>
 #include <util/generic/vector.h>
 #include <util/random/easy.h>
@@ -14,6 +16,8 @@
 namespace NActors {
     namespace NStructuredLog {
         class ILogSink;
+
+        using ILogSinkSPtr = std::shared_ptr<ILogSink>;
     }
 
     namespace NLog {

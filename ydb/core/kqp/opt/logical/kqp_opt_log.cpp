@@ -44,7 +44,7 @@ public:
         , Config(config)
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
-        AddHandler(0, &TCoTopBase::Match, HNDL(RewriteHybridRankTopSort));
+        AddHandler(0, Or({&TCoTopBase::Match, &TCoTake::Match}), HNDL(RewriteHybridRankTopSort));
         AddHandler(0, &TCoTop::Match, HNDL(TopSortSelectIndex));
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortSelectIndex));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
@@ -471,8 +471,8 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteHybridRankTopSort(TExprBase node, TExprContext& ctx) {
-        auto output = KqpRewriteHybridRankTopSort(node, ctx, KqpCtx);
+    TMaybeNode<TExprBase> RewriteHybridRankTopSort(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        auto output = KqpRewriteHybridRankTopSort(node, ctx, KqpCtx, *getParents());
         if (!output.IsValid()) {
             return {};
         }

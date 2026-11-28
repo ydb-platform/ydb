@@ -2609,7 +2609,13 @@ private:
 
             const auto& queries = Settings->GetQuerySettings();
             const auto& expr = queries.GetQuery();
-            YQL_ENSURE(expr.empty() || queries.GetPatternQueries().empty(), "String predicates must remain residual filters beside fulltext queries");
+            const auto& queryArguments = queries.GetQueryArguments();
+            const bool hasKeywordQuery = !expr.empty() || !queryArguments.empty();
+            if (queries.GetHasEmptyQuery() || (!hasKeywordQuery && queries.GetPatternQueries().empty())) {
+                RuntimeError("Expected non-empty query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+                return false;
+            }
+            YQL_ENSURE(!hasKeywordQuery || queries.GetPatternQueries().empty(), "String predicates must remain residual filters beside fulltext queries");
             const auto& settings = Settings->GetIndexDescription().GetSettings();
             YQL_ENSURE(settings.columns_size() == 1);
             const auto& column = settings.columns(0);
@@ -2628,10 +2634,23 @@ private:
                     addWord(term, true);
                 }
             }
-            if (!expr.empty()) {
-                for (const auto& term : NFulltext::BuildSearchTermsStructured(expr, column.analyzers())) {
+            const auto addQuery = [&](const TString& expression) {
+                const auto terms = NFulltext::BuildSearchTermsStructured(expression, column.analyzers());
+                for (const auto& term : terms) {
                     addWord(term.Token, term.Required);
                 }
+                return !terms.empty();
+            };
+            if (!queryArguments.empty()) {
+                for (const auto& argument : queryArguments) {
+                    if (!addQuery(argument)) {
+                        Words.clear();
+                        break;
+                    }
+                }
+            } else if (!expr.empty()) {
+                // Single-argument searches and settings sent by older executors.
+                addQuery(expr);
             }
         }
 
@@ -3001,6 +3020,7 @@ public:
         , IndexDescription(Settings->GetIndexDescription())
         , Database(Settings->GetDatabase())
         , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
+        , Snapshot(Settings->GetSnapshot().GetStep(), Settings->GetSnapshot().GetTxId())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , PipeCacheId(NKikimr::MakePipePerNodeCacheID(false))
         , PrefixCells(TIndexTableImplReader::ParsePrefixCells(Settings))
@@ -3026,12 +3046,6 @@ public:
         // Plain search with LIMIT likely needs only a few documents, so read in small batches.
         if (Limit > 0 && !MainTableReader->GetWithRelevance() && IndexTableReader->GetIsCompact()) {
             IndexTableReader->SetReadMaxBytes(gFulltextPostingReadMaxBytesWithLimit);
-        }
-
-        if (Settings->HasSnapshot()) {
-            Snapshot = IKqpGateway::TKqpSnapshot(
-                Settings->GetSnapshot().GetStep(),
-                Settings->GetSnapshot().GetTxId());
         }
 
         if (Settings->HasLockTxId()) {

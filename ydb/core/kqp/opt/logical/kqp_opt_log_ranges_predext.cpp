@@ -455,6 +455,24 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
         return {};
     }
 
+    if (indexName) {
+        const auto indexType = mainTableDesc.Metadata->GetIndex(indexName.Cast().Value()).second->Type;
+        if (indexType == TIndexDescription::EType::GlobalFulltextRelevance
+            || indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance)
+        {
+            const auto fulltext = FindNode(flatmap.Lambda().Body().Ptr(),
+                [](const TExprNode::TPtr& expr) { return !expr->IsComplete(); },
+                [](const TExprNode::TPtr& expr) { return expr->IsCallable({"FulltextMatch", "FulltextScore"}); });
+            if (fulltext) {
+                // Compact relevance metadata exposes the document table keyed by
+                // PK or row id; noncompact metadata exposes the token dictionary.
+                // Preserve the read until its fulltext calls are lowered, while
+                // allowing ordinary covered PK lookups on a compact relevance view.
+                return {};
+            }
+        }
+    }
+
     TExprNode::TPtr ranges = buildResult.ComputeNode;
 
     if (!ranges) {

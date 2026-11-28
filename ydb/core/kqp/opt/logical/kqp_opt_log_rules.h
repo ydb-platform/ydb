@@ -74,7 +74,7 @@ NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteFlatMapOverJsonRead(
 NYql::NNodes::TExprBase KqpRewriteTopSortOverFlatMap(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteHybridRankTopSort(const NYql::NNodes::TExprBase& node,
-    NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
+    NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parents);
 
 NYql::NNodes::TExprBase KqpRewriteTakeOverIndexRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext&,
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap);

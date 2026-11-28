@@ -352,6 +352,19 @@ namespace NKikimr {
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
+        void FinishSyncJob(const TActorContext& ctx, const TVDiskID& vDiskId, NSyncer::TPeerSyncState peerSyncState, bool fullRecovery) {
+            const auto& oldSyncState = (*SyncerData->Neighbors)[vDiskId].Get().PeerSyncState.SyncState;
+            if (fullRecovery && !NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus)) {
+                // An incomplete snapshot cannot advance the peer's sync position.
+                peerSyncState.SyncState = oldSyncState;
+            }
+            if (peerSyncState.SyncState != oldSyncState) {
+                Commit(ctx, vDiskId, peerSyncState, fullRecovery);
+            } else {
+                ApplyChanges(ctx, vDiskId, peerSyncState, fullRecovery);
+            }
+        }
+
         void Handle(TEvSyncerJobDone::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
             TEvSyncerJobDone *msg = ev->Get();
@@ -366,11 +379,7 @@ namespace NKikimr {
                 return;
             }
 #endif
-            if (msg->Task->NeedCommit()) {
-                Commit(ctx, msg->Task->VDiskId, msg->Task->GetCurrent(), msg->Task->IsFullRecoveryTask());
-            } else {
-                ApplyChanges(ctx, msg->Task->VDiskId, msg->Task->GetCurrent(), msg->Task->IsFullRecoveryTask());
-            }
+            FinishSyncJob(ctx, msg->Task->VDiskId, msg->Task->GetCurrent(), msg->Task->IsFullRecoveryTask());
         }
 
         void Handle(TEvSyncerFullSyncFinished::TPtr& ev, const TActorContext& ctx) {
@@ -400,7 +409,7 @@ namespace NKikimr {
             const auto vDiskId = ev->Get()->VDiskId;
             const auto peerSyncState = ev->Get()->PeerSyncState;
             YDB_LOG_INFO_CTX(ctx, VDISKP(SyncerContext->VCtx->VDiskLogPrefix, "SyncerScheduler: full sync disk cancelled: vDiskId# %s status# %s", vDiskId.ToString().data(), NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus_Name(peerSyncState.LastSyncStatus).data()));
-            ApplyChanges(ctx, vDiskId, peerSyncState, true);
+            FinishSyncJob(ctx, vDiskId, peerSyncState, true);
         }
 
         void Handle(TEvSyncerCommitProxyDone::TPtr &ev, const TActorContext &ctx) {

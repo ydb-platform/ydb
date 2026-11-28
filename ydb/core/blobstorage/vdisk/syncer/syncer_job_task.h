@@ -153,11 +153,6 @@ namespace NKikimr {
             TSjOutcome Handle(TEvFullSyncFinished::TPtr &ev);
             TSjOutcome Terminate(ESyncStatus status);
 
-            bool NeedCommit() const {
-                bool need = OldSyncState != GetCurrent().SyncState;
-                return need;
-            }
-
             const NSyncer::TPeerSyncState &GetCurrent() const {
                 return Current;
             }
@@ -183,7 +178,6 @@ namespace NKikimr {
                     TEvBlobStorage::TEvVSyncFullResult::TPtr &ev,
                     const TSyncState &syncState,
                     const TActorId &parentId);
-            TSjOutcome HandleRestart(const TSyncState &newSyncState);
 
             void SetSyncState(const TSyncState &syncState) {
                 Current.SyncState = syncState;

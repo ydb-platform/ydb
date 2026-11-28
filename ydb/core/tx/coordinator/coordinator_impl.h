@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/library/actors/wilson/wilson_event_budget.h>
 
 #include "defs.h"
 #include "coordinator.h"
@@ -34,7 +35,30 @@ typedef ui64 TStepId;
 typedef ui64 TTabletId;
 typedef ui64 TTxId;
 
+struct TCoordinatorPlanTrace {
+    NWilson::TSpan Span;
+    NWilson::TSpanEventBudget Events;
+
+    explicit TCoordinatorPlanTrace(NWilson::TTraceId traceId)
+        : Span(11, std::move(traceId), "Coordinator plan lifecycle", NWilson::EFlags::AUTO_END) {}
+
+    ~TCoordinatorPlanTrace() { Finish("trace_owner_destroyed"); }
+
+    void Event(const char* name) { Events.Event(Span, 11, name); }
+
+    void Finish(const char* boundary) {
+        if (Span) {
+            Span.Attribute("ydb.plan.end_boundary", TString(boundary));
+            Span.Attribute("ydb.trace.event_budget.scope", TString("coordinator_plan"));
+            Events.Event(Span, 11, "plan lifecycle terminal boundary", NWilson::TSpanEventBudget::EKind::Terminal);
+            Events.Annotate(Span);
+            Span.End();
+        }
+    }
+};
+
 struct TTransactionProposal {
+    std::shared_ptr<TCoordinatorPlanTrace> Trace;
     TActorId Proxy;
 
     TTxId TxId; // could be zero, then transaction is not saved a-priori and must be idempotent, with body provided
@@ -404,6 +428,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
     };
 
     struct TTransaction {
+        std::shared_ptr<TCoordinatorPlanTrace> Trace;
         TStepId PlanOnStep = 0;
         THashSet<TTabletId> AffectedSet;
         THashMap<TTabletId, THashSet<TTabletId>> UnconfirmedAffectedSet;

@@ -93,6 +93,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                     x.second.clear();
                 }
 
+                if (proposal.Trace) { proposal.Trace->Event("plan transaction executing"); }
                 const TTxId txId = proposal.TxId;
                 Y_ABORT_UNLESS(txId);
 
@@ -113,6 +114,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                         proposal.Proxy,
                         TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated,
                         0);
+                    if (proposal.Trace) { proposal.Trace->Finish("proposal_declined_during_plan"); }
                     ++DeclinedCounter;
                     continue;
                 }
@@ -152,6 +154,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                         proposal.Proxy,
                         TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace,
                         0);
+                    if (proposal.Trace) { proposal.Trace->Finish("proposal_declined_during_plan"); }
                     ++DeclinedCounter;
                     continue;
                 }
@@ -162,6 +165,11 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                     TTransaction& transaction = transactions[txId];
 
                     transaction.PlanOnStep = PlanOnStep;
+                    transaction.Trace = proposal.Trace;
+                    if (transaction.Trace) {
+                        transaction.Trace->Span.Attribute("ydb.plan.assigned_step", static_cast<i64>(PlanOnStep));
+                        transaction.Trace->Event("plan assigned to participants");
+                    }
                     Y_ABORT_UNLESS(!proposal.AffectedSet.empty());
                     for (const auto &txprop : proposal.AffectedSet) {
                         const TTabletId affectedTablet = txprop.TabletId;
@@ -324,6 +332,11 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         }
 
         Self->SendStepConfirmations(ProxyPlanConfirmations, ctx);
+        for (auto& slot : Slots) {
+            for (auto& proposal : slot) {
+                if (proposal.Trace) { proposal.Trace->Event("plan transaction complete"); }
+            }
+        }
 
         // uncomment this to enable consistency self-check
         //Self->Execute(Self->CreateTxConsistencyCheck(), ctx);

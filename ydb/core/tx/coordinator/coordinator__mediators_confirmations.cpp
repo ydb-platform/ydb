@@ -37,6 +37,15 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
                 auto &unconfirmed = it->second.UnconfirmedAffectedSet[mediatorId];
                 for (TTabletId tabletId : confirmed) {
                     auto removed = unconfirmed.erase(tabletId);
+                    if (const auto& trace = it->second.Trace) {
+                        trace->Events.Event(trace->Span, 11, removed ? "participant plan acknowledged" : "duplicate participant plan ack", [&] {
+                            NWilson::TKeyValueList attributes;
+                            attributes["tablet_id"] = static_cast<i64>(tabletId);
+                            attributes["mediator_id"] = static_cast<i64>(mediatorId);
+                            attributes["remaining_for_mediator"] = static_cast<i64>(unconfirmed.size());
+                            return attributes;
+                        });
+                    }
                     FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "",
                         {"tabletId", Self->TabletID()},
                         {"internalTxGen", internalTxGen},
@@ -63,6 +72,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
                         {"internalTxGen", internalTxGen},
                         {"internalTxStep", internalTxStep},
                         {"volatileTx", txid});
+                    if (it->second.Trace) { it->second.Trace->Finish("all_plan_acknowledgments_received"); }
                     Self->VolatileTransactions.erase(it);
                     ++CompleteTransactions;
                 }
@@ -84,6 +94,15 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
             auto &unconfirmed = it->second.UnconfirmedAffectedSet[mediatorId];
             for (TTabletId tabletId : confirmed) {
                 auto removed = unconfirmed.erase(tabletId);
+                if (const auto& trace = it->second.Trace) {
+                    trace->Events.Event(trace->Span, 11, removed ? "participant plan acknowledged" : "duplicate participant plan ack", [&] {
+                        NWilson::TKeyValueList attributes;
+                        attributes["tablet_id"] = static_cast<i64>(tabletId);
+                        attributes["mediator_id"] = static_cast<i64>(mediatorId);
+                        attributes["remaining_for_mediator"] = static_cast<i64>(unconfirmed.size());
+                        return attributes;
+                    });
+                }
                 if (removed) {
                     db.Table<Schema::AffectedSet>().Key(mediatorId, txid, tabletId).Delete();
                 }
@@ -114,6 +133,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
                     {"internalTxStep", internalTxStep},
                     {"persistentTx", txid});
                 db.Table<Schema::Transaction>().Key(txid).Delete();
+                if (it->second.Trace) { it->second.Trace->Finish("all_plan_acknowledgments_received"); }
                 Self->Transactions.erase(it);
                 ++CompleteTransactions;
             }

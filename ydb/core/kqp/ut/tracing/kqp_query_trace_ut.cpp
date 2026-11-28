@@ -164,6 +164,24 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         return sessionId;
     }
 
+    Y_UNIT_TEST(DistributedWriteHasCoordinatorPlanLifecycle) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
+        auto* uploader = RegisterUploader(runtime);
+        for (ui8 level : {10, 11}) {
+            ClearUploader(*uploader);
+            ExecSQL(runtime, sender,
+                "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 10u), (4000000000u, 20u);", level);
+            const auto* plan = FindSpan(*uploader, "Coordinator plan lifecycle");
+            UNIT_ASSERT_VALUES_EQUAL(bool(plan), level >= 11);
+            if (plan) {
+                UNIT_ASSERT(FindAttribute(*plan, "ydb.plan.participant_count")->value().int_value() >= 2);
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*plan, "ydb.plan.end_boundary")->value().string_value(),
+                    "all_plan_acknowledgments_received");
+            }
+        }
+    }
+
     Y_UNIT_TEST(CommonTreeIncludesKqpAndDatashard) {
         auto [runtime, server, sender] = CreateServer();
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);

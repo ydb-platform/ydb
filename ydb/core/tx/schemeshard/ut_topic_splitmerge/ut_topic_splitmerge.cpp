@@ -1,5 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+
 #include <ydb/core/persqueue/writer/partition_chooser_impl.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -729,6 +731,144 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
                        {{TEvSchemeShard::EStatus::StatusInvalidParameter,
                          "You cannot merge non-contiguous partitions"}});
     } // Y_UNIT_TEST(MargeNotAdjacentRangePartitions)
+
+    Y_UNIT_TEST(IgnoreTotalGroupCountOnSplitMergeTopics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 2);
+
+        ModifyTopic(runtime, env, txId, [](auto& scheme) {
+            scheme.SetTotalGroupCount(3);
+        });
+
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetTotalGroupCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(topic.PartitionsSize(), 2);
+        for (const auto& p : topic.GetPartitions()) {
+            UNIT_ASSERT_C(p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active,
+                          "Partition " << p.GetPartitionId() << " should be Active, got " << (int)p.GetStatus());
+        }
+    } // Y_UNIT_TEST(IgnoreTotalGroupCountOnSplitMergeTopics)
+
+    Y_UNIT_TEST(RejectInvalidPartitionStrategyOnAlter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 2);
+
+        ModifyTopic(runtime, env, txId, [](auto& scheme) {
+            auto* strategy = scheme.MutablePQTabletConfig()->MutablePartitionStrategy();
+            strategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+            strategy->SetMinPartitionCount(5);
+            strategy->SetMaxPartitionCount(4);
+        }, {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid min and max partition count"}});
+    } // Y_UNIT_TEST(RejectInvalidPartitionStrategyOnAlter)
+
+    Y_UNIT_TEST(RejectMergeOfPartitionsWithoutKeyRanges) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 1);
+
+        ModifyTopic(runtime, env, txId, [](auto& scheme) {
+            auto* boundary = scheme.AddRootPartitionBoundaries();
+            boundary->SetPartition(1);
+            boundary->SetCreatePartition(true);
+        });
+
+        MergePartition(runtime, env, txId, 0, 1,
+                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "You cannot merge non-contiguous partitions"}});
+    } // Y_UNIT_TEST(RejectMergeOfPartitionsWithoutKeyRanges)
+
+    Y_UNIT_TEST(RejectMissingSplitMergeFields) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 2);
+
+        auto sendRawAlter = [&](auto modify, TStringBuf expectedReason) {
+            auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(++txId, TTestTxConfig::SchemeShard);
+            auto* tx = request->Record.AddTransaction();
+            tx->SetWorkingDir("/MyRoot/USER_1");
+            tx->SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
+            auto* alter = tx->MutableAlterPersQueueGroup();
+            alter->SetName("Topic1");
+            modify(*alter);
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request.Release());
+            TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusInvalidParameter, TString(expectedReason)}});
+        };
+
+        sendRawAlter([](auto& alter) { alter.AddSplit(); },
+                     "Partition for split must be specified");
+        sendRawAlter([](auto& alter) { alter.AddSplit()->SetPartition(0); },
+                     "SplitBoundary must be specified");
+        sendRawAlter([](auto& alter) { alter.AddMerge()->SetPartition(0); },
+                     "AdjacentPartition for merge must be specified");
+        sendRawAlter([](auto& alter) { alter.AddMerge()->SetAdjacentPartition(1); },
+                     "Partition for merge must be specified");
+        sendRawAlter([](auto& alter) { alter.AddRootPartitionBoundaries(); },
+                     "Partition id for root partition bounds must be specified");
+    } // Y_UNIT_TEST(RejectMissingSplitMergeFields)
+
+    Y_UNIT_TEST(RejectPartitionsToAddOnSplitMergeTopic) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 2);
+
+        ModifyTopic(runtime, env, txId, [](auto& scheme) {
+            scheme.AddPartitionsToAdd()->SetPartitionId(3);
+            scheme.MutablePartitionsToAdd(0)->SetGroupId(3);
+        }, {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Cannot change partition count. Use split/merge instead"}});
+    } // Y_UNIT_TEST(RejectPartitionsToAddOnSplitMergeTopic)
+
+    Y_UNIT_TEST(RejectMinPartitionIncreaseWithRootBoundaries) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        const TString bound0(reinterpret_cast<const char*>(bound_1_3), sizeof(bound_1_3));
+        const TString bound1(reinterpret_cast<const char*>(bound_2_3), sizeof(bound_2_3));
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            auto* strategy = scheme.MutablePQTabletConfig()->MutablePartitionStrategy();
+            strategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+            strategy->SetMinPartitionCount(4);
+            strategy->SetMaxPartitionCount(10);
+
+            auto* first = scheme.AddRootPartitionBoundaries();
+            first->SetPartition(0);
+            first->MutableKeyRange()->SetToBound(bound0);
+            auto* second = scheme.AddRootPartitionBoundaries();
+            second->SetPartition(1);
+            second->MutableKeyRange()->SetFromBound(bound0);
+            second->MutableKeyRange()->SetToBound(bound1);
+            auto* third = scheme.AddRootPartitionBoundaries();
+            third->SetPartition(2);
+            third->MutableKeyRange()->SetFromBound(bound1);
+        }, {{TEvSchemeShard::EStatus::StatusInvalidParameter,
+             "Can't increase active partitions and Split/Merge or change root boundaries at the same time"}});
+    } // Y_UNIT_TEST(RejectMinPartitionIncreaseWithRootBoundaries)
 
     Y_UNIT_TEST(MargeInactivePartitions) {
         TTestBasicRuntime runtime;

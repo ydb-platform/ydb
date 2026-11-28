@@ -28,6 +28,11 @@ constexpr ui32 METRICS_LEVEL_DETAILED = 3;
 
 constexpr i64 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS = TDuration::Days(16).MilliSeconds();
 constexpr ui64 DEFAULT_PARTITION_SPEED = 1_MB;
+
+// Upper bound on the write speed of one partition. Used by the public API
+// validation and by SchemeShard when it enforces the same limit.
+constexpr ui64 MAX_WRITE_SPEED_PER_PARTITION = 50 * 1_MB;
+
 constexpr ui64 MAX_TOPIC_PARTITIONS = 35'000;
 constexpr i32 MAX_READ_RULES_COUNT = 3000;
 constexpr i32 MAX_SUPPORTED_CODECS_COUNT = 100;

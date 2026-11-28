@@ -48,7 +48,8 @@ TClientServiceTypes GetSupportedClientServiceTypes();
 TResult ValidatePartitionStrategy(const NKikimrPQ::TPQTabletConfig& config);
 TResult ValidateConfig(
     const NKikimrPQ::TPQTabletConfig& config,
-    const EOperation operation
+    const EOperation operation,
+    const NKikimrPQ::TPQTabletConfig* oldConfig = nullptr
 );
 
 TResult ValidateConsumersConfig(

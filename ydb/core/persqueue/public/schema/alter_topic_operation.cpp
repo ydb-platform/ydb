@@ -167,7 +167,12 @@ private:
             TopicInfo.Info->Description
         );
         if (result) {
-            result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Alter);
+            // The alter copies the stored config, so pass it to skip the
+            // checks for values inherited unchanged (see ValidateConfig).
+            const NKikimrPQ::TPQTabletConfig* oldConfig = TopicInfo.Info
+                ? &TopicInfo.Info->Description.GetPQTabletConfig()
+                : nullptr;
+            result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Alter, oldConfig);
         }
 
         if (!result) {

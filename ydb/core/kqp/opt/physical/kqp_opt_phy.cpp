@@ -302,8 +302,8 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> ApplyLimitToReadTable(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpApplyLimitToReadTable(node, ctx, KqpCtx);
+    TMaybeNode<TExprBase> ApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpApplyLimitToReadTable(node, ctx, KqpCtx, getParents());
         DumpAppliedRule("ApplyLimitToReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

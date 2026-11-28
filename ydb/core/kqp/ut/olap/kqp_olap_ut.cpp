@@ -2733,6 +2733,187 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    // LIMIT must reach the OLAP read through the rename FlatMap that projection push leaves behind,
+    // so JSON_VALUE stays a subcolumn in the shard and is not parsed as JsonDocument in compute.
+    Y_UNIT_TEST(LimitThroughOlapProjection) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/LimitProj` (
+                a Int64 NOT NULL,
+                name Utf8,
+                jsonDoc JsonDocument,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        auto insertRes = session2.ExecuteQuery(R"(
+            INSERT INTO `/Root/LimitProj` (a, name, jsonDoc) VALUES
+                (1, 'foo', JsonDocument('{"file":"aa","name":"red"}'));
+            INSERT INTO `/Root/LimitProj` (a, name, jsonDoc) VALUES
+                (2, 'foo', JsonDocument('{"file":"aa","name":"blue"}'));
+            INSERT INTO `/Root/LimitProj` (a, name, jsonDoc) VALUES
+                (3, 'foo', JsonDocument('{"file":"bb","name":"green"}'));
+            INSERT INTO `/Root/LimitProj` (a, name, jsonDoc) VALUES
+                (4, 'bar', JsonDocument('{"file":"aa","name":"gold"}'));
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(insertRes.IsSuccess(), insertRes.GetIssues().ToString());
+
+        auto assertItemsLimit = [](const TString& ast, ui64 limit) {
+            constexpr TStringBuf itemsLimitKey = "\"ItemsLimit\"";
+            const size_t keyPos = TStringBuf(ast).find(itemsLimitKey);
+            UNIT_ASSERT_C(keyPos != TString::npos, ast);
+
+            const TString inlineBinding1 = TStringBuilder() << "\"ItemsLimit\" (Uint64 '" << limit << "')";
+            const TString inlineBinding2 = TStringBuilder() << "\"ItemsLimit\" (Uint64 '\"" << limit << "\")";
+            if (ast.find(inlineBinding1, keyPos) != TString::npos || ast.find(inlineBinding2, keyPos) != TString::npos) {
+                return;
+            }
+
+            size_t p = keyPos + itemsLimitKey.size();
+            while (p < ast.size() && (ast[p] == ' ' || ast[p] == '\t' || ast[p] == '\n')) {
+                ++p;
+            }
+            UNIT_ASSERT_C(p < ast.size() && ast[p] == '$', ast);
+            ++p;
+            TString var = "$";
+            while (p < ast.size() && ast[p] >= '0' && ast[p] <= '9') {
+                var.push_back(ast[p]);
+                ++p;
+            }
+            const TString letBinding = TStringBuilder() << "(let " << var << " (Uint64 '" << limit << "))";
+            UNIT_ASSERT_C(ast.find(letBinding) != TString::npos, ast);
+        };
+
+        // ItemsLimit makes the shard stop early, so row order is not the primary-key order.
+        auto check = [&](const TString& query, const TString& expectedRows, TMaybe<ui64> limit, bool expectProjection,
+            bool offsetEitherMatch) {
+            auto explained = session2.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explained.GetStatus(), EStatus::SUCCESS, explained.GetIssues().ToString());
+            const TString ast(*explained.GetStats()->GetAst());
+
+            if (limit) {
+                // OFFSET + LIMIT is precomputed (AggrAdd, with an overflow guard), not a folded Uint64.
+                if (offsetEitherMatch) {
+                    UNIT_ASSERT_C(ast.find("ItemsLimit") != TString::npos, ast);
+                    UNIT_ASSERT_C(ast.find("(Uint64 '1)") != TString::npos, ast);
+                    UNIT_ASSERT_C(ast.find("AggrAdd") != TString::npos, ast);
+                } else {
+                    assertItemsLimit(ast, *limit);
+                }
+                UNIT_ASSERT_C(ast.find("Sequential") != TString::npos, ast);
+            } else {
+                UNIT_ASSERT_C(ast.find("ItemsLimit") == TString::npos, ast);
+            }
+            if (expectProjection) {
+                UNIT_ASSERT_C(ast.find("KqpOlapFilter") != TString::npos, ast);
+                UNIT_ASSERT_C(ast.find("KqpOlapProjection") != TString::npos, ast);
+                UNIT_ASSERT_C(ast.find("Json2.JsonDocumentSqlValueConvertToUtf8") == TString::npos, ast);
+            }
+
+            auto executed = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(executed.GetStatus(), EStatus::SUCCESS, executed.GetIssues().ToString());
+            const TString yson = FormatResultSetYson(executed.GetResultSet(0));
+            if (offsetEitherMatch) {
+                if (yson.Contains("red")) {
+                    CompareYson(R"([[1;["aa"];["red"]]])", yson);
+                } else {
+                    CompareYson(R"([[2;["aa"];["blue"]]])", yson);
+                }
+            } else {
+                CompareYsonUnordered(expectedRows, yson);
+            }
+        };
+
+        const TString pragma = "PRAGMA Kikimr.OptEnableOlapPushdownProjections = \"true\";\n";
+
+        // Two JSON paths of one column.
+        check(
+            pragma + R"(
+                SELECT a,
+                    JSON_VALUE(jsonDoc, "$.file") AS file,
+                    JSON_VALUE(jsonDoc, "$.name") AS label
+                FROM `/Root/LimitProj`
+                WHERE name = 'foo'
+                    AND JSON_VALUE(jsonDoc, "$.file") = 'aa'
+                LIMIT 10;
+            )",
+            R"([[1;["aa"];["red"]];[2;["aa"];["blue"]]])",
+            10, true, false);
+
+        check(
+            pragma + R"(
+                SELECT a,
+                    JSON_VALUE(jsonDoc, "$.file") AS file,
+                    JSON_VALUE(jsonDoc, "$.name") AS label
+                FROM `/Root/LimitProj`
+                WHERE name = 'foo'
+                    AND JSON_VALUE(jsonDoc, "$.file") = 'aa'
+                LIMIT 1 OFFSET 1;
+            )",
+            "",
+            2, true, true);
+
+        // Stored columns only: the limit is on the read, as before.
+        check(
+            pragma + R"(
+                SELECT a, name
+                FROM `/Root/LimitProj`
+                LIMIT 10;
+            )",
+            R"([[1;["foo"]];[2;["foo"]];[3;["foo"]];[4;["bar"]]])",
+            10, false, false);
+
+        // CAST is not an OLAP projection, so it stays in the FlatMap and the limit must not move under it.
+        check(
+            pragma + R"(
+                SELECT a, CAST(a AS Utf8) AS s
+                FROM `/Root/LimitProj`
+                WHERE name = 'foo'
+                LIMIT 10;
+            )",
+            R"([[1;"1"];[2;"2"];[3;"3"]])",
+            {}, false, false);
+
+        // JSON_VALUE is pushed. Unwrap blocks the predicate from KqpOlapApply, so it stays in the FlatMap.
+        // The limit must stay above that predicate: rows 1-3 fail it, and LIMIT 1 has to return row 4.
+        {
+            const TString query = pragma + R"(
+                SELECT a, JSON_VALUE(jsonDoc, "$.file") AS file
+                FROM `/Root/LimitProj`
+                WHERE Unwrap(Unicode::ToLower(name)) = 'bar'
+                LIMIT 1;
+            )";
+            auto explained = session2.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explained.GetStatus(), EStatus::SUCCESS, explained.GetIssues().ToString());
+            const TString ast(*explained.GetStats()->GetAst());
+            UNIT_ASSERT_C(ast.find("ItemsLimit") == TString::npos, ast);
+            UNIT_ASSERT_C(ast.find("KqpOlapProjection") != TString::npos, ast);
+            UNIT_ASSERT_C(ast.find("Unwrap") != TString::npos, ast);
+
+            auto executed = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(executed.GetStatus(), EStatus::SUCCESS, executed.GetIssues().ToString());
+            CompareYson(R"([[4;["aa"]]])", FormatResultSetYson(executed.GetResultSet(0)));
+        }
+    }
+
     // Unit tests for datetime pushdowns in query service
     Y_UNIT_TEST(PredicatePushdown_Datetime_QS) {
         auto settings = TKikimrSettings()

@@ -86,7 +86,7 @@ NYql::NNodes::TExprBase KqpApplyLimitToFullTextIndex(NYql::NNodes::TExprBase nod
     const TKqpOptimizeContext& kqpCtx);
 
 NYql::NNodes::TExprBase KqpApplyLimitToReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx);
+    const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap* parents);
 
 NYql::NNodes::TExprBase KqpApplyLimitToOlapReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);

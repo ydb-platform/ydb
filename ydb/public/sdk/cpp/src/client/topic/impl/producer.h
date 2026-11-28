@@ -136,24 +136,6 @@ private:
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Custom retry policy
-
-    // Write-session settings keep this object alive. GetNextRetryDelay may run
-    // on the gRPC thread after TProducer is destroyed, so the user policy is
-    // stored here instead of a producer pointer.
-    struct TProducerRetryPolicy : public ::IRetryPolicy<EStatus> {
-        using TSelf = TProducerRetryPolicy;
-        using TPtr = std::shared_ptr<TSelf>;
-
-        explicit TProducerRetryPolicy(::IRetryPolicy<EStatus>::TPtr userPolicy);
-        ~TProducerRetryPolicy() = default;
-        typename IRetryState::TPtr CreateRetryState() const override;
-
-    private:
-        ::IRetryPolicy<EStatus>::TPtr UserPolicy;
-    };
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Workers
 
     struct TEventsWorker;
@@ -519,7 +501,6 @@ private:
     std::unordered_map<std::uint32_t, std::shared_ptr<TSplittedPartitionWorker>> SplittedPartitionWorkers;
     std::unordered_map<std::uint32_t, std::shared_ptr<TSplittedPartitionWorker>> ReadySplittedPartitionWorkers;
     std::shared_ptr<TMessagesWorker> MessagesWorker;
-    std::shared_ptr<TProducerRetryPolicy> RetryPolicy;
 
     // TFuture::Subscribe may invoke callback synchronously when the future is already ready.
     // Also, callbacks may arrive concurrently with the attempt to go idle.

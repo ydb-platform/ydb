@@ -30,8 +30,9 @@ TWriteSession::TWriteSession(
     const TWriteSessionSettings& settings,
     std::shared_ptr<TTopicClient::TImpl> client,
     std::shared_ptr<TGRpcConnectionsImpl> connections,
-    TDbDriverStatePtr dbDriverState)
-    : TContextOwner(settings, std::move(client), std::move(connections), std::move(dbDriverState))
+    TDbDriverStatePtr dbDriverState,
+    bool closeOnInactivePartition)
+    : TContextOwner(settings, std::move(client), std::move(connections), std::move(dbDriverState), closeOnInactivePartition)
 {
 }
 

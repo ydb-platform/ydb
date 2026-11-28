@@ -3,147 +3,79 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <memory>
-
-using namespace NYdb;
-using namespace NYdb::NTopic;
-
 namespace NYdb::inline Dev::NTopic {
 
 struct TProducerRetryPolicyTestHelper {
-    static TProducer::TProducerRetryPolicy::TPtr Create(IRetryPolicy::TPtr userPolicy) {
-        return std::make_shared<TProducer::TProducerRetryPolicy>(std::move(userPolicy));
-    }
+    static void ReportOverload(IProducer& writer) {
+        auto& producer = static_cast<TProducer&>(writer);
+        TProducer::WrappedWriteSessionPtr session;
+        {
+            std::lock_guard guard(producer.GlobalLock);
+            session = producer.SessionsWorker->GetWriteSession(0);
+        }
+        UNIT_ASSERT(session);
 
-    static TProducer::TProducerRetryPolicy::TPtr FromProducer(IProducer& producer) {
-        return static_cast<TProducer&>(producer).RetryPolicy;
+        auto impl = static_cast<TWriteSession&>(*session->Session).TryGetImpl();
+        TWriteSessionImpl::THandleResult result;
+        {
+            std::lock_guard guard(impl->Lock);
+            result = impl->OnErrorImpl({EStatus::OVERLOADED, "temporary overload"});
+        }
+        impl->ProcessHandleResult(result);
     }
 };
 
-} // namespace NYdb::inline Dev::NTopic
-
 namespace {
 
-    class TScriptedRetryPolicy: public NTopic::IRetryPolicy {
-    public:
-        mutable int StateCount = 0;
-        mutable int CallCount = 0;
-        mutable EStatus LastStatus = EStatus::STATUS_UNDEFINED;
+constexpr auto Timeout = TDuration::Seconds(15);
 
-        struct TState: public NTopic::IRetryPolicy::IRetryState {
-            explicit TState(TScriptedRetryPolicy* policy)
-                : Policy(policy)
-            {
-            }
+void WriteAndFlush(IProducer& producer) {
+    UNIT_ASSERT(producer.Write(TWriteMessage("message")).IsQueued());
+    auto flush = producer.Flush();
+    UNIT_ASSERT_C(flush.Wait(Timeout), "Producer flush timed out");
+    UNIT_ASSERT(flush.GetValue().IsSuccess());
+}
 
-            TMaybe<TDuration> GetNextRetryDelay(EStatus status) override {
-                ++Policy->CallCount;
-                Policy->LastStatus = status;
-                if (AttemptsLeft == 0) {
-                    return Nothing();
-                }
-                --AttemptsLeft;
-                return TDuration::MilliSeconds(15);
-            }
-
-            TScriptedRetryPolicy* Policy;
-            int AttemptsLeft = 1;
-        };
-
-        NTopic::IRetryPolicy::IRetryState::TPtr CreateRetryState() const override {
-            ++StateCount;
-            return std::make_unique<TState>(const_cast<TScriptedRetryPolicy*>(this));
-        }
-    };
+std::shared_ptr<IProducer> StartProducer(const NTests::TTopicSdkTestSetup& setup, TProducerSettings settings) {
+    settings.Path(setup.GetTopicPath()).Codec(ECodec::RAW);
+    settings.ProducerIdPrefix("overload").AsyncExecutionMode(true);
+    auto producer = setup.MakeClient().CreateProducer(settings);
+    WriteAndFlush(*producer);
+    return producer;
+}
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(ProducerRetryPolicy) {
-
-    Y_UNIT_TEST(OverloadedDoesNotConsultUserPolicy) {
-        auto user = std::make_shared<TScriptedRetryPolicy>();
-        auto policy = TProducerRetryPolicyTestHelper::Create(user);
-        auto state = policy->CreateRetryState();
-
-        const auto delay = state->GetNextRetryDelay(EStatus::OVERLOADED);
-
-        UNIT_ASSERT(!delay);
-        UNIT_ASSERT_VALUES_EQUAL(user->StateCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(user->CallCount, 0);
-    }
-
-    Y_UNIT_TEST(DelegatesOtherStatusesAndReusesState) {
-        auto user = std::make_shared<TScriptedRetryPolicy>();
-        auto policy = TProducerRetryPolicyTestHelper::Create(user);
-        auto state = policy->CreateRetryState();
-
-        const auto first = state->GetNextRetryDelay(EStatus::UNAVAILABLE);
-        UNIT_ASSERT(first);
-        UNIT_ASSERT_VALUES_EQUAL(first->MilliSeconds(), 15);
-        UNIT_ASSERT_VALUES_EQUAL(user->StateCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(user->CallCount, 1);
-        UNIT_ASSERT(user->LastStatus == EStatus::UNAVAILABLE);
-
-        // OVERLOADED is handled by the wrapper and must not consume a user attempt.
-        UNIT_ASSERT(!state->GetNextRetryDelay(EStatus::OVERLOADED));
-        UNIT_ASSERT_VALUES_EQUAL(user->CallCount, 1);
-
-        const auto second = state->GetNextRetryDelay(EStatus::UNAVAILABLE);
-        UNIT_ASSERT(!second);
-        UNIT_ASSERT_VALUES_EQUAL(user->StateCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(user->CallCount, 2);
-    }
-
-    Y_UNIT_TEST(RetryStatesAreIndependent) {
-        auto user = std::make_shared<TScriptedRetryPolicy>();
-        auto policy = TProducerRetryPolicyTestHelper::Create(user);
-        auto first = policy->CreateRetryState();
-        auto second = policy->CreateRetryState();
-
-        UNIT_ASSERT(first->GetNextRetryDelay(EStatus::UNAVAILABLE));
-        UNIT_ASSERT(!first->GetNextRetryDelay(EStatus::UNAVAILABLE));
-        UNIT_ASSERT(second->GetNextRetryDelay(EStatus::TRANSPORT_UNAVAILABLE));
-        UNIT_ASSERT_VALUES_EQUAL(user->StateCount, 2);
-        UNIT_ASSERT(user->LastStatus == EStatus::TRANSPORT_UNAVAILABLE);
-    }
-
-    Y_UNIT_TEST(SurvivesProducerDestruction) {
-        NTests::TTopicSdkTestSetup setup{TEST_CASE_NAME, NTests::TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopic();
-
-        auto client = setup.MakeClient();
+    Y_UNIT_TEST(RetriesTemporaryOverload) {
+        NTests::TTopicSdkTestSetup setup(TEST_CASE_NAME);
         TProducerSettings settings;
-        settings
-            .Path(setup.GetTopicPath())
-            .Codec(ECodec::RAW);
-        settings.ProducerIdPrefix("retry-after-destroy");
-        settings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
-        auto user = std::make_shared<TScriptedRetryPolicy>();
-        settings.RetryPolicy(user);
+        settings.RetryPolicy(IRetryPolicy::GetFixedIntervalPolicy(TDuration::MilliSeconds(10)));
+        auto producer = StartProducer(setup, settings);
 
-        auto producer = client.CreateProducer(settings);
-        auto policy = TProducerRetryPolicyTestHelper::FromProducer(*producer);
-        producer.reset();
+        TProducerRetryPolicyTestHelper::ReportOverload(*producer);
 
-        const auto delay = policy->CreateRetryState()->GetNextRetryDelay(EStatus::UNAVAILABLE);
-        UNIT_ASSERT(delay);
-        UNIT_ASSERT_VALUES_EQUAL(delay->MilliSeconds(), 15);
-        UNIT_ASSERT_VALUES_EQUAL(user->CallCount, 1);
+        WriteAndFlush(*producer);
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, 2);
+        UNIT_ASSERT(producer->Close(Timeout).IsSuccess());
     }
 
-    Y_UNIT_TEST(MissingUserPolicyUsesDefaultAndDoesNotNeedProducer) {
-        // The wrapper must stay usable with no TProducer: write sessions call it
-        // after the producer has already been destroyed.
-        auto policy = TProducerRetryPolicyTestHelper::Create(nullptr);
-        auto state = policy->CreateRetryState();
+    Y_UNIT_TEST(OverloadWithoutRetryReturnsOriginalError) {
+        NTests::TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto closed = NThreading::NewPromise<TSessionClosedEvent>();
+        TProducerSettings settings;
+        settings.RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
+        settings.EventHandlers_.SessionClosedHandler(
+            [closed](const TSessionClosedEvent& event) mutable { closed.TrySetValue(event); });
+        auto producer = StartProducer(setup, settings);
 
-        const auto retry = state->GetNextRetryDelay(EStatus::UNAVAILABLE);
-        UNIT_ASSERT(retry);
-        UNIT_ASSERT(*retry > TDuration::Zero());
+        TProducerRetryPolicyTestHelper::ReportOverload(*producer);
 
-        auto fatal = policy->CreateRetryState();
-        UNIT_ASSERT(!fatal->GetNextRetryDelay(EStatus::SCHEME_ERROR));
-        UNIT_ASSERT(!fatal->GetNextRetryDelay(EStatus::OVERLOADED));
+        auto event = closed.GetFuture();
+        UNIT_ASSERT_C(event.Wait(Timeout), "Producer did not report the session error");
+        UNIT_ASSERT_VALUES_EQUAL(event.GetValue().GetStatus(), EStatus::OVERLOADED);
+        UNIT_ASSERT_STRING_CONTAINS(event.GetValue().GetIssues().ToString(), "temporary overload");
     }
+}
 
-} // Y_UNIT_TEST_SUITE(ProducerRetryPolicy)
+} // namespace NYdb::NTopic

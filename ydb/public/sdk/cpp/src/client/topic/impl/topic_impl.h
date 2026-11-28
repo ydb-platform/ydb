@@ -361,7 +361,7 @@ public:
         return std::make_shared<TTypedProducer<T>>(producer);
     }
 
-    std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
+    std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings, bool closeOnInactivePartition = false);
 
     using IReadSessionConnectionProcessorFactory =
         ISessionConnectionProcessorFactory<Ydb::Topic::StreamReadMessage::FromClient,

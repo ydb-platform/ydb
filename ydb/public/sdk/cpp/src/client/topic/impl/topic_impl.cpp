@@ -24,7 +24,7 @@ std::shared_ptr<IReadSession> TTopicClient::TImpl::CreateReadSession(const TRead
 }
 
 std::shared_ptr<IWriteSession> TTopicClient::TImpl::CreateWriteSession(
-        const TWriteSessionSettings& settings
+        const TWriteSessionSettings& settings, bool closeOnInactivePartition
 ) {
     std::optional<TWriteSessionSettings> maybeSettings;
     if (!settings.CompressionExecutor_ || !settings.EventHandlers_.HandlersExecutor_) {
@@ -38,7 +38,7 @@ std::shared_ptr<IWriteSession> TTopicClient::TImpl::CreateWriteSession(
         }
     }
     auto session = std::make_shared<TWriteSession>(
-            maybeSettings.value_or(settings), shared_from_this(), Connections_, DbDriverState_
+            maybeSettings.value_or(settings), shared_from_this(), Connections_, DbDriverState_, closeOnInactivePartition
     );
     session->Start(TDuration::Zero());
     return std::move(session);

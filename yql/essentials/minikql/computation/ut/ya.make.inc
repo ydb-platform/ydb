@@ -12,6 +12,17 @@ ENDIF()
 ENABLE(TIDY_ALLOW_GENERATED)
 SET(TIDY_HEADER_FILTER "${ARCADIA_ROOT}/yql/essentials/minikql/computation/")
 
+INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
+
+COPY(
+    WITH_CONTEXT
+    AUTO
+    FROM yql/essentials/minikql/computation
+    mkql_computation_node_codegen_ut.cpp
+    OUTPUT_INCLUDES
+        ${BINDIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
+)
+
 SRCDIR(yql/essentials/minikql/computation)
 
 SRCS(

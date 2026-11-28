@@ -72,7 +72,7 @@ public:
     // Eviction of a portion living on the default storage to targetTier, i.e. features addressed as MakeAddress(targetTier).
     TPortionEvictionFeatures MakeEvictionFeatures(const TString& targetTier) const {
         const auto schema = VersionedIndex.GetLastSchema();
-        TPortionEvictionFeatures result(schema, schema, IStoragesManager::DefaultStorageId);
+        TPortionEvictionFeatures result(schema->GetVersion(), schema, schema, IStoragesManager::DefaultStorageId);
         result.SetTargetTierName(targetTier);
         return result;
     }
@@ -126,8 +126,8 @@ public:
     }
 };
 
-// The scheme actualizer rewrites portions onto the latest critical schema. Its version is registered as v2, so a
-// portion written under v1 is a rewrite candidate until it resolves to v2.
+// The scheme actualizer rewrites every portion whose stored version is below the threshold with the latest schema. The
+// threshold is v2 here (the version that set SchemeNeedActualization), so a portion written under v1 is a candidate.
 class TSchemeTestEnv {
 private:
     const std::shared_ptr<TSchemaObjectsCache> Cache = std::make_shared<TSchemaObjectsCache>();
@@ -145,13 +145,14 @@ public:
         Actualizer.emplace(TestPathId, VersionedIndex);
     }
 
-    // Queues a portion written under schema v1 for rewrite to the critical schema v2.
+    // Queues a portion written under schema v1 (below the threshold v2).
     void QueuePortion() {
         Portions.emplace(TestPortionId, NTest::MakeTestCompactedPortion(TestPathId, TestPortionId, 10, 19, 10, TSnapshot(1, 1), std::nullopt));
         Actualizer->Refresh(TAddExternalContext(TInstant::Now(), Portions));
     }
 
-    // Drops schema v1, so a portion written under it now resolves to v2 and no longer needs a rewrite.
+    // Drops schema v1 (EnableCSSchemasCollapsing): a portion written under it resolves to v2 from now on, but still
+    // stores v1.
     void CollapseSchemaOntoTarget() {
         VersionedIndex.EraseVersion(1);
     }
@@ -360,13 +361,15 @@ Y_UNIT_TEST_SUITE(TTieringActualizerTests) {
 }
 
 Y_UNIT_TEST_SUITE(TSchemeActualizerTests) {
-    Y_UNIT_TEST(CollapsedSchemaPortionIsDropped) {
+    Y_UNIT_TEST(CollapsedSchemaPortionIsStillRewritten) {
         TSchemeTestEnv env;
         env.QueuePortion();
-        // once v1 collapses onto v2, the queued portion already carries the target schema: it must be dropped, not
-        // turned into a task from an empty actualization info
+        // once v1 collapses onto v2 the lookup of the portion's version gives v2, but the version it stores is still
+        // below the threshold: the portion is rewritten (an index v2 added would be built), not dropped as current
         env.CollapseSchemaOntoTarget();
-        UNIT_ASSERT(env.ExtractTasks().empty());
+        const auto tasks = env.ExtractTasks();
+        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tasks.begin()->second.size(), 1);
     }
 }
 

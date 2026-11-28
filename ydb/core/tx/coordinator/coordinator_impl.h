@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/actors/wilson/wilson_span.h>
+
 #include "defs.h"
 #include "coordinator.h"
 
@@ -413,9 +415,14 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         TActorId Sender;
         ui64 Cookie;
 
-        TAcquireReadStepRequest(const TActorId& sender, ui64 cookie)
+        NWilson::TSpan Span;
+        TMonotonic QueuedAt;
+
+        TAcquireReadStepRequest(const TActorId& sender, ui64 cookie, NWilson::TTraceId traceId, TMonotonic queuedAt)
             : Sender(sender)
             , Cookie(cookie)
+            , Span(11, std::move(traceId), "Coordinator acquire read step", NWilson::EFlags::AUTO_END)
+            , QueuedAt(queuedAt)
         { }
     };
 

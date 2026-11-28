@@ -1,5 +1,7 @@
 #include "coordinator_impl.h"
 
+#include <memory>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COORDINATOR
 
 namespace NKikimr {
@@ -25,6 +27,12 @@ struct TTxCoordinator::TTxAcquireReadStep : public TTransactionBase<TTxCoordinat
         Y_ABORT_UNLESS(Self->VolatileState.AcquireReadStepStarting);
         Requests.swap(Self->VolatileState.AcquireReadStepPending);
         Self->VolatileState.AcquireReadStepStarting = false;
+        for (auto& request : Requests) {
+            if (request.Span) {
+                request.Span.Attribute("ydb.snapshot.queue_us", static_cast<i64>((ctx.Monotonic() - request.QueuedAt).MicroSeconds()));
+                request.Span.Event("acquire transaction executing");
+            }
+        }
 
         // This is the maximum step that we may have sent to mediators.
         // It is linearizable with all committed transactions, because this is
@@ -56,8 +64,12 @@ struct TTxCoordinator::TTxAcquireReadStep : public TTransactionBase<TTxCoordinat
     void Complete(const TActorContext& ctx) override {
         ui64 latencyUs = (ctx.Monotonic() - StartTimeStamp).MicroSeconds();
 
-        for (const auto& req : Requests) {
-            ctx.Send(req.Sender, new TEvTxProxy::TEvAcquireReadStepResult(Self->TabletID(), Step), 0, req.Cookie);
+        for (auto& req : Requests) {
+            ctx.Send(req.Sender, new TEvTxProxy::TEvAcquireReadStepResult(Self->TabletID(), Step), 0, req.Cookie, req.Span.GetTraceId());
+            req.Span.Attribute("ydb.snapshot.step", static_cast<i64>(Step));
+            req.Span.Attribute("ydb.snapshot.commit_us", static_cast<i64>(latencyUs));
+            req.Span.Event("read step response dispatched");
+            req.Span.EndOk();
         }
 
         Self->VolatileState.AcquireReadStepLatencyUs.Push(latencyUs);
@@ -118,14 +130,36 @@ void TTxCoordinator::Handle(TEvTxProxy::TEvAcquireReadStep::TPtr& ev, const TAct
         ui64 cookie = ev->Cookie;
         ui64 step = Max(VolatileState.LastSentStep, VolatileState.LastAcquired);
         VolatileState.LastAcquired = step;
-        Executor()->ConfirmReadOnlyLease([this, sender, cookie, step]() {
-            Send(sender, new TEvTxProxy::TEvAcquireReadStepResult(TabletID(), step), 0, cookie);
+        // The executor callback is copyable and can outlive this handler.
+        // Allocate trace state only for a sampled detailed request.
+        std::shared_ptr<NWilson::TSpan> span;
+        if (ev->TraceId && ev->TraceId.GetVerbosity() >= 11) {
+            span = std::make_shared<NWilson::TSpan>(11, NWilson::TTraceId(ev->TraceId),
+                "Coordinator acquire read step", NWilson::EFlags::AUTO_END);
+            span->Attribute("ydb.snapshot.wait_reason", TString("read_only_lease"));
+            span->Attribute("ydb.coordinator_id", static_cast<i64>(TabletID()));
+            span->Event("lease confirmation requested");
+        }
+        const auto trace = span ? span->GetTraceId() : NWilson::TTraceId(ev->TraceId);
+        Executor()->ConfirmReadOnlyLease([this, sender, cookie, step, span, trace = NWilson::TTraceId(trace)]() {
+            Send(sender, new TEvTxProxy::TEvAcquireReadStepResult(TabletID(), step), 0, cookie, NWilson::TTraceId(trace));
+            if (span && *span) {
+                span->Attribute("ydb.snapshot.step", static_cast<i64>(step));
+                span->Event("read step response dispatched");
+                span->EndOk();
+            }
         });
         SchedulePlanTickAligned(step + 1);
         return;
     }
 
-    VolatileState.AcquireReadStepPending.emplace_back(ev->Sender, ev->Cookie);
+    auto& request = VolatileState.AcquireReadStepPending.emplace_back(ev->Sender, ev->Cookie, NWilson::TTraceId(ev->TraceId), ctx.Monotonic());
+    request.Span.Attribute("ydb.snapshot.wait_reason", TString("persist_read_step"));
+    request.Span.Attribute("ydb.coordinator_id", static_cast<i64>(TabletID()));
+    request.Span.Attribute("ydb.snapshot.flush_pending", VolatileState.AcquireReadStepFlushing);
+    request.Span.Attribute("ydb.snapshot.starting", VolatileState.AcquireReadStepStarting);
+    request.Span.Attribute("ydb.snapshot.in_flight", static_cast<i64>(VolatileState.AcquireReadStepInFlight));
+    request.Span.Event("read step queued");
     MaybeFlushAcquireReadStep(ctx);
 }
 

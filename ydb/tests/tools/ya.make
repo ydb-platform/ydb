@@ -10,6 +10,7 @@ RECURSE(
     nemesis
     s3_bench
     s3_recipe
+    s3_data_import
     token_accessor_mock
     ydb_serializable
     ydb_serializable/replay

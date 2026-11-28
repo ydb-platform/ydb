@@ -881,5 +881,41 @@ Y_UNIT_TEST_SUITE(CopyTable) {
             UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
         }
     }
+
+    // Reproduces the volatile per-path watermark bug: after a reboot, a stale
+    // DropTable with a lower seqNo than the CopyTable that created the path is
+    // accepted instead of rejected, because LastSchemaSeqNoByPath is cleared on
+    // boot and never restored.
+    Y_UNIT_TEST(StalePathSpecificTxRejectedAfterReboot) {
+        TTestBasicRuntime runtime;
+        SetupCopyTableTestRuntime(runtime);
+        auto csDefaultControllerGuard = RegisterCopyTableTestController<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+
+        const ui64 copyDstPathId = 2;
+        const ui64 copyRound = 5;
+        const ui64 staleDropRound = 1;
+
+        // Step 1: CopyTable(src=1 -> dst=2, round=copyRound) -> watermark[2] = (gen=0, round=copyRound)
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, copyDstPathId, copyRound), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        // Step 2: DropTable(path=2, round=staleDropRound) -> REJECTED (guard works before reboot)
+        ProposeSchemaTxFail(runtime, sender, TTestSchema::DropTableTxBody(copyDstPathId, staleDropRound), ++txId);
+
+        // Step 3: RebootTablet
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+
+        // Step 4: DropTable(path=2, round=staleDropRound) -> must be REJECTED
+        // This is where the bug manifests: after reboot, LastSchemaSeqNoByPath is
+        // empty, so the per-path check degenerates into an unconditional accept.
+        ProposeSchemaTxFail(runtime, sender, TTestSchema::DropTableTxBody(copyDstPathId, staleDropRound), ++txId);
+    }
 }
 }   // namespace NKikimr

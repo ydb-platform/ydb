@@ -80,8 +80,18 @@ namespace NActors {
             TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
         }
 
+        std::unique_ptr<IActorTraceSpan> trace;
+        if (ev->TraceId && ev->TraceId.GetVerbosity() >= 15) {
+            if (const auto* tracing = ActorSystem->GetEventTracing()) {
+                trace = tracing->BeginMailboxSubmit(*ev, ActorSystem, PoolId);
+            }
+        }
         if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
-            switch (mailbox->Push(ev)) {
+            const auto result = mailbox->Push(ev);
+            if (trace) {
+                trace->Finish(result != EMailboxPush::Free);
+            }
+            switch (result) {
                 case EMailboxPush::Pushed:
                     return true;
                 case EMailboxPush::Locked:
@@ -106,8 +116,18 @@ namespace NActors {
             TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
         }
 
+        std::unique_ptr<IActorTraceSpan> trace;
+        if (ev->TraceId && ev->TraceId.GetVerbosity() >= 15) {
+            if (const auto* tracing = ActorSystem->GetEventTracing()) {
+                trace = tracing->BeginMailboxSubmit(*ev, ActorSystem, PoolId);
+            }
+        }
         if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
-            switch (mailbox->Push(ev)) {
+            const auto result = mailbox->Push(ev);
+            if (trace) {
+                trace->Finish(result != EMailboxPush::Free);
+            }
+            switch (result) {
                 case EMailboxPush::Pushed:
                     return true;
                 case EMailboxPush::Locked:

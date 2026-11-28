@@ -10,6 +10,8 @@
 #include <util/generic/map.h>
 #include <util/stream/walk.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_process_epoch.h>
+#include <library/cpp/time_provider/monotonic.h>
 #include <ydb/library/actors/interconnect/logging/logging.h>
 
 #include "interconnect_common.h"
@@ -94,7 +96,19 @@ namespace NActors {
             const ui32 bytes = event.Fill(ev, now) + sizeof(TEventDescr2);
             OutputQueueSize += bytes;
             event.Span = NActors::TPacketSpan::TUniversal(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue");
-            if (NWilson::TSpan* wilsonSpan = event.Span.GetWilsonSpanPtr()) {
+            if (NWilson::TSpan* wilsonSpan = event.Span.GetWilsonSpanPtr(); wilsonSpan && *wilsonSpan) {
+                if (!TraceChannelEpoch) {
+                    TraceChannelEpoch = RandomNumber<ui64>(Max<i64>()) + 1;
+                }
+                wilsonSpan->Attribute("ydb.process.epoch", static_cast<i64>(NWilson::GetProcessTraceEpoch()));
+                wilsonSpan->Attribute("ydb.ic.channel_epoch", static_cast<i64>(TraceChannelEpoch));
+                wilsonSpan->Attribute("ydb.ic.peer_node_id", static_cast<i64>(PeerNodeId));
+                wilsonSpan->Attribute("ydb.ic.channel_id", static_cast<i64>(ChannelId));
+                wilsonSpan->Attribute("ydb.ic.event_type", static_cast<i64>(event.Descr.Type));
+                // This exact context is serialized with the physical message.
+                wilsonSpan->Attribute("ydb.ic.message_token", wilsonSpan->GetTraceId().ToTraceresponseHeader());
+                wilsonSpan->Attribute("ydb.ic.enqueue_monotonic_us", static_cast<i64>(TMonotonic::Now().MicroSeconds()));
+                wilsonSpan->Attribute("ydb.ic.end_boundary", TString("descriptor_buffered"));
                 wilsonSpan->Attribute("OutputQueueItems", static_cast<i64>(Queue.size()));
                 wilsonSpan->Attribute("OutputQueueSize", static_cast<i64>(OutputQueueSize));
             }
@@ -123,6 +137,7 @@ namespace NActors {
 
         void ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg);
 
+        ui64 TraceChannelEpoch = 0;
         const ui32 PeerNodeId;
         const ui16 ChannelId;
         std::shared_ptr<IInterconnectMetrics> Metrics;
@@ -171,7 +186,7 @@ namespace NActors {
         std::optional<bool> FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event);
         std::optional<bool> FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex, bool checksumming);
 
-        bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event);
+        bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 serial);
 
         void AccountTraffic() {
             if (const ui64 amount = std::exchange(UnaccountedTraffic, 0)) {

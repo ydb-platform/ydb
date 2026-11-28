@@ -1,4 +1,5 @@
 #pragma once
+#include "event_trace.h"
 
 #include "defs.h"
 
@@ -119,6 +120,7 @@ namespace NActors {
         bool InterconnectCollectSubscriptionStackTrace = false;
 
         bool MonitorStuckActors = false;
+        std::shared_ptr<IActorEventTracing> EventTracing;
 
         using TLocalServices = TVector<std::pair<TActorId, TActorSetupCmd>>;
         TLocalServices LocalServices;
@@ -219,6 +221,7 @@ namespace NActors {
                           ui64 revolvingCounter = 0, const TActorId& parentId = TActorId());
 
         bool MonitorStuckActors() const { return SystemSetup->MonitorStuckActors; }
+        const IActorEventTracing* GetEventTracing() const { return SystemSetup->EventTracing.get(); }
 
     private:
         typedef bool (IExecutorPool::*TEPSendFunction)(std::unique_ptr<IEventHandle>& ev);

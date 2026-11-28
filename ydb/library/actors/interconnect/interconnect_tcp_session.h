@@ -230,6 +230,7 @@ namespace NActors {
        , public TInterconnectLoggingBase
     {
     protected:
+        ui64 TraceConnectionEpoch = 0;
         enum {
             EvCheckDeadPeer = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvResumeReceiveData,

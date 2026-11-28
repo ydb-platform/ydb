@@ -30,6 +30,8 @@
 
 `--destination-prefix PREFIX`: Префикс ключа в бакете S3.
 
+`--storage-class CLASS`: Класс хранения объектов в S3. Значение по умолчанию: `NOT_SET` — класс хранения не задаётся, используется класс по умолчанию хранилища. Допустимые значения: `NOT_SET`, `STANDARD`, `REDUCED_REDUNDANCY`, `STANDARD_IA`, `ONEZONE_IA`, `INTELLIGENT_TIERING`, `GLACIER`, `DEEP_ARCHIVE`, `OUTPOSTS`.
+
 ### Перечень выгружаемых объектов {#items}
 
 {% include [export-root-include-exclude-params.md](export-root-include-exclude-params.md) %}

@@ -652,7 +652,10 @@ private:
 
             // remove source path prefix
             TString exportPath = CanonizePath(exportItem.source_path());
-            if (exportPath.StartsWith(sourcePathRoot)) {
+            if (exportPath == sourcePathRoot) {
+                // Keep the object name when exporting the source root itself.
+                exportPath = TString(ExtractBase(exportPath));
+            } else if (exportPath.StartsWith(sourcePathRoot + '/')) {
                 exportPath = exportPath.substr(sourcePathRoot.size() + 1); // cut all prefix + '/'
             }
             exportPath = NBackup::NormalizeItemPath(exportPath); // Path without leading slash

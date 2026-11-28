@@ -5491,6 +5491,51 @@ state: STATE_ENABLED
         UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/my_export/metadata.json"), "{\"kind\":\"SimpleExportV0\",\"checksum\":\"sha256\"}");
     }
 
+    Y_UNIT_TEST_TWIN(SchemaMappingSourcePathBoundary, sameSourcePath) {
+        const TString sourceRoot = sameSourcePath ? "/MyRoot/Table" : "/MyRoot/Tab";
+        const TString objectPath = sameSourcePath ? "Table" : "MyRoot/Table";
+        RunS3({R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )"}, TStringBuilder() << R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: ")" << sourceRoot << R"("
+              destination_prefix: "backup"
+              items {
+                source_path: "/MyRoot/Table"
+              }
+            }
+        )", Ydb::StatusIds::SUCCESS, false);
+
+        NBackup::TSchemaMapping mapping;
+        TString error;
+        UNIT_ASSERT_C(mapping.Deserialize(GetS3FileContent("/backup/SchemaMapping/mapping.json"), error), error);
+        UNIT_ASSERT_VALUES_EQUAL(mapping.Items.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(mapping.Items[0].ObjectPath, objectPath);
+        UNIT_ASSERT_VALUES_EQUAL(mapping.Items[0].ExportPrefix, objectPath);
+        UNIT_ASSERT(HasS3File(TStringBuilder() << "/backup/" << objectPath << "/scheme.pb"));
+        UNIT_ASSERT(HasS3File(TStringBuilder() << "/backup/" << objectPath << "/data_00.csv"));
+
+        const ui64 importId = 1000;
+        TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_prefix: "backup"
+              destination_path: "/MyRoot/Restored"
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), importId);
+        TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        TestDescribeResult(DescribePath(Runtime(), TStringBuilder() << "/MyRoot/Restored/" << objectPath), {
+            NLs::PathExist,
+        });
+    }
+
     Y_UNIT_TEST(SchemaMappingEncryption) {
         RunS3({
             R"(

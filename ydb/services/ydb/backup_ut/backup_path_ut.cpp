@@ -2483,6 +2483,20 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
         ExportWithExcludeRegexpsImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
+    Y_UNIT_TEST_TWIN(ExportExcludedSourceRoot, ExplicitItem) {
+        const TString sourcePath = "/Root/RecursiveFolderProcessing/Table0";
+        auto settings = MakeExportSettings(sourcePath, "Prefix");
+        settings.AppendExcludeRegexp("^$");
+        if (ExplicitItem) {
+            settings.AppendItem(NExport::TExportToS3Settings::TItem{.Src = sourcePath});
+        }
+
+        const auto result = YdbExportClient().ExportToS3(settings).GetValueSync();
+        WaitOpStatus(result, EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(result.Status().GetIssues().ToString(), "Nothing to export");
+        ValidateS3FileList({});
+    }
+
     Y_UNIT_TEST_TWIN(ExportFilteringWithoutEncryption, IsOlap) {
         ExportFilteringWithoutEncryptionImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }

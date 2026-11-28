@@ -73,6 +73,8 @@ message TConnectionParams {
         TOAuthToken OAuthToken = 4;
         TIamCredentials IamCredentials = 7;
     }
+    // Identifies one resolution of the source credential, even when its value is unchanged.
+    optional string CredentialInstanceId = 8;
 }
 
 message TConsistencySettings {
@@ -502,6 +504,11 @@ message TEvWorkerStatus {
         REASON_SOURCE_OFFSET_MISMATCH = 5;
     }
 
+    enum EErrorKind {
+        ERROR_KIND_UNSPECIFIED = 0;
+        ERROR_KIND_SOURCE_AUTHENTICATION = 1;
+    }
+
     optional TWorkerIdentity Worker = 1;
     optional EStatus Status = 2;
     optional EReason Reason = 3;
@@ -509,6 +516,8 @@ message TEvWorkerStatus {
     optional uint32 LagMilliSeconds = 5;
     optional TWorkerStats Stats = 6;
     optional uint64 SourceCommittedOffset = 7;
+    optional EErrorKind ErrorKind = 8;
+    optional string CredentialInstanceId = 9;
 }
 
 message TEvWorkerDataEnd {

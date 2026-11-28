@@ -4,11 +4,14 @@ from urllib.parse import urlparse
 
 import boto3
 import pytest
+import requests
 import yatest.common
 
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.multicluster_test_base import MulticlusterTestBase
 from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.sql.lib.test_query import Query
 
 
@@ -52,6 +55,35 @@ class TestAsyncReplicationConsistency(MulticlusterTestBase):
         assert wait_for(completed, timeout_seconds=100), f"{operation} did not finish: {result}"
         self.run_cli(cluster, "operation", "forget", operation_id)
 
+    def export_replication_snapshot(self, destination, replication_path, table_path):
+        source_cluster, destination_cluster = self.clusters
+        table_name = table_path.rsplit("/", 1)[1]
+
+        def changefeed_ready():
+            description = self.describe(destination_cluster, replication_path)
+            assert "error" not in description, description
+            items = description.get("items", [])
+            if "paused" not in description or len(items) != 1:
+                return False
+            name = items[0].get("source_changefeed_name")
+            table = self.describe(source_cluster, table_path)
+            if not any(feed["name"] == name and feed["state"] == "STATE_ENABLED"
+                       for feed in table.get("changefeeds", [])):
+                return False
+            topic = self.describe(source_cluster, f"{table_path}/{name}")
+            return any(consumer["name"] == "replicationConsumer" for consumer in topic.get("consumers", []))
+
+        assert wait_for(changefeed_ready, timeout_seconds=100), "Source changefeed is not ready for backup"
+        assert wait_for(lambda: DMLOperations(destination).table_exists(table_name), timeout_seconds=100), \
+            "Destination placeholder was not created"
+        bucket = f"replication-{self.hash_short}"
+        boto3.client(
+            "s3", endpoint_url=os.environ["S3_ENDPOINT"],
+            aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1",
+        ).create_bucket(Bucket=bucket)
+        self.run_s3_operation(source_cluster, "export", bucket, table_path, table_name)
+        return bucket
+
     @pytest.mark.parametrize("from_backup", [False, True], ids=["initial_scan", "backup"])
     @pytest.mark.parametrize("consistency_level", ["ROW", "GLOBAL"])
     def test_consistency(self, from_backup, consistency_level):
@@ -88,29 +120,7 @@ class TestAsyncReplicationConsistency(MulticlusterTestBase):
         """)
 
         if from_backup:
-            def changefeed_ready():
-                description = self.describe(destination_cluster, replication_path)
-                assert "error" not in description, description
-                items = description.get("items", [])
-                if "paused" not in description or len(items) != 1:
-                    return False
-                name = items[0].get("source_changefeed_name")
-                table = self.describe(source_cluster, table_path)
-                if not any(feed["name"] == name and feed["state"] == "STATE_ENABLED"
-                           for feed in table.get("changefeeds", [])):
-                    return False
-                topic = self.describe(source_cluster, f"{table_path}/{name}")
-                return any(consumer["name"] == "replicationConsumer" for consumer in topic.get("consumers", []))
-
-            assert wait_for(changefeed_ready, timeout_seconds=100), "Source changefeed is not ready for backup"
-            assert wait_for(lambda: DMLOperations(destination).table_exists(table_name), timeout_seconds=100), \
-                "Destination placeholder was not created"
-            bucket = f"replication-{self.hash_short}"
-            boto3.client(
-                "s3", endpoint_url=os.environ["S3_ENDPOINT"],
-                aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1",
-            ).create_bucket(Bucket=bucket)
-            self.run_s3_operation(source_cluster, "export", bucket, table_path, table_name)
+            bucket = self.export_replication_snapshot(destination, replication_path, table_path)
             # These changes must be recovered from CDC, since they are absent from the backup.
             write_rows(0, 25, "during_backup")
             self.run_s3_operation(destination_cluster, "import", bucket, table_name, table_path)
@@ -148,3 +158,137 @@ class TestAsyncReplicationConsistency(MulticlusterTestBase):
         assert source_checksum.row_count == 151, source_checksum
         assert source_checksum == destination_checksum, \
             f"Source checksum: {source_checksum}; destination checksum: {destination_checksum}"
+
+
+class TestAuthenticationRecovery(MulticlusterTestBase):
+    run_cli = TestAsyncReplicationConsistency.run_cli
+    describe = TestAsyncReplicationConsistency.describe
+    run_s3_operation = TestAsyncReplicationConsistency.run_s3_operation
+    export_replication_snapshot = TestAsyncReplicationConsistency.export_replication_snapshot
+
+    @classmethod
+    def get_extra_grpc_services(cls):
+        return ["replication"]
+
+    @classmethod
+    def get_extra_feature_flags(cls):
+        return [*super().get_extra_feature_flags(), "enable_schema_secrets"]
+
+    @classmethod
+    def build_cluster(cls):
+        # This regression restarts every process; the default fixture uses RAM disks.
+        cluster = KiKiMR(KikimrConfigGenerator(
+            erasure=cls.get_cluster_configuration(), use_in_memory_pdisks=False,
+            extra_feature_flags=cls.get_extra_feature_flags(),
+            extra_grpc_services=cls.get_extra_grpc_services()))
+        cluster.start()
+        return cluster
+
+    @pytest.mark.parametrize("consistency_level, from_backup", [
+        pytest.param("ROW", False, id="ROW"),
+        pytest.param("GLOBAL", False, id="GLOBAL"),
+        pytest.param("GLOBAL", True, id="GLOBAL-backup-catchup"),
+    ])
+    def test_schema_secret_change_recovers_without_pause(self, consistency_level, from_backup):
+        source_cluster, destination_cluster = self.clusters
+        source = Query.create(self.get_database(), self.get_endpoint(source_cluster))
+        destination = Query.create(self.get_database(), self.get_endpoint(destination_cluster))
+        name = f"auth{self.hash_short}"
+        path = f"{self.get_database()}/{name}"
+        replication = f"{path}_replication"
+        secret = f"{path}_secret"
+        old_password, new_password = "OriginalCredential27516", "RotatedCredential27516"
+        source.query(f"CREATE USER {name} PASSWORD '{old_password}';")
+        source.query(f"GRANT ALL ON `{self.get_database()}` TO {name};")
+        source.query(f"CREATE TABLE `{path}` (key Uint64, value Utf8, PRIMARY KEY(key));")
+        destination.query(f"CREATE SECRET `{secret}` WITH (value='{old_password}');")
+        interval = ", COMMIT_INTERVAL=Interval('PT1S')" if consistency_level == "GLOBAL" else ""
+        destination.query(f"""
+            CREATE ASYNC REPLICATION `{replication}` FOR `{path}` AS `{path}` WITH (
+                CONNECTION_STRING='grpc://{self.get_endpoint(source_cluster)}/?database={self.get_database()}',
+                USER='{name}', PASSWORD_SECRET_PATH='{secret}',
+                INITIAL_SCAN={'FALSE' if from_backup else 'TRUE'},
+                CONSISTENCY_LEVEL='{consistency_level}'{interval})
+        """)
+        source.query(f"UPSERT INTO `{path}` (key,value) VALUES (1u,'initial');")
+        if from_backup:
+            source.query(f"UPSERT INTO `{path}` (key,value) VALUES (10u,'snapshot-delete');")
+            bucket = self.export_replication_snapshot(destination, replication, path)
+            # This prefix must arrive through CDC, not from the imported snapshot.
+            source.query(f"UPSERT INTO `{path}` (key,value) VALUES (1u,'prefix'), (11u,'prefix-delete');")
+            self.run_s3_operation(destination_cluster, "import", bucket, name, path)
+            destination.query(f"ALTER ASYNC REPLICATION `{replication}` SET (STATE='STANDBY');")
+
+        def equal_rows():
+            try:
+                return destination.query(f"SELECT * FROM `{path}` ORDER BY key;") == source.query(
+                    f"SELECT * FROM `{path}` ORDER BY key;")
+            except Exception:
+                return False
+
+        def identities():
+            node = destination_cluster.nodes[1]
+            result = []
+            for object_path in (replication, path):
+                response = requests.get(
+                    f"http://{node.host}:{node.mon_port}/viewer/json/describe",
+                    params={"database": self.get_database(), "path": object_path, "enums": "true"}, timeout=10)
+                response.raise_for_status()
+                entry = response.json()["PathDescription"]["Self"]
+                result.append((entry["SchemeshardId"], entry["PathId"]))
+            return result
+
+        assert wait_for(equal_rows, timeout_seconds=120), "Initial rows did not arrive"
+        original_identities = identities()
+        if from_backup:
+            assert "running" in self.describe(destination_cluster, replication)
+            prefix = [(1, 'prefix'), (10, 'snapshot-delete'), (11, 'prefix-delete')]
+            assert [(row.key, row.value) for row in destination.query(
+                f"SELECT * FROM `{path}` ORDER BY key;")] == prefix
+            try:
+                # Hold a catch-up boundary without changing the replication's requested state.
+                # Acknowledged SIGSTOP makes the following CDC tail deterministically pending.
+                for node in destination_cluster.nodes.values():
+                    node.freeze()
+                    pid, status = os.waitpid(node.pid, os.WUNTRACED)
+                    assert pid == node.pid and os.WIFSTOPPED(status), "Destination did not freeze"
+                source.query(f"UPSERT INTO `{path}` (key,value) VALUES (1u,'tail-update'), (20u,'tail-insert');")
+                source.query(f"DELETE FROM `{path}` WHERE key=10u;")
+                source.query(f"ALTER USER {name} PASSWORD '{new_password}';")
+                # kill() restarts the node. Do not unfreeze the old process: it could
+                # drain the tail using its still-valid token before the fresh Login.
+                for node in destination_cluster.nodes.values():
+                    node.kill()
+            finally:
+                for node in destination_cluster.nodes.values():
+                    if node.is_alive():
+                        node.unfreeze()
+        else:
+            source.query(f"ALTER USER {name} PASSWORD '{new_password}';")
+            # All old destination tokens disappear, forcing a fresh Login with the stale secret.
+            for node in destination_cluster.nodes.values():
+                node.stop()
+            for node in destination_cluster.nodes.values():
+                node.start()
+        source.query(f"UPSERT INTO `{path}` (key,value) VALUES (2u,'while-failed');")
+
+        def has_error():
+            try:
+                return "error" in self.describe(destination_cluster, replication)
+            except yatest.common.ExecutionError:
+                return False  # The endpoint may still be starting after the restart.
+
+        assert wait_for(has_error, timeout_seconds=120), "Rejected Login did not become public Error"
+        error = self.describe(destination_cluster, replication)["error"]
+        assert "authentication" in str(error).lower(), error
+        assert old_password not in str(error) and new_password not in str(error)
+        if from_backup:
+            assert [(row.key, row.value) for row in destination.query(
+                f"SELECT * FROM `{path}` ORDER BY key;")] == prefix, "Stale credentials delivered the pending tail"
+        destination.query(f"ALTER SECRET `{secret}` WITH (value='{new_password}');")
+        # Deliberately no ALTER REPLICATION / PAUSE / STANDBY here.
+        assert wait_for(equal_rows, timeout_seconds=120), "Secret change did not recover backlog"
+        source.query(f"UPSERT INTO `{path}` (key,value) VALUES (1u,'updated'), (3u,'after-recovery');")
+        source.query(f"DELETE FROM `{path}` WHERE key=2u;")
+        assert wait_for(equal_rows, timeout_seconds=120), "Recovered replication lost subsequent changes"
+        assert identities() == original_identities, "Recovery recreated schema objects"

@@ -7,6 +7,8 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
+#include <util/string/builder.h>
+
 #include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -100,6 +102,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvBootPersistedWorkers, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
         HFunc(TEvPrivate::TEvCompleteWorkerSet, Handle);
+        HFunc(TEvPrivate::TEvWorkerRegistrationError, Handle);
+        HFunc(TEvPrivate::TEvRefreshCredentials, Handle);
         HFunc(TEvPrivate::TEvResumeDeferredAlter, Handle);
         HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvPrivate::TEvRequestCreateStream, Handle);
@@ -395,10 +399,19 @@ void TController::Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorCo
     RunTxAlterDstResult(ev, ctx);
 }
 
+void TController::Handle(TEvPrivate::TEvWorkerRegistrationError::TPtr& ev, const TActorContext& ctx) {
+    RunTxWorkerRegistrationError(ev, ctx);
+}
+
 void TController::Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
     RunTxDropDstResult(ev, ctx);
+}
+
+TString TController::AllocateCredentialInstanceId() {
+    // Workers can outlive the controller. The tablet generation fences their old credentials after a restart.
+    return TStringBuilder() << TabletID() << ':' << Executor()->Generation() << ':' << ++CredentialInstanceSequence;
 }
 
 void TController::Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx) {
@@ -635,6 +648,19 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
         }
         break;
     case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
+        if (record.GetErrorKind() == NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION) {
+            const auto replication = Find(id.ReplicationId());
+            if (!replication || !replication->AreCredentialsSame(record.GetCredentialInstanceId()))
+            {
+                // A controller restart can adopt a worker using the previous
+                // credentials. Retire its ownership through the stop handshake:
+                // ignoring its report would leave a dead worker assigned forever.
+                if (HasWorkerSession(id, nodeId)) {
+                    StopQueue.emplace(id, nodeId);
+                }
+                break;
+            }
+        }
         if (!HasWorkerSession(id, nodeId)) {
             session.DetachWorker(id);
             break;
@@ -645,7 +671,7 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
         UpdateStats(id, record.GetStatus());
         if (!MaybeRemoveWorker(id, ctx)) {
             if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR && !ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())) {
-                RunTxWorkerError(id, record.GetErrorDescription(), ctx);
+                RunTxWorkerError(id, record.GetErrorDescription(), ctx, false, Nothing(), record.GetErrorKind(), record.GetCredentialInstanceId());
             } else {
                 session.DetachWorker(id);
                 const auto worker = Workers.find(id);
@@ -821,7 +847,7 @@ bool TController::IsValidWorker(const TWorkerId& id) const {
     }
 
     if (ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())
-        || replication->GetState() != TReplication::EState::Ready)
+        || replication->GetOperationalState() != TReplication::EState::Ready)
     {
         return false;
     }

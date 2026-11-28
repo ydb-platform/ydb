@@ -104,6 +104,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::AuthenticationRecoverySecretRevision>(Replication->GetAuthenticationErrorRevision()),
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(rid, tid).Update(
@@ -111,7 +112,7 @@ public:
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );
 
-        if (Replication->GetState() != TReplication::EState::Ready
+        if (Replication->GetOperationalState() != TReplication::EState::Ready
             && Replication->GetState() != TReplication::EState::Removing)
         {
             Replication.Reset();

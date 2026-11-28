@@ -482,7 +482,7 @@ void TController::StartIndexReady(const std::pair<ui64, ui64>& key, const TActor
     const auto& build = IndexBuilds.at(key);
     const bool cancelling = build.GetPhase() == TBuild::CANCELLING;
     const bool finishing = replication->GetDesiredState() == TReplication::EState::Done;
-    const auto state = replication->GetState();
+    const auto state = replication->GetOperationalState();
     if (state != TReplication::EState::Ready && !(finishing && state == TReplication::EState::Paused)) {
         return;
     }
@@ -598,6 +598,7 @@ public:
                 );
                 db.Table<Schema::Replications>().Key(key.first).Update(
                     NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+                    NIceDb::TUpdate<Schema::Replications::AuthenticationRecoverySecretRevision>(Replication->GetAuthenticationErrorRevision()),
                     NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
                 );
             }

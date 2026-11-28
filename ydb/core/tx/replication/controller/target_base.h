@@ -25,7 +25,7 @@ protected:
         return Replication;
     }
 
-    bool HasWorkers() const;
+    bool HasWorkers() const override;
     bool HasWorker(ui64 id) const;
     void RemoveWorkers(const TActorContext& ctx);
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
@@ -64,6 +64,7 @@ public:
 
     bool IsExpectedDstCreator(const TActorId& actorId) const override;
     bool IsExpectedDstAlterer(const TActorId& actorId) const override;
+    bool IsExpectedWorkerRegistar(const TActorId& actorId) const override;
 
     const TPathId& GetDstPathId() const override;
     void SetDstPathId(const TPathId& value) override;

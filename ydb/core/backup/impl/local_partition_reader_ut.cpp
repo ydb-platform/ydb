@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
         // Worker can recreate/retry it. On the current code this line is never
         // reached because HandleInit aborts the process at the Y_VERIFY_S above.
         auto gone = runtime.GrabEdgeEventRethrow<TEvWorker::TEvGone>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::UNAVAILABLE);
     }
 
     Y_UNIT_TEST(TabletDroppedDuringInit) {

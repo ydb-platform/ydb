@@ -490,7 +490,7 @@ Y_UNIT_TEST(EmptyNavigateResultLeaves) {
     auto writer = env.StartWriter();
     env.Kick(writer);
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
 }
 
 Y_UNIT_TEST(EmptyNavigatePointerLeaves) {
@@ -505,7 +505,7 @@ Y_UNIT_TEST(EmptyNavigatePointerLeaves) {
     env.Pump();
     env.Runtime.Send(new IEventHandle(writer, env.Edge, new TEvWorker::TEvHandshake()));
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
 }
 
 Y_UNIT_TEST(UnexpectedEntriesCountLeaves) {
@@ -520,7 +520,7 @@ Y_UNIT_TEST(UnexpectedEntriesCountLeaves) {
     auto writer = env.StartWriter();
     env.Kick(writer);
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
 }
 
 Y_UNIT_TEST(TableIdMismatchLeaves) {
@@ -534,7 +534,7 @@ Y_UNIT_TEST(TableIdMismatchLeaves) {
     auto writer = env.StartWriter();
     env.Kick(writer);
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
 }
 
 Y_UNIT_TEST(PathNotTableLeaves) {
@@ -548,7 +548,7 @@ Y_UNIT_TEST(PathNotTableLeaves) {
     auto writer = env.StartWriter();
     env.Kick(writer);
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
     UNIT_ASSERT_STRING_CONTAINS(gone->ErrorDescription, "Only tables are supported");
 }
 
@@ -563,7 +563,7 @@ Y_UNIT_TEST(NonTableKindLeaves) {
     auto writer = env.StartWriter();
     env.Kick(writer);
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
     UNIT_ASSERT_STRING_CONTAINS(gone->ErrorDescription, "Only tables are supported");
 }
 
@@ -586,7 +586,7 @@ Y_UNIT_TEST(LookupErrorRetriesThenSucceeds) {
     env.Handshake(writer);
     env.SendData(writer, {});
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::DONE);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::DONE);
     UNIT_ASSERT_VALUES_EQUAL(requests, 2u);
 }
 
@@ -595,7 +595,7 @@ Y_UNIT_TEST(CompilationFailedBeforeHandshake) {
     auto writer = env.StartWriter();
     env.Runtime.Send(new IEventHandle(writer, env.Edge, new TEvWorker::TEvHandshake()));
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
     UNIT_ASSERT_STRING_CONTAINS(gone->ErrorDescription, "Compilation failed");
 }
 
@@ -619,7 +619,7 @@ Y_UNIT_TEST(OutdatedCompileResponseIsIgnored) {
     env.Handshake(writer);
     env.SendData(writer, {});
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::DONE);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::DONE);
 }
 
 Y_UNIT_TEST(DataHeldDuringCompileIsProcessed) {
@@ -637,7 +637,7 @@ Y_UNIT_TEST(EmptyRecordsCompletePartition) {
     env.Handshake(writer);
     env.SendData(writer, {});
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::DONE);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::DONE);
 }
 
 Y_UNIT_TEST(EmptyTransformBatchCommitsOffset) {
@@ -655,7 +655,7 @@ Y_UNIT_TEST(TransformExceptionLeaves) {
     env.Handshake(writer);
     env.SendData(writer, {TTopicMessage(0, "hello")});
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
     UNIT_ASSERT_STRING_CONTAINS(gone->ErrorDescription, "unwrap error");
 }
 
@@ -665,7 +665,7 @@ Y_UNIT_TEST(TableOverrideWithoutDirectoryLeaves) {
     env.Handshake(writer);
     env.SendData(writer, {TTopicMessage(0, "hello")});
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
     UNIT_ASSERT_STRING_CONTAINS(gone->ErrorDescription, "it is not allowed to specify a table to write");
 }
 
@@ -675,7 +675,7 @@ Y_UNIT_TEST(TableOverrideOutsideDirectoryLeaves) {
     env.Handshake(writer);
     env.SendData(writer, {TTopicMessage(0, "hello")});
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
     UNIT_ASSERT_STRING_CONTAINS(gone->ErrorDescription, "outside target directory");
 }
 
@@ -685,7 +685,7 @@ Y_UNIT_TEST(DirectoryUnderDatabaseIsAccepted) {
     env.Handshake(writer);
     env.SendData(writer, {});
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::DONE);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::DONE);
 }
 
 Y_UNIT_TEST(RelativeDirectoryPathThrowsInConstructor) {
@@ -701,7 +701,7 @@ Y_UNIT_TEST(DirectoryOutsideDatabaseIsIgnored) {
     env.Handshake(writer);
     env.SendData(writer, {TTopicMessage(0, "hello")});
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
     UNIT_ASSERT_STRING_CONTAINS(gone->ErrorDescription, "it is not allowed to specify a table to write");
 }
 
@@ -734,7 +734,7 @@ Y_UNIT_TEST(ColumnTableFlushEmpty) {
     env.Handshake(writer);
     env.SendData(writer, {});
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::DONE);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::DONE);
 }
 
 Y_UNIT_TEST(WriteCompletedErrorLeaves) {
@@ -749,7 +749,7 @@ Y_UNIT_TEST(WriteCompletedErrorLeaves) {
         env.Edge,
         new NTransferPrivate::TEvWriteCompleeted(Ydb::StatusIds::UNAVAILABLE, std::move(issues))));
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
     UNIT_ASSERT_STRING_CONTAINS(gone->ErrorDescription, "upload failed");
 }
 
@@ -774,7 +774,7 @@ Y_UNIT_TEST(LeaveOnBatchSizeExceedWakeup) {
     env.SendData(writer, {TTopicMessage(0, "hello")});
     env.Runtime.Send(new IEventHandle(writer, env.Edge, new TEvents::TEvWakeup(2)));
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::OVERLOAD);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::OVERLOAD);
     UNIT_ASSERT_STRING_CONTAINS(gone->ErrorDescription, "max batch size exceeded");
 }
 
@@ -931,7 +931,7 @@ Y_UNIT_TEST(CompileAbortIsIgnored) {
     env.Handshake(writer);
     env.SendData(writer, {});
     auto gone = env.WaitGone();
-    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::DONE);
+    UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::EStatus::DONE);
 }
 
 } // Y_UNIT_TEST_SUITE(TransferWriter)

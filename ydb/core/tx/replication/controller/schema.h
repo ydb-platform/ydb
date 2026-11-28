@@ -35,6 +35,11 @@ struct TControllerSchema: NIceDb::Schema {
         struct CommittedTxId: Column<12, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
         struct SourceOffsetMismatch: Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+        // Empty disables recovery. Other values identify the failed secret or a recovery marker.
+        struct AuthenticationRecoverySecretRevision: Column<16, NScheme::NTypeIds::String> {
+            // Preserve the existing tablet schema name across upgrade and rollback.
+            static TString GetColumnName(const TString&) { return "AuthenticationErrorRevision"; }
+        };
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -50,7 +55,8 @@ struct TControllerSchema: NIceDb::Schema {
             DeferredAlter,
             CommittedStep,
             CommittedTxId,
-            SourceOffsetMismatch
+            SourceOffsetMismatch,
+            AuthenticationRecoverySecretRevision
         >;
     };
 

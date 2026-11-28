@@ -46,7 +46,7 @@ public:
         if (Ev->Get()->IsSuccess()) {
             YDB_LOG_NOTICE_CTX(ctx, "Secret resolved",
                 {"rid", rid});
-            Replication->UpdateSecret(Ev->Get()->Value);
+            Replication->UpdateSecret(Ev->Get()->Value, Ev->Get()->Revision, Self->AllocateCredentialInstanceId());
         } else {
             YDB_LOG_ERROR_CTX(ctx, "Resolve secret error",
                 {"rid", rid},
@@ -56,6 +56,7 @@ public:
             NIceDb::TNiceDb db(txc.DB);
             db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
                 NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+                NIceDb::TUpdate<Schema::Replications::AuthenticationRecoverySecretRevision>(Replication->GetAuthenticationErrorRevision()),
                 NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
             );
         }

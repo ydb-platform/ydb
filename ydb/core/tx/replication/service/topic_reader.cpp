@@ -38,7 +38,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             {"worker", Worker});
 
         Y_ABORT_UNLESS(!ReadSession);
-        Send(YdbProxy, new TEvYdbProxy::TEvCreateTopicReaderRequest(Settings));
+        Send(*YdbProxy, new TEvYdbProxy::TEvCreateTopicReaderRequest(Settings));
     }
 
     void Handle(TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
@@ -104,7 +104,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
                 if (Settings.ReportStats_) {
                     SendError();
                 }
-                return Leave(TEvWorker::TEvGone::DATA_ERROR, MakeDecompressionIssue(
+                return Leave(TEvWorker::TEvGone::EStatus::DATA_ERROR, MakeDecompressionIssue(
                     TString(Settings.GetBase().Topics_.at(0).Path_), readResult.PartitionId, msg.GetOffset(),
                     CurrentExceptionMessage(), static_cast<ui32>(msg.GetCodec())));
             }
@@ -130,7 +130,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         if (Settings.FailOnDataLoss_) {
             for (const auto& msg : result.Messages) {
                 if (msg.GetOffset() != NextReadOffset) {
-                    Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+                    Leave(TEvWorker::TEvGone::EStatus::DATA_LOSS, TStringBuilder()
                         << "Unexpected message offset in topic " << Settings.GetBase().Topics_.at(0).Path_
                         << ", partition " << result.PartitionId << ", consumer " << Settings.GetBase().ConsumerName_
                         << ": expected offset " << NextReadOffset << ", got " << msg.GetOffset());
@@ -174,7 +174,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         }
 
         if (*PendingStatusReadOffset > NextReadOffset) {
-            return Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+            return Leave(TEvWorker::TEvGone::EStatus::DATA_LOSS, TStringBuilder()
                 << "Topic " << Settings.GetBase().Topics_.at(0).Path_
                 << ", partition " << Settings.GetBase().Topics_.at(0).PartitionIds_.at(0)
                 << ", consumer " << Settings.GetBase().ConsumerName_
@@ -211,7 +211,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         NextReadOffset = result.ReadOffset;
         PendingStatusReadOffset.reset();
         if (Settings.FailOnDataLoss_ && result.RetainedStartOffset && *result.RetainedStartOffset > NextReadOffset) {
-            return Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+            return Leave(TEvWorker::TEvGone::EStatus::DATA_LOSS, TStringBuilder()
                 << "Topic " << Settings.GetBase().Topics_.at(0).Path_
                 << ", consumer " << Settings.GetBase().ConsumerName_
                 << ": read offset " << NextReadOffset
@@ -224,8 +224,8 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
 
-        if (!YdbProxy || !ReadSessionId) {
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+        if (!*YdbProxy || !ReadSessionId) {
+            return Leave(TEvWorker::TEvGone::EStatus::UNAVAILABLE);
         }
 
         const auto offset = ev->Get()->Offset;
@@ -248,14 +248,17 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         CommittedOffset = offset;
         CommitInFlight = CommittedOffset;
-        Send(YdbProxy, CreateCommitOffsetRequest().release());
+        Send(*YdbProxy, CreateCommitOffsetRequest().release());
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
         if (!ev->Get()->Result.IsSuccess()) {
+            if (LeaveOnAuthenticationFailure(ev->Get()->Result.GetStatus())) {
+                return;
+            }
             YDB_LOG_WARN("Handle",
                 {"ev", ev->Get()->ToString()});
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+            return Leave(TEvWorker::TEvGone::EStatus::UNAVAILABLE);
         } else {
             YDB_LOG_DEBUG("Handle",
                 {"committedOffset", CommittedOffset},
@@ -285,7 +288,29 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         return std::make_unique<TEvYdbProxy::TEvCommitOffsetRequest>(topicName, partitionId, consumerName, CommittedOffset, std::move(settings));
     }
 
+    bool LeaveOnAuthenticationFailure(NYdb::EStatus status) {
+        if (status != NYdb::EStatus::UNAUTHORIZED && status != NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+            return false;
+        }
+
+        // Remote issues are untrusted and may contain credentials. Preserve
+        // the typed SDK cause, without logging or forwarding their text.
+        YDB_LOG_WARN("Source authentication failed", {"status", status});
+        if (Settings.ReportStats_) {
+            SendError();
+        }
+        const auto outcome = status == NYdb::EStatus::UNAUTHORIZED
+                || AuthFailurePolicy == EAuthFailurePolicy::StaticLoginInitialization
+            ? TEvWorker::TEvGone::EStatus::AUTH_ERROR : TEvWorker::TEvGone::EStatus::UNAVAILABLE;
+        Leave(outcome, TStringBuilder() << "Source authentication failed (" << status << ")");
+        return true;
+    }
+
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
+        if (LeaveOnAuthenticationFailure(ev->Get()->Result.GetStatus())) {
+            return;
+        }
+
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
         if (Settings.ReportStats_) {
@@ -293,21 +318,21 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         }
 
         if (ev->Get()->FailureKind == TEvYdbProxy::TEvTopicReaderGone::EFailureKind::DataError) {
-            return Leave(TEvWorker::TEvGone::DATA_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
+            return Leave(TEvWorker::TEvGone::EStatus::DATA_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         }
 
         switch (ev->Get()->Result.GetStatus()) {
         case NYdb::EStatus::SCHEME_ERROR:
             if (Settings.RetryOnSchemeError_) {
                 // Only the base-table CDC snapshot authorizes index removal.
-                return Leave(TEvWorker::TEvGone::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
+                return Leave(TEvWorker::TEvGone::EStatus::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
             }
 
             [[fallthrough]];
         case NYdb::EStatus::BAD_REQUEST:
-            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
+            return Leave(TEvWorker::TEvGone::EStatus::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         default:
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
+            return Leave(TEvWorker::TEvGone::EStatus::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
         }
     }
 
@@ -361,11 +386,14 @@ public:
         return NKikimrServices::TActivity::REPLICATION_REMOTE_TOPIC_READER;
     }
 
-    explicit TRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts)
+    explicit TRemoteTopicReader(std::shared_ptr<const TActorId> ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts,
+        EAuthFailurePolicy authFailurePolicy)
         : TActor(&TThis::StateWork)
-        , YdbProxy(ydbProxy)
+        , YdbProxy(std::move(ydbProxy))
         , Settings(opts)
+        , AuthFailurePolicy(authFailurePolicy)
     {
+        Y_ABORT_UNLESS(YdbProxy);
         const auto& base = Settings.GetBase();
         Y_ABORT_UNLESS(base.Topics_.size() == 1);
         Y_ABORT_UNLESS(base.Topics_.at(0).PartitionIds_.size() == 1);
@@ -403,8 +431,9 @@ private:
     };
 
 
-    const TActorId YdbProxy;
+    const std::shared_ptr<const TActorId> YdbProxy;
     const TEvYdbProxy::TTopicReaderSettings Settings;
+    const EAuthFailurePolicy AuthFailurePolicy;
     mutable TMaybe<TString> LogPrefix;
 
     TActorId Worker;
@@ -427,8 +456,16 @@ private:
 
 }; // TRemoteTopicReader
 
-IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts) {
-    return new TRemoteTopicReader(ydbProxy, opts);
+IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts,
+    EAuthFailurePolicy authFailurePolicy)
+{
+    return CreateRemoteTopicReader(std::make_shared<const TActorId>(ydbProxy), opts, authFailurePolicy);
+}
+
+IActor* CreateRemoteTopicReader(std::shared_ptr<const TActorId> ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts,
+    EAuthFailurePolicy authFailurePolicy)
+{
+    return new TRemoteTopicReader(std::move(ydbProxy), opts, authFailurePolicy);
 }
 
 } //NKikimr::NReplication::NService

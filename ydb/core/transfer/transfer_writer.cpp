@@ -75,7 +75,7 @@ private:
     void LogCritAndLeave(const TString& error) {
         YDB_LOG_CRIT("[TransferWriter] " << error,
             {"logPrefix", GetLogPrefix()});
-        Leave(TEvWorker::TEvGone::SCHEME_ERROR, error);
+        Leave(TEvWorker::TEvGone::EStatus::SCHEME_ERROR, error);
     }
 
     void LogWarnAndRetry(const TString& error) {
@@ -281,7 +281,7 @@ private:
 
     void ProcessData(const ui32 partitionId, const TVector<TTopicMessage>& records) {
         if (!records) {
-            Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
+            Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::EStatus::DONE));
             return;
         }
         SendOperationChange(EWorkerOperation::PROCESS);
@@ -444,7 +444,7 @@ private:
                 TableState->Flush();
                 break;
             case ETag::LeaveOnBatchSizeExceed:
-                auto status = LastProcessedOffset ? TEvWorker::TEvGone::OVERLOAD : TEvWorker::TEvGone::SCHEME_ERROR;
+                auto status = LastProcessedOffset ? TEvWorker::TEvGone::EStatus::OVERLOAD : TEvWorker::TEvGone::EStatus::SCHEME_ERROR;
                 return Leave(status, "Overloaded: max batch size exceeded");
         }
     }

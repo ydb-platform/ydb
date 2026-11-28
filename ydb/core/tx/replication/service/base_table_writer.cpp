@@ -248,7 +248,7 @@ class TLocalTableWriter
 
     void LogCritAndLeave(const TString& error) {
         YDB_LOG_CRIT(error);
-        Leave(TEvWorker::TEvGone::SCHEME_ERROR, error);
+        Leave(TEvWorker::TEvGone::EStatus::SCHEME_ERROR, error);
     }
 
     void LogWarnAndRetry(const TString& error) {
@@ -603,7 +603,7 @@ class TLocalTableWriter
 
         Terminating = true;
         if (IsAllSendersReadyOrUninit()) {
-            Leave(TEvWorker::TEvGone::DONE);
+            Leave(TEvWorker::TEvGone::EStatus::DONE);
         }
     }
 
@@ -799,7 +799,7 @@ class TLocalTableWriter
         OnReady(ev->Get()->PartitionId);
 
         if (Terminating && IsAllSendersReadyOrUninit()) {
-            Leave(TEvWorker::TEvGone::DONE);
+            Leave(TEvWorker::TEvGone::EStatus::DONE);
         }
     }
 
@@ -808,7 +808,7 @@ class TLocalTableWriter
             {"ev", ev->Get()->ToString()});
 
         if (ev->Get()->HardError) {
-            Leave(TEvWorker::TEvGone::SCHEME_ERROR, "Cannot apply changes");
+            Leave(TEvWorker::TEvGone::EStatus::SCHEME_ERROR, "Cannot apply changes");
         } else {
             OnGone(ev->Get()->PartitionId);
         }

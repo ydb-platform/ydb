@@ -118,7 +118,7 @@ struct TEvWorker {
     };
 
     struct TEvGone: public TEventLocal<TEvGone, EvGone> {
-        enum EStatus {
+        enum class EStatus {
             DONE,
             S3_ERROR,
             SCHEME_ERROR,
@@ -126,6 +126,7 @@ struct TEvWorker {
             OVERLOAD,
             DATA_ERROR,
             DATA_LOSS,
+            AUTH_ERROR,
         };
 
         EStatus Status;

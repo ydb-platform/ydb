@@ -13,4 +13,5 @@ inline constexpr size_t MAX_SHARD_EVENTS = 32;
 inline constexpr size_t MAX_ACTIVE_SHARD_READS = 32;
 inline constexpr size_t MAX_RETAINED_READ_SHARDS = 32;
 inline constexpr size_t MAX_INTERESTING_READ_SHARDS = 5;
+inline constexpr size_t MAX_READ_RESULT_SPANS = 32;
 } // namespace NKikimr::NKqp::NQueryTraceSettings

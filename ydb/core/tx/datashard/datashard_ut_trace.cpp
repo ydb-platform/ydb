@@ -370,7 +370,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                 ExpectedSpan("Tablet.Transaction.Execute",
                     Repeat("Datashard.Unit", 2)),
                 "Tablet.Transaction.Complete"),
-            "Datashard.SendWithConfirmedReadOnlyLease").ToString();
+            ExpectedSpan("Datashard.SendWithConfirmedReadOnlyLease",
+                "Read table: hand off shard result")).ToString();
         for (const auto& span : dsReads) {
             UNIT_ASSERT_VALUES_EQUAL(DescribeSpan(span.get()).ToString(), canon);
         }
@@ -436,7 +437,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                 ExpectedSpan("Tablet.Transaction.Execute",
                     Repeat("Datashard.Unit", 4)),
                 "Tablet.Transaction.Complete"),
-            "Datashard.SendWithConfirmedReadOnlyLease").ToString();
+            ExpectedSpan("Datashard.SendWithConfirmedReadOnlyLease",
+                "Read table: hand off shard result")).ToString();
         for (const auto& span : dsReads) {
             UNIT_ASSERT_VALUES_EQUAL(DescribeSpan(span.get()).ToString(), canon);
         }

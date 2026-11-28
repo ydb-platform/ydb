@@ -63,6 +63,7 @@ PEERDIR(
     ydb/public/lib/stat_visualization
     ydb/public/lib/ydb_cli/commands/command_base
     ydb/public/lib/ydb_cli/commands/interactive
+    ydb/public/lib/ydb_cli/commands/scheme_workload
     ydb/public/lib/ydb_cli/commands/sdk_core_access
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
@@ -110,6 +111,7 @@ END()
 RECURSE(
     command_base
     interactive
+    scheme_workload
     sdk_core_access
     topic_workload
     transfer_workload

@@ -27,6 +27,7 @@ RECURSE(
     log
     mixed
     query
+    scheme
     stock
     tpcc
     tpc_base

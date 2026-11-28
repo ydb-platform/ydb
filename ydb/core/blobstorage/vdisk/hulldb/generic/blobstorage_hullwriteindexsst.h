@@ -94,7 +94,8 @@ protected:
             PDiskCtx->Dsk->AppendBlockSize,
             (ui32)PDiskCtx->Dsk->BulkWriteBlockSize,
             ChunkIdx,
-            MsgQueue);
+            MsgQueue,
+            PDiskCtx.get());
     }
 
 public:

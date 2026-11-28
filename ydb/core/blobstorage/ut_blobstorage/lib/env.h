@@ -68,6 +68,11 @@ struct TEnvironmentSetup {
         const ui64 PDiskSize = 10_TB;
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
+        // Mock PDisks lay data chunks out in encrypted sectors and hand out the format context, as a real PDisk does.
+        // Off: plain data chunks with whole-sector append blocks.
+        const bool SectorFormatInPDiskMock = true;
+        // VDiskControls.EnableVDiskSectorPreparation: VDisks build and open data sectors themselves.
+        const bool EnableVDiskSectorPreparation = false;
         const bool SelfManagementConfig = false;
         const bool EnableDeepScrubbing = false;
         const ui32 NumPiles = 0;
@@ -107,7 +112,7 @@ struct TEnvironmentSetup {
                     metadata = std::make_shared<TPDiskMockState::TMetadata>();
                 }
                 state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, Env.Settings.PDiskSize, chunkSize,
-                        cfg->ReadOnly, Env.Settings.DiskType, spaceColorPolicy, metadata));
+                        cfg->ReadOnly, Env.Settings.DiskType, spaceColorPolicy, metadata, Env.Settings.SectorFormatInPDiskMock));
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
@@ -596,6 +601,8 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.EnablePersistentPhantomFlagStorage, false, false, true, Settings.EnablePersistentPhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
                 ADD_ICB_CONTROL(VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes, 1'000'000, 1, 10'000'000, Settings.VolatilePhantomFlagStorageBlobSizeLimitBytes);
+                ADD_ICB_CONTROL(VDiskControls.EnableVDiskSectorPreparation, false, false, true,
+                    Settings.EnableVDiskSectorPreparation);
                 ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
                 ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
 #undef ADD_ICB_CONTROL

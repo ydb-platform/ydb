@@ -1,6 +1,7 @@
 #include "ddisk_actor.h"
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_format_context.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
@@ -120,9 +121,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::CreatePersistentBuffer() {
-        auto format = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(*DiskFormat), +[](NPDisk::TDiskFormat* ptr) {
-            delete ptr;
-        });
+        NPDisk::TDiskFormatPtr format = NPDisk::MakeDiskFormatCopy(*DiskFormat);
         if (PersistentBufferUniqueId == 0) {
             PersistentBufferUniqueId = RandomNumber<ui64>();
         }

@@ -289,6 +289,7 @@ namespace NKikimr::NStorage {
         TControlWrapper EnablePersistentPhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
+        TControlWrapper EnableVDiskSectorPreparation;
 
         TControlWrapper EnableChunkKeeper;
 

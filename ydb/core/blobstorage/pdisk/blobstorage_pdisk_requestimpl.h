@@ -10,6 +10,8 @@
 #include "blobstorage_pdisk_impl_metadata.h"
 
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
+
+#include <atomic>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/library/schlab/schine/job_kind.h>
@@ -408,6 +410,7 @@ public:
     ui64 RemainingSize;
     TCompletionChunkRead *FinalCompletion = nullptr;
     bool ChunkEncrypted = true;
+    bool RawSectors = false; // see TEvChunkRead::RawSectors; read then as a plain chunk would be
     bool IsReplied = false;
 
     ui64 SlackSize;
@@ -431,6 +434,7 @@ public:
         , Cookie(ev.Cookie)
         , BlobId(ev.BlobId)
         , RemainingSize(ev.Size)
+        , RawSectors(ev.RawSectors)
         , SlackSize(Max<ui32>())
         , DoubleFreeCanary(ReferenceCanary)
     {
@@ -523,6 +527,13 @@ public:
     bool IsSeqWrite;
     bool IsReplied = false;
     bool ChunkEncrypted = true;
+    bool PreformattedSectors = false; // see TEvChunkWrite::PreformattedSectors
+    ui64 FirstSectorNonce = 0;
+    // A preformatted write goes to the device in pieces; Completion waits for the pieces and, once all are submitted, the device fence.
+    std::atomic<ui32> PreformattedPiecesInFlight = 0;
+    std::atomic<bool> PreformattedPieceFailed = false;
+    ui32 PreformattedPieceCount = 0; // set when the write is cut into pieces
+    ui32 PreformattedPiecesSubmitted = 0; // in the PDisk thread
 
     TLogoBlobID BlobId;
 
@@ -545,11 +556,16 @@ public:
         AtomicIncrement(Pieces);
     }
 
-    void AbortPiece(TActorSystem *actorSystem) {
-        if (AtomicDecrement(Pieces) == 0) {
-            this->Abort(actorSystem);
-        }
-    }
+    // Each piece, sent or dropped, is accounted for exactly once, as the pieces of a read are: a write that lost a
+    // piece is answered once, with an error, when the last of its pieces is done or dropped.
+    void AbortPiece(TActorSystem *actorSystem); // a piece dropped unsent, when the PDisk stops
+    void PieceDone(TActorSystem *actorSystem); // a piece of an ordinary write was executed
+    std::atomic<bool> PieceAborted = false;
+
+private:
+    void ReplyAborted(TActorSystem *actorSystem);
+
+public:
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWrite;

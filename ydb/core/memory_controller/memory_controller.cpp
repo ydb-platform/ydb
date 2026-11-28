@@ -650,8 +650,15 @@ private:
         const auto *msg = ev->Get();
         if (const auto it = PendingIndexBuildLimits.find(ev->Cookie); it != PendingIndexBuildLimits.end()) {
             if (msg->Record.GetSuccess() && ev->Cookie > LastConfirmedBrokerConfig) {
-                AppData()->BuildIndexScanAdmission->ConfirmBrokerLimit(msg->IndexBuildMemoryLimit.value_or(it->second));
+                auto& admission = *AppData()->BuildIndexScanAdmission;
+                admission.ConfirmBrokerLimit(msg->IndexBuildMemoryLimit.value_or(it->second));
                 LastConfirmedBrokerConfig = ev->Cookie;
+                if (msg->PendingScanMemoryReady) {
+                    admission.SetPendingByteLimit(CurrentResourceBrokerConfig->PendingScanMemory);
+                } else {
+                    // Existing broker allocations still occupy part of the pending slice.
+                    CurrentResourceBrokerConfig.reset();
+                }
             } else if (!msg->Record.GetSuccess() && ev->Cookie == NextBrokerConfig) {
                 CurrentResourceBrokerConfig.reset();
             }
@@ -736,23 +743,12 @@ private:
             AppData()->DataShardConfig.GetBuildIndexPendingBytesLimit());
         Counters->GetCounter("Consumer/IndexBuild/Limit")->Set(indexBuildLimit);
         auto& admission = *AppData()->BuildIndexScanAdmission;
-        const ui64 pendingBytes = admission.ShrinkPendingBudget(indexBuildLimit);
+        const ui64 pendingBytes = admission.ShrinkPendingBudget(indexBuildLimit, pendingLimit);
+        const ui64 pendingBudget = Max(pendingLimit, pendingBytes);
         Counters->GetCounter("Consumer/IndexBuildPending/Consumption")->Set(pendingBytes);
-        if (!pendingBytes) {
-            PendingIndexBuildCharge = 0;
-        } else {
-            // Charge in 8 MiB increments and retain the high-water mark until
-            // the pending pool drains. Descriptor churn below that mark must
-            // not reconfigure every broker queue on every controller tick.
-            const ui64 bytes = Min(pendingBytes, activitiesLimitBytes);
-            const ui64 rounded = bytes + Min(activitiesLimitBytes - bytes, (8_MB - bytes % 8_MB) % 8_MB);
-            PendingIndexBuildCharge = Min(activitiesLimitBytes,
-                Max(bytes, Min(pendingLimit, Max(PendingIndexBuildCharge, rounded))));
-        }
-        Counters->GetCounter("Consumer/IndexBuildPending/Reserved")->Set(PendingIndexBuildCharge);
+        Counters->GetCounter("Consumer/IndexBuildPending/Reserved")->Set(pendingBudget);
         TResourceBrokerConfig config{
-            // Idle index builds return the entire charge to other queues.
-            .LimitBytes = activitiesLimitBytes - PendingIndexBuildCharge,
+            .LimitBytes = activitiesLimitBytes,
             .QueueLimits = {
                 {NLocalDb::KqpResourceManagerQueue, GetQueryExecutionLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionIndexationQueue, GetColumnTablesCompactionIndexationQueueLimitBytes(Config, hardLimitBytes)},
@@ -761,6 +757,7 @@ private:
                 {NLocalDb::ColumnShardCompactionNormalizerQueue, GetColumnTablesNormalizerQueueLimitBytes(Config, hardLimitBytes)},
             },
             .IndexBuildQueue = ResourceBrokerSelfConfig.IndexBuildQueue,
+            .PendingScanMemory = pendingBudget,
         };
 
         for (auto &[name, limitBytes] : ResourceBrokerSelfConfig.QueueLimits) {
@@ -769,7 +766,6 @@ private:
             }
         }
         // The index budget is a combined bound on active and pending scans.
-        const ui64 pendingBudget = Max(pendingLimit, pendingBytes);
         config.IndexBuildMemoryLimit = indexBuildLimit - Min(indexBuildLimit, pendingBudget);
         const auto queueOverride = ResourceBrokerSelfConfig.QueueLimits.find(config.IndexBuildQueue);
         const ui64 activeIndexLimit = queueOverride != ResourceBrokerSelfConfig.QueueLimits.end()
@@ -809,6 +805,7 @@ private:
         TAutoPtr<TEvResourceBroker::TEvConfigure> configure = new TEvResourceBroker::TEvConfigure();
         configure->Merge = true;
         configure->IndexBuildMemoryLimit = config.IndexBuildMemoryLimit;
+        configure->PendingScanMemory = config.PendingScanMemory;
 
         auto& record = configure->Record;
         record.MutableResourceLimit()->SetMemory(config.LimitBytes);
@@ -822,6 +819,8 @@ private:
         const ui64 cookie = ++NextBrokerConfig;
         PendingIndexBuildLimits.clear(); // Only the latest configuration can supersede a rejection hint.
         PendingIndexBuildLimits[cookie] = Min(config.IndexBuildMemoryLimit, config.LimitBytes);
+        // Publish pending capacity only after the broker has reserved it.
+        AppData()->BuildIndexScanAdmission->SetPendingByteLimit(0);
         Send(MakeResourceBrokerID(), configure.Release(), IEventHandle::FlagTrackDelivery, cookie);
 
         CurrentResourceBrokerConfig.emplace(std::move(config));
@@ -886,7 +885,6 @@ private:
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TMap<EMemoryConsumerKind, TConsumerCounters> ConsumerCounters;
     std::optional<TResourceBrokerConfig> CurrentResourceBrokerConfig;
-    ui64 PendingIndexBuildCharge = 0;
     ui64 NextBrokerConfig = 0;
     ui64 LastConfirmedBrokerConfig = 0;
     THashMap<ui64, ui64> PendingIndexBuildLimits;

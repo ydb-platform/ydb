@@ -509,13 +509,6 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
     const ui64 total = GetIndexBuildLimitBytes(config, 16_GB);
     const ui64 initialPending = TScanAdmissionControl::CalculatePendingByteLimit(total, 64_MB);
     auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuild/Limit"), total);
-    UNIT_ASSERT_VALUES_EQUAL(quota.GetByteLimit(64_MB), initialPending);
-    auto lease = quota.TryAcquire(initialPending, 128, 64_MB);
-    UNIT_ASSERT(lease);
-    UNIT_ASSERT(!quota.TryAcquire(1, 128, 64_MB));
-
     auto broker = fixture.Runtime.Register(NResourceBroker::CreateResourceBrokerActor(
         NResourceBroker::MakeDefaultConfig(), MakeIntrusive<::NMonitoring::TDynamicCounters>()));
     fixture.Runtime.RegisterService(NResourceBroker::MakeResourceBrokerID(), broker);
@@ -527,6 +520,13 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
         brokerLimit = event->Get()->Record.GetResourceLimit().GetMemory();
         activeLimit = event->Get()->IndexBuildMemoryLimit.value_or(0);
     });
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuild/Limit"), total);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetByteLimit(64_MB), initialPending);
+    auto lease = quota.TryAcquire(initialPending, 128, 64_MB);
+    UNIT_ASSERT(lease);
+    UNIT_ASSERT(!quota.TryAcquire(1, 128, 64_MB));
+
     // Reduce the pending slice while the original leases are still outstanding.
     fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(32_MB);
     fixture.Tick();
@@ -534,18 +534,18 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
     UNIT_ASSERT_GT(activeLimit, 0);
     UNIT_ASSERT_VALUES_EQUAL(activeLimit + initialPending, total);
     UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(32_MB), activeLimit);
-    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities - initialPending);
+    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Reserved"), initialPending);
     lease.reset();
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(activeLimit + 32_MB, total);
     UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities);
     lease = quota.TryAcquire(1_MB, 128, 32_MB);
     UNIT_ASSERT(lease);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities - 8_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Consumption"), 1_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Reserved"), 8_MB);
     const ui32 initialConfigurations = configurations;
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Consumption"), 1_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Reserved"), 32_MB);
     auto secondLease = quota.TryAcquire(2_MB, 128, 32_MB);
     UNIT_ASSERT(secondLease);
     fixture.Tick();
@@ -556,7 +556,55 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
     lease.reset();
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Reserved"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Reserved"), 32_MB);
+    UNIT_ASSERT_VALUES_EQUAL(configurations, initialConfigurations);
+}
+
+Y_UNIT_TEST(PendingDescriptorsWaitForBrokerCapacity) {
+    using namespace NResourceBroker;
+
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(2_GB);
+    TResourceBrokerConfig brokerConfig;
+    brokerConfig.LimitBytes = 256_MB;
+    TControllerFixture fixture(config, brokerConfig);
+    auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
+    UNIT_ASSERT(!quota.TryAcquire(1, 128, 64_MB));
+
+    auto initialConfig = MakeDefaultConfig();
+    initialConfig.MutableResourceLimit()->SetMemory(256_MB);
+    const auto broker = fixture.Runtime.Register(CreateResourceBrokerActor(
+        initialConfig, MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+    const auto edge = fixture.Runtime.AllocateEdgeActor();
+    fixture.Runtime.Send(new IEventHandle(broker, edge, new TEvResourceBroker::TEvSubmitTask(
+        1, "occupy activities budget", {{1, 256_MB}}, "unknown", 0, {})), 0, true);
+    TAutoPtr<IEventHandle> handle;
+    const auto* grant = fixture.Runtime.GrabEdgeEventRethrow<TEvResourceBroker::TEvResourceAllocated>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(grant->TaskId, 1);
+
+    fixture.Runtime.RegisterService(MakeResourceBrokerID(), broker);
+    fixture.Tick();
+    UNIT_ASSERT(!quota.TryAcquire(1, 128, 64_MB));
+
+    fixture.Runtime.Send(new IEventHandle(broker, edge, new TEvResourceBroker::TEvFinishTask(1)));
+    fixture.Tick();
+    auto lease = quota.TryAcquire(64_MB, 128, 64_MB);
+    UNIT_ASSERT(lease);
+
+    size_t grants = 0;
+    auto observer = fixture.Runtime.AddObserver<TEvResourceBroker::TEvResourceAllocated>([&](auto& ev) {
+        if (ev->Recipient == edge) {
+            ++grants;
+        }
+    });
+    fixture.Runtime.Send(new IEventHandle(broker, edge, new TEvResourceBroker::TEvSubmitTask(
+        2, "would use the pending slice", {{1, 193_MB}}, "unknown", 0, {})));
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(grants, 0);
+    fixture.Runtime.Send(new IEventHandle(broker, edge, new TEvResourceBroker::TEvSubmitTask(
+        3, "use the available activities budget", {{1, 192_MB}}, "build_index", 0, {})));
+    grant = fixture.Runtime.GrabEdgeEventRethrow<TEvResourceBroker::TEvResourceAllocated>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(grant->TaskId, 3);
 }
 
 Y_UNIT_TEST(DisabledBrokerSkipsConfiguration) {
@@ -614,6 +662,9 @@ Y_UNIT_TEST(IndexBuildBudgetOnSmallNodes) {
     NKikimrConfig::TMemoryControllerConfig config;
     config.SetHardLimitBytes(2_GB);
     TControllerFixture fixture(config);
+    auto broker = fixture.Runtime.Register(NResourceBroker::CreateResourceBrokerActor(
+        NResourceBroker::MakeDefaultConfig(), MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+    fixture.Runtime.RegisterService(NResourceBroker::MakeResourceBrokerID(), broker);
     fixture.Tick();
     auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuild/Limit"), 256_MB);

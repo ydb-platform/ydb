@@ -385,6 +385,8 @@ public:
      * Return true if any task was affected.
      */
     bool RemoveTasks(const TActorId &client, const TActorSystem &as);
+    bool HasPendingScanHeadroom(ui64 bytes = 0) const;
+
     /**
      * Try to allocate resources for next tasks until we are out of resources or tasks.
      */
@@ -397,7 +399,7 @@ public:
      * to new mapping. Returns queued tasks rejected by the new strict memory limits.
      */
     TVector<TTaskPtr> Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config, const TActorSystem &as,
-        std::optional<ui64> indexBuildMemoryLimit = {});
+        std::optional<ui64> indexBuildMemoryLimit = {}, std::optional<ui64> pendingScanMemory = {});
 
     /**
      * Update current scheduler time which is used for all resource consumption
@@ -411,6 +413,8 @@ public:
     void OutputState(IOutputStream &os) const;
 
 private:
+    ui64 GetSchedulingMemoryLimit() const;
+
     // Erase task from all structure.
     void EraseTask(TTaskPtr task, bool finished, const TActorSystem &as);
     void EraseTaskFromIndexes(const TTask &task);
@@ -436,6 +440,7 @@ private:
     THashMap<TString, TTaskConfig> TaskConfigs;
     TResourceLimitPtr ResourceLimit;
     const TResourceLimitPtr IndexBuildLimit;
+    ui64 PendingScanMemory = 0;
     THashMap<std::pair<TActorId, ui64>, TTaskPtr> Tasks;
     // Contains exactly the task IDs in Tasks for each client; empty clients are removed.
     THashMap<TActorId, THashSet<ui64>> TasksByClient;
@@ -461,8 +466,8 @@ public:
 
     NKikimrResourceBroker::TResourceBrokerConfig GetConfig() const;
     TVector<TEvResourceBroker::TQueueUsage> GetQueueUsage() const;
-    ui64 Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config,
-        std::optional<ui64> indexBuildMemoryLimit = {});
+    void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config,
+        const TEvResourceBroker::TEvConfigure& request, TEvResourceBroker::TEvConfigureResult& result);
 
     using TOpError = THolder<TEvResourceBroker::TEvTaskOperationError>;
 

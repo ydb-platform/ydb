@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/core/util/random.h>
 
 #include <library/cpp/iterator/enumerate.h>
@@ -291,8 +292,9 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
         UNIT_ASSERT_VALUES_EQUAL(reassigns, 0);
     }
 
-    Y_UNIT_TEST(ClusterBalancingEvenDistribution) {
-        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2, 10, TDuration::MilliSeconds(100));
+    Y_UNIT_TEST_TWIN(ClusterBalancingEvenDistribution, block82) {
+        const auto erasure = block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block;
+        TTestEnv env(TBlobStorageGroupType(erasure).BlobSubgroupSize(), erasure, 1, 2, 10, TDuration::MilliSeconds(100));
 
         UNIT_ASSERT(env.EachPDiskHasNVDisks(2));
 
@@ -319,7 +321,7 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
 
         bool success = env.WaitFor([&] {
             return env.EachPDiskHasNVDisks(1);
-        }, 60);
+        }, 10 * TBlobStorageGroupType(erasure).BlobSubgroupSize());
 
         UNIT_ASSERT(seenParameters);
         UNIT_ASSERT(success);
@@ -522,10 +524,11 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
             << " blockedTopBucketAttempts# " << blockedTopBucketAttempts);
     }
 
-    Y_UNIT_TEST(ClusterBalancingSkipsNonImprovableStoragePool) {
+    Y_UNIT_TEST_TWIN(ClusterBalancingSkipsNonImprovableStoragePool, block82) {
+        const auto erasure = block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block;
         constexpr ui64 SsdPoolId = 2;
 
-        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2, 100);
+        TTestEnv env(TBlobStorageGroupType(erasure).BlobSubgroupSize(), erasure, 1, 2, 100);
 
         env.DefineBoxWithDrives(1, {
             NKikimrBlobStorage::EPDiskType::ROT,

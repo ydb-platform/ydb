@@ -2274,6 +2274,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
      Y_UNIT_TEST(DisableBlocksOnColumnsLimit) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
+        // BlockAsStruct is a legacy representation; ut/rbo/olap covers NewRBO block channels.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         // Columns limit 2 for tests.
         settings.AppConfig.MutableTableServiceConfig()->SetDisableOlapBlocksOnColumnsLimit(2);
         TKikimrRunner kikimr(settings);
@@ -4386,6 +4388,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     void RunBlockChannelTest(auto blockChannelsMode) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
+        // Check legacy channel wrappers; ut/rbo/olap covers NewRBO channel layouts.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");

@@ -93,6 +93,8 @@ void CreateExternalDataSource(EProviderType providerType, const std::shared_ptr<
 
 NKikimrConfig::TAppConfig CreateDefaultAppConfig() {
     NKikimrConfig::TAppConfig appConfig;
+    // NewRBO fallback repeats metadata calls, exceeding these tests' mock expectations.
+    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
     NYql::TAttr dateTimeFormat;
     dateTimeFormat.SetName("DateTimeFormat");
     dateTimeFormat.SetValue("string");

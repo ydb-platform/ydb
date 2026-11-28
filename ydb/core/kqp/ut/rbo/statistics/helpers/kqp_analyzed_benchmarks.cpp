@@ -48,6 +48,8 @@ NJson::TJsonValue ReadBaseStatistics(const TString& workload, double scale, bool
 void ConfigureBenchmark(Tests::TServerSettings& settings, const NJson::TJsonValue& baseStatistics) {
     auto* config = settings.AppConfig->MutableTableServiceConfig();
     config->SetEnableNewRBO(true);
+    config->SetEnableFallbackOnRowTables(false);
+    config->SetEnableFallbackOnDML(false);
     config->SetEnableFallbackToYqlOptimizer(false);
     config->SetEnableFallbackOnMultipleStatements(false);
     config->SetEnableKqpDataQueryStreamIdxLookupJoin(false);

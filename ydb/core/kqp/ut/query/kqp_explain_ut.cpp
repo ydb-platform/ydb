@@ -460,7 +460,10 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     }
 
     Y_UNIT_TEST(PureExpr) {
-        auto kikimr = DefaultKikimrRunner();
+        NKikimrConfig::TAppConfig app;
+        // ConstantExpr is produced by legacy compile-time literal execution.
+        app.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         TStreamExecScanQuerySettings settings;
         settings.Explain(true);

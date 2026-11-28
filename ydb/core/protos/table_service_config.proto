@@ -437,7 +437,7 @@ message TTableServiceConfig {
 
     optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableNewRBO = 84 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableNewRBO = 84 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableOlapScalarApply = 86 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableOlapSubstringPushdown = 87 [default = true, (InvalidateCompileCache) = true];
@@ -494,7 +494,7 @@ message TTableServiceConfig {
 
     optional EBackportMode BackportMode = 108 [ default = All, (InvalidateCompileCache) = true];
 
-    optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableFallbackToYqlOptimizer = 109 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableWatermarks = 110 [default = true, (InvalidateCompileCache) = true];
 
@@ -628,7 +628,7 @@ message TTableServiceConfig {
     optional bool EnableBlockHashJoinEqualNulls = 149 [default = true, (InvalidateCompileCache) = true];
 
     // Fallback to legacy optimizer on data manipulation queries
-    optional bool EnableFallbackOnDML = 150 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableFallbackOnDML = 150 [default = true, (InvalidateCompileCache) = true];
 
     // Fallback to legacy optimizer on multiple statements in a query
     optional bool EnableFallbackOnMultipleStatements = 151 [default = false, (InvalidateCompileCache) = true];
@@ -652,5 +652,5 @@ message TTableServiceConfig {
 
     // Reject row-table reads in the new RBO to trigger fallback to the YQL optimizer.
     // Requires EnableFallbackToYqlOptimizer; without it these queries fail compilation.
-    optional bool EnableFallbackOnRowTables = 157 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableFallbackOnRowTables = 157 [default = true, (InvalidateCompileCache) = true];
 };

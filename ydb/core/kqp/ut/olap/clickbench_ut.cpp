@@ -45,6 +45,8 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
     void TestClickBenchBase(const std::vector<TOlapTestCase>& cases, const bool genericQuery) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
+        // FIXME: Re-enable NewRBO once ClickBenchSmoke supports its physical plans.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         TKikimrRunner kikimr(settings);
 
         TClickHelper(kikimr).CreateClickBenchTable();
@@ -81,6 +83,8 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             .SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetNodeCount(2);
+        // FIXME: Re-enable NewRBO once ClickBenchSmoke supports its physical plans.
+        settings.AppConfig->MutableTableServiceConfig()->SetEnableNewRBO(false);
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 

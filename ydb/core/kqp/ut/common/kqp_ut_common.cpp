@@ -24,6 +24,7 @@
 #include <util/system/mutex.h>
 
 #include <memory>
+#include <type_traits>
 
 namespace NKikimr {
 namespace NKqp {
@@ -833,6 +834,50 @@ bool HasIssue(const NYdb::NIssue::TIssues& issues, ui32 code,
     }
 
     return hasIssue;
+}
+
+namespace {
+
+template <typename TIssues>
+TIssues FilterRboFallbackIssues(const TIssues& issues) {
+    using TIssue = std::decay_t<decltype(*issues.begin())>;
+    const auto filter = [](auto&& self, const TIssue& issue) -> TIntrusivePtr<TIssue> {
+        const bool isInfo = static_cast<ui32>(issue.GetSeverity()) == NYql::TSeverityIds::S_INFO;
+        if (isInfo && issue.GetCode() == NYql::DEFAULT_ERROR
+            && TStringBuf(issue.GetMessage()).StartsWith("Compilation with the new RBO failed: ")) {
+            return {};
+        }
+
+        auto filtered = MakeIntrusive<TIssue>();
+        filtered->CopyWithoutSubIssues(issue);
+        for (const auto& child : issue.GetSubIssues()) {
+            if (auto remaining = self(self, *child)) {
+                filtered->AddSubIssue(std::move(remaining));
+            }
+        }
+        if (isInfo && !issue.GetSubIssues().empty() && filtered->GetSubIssues().empty()) {
+            return {};
+        }
+        return filtered;
+    };
+
+    TIssues filtered;
+    for (const auto& issue : issues) {
+        if (auto remaining = filter(filter, issue)) {
+            filtered.AddIssue(*remaining);
+        }
+    }
+    return filtered;
+}
+
+} // namespace
+
+NYql::TIssues IssuesWithoutRboFallback(const NYql::TIssues& issues) {
+    return FilterRboFallbackIssues(issues);
+}
+
+NYdb::NIssue::TIssues IssuesWithoutRboFallback(const NYdb::NIssue::TIssues& issues) {
+    return FilterRboFallbackIssues(issues);
 }
 
 void PrintQueryStats(const TDataQueryResult& result) {

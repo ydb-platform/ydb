@@ -56,6 +56,9 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     NKikimrKqp::TKqpDefaultSettings defaultSettings;
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
+    // This direct query processor cannot retry with the legacy optimizer.
+    kikimrConfig->SetEnableFallbackOnDML(false);
+    kikimrConfig->SetEnableFallbackOnRowTables(false);
 
     auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>(TKqpFederatedQuerySetup{
         .HttpGateway = NYql::IHTTPGateway::Make(),
@@ -140,7 +143,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         {
             const TString query = Q_(R"(
                 UPSERT INTO `/Root/IndexedTableWithState` (key, value, value2)
-                    VALUES (1, "qq", "ww")
+                    VALUES (1u, "qq", "ww")
             )");
 
             auto explainResult = qp->SyncExplainDataQuery(query, true);
@@ -282,7 +285,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         {
             const TString query = Q_(R"(
                 UPSERT INTO `/Root/IndexedTableWithState` (key, value, value2)
-                    VALUES (1, "qq", "ww");
+                    VALUES (1u, "qq", "ww");
             )");
             auto explainResult = qp->SyncExplainDataQuery(query, true);
             UNIT_ASSERT_C(explainResult.Success(), explainResult.Issues().ToString());
@@ -340,7 +343,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                                      execSettings)
                               .ExtractValueSync();
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#];[[7]]]");
 
@@ -371,7 +374,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#;#;[\"Payload8\"]];[#;[7];[\"Payload7\"]]]");
         }
@@ -2015,7 +2018,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             auto result = client.ExecuteYqlScript(query).GetValueSync();
 
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[]");
         }
@@ -5477,7 +5480,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             );)";
 
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
@@ -5500,7 +5503,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             )";
 
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
@@ -5516,7 +5519,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             )"));
 
             auto result = session.ExecuteDataQuery(selectSql, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), R"([[[100u];[101u]];[[200u];[201u]]])");
         }

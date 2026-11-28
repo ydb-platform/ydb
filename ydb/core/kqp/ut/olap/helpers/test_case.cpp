@@ -14,8 +14,11 @@ bool CheckOperatorPresentInAst(const std::string_view ast, const std::string_vie
         });
 }
 
-void TestOlapTableBase(const std::vector<TOlapTestCase>& cases) {
+void TestOlapTableBase(const std::vector<TOlapTestCase>& cases, std::optional<bool> enableNewRbo) {
     auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("SIMPLE");
+    if (enableNewRbo) {
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(*enableNewRbo);
+    }
     TKikimrRunner kikimr(settings);
 
     TLocalHelper(kikimr).CreateTestOlapTable();
@@ -46,12 +49,15 @@ void TestOlapTableBase(const std::vector<TOlapTestCase>& cases) {
     }
 }
 
-void TestOlapTableInternal(const std::vector<TOlapTestCase>& cases) {
+void TestOlapTableInternal(const std::vector<TOlapTestCase>& cases, std::optional<bool> enableNewRbo) {
     TPortManager tp;
     ui16 mbusport = tp.GetPort(2134);
     auto settings = Tests::TServerSettings(mbusport)
         .SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
 
+    if (enableNewRbo) {
+        settings.AppConfig->MutableTableServiceConfig()->SetEnableNewRBO(*enableNewRbo);
+    }
     Tests::TServer::TPtr server = new Tests::TServer(settings);
 
     auto runtime = server->GetRuntime();
@@ -137,9 +143,9 @@ void TestTableWithNulls(const std::vector<TOlapTestCase>& cases, const bool gene
     }
 }
 
-void TestOlapTable(const std::vector<TOlapTestCase>& cases) {
-    TestOlapTableBase(cases);
-    TestOlapTableInternal(cases);
+void TestOlapTable(const std::vector<TOlapTestCase>& cases, std::optional<bool> enableNewRbo) {
+    TestOlapTableBase(cases, enableNewRbo);
+    TestOlapTableInternal(cases, enableNewRbo);
 }
 
 }

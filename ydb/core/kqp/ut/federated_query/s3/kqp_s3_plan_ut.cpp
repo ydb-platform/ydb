@@ -164,6 +164,8 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        // These CTAS task-count and plan-shape assertions cover the legacy optimizer.
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
 
         auto tc = kikimr->GetTableClient();

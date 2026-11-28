@@ -328,6 +328,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
     // the raw JSON column must not be shipped, and the forced DISTINCT key must resolve.
     Y_UNIT_TEST(JsonValueDistinct_SubselectExtractMembers_PushesProjectionAndDistinct) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
+        // Cover the legacy ExtractMembers rewrite; NewRBO has separate coverage in ut/rbo/olap.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();

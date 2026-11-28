@@ -11,6 +11,12 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
+#include <algorithm>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
@@ -270,6 +276,36 @@ void ValidateOptionalColumn(const std::shared_ptr<arrow::Array>& array, int dept
 
     auto innerArray = structArray->field(0);
     ValidateOptionalColumn(innerArray, depth - 1, isVariant);
+}
+
+void AssertStringInt32DictEntries(const std::shared_ptr<arrow::Array>& array,
+    std::vector<std::pair<std::optional<std::string>, int32_t>> expected)
+{
+    UNIT_ASSERT_C(array->type_id() == arrow::Type::LIST, array->ToString());
+    UNIT_ASSERT_VALUES_EQUAL(array->length(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(array->null_count(), 0);
+
+    const auto entries = std::static_pointer_cast<arrow::ListArray>(array)->value_slice(0);
+    UNIT_ASSERT_C(entries->type_id() == arrow::Type::STRUCT, entries->ToString());
+    const auto pairs = std::static_pointer_cast<arrow::StructArray>(entries);
+    UNIT_ASSERT_VALUES_EQUAL(pairs->num_fields(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(pairs->null_count(), 0);
+    UNIT_ASSERT_C(pairs->field(0)->type_id() == arrow::Type::BINARY, pairs->ToString());
+    UNIT_ASSERT_C(pairs->field(1)->type_id() == arrow::Type::INT32, pairs->ToString());
+    const auto keys = std::static_pointer_cast<arrow::BinaryArray>(pairs->field(0));
+    const auto values = std::static_pointer_cast<arrow::Int32Array>(pairs->field(1));
+    UNIT_ASSERT_VALUES_EQUAL(values->null_count(), 0);
+
+    decltype(expected) actual;
+    for (int64_t i = 0; i < pairs->length(); ++i) {
+        actual.emplace_back(keys->IsNull(i) ? std::nullopt : std::make_optional(keys->GetString(i)), values->Value(i));
+    }
+
+    // YQL dictionaries are unordered; compare key/value pairs independently of
+    // iteration order, which can change with the optimizer or execution path.
+    std::sort(actual.begin(), actual.end());
+    std::sort(expected.begin(), expected.end());
+    UNIT_ASSERT_C(actual == expected, array->ToString());
 }
 
 } // namespace
@@ -2010,25 +2046,7 @@ R"(column0:   -- is_valid: all not null
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
             UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
-            const TString expected =
-R"(column0:   [
-    -- is_valid: all not null
-    -- child 0 type: binary
-      [
-        61,
-        63,
-        62
-      ]
-    -- child 1 type: int32
-      [
-        1,
-        3,
-        2
-      ]
-  ]
-)";
-
-            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+            AssertStringInt32DictEntries(batch->column(0), {{"a", 1}, {"b", 2}, {"c", 3}});
         }
     }
 
@@ -2050,25 +2068,7 @@ R"(column0:   [
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
             UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
-            const TString expected =
-R"(column0:   [
-    -- is_valid: all not null
-    -- child 0 type: binary
-      [
-        61,
-        62,
-        null
-      ]
-    -- child 1 type: int32
-      [
-        1,
-        2,
-        3
-      ]
-  ]
-)";
-
-            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+            AssertStringInt32DictEntries(batch->column(0), {{"a", 1}, {"b", 2}, {std::nullopt, 3}});
         }
     }
 

@@ -9,12 +9,16 @@ namespace NKikimr::NKqp {
 inline NKikimrConfig::TAppConfig NewRboAppConfig() {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+    appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
+    appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
     appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
     return appConfig;
 }
 
 inline void EnableNewRbo(TKikimrRunner& kikimr, NKikimrConfig::TTableServiceConfig config) {
     config.SetEnableNewRBO(true);
+    config.SetEnableFallbackOnRowTables(false);
+    config.SetEnableFallbackOnDML(false);
     config.SetEnableFallbackToYqlOptimizer(false);
 
     // Call only after schema and fixture queries have finished. Preserve the
@@ -60,6 +64,8 @@ public:
 private:
     static TKikimrSettings FixtureSettings(TKikimrSettings settings) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(!settings.WithSampleTables);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         return settings;
     }

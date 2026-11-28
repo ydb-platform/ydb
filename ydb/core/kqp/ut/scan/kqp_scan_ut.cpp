@@ -105,6 +105,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto* tableService = settings.AppConfig.MutableTableServiceConfig();
         tableService->SetEnableNewRBO(true);
         tableService->SetEnableFallbackToYqlOptimizer(false);
+        // Exercise NewRBO on row tables instead of the default row-table fallback policy.
+        tableService->SetEnableFallbackOnRowTables(false);
         tableService->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
         tableService->SetEnableKqpScanQuerySourceRead(true);
         TKikimrRunner kikimr(settings);

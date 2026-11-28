@@ -3,6 +3,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
+#include <yql/essentials/core/yql_expr_optimize.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {
@@ -11,8 +13,10 @@ using namespace NYdb;
 
 Y_UNIT_TEST_SUITE(KqpOlapPeephole) {
 
-    Y_UNIT_TEST(EliminateWideMapPackUnpackOnSelectStarLimit) {
+    Y_UNIT_TEST_TWIN(EliminateWideMapPackUnpackOnSelectStarLimit, NewRbo) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TKikimrRunner kikimr(settings);
@@ -41,9 +45,33 @@ Y_UNIT_TEST_SUITE(KqpOlapPeephole) {
         UNIT_ASSERT(plan.QueryStats.Defined());
         const auto& ast = plan.QueryStats->Getquery_ast();
 
-        UNIT_ASSERT_C(ast.Contains("(WideTakeBlocks (FromFlow"),
-            "Scan stage: expected WideTakeBlocks directly on FromFlow "
-            "(WideMap pack/unpack roundtrip should be eliminated). AST: " + ast);
+        if (NewRbo) {
+            // NewRBO keeps the final limit in a downstream stage. The scan must still
+            // return blocks directly, without a WideMap pack/unpack roundtrip.
+            auto parsed = NYql::ParseAst(ast);
+            UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
+            NYql::TExprContext ctx;
+            NYql::TExprNode::TPtr expr;
+            UNIT_ASSERT_C(NYql::CompileExpr(*parsed.Root, expr, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
+            auto scanOutput = NYql::FindNode(expr, [](const NYql::TExprNode::TPtr& node) {
+                return node->IsCallable("FromFlow") && node->Head().IsCallable("KqpBlockReadOlapTableRanges");
+            });
+            UNIT_ASSERT_C(scanOutput, ast);
+            auto readLimit = NYql::FindNode(scanOutput, [](const NYql::TExprNode::TPtr& node) {
+                return node->IsList() && node->ChildrenSize() == 2 && node->Head().IsAtom("ItemsLimit")
+                    && node->Tail().IsCallable("Uint64") && node->Tail().Head().IsAtom("1");
+            });
+            UNIT_ASSERT_C(readLimit, ast);
+            auto finalLimit = NYql::FindNode(expr, [](const NYql::TExprNode::TPtr& node) {
+                return node->IsCallable("WideTakeBlocks") && node->Tail().IsCallable("Uint64")
+                    && node->Tail().Head().IsAtom("1");
+            });
+            UNIT_ASSERT_C(finalLimit, ast);
+        } else {
+            UNIT_ASSERT_C(ast.Contains("(WideTakeBlocks (FromFlow"),
+                "Scan stage: expected WideTakeBlocks directly on FromFlow "
+                "(WideMap pack/unpack roundtrip should be eliminated). AST: " + ast);
+        }
     }
 }
 

@@ -122,6 +122,8 @@ static TKikimrRunner GetKikimrWithJoinSettings(
     }
 
     NKikimrConfig::TAppConfig appConfig;
+    // These tests assert join plans and optimizer statistics produced by the legacy optimizer.
+    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
     appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());

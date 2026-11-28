@@ -383,7 +383,6 @@ public:
             if (splitByPartitionKey) {
                 alterConfig.SetSplitByPartitionKey(true);
             }
-            Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
             alterConfig.Swap(tabletConfig);
         }
         if (alter.PartitionsToDeleteSize()) {
@@ -1295,6 +1294,11 @@ public:
         } else {
             pqChannelsBinding = tabletChannelsBinding;
         }
+
+        // SchemaVersion belongs to SchemeShard and is stored in the tablet config.
+        // Version remains the topic AlterVersion. A value from the request is ignored.
+        newTabletConfig.SetSchemaVersion(tabletConfig.GetSchemaVersion() + 1);
+        Y_PROTOBUF_SUPPRESS_NODISCARD newTabletConfig.SerializeToString(&alterData->TabletConfig);
 
         topic->PrepareAlter(alterData);
         const TTxState& txState = PrepareChanges(OperationId, path, topic, shardsToCreate, tabletChannelsBinding,

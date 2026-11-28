@@ -170,6 +170,7 @@ message THasDataInfo {
     optional int32 MaxTimeLagMs = 7; // optional, default = infinity, why we use int instead of uint?
     optional uint64 ReadTimestampMs = 8; //optional, default = 0
     optional string SessionId = 9;
+    optional uint64 SchemaVersion = 10;
 }
 
 message THasDataInfoResponse { //signal
@@ -181,6 +182,7 @@ message THasDataInfoResponse { //signal
     repeated uint32 AdjacentPartitionIds = 6;
     repeated uint32 ChildPartitionIds = 7;
     optional bool SessionInvalidated = 8;
+    optional uint64 SchemaVersion = 9;
 }
 
 message TPartitionClientInfo {

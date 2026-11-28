@@ -23,6 +23,7 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDeduplicatorRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
+void RequestTopicChangesRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 [[nodiscard]] bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev);
 
 //
@@ -37,6 +38,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitInternalFieldsStep>(this));
     Steps.push_back(MakeHolder<TInitDiskStatusStep>(this));
     Steps.push_back(MakeHolder<TInitMetaStep>(this));
+    Steps.push_back(MakeHolder<TInitSchemaChangesStep>(this));
     Steps.push_back(MakeHolder<TInitInfoRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
@@ -284,6 +286,55 @@ void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActo
 
 TInitMetaStep::TInitMetaStep(TInitializer* initializer)
     : TBaseKVStep(initializer, "TInitMetaStep", true) {
+}
+
+TInitSchemaChangesStep::TInitSchemaChangesStep(TInitializer* initializer)
+    : TBaseKVStep(initializer, "TInitSchemaChangesStep", true) {
+}
+
+void TInitSchemaChangesStep::Execute(const TActorContext& ctx) {
+    RequestTopicChangesRange(ctx, Partition()->TabletActorId, PartitionId(), "");
+}
+
+void TInitSchemaChangesStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
+
+    auto& response = ev->Get()->Record;
+    PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
+
+    auto& range = response.GetReadRangeResult(0);
+    PQ_INIT_ENSURE(range.HasStatus());
+    switch (range.GetStatus()) {
+        case NKikimrProto::OK:
+        case NKikimrProto::OVERRUN:
+            for (ui32 i = 0; i < range.PairSize(); ++i) {
+                const auto& pair = range.GetPair(i);
+                PQ_INIT_ENSURE(pair.HasStatus());
+                AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK)
+                    ("status", pair.GetStatus())
+                    ("key", pair.GetKey());
+                PQ_INIT_ENSURE(pair.HasKey());
+                PQ_INIT_ENSURE(pair.HasValue());
+
+                const auto key = TSchemaChangesKey::FromString(pair.GetKey(), PartitionId());
+                Partition()->AddTopicChangeKey(key.GetSchemaVersion(), key.GetOffset());
+            }
+
+            if (range.GetStatus() == NKikimrProto::OVERRUN) {
+                PQ_INIT_ENSURE(range.PairSize());
+                RequestTopicChangesRange(ctx, Partition()->TabletActorId, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
+                return;
+            }
+            Done(ctx);
+            break;
+        case NKikimrProto::NODATA:
+            Done(ctx);
+            break;
+        default:
+            AFL_ENSURE(false)("status", range.GetStatus());
+    }
 }
 
 void TInitMetaStep::Execute(const TActorContext& ctx) {
@@ -1707,6 +1758,10 @@ void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPart
 
 void RequestDeduplicatorRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key) {
     RequestRange(ctx, dst, partition, TKeyPrefix::TypeDeduplicator, true, key, key == "");
+}
+
+void RequestTopicChangesRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key) {
+    RequestRange(ctx, dst, partition, TKeyPrefix::TypeTopicChangesData, true, key, key == "");
 }
 
 } // namespace NKikimr::NPQ

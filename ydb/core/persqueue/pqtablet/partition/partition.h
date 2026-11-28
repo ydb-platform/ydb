@@ -4,6 +4,7 @@
 #include "message_id_deduplicator.h"
 #include "partition_blob_encoder.h"
 #include "partition_compactification.h"
+#include "partition_replication.h"
 #include "partition_init.h"
 #include "partition_sourcemanager.h"
 #include "partition_types.h"
@@ -159,6 +160,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitInternalFieldsStep;
     friend TInitDiskStatusStep;
     friend TInitMetaStep;
+    friend TInitSchemaChangesStep;
     friend TInitInfoRangeStep;
     friend TInitDataRangeStep;
     friend TDeleteKeysStep;
@@ -186,6 +188,9 @@ public:
         ReadBlobForResetOffset,
         End
     };
+
+    // The remaining bits identify the read in ReadInfo, including concurrent reads.
+    static constexpr ui64 SchemaChangesReadCookieMask = ui64{1} << 63;
 
 private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
@@ -321,8 +326,11 @@ private:
     void ProcessChangeOwnerRequests(const TActorContext& ctx);
     void ProcessHasDataRequests(const TActorContext& ctx);
     bool ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
+    bool IsReplicationConsumer(const TString& clientId) const;
     void FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx);
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
+    bool ProcessReadSchemaChanges(const TActorContext& ctx, TReadInfo& info, ui64 cookie);
+    void HandleSchemaChangesReadResponse(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void ProcessReserveRequests(const TActorContext& ctx);
     void ProcessTimestampRead(const TActorContext& ctx);
     void ProcessTimestampsForNewData(const ui64 prevEndOffset, const TActorContext& ctx);
@@ -520,6 +528,8 @@ private:
     void BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
     void ExecChangePartitionConfig();
 
+    void AddTopicChangeKey(ui64 schemaVersion, ui64 endOffset);
+
     void OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx);
 
     void EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
@@ -582,6 +592,8 @@ private:
     ::NMonitoring::TDynamicCounterPtr GetPerPartitionCounterSubgroup() const;
     void SetupDetailedMetrics();
     void ResetDetailedMetrics();
+
+    bool IsSchemaChangesEnabled(const TActorContext& ctx) const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -886,6 +898,8 @@ private:
 
     TPartitionBlobEncoder CompactionBlobEncoder; // Compaction zone
     TPartitionBlobEncoder BlobEncoder;           // FastWrite zone
+
+    TSchemaChangesIndex SchemaChangesIndex;
 
     std::deque<std::pair<ui64, ui64>> GapOffsets;
     ui64 GapSize;

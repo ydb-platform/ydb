@@ -558,6 +558,10 @@ message TPQTabletConfig {
     };
 
     optional EWriteMode WriteMode = 51 [default = WRITE_AVAILABLE];
+
+    // Independent of Version. Incremented by SchemeShard on every accepted alter.
+    // A value from the alter request is ignored.
+    optional uint64 SchemaVersion = 53 [default = 0];
 }
 
 message THeartbeat {

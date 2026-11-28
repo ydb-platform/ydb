@@ -2836,6 +2836,11 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
 
     auto& response = ev->Get()->Record;
 
+    if (response.HasCookie() && (response.GetCookie() & SchemaChangesReadCookieMask)) {
+        HandleSchemaChangesReadResponse(ev, ctx);
+        return;
+    }
+
     if (response.HasCookie() && (response.GetCookie() == static_cast<ui64>(ERequestCookie::CompactificationWrite))) {
         PQ_ENSURE(CompacterKvRequestInflight);
         CompacterKvRequestInflight = false;
@@ -3278,7 +3283,7 @@ void TPartition::MoveUserActionAndTxToPendingCommitQueue() {
 
 ui64 TPartition::NextReadCookie()
 {
-    if (Cookie == Max<ui64>()) {
+    if (Cookie == SchemaChangesReadCookieMask - 1) {
         Cookie = ERequestCookie::End;
     }
     return Cookie++;
@@ -5164,6 +5169,10 @@ void TPartition::AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request)
     write->SetKey(key.data(), key.size());
     write->SetValue(data.data(), data.size());
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+
+    if (AppData()->FeatureFlags.GetEnableTopicChangesData()) {
+        SchemaChangesIndex.AddChange(request, Partition, GetEndOffset(), ChangeConfig->Config.GetSchemaVersion(), ChangeConfig->Config);
+    }
 }
 
 TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
@@ -5739,6 +5748,14 @@ void TPartition::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationReque
     }
     response->Record.SetStatus(NKikimrPQ::EStatus::OK);
     Send(ev->Sender, response.Release());
+}
+
+void TPartition::AddTopicChangeKey(ui64 schemaVersion, ui64 endOffset) {
+    SchemaChangesIndex.AddKey(Partition, schemaVersion, endOffset);
+}
+
+bool TPartition::IsSchemaChangesEnabled(const TActorContext& ctx) const {
+    return AppData(ctx)->FeatureFlags.GetEnableTopicChangesData();
 }
 
 } // namespace NKikimr::NPQ

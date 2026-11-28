@@ -143,6 +143,7 @@ struct TPartition::THasDataReq {
     TString ClientId;
     TMaybe<TInstant> ReadTimestamp;
     TInstant Deadline;
+    ui64 SchemaVersion;
 
     bool operator < (const THasDataReq& req) const {
         return std::tuple(Offset, Num) < std::tuple(req.Offset, req.Num);

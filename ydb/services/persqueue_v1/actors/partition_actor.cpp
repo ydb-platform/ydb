@@ -54,6 +54,7 @@ TPartitionActor::TPartitionActor(
     , ReadTimestampMs(readTimestampMs)
     , ReadOffset(0)
     , ClientReadOffset(0)
+    , ReadSchemaVersion(0)
     , ClientCommitOffset(0)
     , ClientVerifyReadOffset(false)
     , CommittedOffset(0)
@@ -679,6 +680,12 @@ bool FillBatchedData(
             message->set_message_group_id(GetBatchSourceId(currentBatch));
             auto* msgMeta = message->mutable_metadata_items();
             *msgMeta = (proto.GetMessageMeta());
+
+            if (r.GetIsServiceTopicChangesMessage()) {
+                auto* metadata = message->add_metadata_items();
+                metadata->set_key("_ydb_service_topic_changes_message");
+                metadata->set_value("true");
+            }
         }
         hasData = true;
     }
@@ -1666,6 +1673,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     TAutoPtr<TEvPersQueue::TEvHasDataInfo> event(new TEvPersQueue::TEvHasDataInfo());
     event->Record.SetPartition(Partition.Partition);
     event->Record.SetOffset(ReadOffset);
+    event->Record.SetSchemaVersion(ReadSchemaVersion);
     event->Record.SetCookie(++WaitDataCookie);
     ui64 deadline = (ctx.Now() + WAIT_DATA - WAIT_DELTA).MilliSeconds();
     event->Record.SetDeadline(deadline);
@@ -2003,6 +2011,10 @@ void TPartitionActor::DoWakeup(const TActorContext& ctx) {
 }
 
 bool TPartitionActor::IsPartitionDataReady() const {
+    if (TopicHolder->IsReplicationConsumer && ReadOffset == EndOffset && ReadSchemaVersion < EndSchemaVersion) {
+        return true;
+    }
+
     return ReadOffset < EndOffset && (!ClientMaxOffset.Defined() || ReadOffset < *ClientMaxOffset);
 }
 

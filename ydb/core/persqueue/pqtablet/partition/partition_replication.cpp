@@ -1,4 +1,5 @@
 #include "partition.h"
+#include "partition_replication.h"
 
 namespace NKikimr::NPQ {
 
@@ -176,6 +177,47 @@ void TPartition::SendOffsetsToReplicationConsumer(const TActorContext& ctx, TCon
         event->Record.SetPartitionSessionId(info.PartitionSessionId);
         ctx.Send(info.ReadSessionActor, event.Release());
     }
+}
+
+void TSchemaChangesIndex::AddKey(const TPartitionId& partition, ui64 schemaVersion, ui64 endOffset) {
+    Keys.emplace_back(partition, endOffset, schemaVersion);
+}
+
+void TSchemaChangesIndex::AddChange(NKikimrClient::TKeyValueRequest& request, const TPartitionId& partition, ui64 endOffset, ui64 schemaVersion, const NKikimrPQ::TPQTabletConfig& config) {
+    TString serialized;
+    auto ok = config.SerializeToString(&serialized);
+    if (!ok) {
+        return;
+    }
+
+    const TSchemaChangesKey key(partition, endOffset, schemaVersion);
+    Keys.emplace_back(key);
+    auto* write = request.AddCmdWrite();
+    write->SetKey(key.ToString());
+    write->SetValue(serialized);
+}
+
+std::vector<TSchemaChangesKey> TSchemaChangesIndex::Lookup(ui64 offset) const {
+    auto it = std::upper_bound(Keys.begin(), Keys.end(), offset, [](ui64 offset, const TSchemaChangesKey& key) {
+        return offset < key.GetOffset();
+    });
+
+    if (it == Keys.begin()) {
+        return {};
+    }
+
+    --it;
+
+    std::vector<TSchemaChangesKey> result;
+    while (it->GetOffset() == offset) {
+        result.push_back(*it);
+        if (it == Keys.begin()) {
+            break;
+        }
+        --it;
+    }
+
+    return result;
 }
 
 } // namespace NKikimr::NPQ

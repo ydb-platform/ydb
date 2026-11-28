@@ -125,6 +125,21 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
         UNIT_ASSERT_VALUES_EQUAL(e->Result.AdjacentPartitionsIds, TVector<ui64>{1});
         UNIT_ASSERT_VALUES_EQUAL(e->Result.ChildPartitionsIds, TVector<ui64>{2});
     }
+
+    Y_UNIT_TEST(ShouldWaitForLastRecordCommitWhenSessionStartsAtIt) {
+        // given
+        TActorId client = MakeActorId();
+        MockActorOps actorOps;
+        TPartitionEndWatcher watcher(&actorOps);
+        watcher.Clear(31);
+        watcher.UpdatePendingCommittedOffset(MakeTDataReceivedEvent());
+
+        // when
+        watcher.SetEvent(std::move(MakeTEndPartitionSessionEvent()), client);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(actorOps.Events.size(), 0);
+    }
 }
 
 }

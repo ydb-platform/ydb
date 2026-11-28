@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "partition_split_merge_transitions_repository.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -90,11 +91,17 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        // Once any worker leaves, the persisted worker set is no longer
-        // complete. Keep schema reports blocked until
-        // the next registration pass recreates it.
-        db.Table<Schema::Targets>().Key(Id.ReplicationId(), Id.TargetId()).Update(
-            NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
+        if (Self->SplitMergeTransitions.IsParentRemovalRequested(Id)) {
+            TPartitionSplitMergeTransitionsRepository::SaveCompleted(db, Id);
+        } else {
+            // Once any worker leaves, the persisted worker set is no longer
+            // complete. Keep schema reports blocked until
+            // the next registration pass recreates it.
+            db.Table<Schema::Targets>().Key(Id.ReplicationId(), Id.TargetId()).Update(
+                NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
+            TPartitionSplitMergeTransitionsRepository::DeleteCompleted(db,
+                Self->SplitMergeTransitions.ClearTarget(Id.ReplicationId(), Id.TargetId()));
+        }
         db.Table<Schema::Workers>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Delete();
         Remove = true;
         return true;
@@ -106,7 +113,12 @@ public:
         }
 
         Self->RemoveQueue.erase(Id);
-        Self->CompleteWorkerSets.erase(std::make_pair(Id.ReplicationId(), Id.TargetId()));
+        const bool parentRemovalRequested = Self->SplitMergeTransitions.IsParentRemovalRequested(Id);
+        if (parentRemovalRequested) {
+            Self->SplitMergeTransitions.CompleteTransition(Id);
+        } else {
+            Self->CompleteWorkerSets.erase(std::make_pair(Id.ReplicationId(), Id.TargetId()));
+        }
 
         const auto worker = Self->Workers.find(Id);
         if (worker != Self->Workers.end() && worker->second.HasHeartbeat()) {
@@ -135,6 +147,11 @@ public:
         Self->TabletCounters->Simple()[COUNTER_WORKERS] = Self->Workers.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = Self->PendingHeartbeats.size();
+
+        if (parentRemovalRequested) {
+            Self->RemoveParentsWithReadyChildren(ctx);
+            Self->RunTxHeartbeat(ctx);
+        }
 
         const auto replication = Self->Find(Id.ReplicationId());
         if (!replication) {

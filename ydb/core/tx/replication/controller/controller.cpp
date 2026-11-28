@@ -226,6 +226,7 @@ void TController::Reset() {
     AssignedTxIds.clear();
     CommittedVersions.clear();
     Workers.clear();
+    SplitMergeTransitions.Clear();
     LagExpiryQueue.Clear();
     LagExpiryScheduled = false;
     StoppingWorkers.clear();
@@ -787,6 +788,14 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
     auto* worker = GetOrCreateWorker(id);
     worker->SetDataEnded(true);
 
+    TVector<TWorkerId> children;
+    for (auto partitionId : record.GetChildPartitionsIds()) {
+        children.emplace_back(id.ReplicationId(), id.TargetId(), partitionId);
+    }
+    if (!children.empty() && Replications.at(id.ReplicationId())->GetConfig().GetConsistencySettings().HasGlobal()) {
+        SplitMergeTransitions.StartTransition(id, children);
+    }
+
     auto allParentsEnded = AllOf(record.GetAdjacentPartitionsIds(), [&](auto partitionId) {
         auto it = Workers.find(TWorkerId{id.ReplicationId(), id.TargetId(), partitionId});
         if (it == Workers.end()) {
@@ -806,11 +815,33 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
                 {"ev", ev->Get()->ToString()});
             return;
         }
-        for (auto partitionId : record.GetChildPartitionsIds()) {
+        for (const auto& child : children) {
             auto ev = MakeHolder<TEvService::TEvRunWorker>();
-            TWorkerId(id.ReplicationId(), id.TargetId(), partitionId).Serialize(*ev->Record.MutableWorker());
+            child.Serialize(*ev->Record.MutableWorker());
             Send(SelfId(), std::move(ev));
         }
+    }
+
+    RemoveParentsWithReadyChildren(ctx);
+}
+
+void TController::RemoveParentsWithReadyChildren(const TActorContext& ctx) {
+    const auto isChildReady = [&](const TWorkerId& child) {
+        return WorkersWithHeartbeat.contains(child) || SplitMergeTransitions.IsTransitionCompleted(child);
+    };
+
+    TVector<TWorkerId> ready;
+    for (const auto& [parent, children] : SplitMergeTransitions.GetWaitingParents()) {
+        if (IsValidWorker(parent) && !RemoveQueue.contains(parent) && AllOf(children, isChildReady)) {
+            ready.push_back(parent);
+        }
+    }
+
+    SplitMergeTransitions.RequestParentRemoval(ready);
+    for (const auto& parent : ready) {
+        YDB_LOG_NOTICE_CTX(ctx, "Remove parent partition worker after its children reported heartbeats",
+            {"workerId", parent});
+        Send(SelfId(), new TEvPrivate::TEvRemoveWorker(parent.ReplicationId(), parent.TargetId(), parent.WorkerId()));
     }
 }
 
@@ -836,6 +867,10 @@ bool TController::IsValidWorker(const TWorkerId& id) const {
     }
 
     if (target->GetStreamState() != TReplication::EStreamState::Ready) {
+        return false;
+    }
+
+    if (SplitMergeTransitions.IsParentRemovalRequested(id) || SplitMergeTransitions.IsTransitionCompleted(id)) {
         return false;
     }
 

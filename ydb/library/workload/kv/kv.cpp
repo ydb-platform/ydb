@@ -463,9 +463,13 @@ TQueryInfoList TKvWorkloadGenerator::Mixed() {
 
 TQueryInfoList TKvWorkloadGenerator::GetInitialData() {
     TQueryInfoList res;
+    try {
     for (size_t i = 0; i < Params.InitRowCount; ++i) {
         auto queryInfos = Upsert(GenerateRandomRows());
         res.insert(res.end(), queryInfos.begin(), queryInfos.end());
+    }
+    } catch (const std::exception& e) {
+        Cerr << "Exception in GetInitialData(): " << e.what() << Endl;
     }
 
     return res;

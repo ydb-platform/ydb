@@ -40,6 +40,12 @@ struct TAtomicBlockCounter {
 
     TAtomicBlockCounter() noexcept {}
 
+    explicit TAtomicBlockCounter(ui64 initialCounter) noexcept
+        : Data(initialCounter)
+    {
+        Y_ABORT_UNLESS((initialCounter & ~CounterMask) == 0);
+    }
+
     bool IsBlocked() const noexcept;
 
     // Blocking

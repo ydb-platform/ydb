@@ -11,16 +11,14 @@ namespace NPDisk {
 class TIdleCounter {
     static constexpr ui32 InFlightThreshold = 1024;
 
-    TAtomicBlockCounter ReversedInFlight;
+    TAtomicBlockCounter ReversedInFlight{InFlightThreshold + 1};
     TLight &IdleLight;
 
 public:
 
     TIdleCounter(TLight &light)
         : IdleLight(light)
-    {
-        ReversedInFlight.Add(InFlightThreshold + 1);
-    }
+    {}
 
     void Increment() {
         TAtomicBlockCounter::TResult res;

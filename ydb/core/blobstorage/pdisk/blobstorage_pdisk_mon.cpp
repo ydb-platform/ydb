@@ -100,7 +100,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT_IF_EXTENDED(StateGroup, LastOwnerId, false);
     COUNTER_INIT_IF_EXTENDED(StateGroup, PendingYardInits, false);
 
-    SeqnoL6 = 0;
+    SeqnoL6 = 1;
     LastDoneOperationTimestamp = 0;
 
     // device subgroup

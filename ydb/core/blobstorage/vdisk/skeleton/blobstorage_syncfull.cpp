@@ -48,7 +48,7 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskConfig> Config;
         TIntrusivePtr<THullCtx> HullCtx;
         const TActorId ParentId;
-        THullDsSnap FullSnap;
+        TFullSyncSnapshot FullSnap;
 
         const TSyncState SyncState;
         const TVDiskID SelfVDiskId;
@@ -85,7 +85,10 @@ namespace NKikimr {
                        const TMemRecBlock &memRec) {
             char tmpBuf[NSyncLog::MaxRecFullSize];
             auto s = NSyncLog::TSerializeRoutines::SetBlock;
-            ui32 size = s(tmpBuf, 0, key.TabletId, memRec.BlockedGeneration, 0);
+            const ui64 tabletId = key.TabletId;
+            const auto* block = FullSnap.CommittedBlocks->FindPtr(tabletId);
+            const ui64 issuerGuid = block && block->Generation == memRec.BlockedGeneration ? block->IssuerGuid : 0;
+            ui32 size = s(tmpBuf, 0, tabletId, memRec.BlockedGeneration, issuerGuid);
             buf->append(tmpBuf, size);
         }
 
@@ -236,7 +239,7 @@ namespace NKikimr {
                 const TIntrusivePtr<TVDiskConfig> &config,
                 const TIntrusivePtr<THullCtx> &hullCtx,
                 const TActorId &parentId,
-                THullDsSnap &&fullSnap,
+                TFullSyncSnapshot &&fullSnap,
                 const TSyncState& syncState,
                 const TVDiskID& selfVDiskId,
                 const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
@@ -325,7 +328,7 @@ namespace NKikimr {
                 const TIntrusivePtr<TVDiskConfig> &config,
                 const TIntrusivePtr<THullCtx> &hullCtx,
                 const TActorId &parentId,
-                THullDsSnap &&fullSnap,
+                TFullSyncSnapshot &&fullSnap,
                 const TSyncState& syncState,
                 const TVDiskID& selfVDiskId,
                 const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
@@ -335,7 +338,7 @@ namespace NKikimr {
                 const TKeyBlock &keyBlock,
                 const TKeyBarrier &keyBarrier,
                 NKikimrBlobStorage::ESyncFullStage stage)
-            : THullSyncFullBase(config, hullCtx, parentId, std::forward<THullDsSnap>(fullSnap),
+            : THullSyncFullBase(config, hullCtx, parentId, std::move(fullSnap),
                     syncState, selfVDiskId, ifaceMonGroup, fullSyncGroup, ev,
                     keyLogoBlob, keyBlock, keyBarrier, stage)
             , TActorBootstrapped<THullSyncFullActorLegacyProtocol>()
@@ -363,13 +366,13 @@ namespace NKikimr {
                 const TIntrusivePtr<THullCtx>& hullCtx,
                 const TActorId& parentId,
                 const TActorId& syncLogActorId,
-                THullDsSnap&& fullSnap,
+                TFullSyncSnapshot&& fullSnap,
                 const TSyncState& syncState,
                 const TVDiskID& selfVDiskId,
                 const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
                 const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
                 const TEvBlobStorage::TEvVSyncFull::TPtr& ev)
-            : THullSyncFullBase(config, hullCtx, parentId, std::forward<THullDsSnap>(fullSnap),
+            : THullSyncFullBase(config, hullCtx, parentId, std::move(fullSnap),
                     syncState, selfVDiskId, ifaceMonGroup, fullSyncGroup, ev, TKeyLogoBlob::First(),
                     TKeyBlock::First(), TKeyBarrier::First(), NKikimrBlobStorage::LogoBlobs)
             , TActorBootstrapped<THullSyncFullActorUnorderedDataProtocol>()
@@ -483,7 +486,7 @@ namespace NKikimr {
             const TIntrusivePtr<TVDiskConfig> &config,
             const TIntrusivePtr<THullCtx> &hullCtx,
             const TActorId &parentId,
-            THullDsSnap &&fullSnap,
+            TFullSyncSnapshot &&fullSnap,
             const TSyncState& syncState,
             const TVDiskID& selfVDiskId,
             const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
@@ -503,7 +506,7 @@ namespace NKikimr {
             const TIntrusivePtr<THullCtx> &hullCtx,
             const TActorId &parentId,
             const TActorId& syncLogActorId,
-            THullDsSnap &&fullSnap,
+            TFullSyncSnapshot &&fullSnap,
             const TSyncState& syncState,
             const TVDiskID& selfVDiskId,
             const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,

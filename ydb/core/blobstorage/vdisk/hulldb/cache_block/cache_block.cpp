@@ -48,12 +48,12 @@ namespace NKikimr {
 
     bool TBlocksCache::HasRecord(ui64 tabletId) const {
         Y_ABORT_UNLESS(Initialized);
-        return PersistentBlocks.find(tabletId) != PersistentBlocks.end();
+        return PersistentBlocks->find(tabletId) != PersistentBlocks->end();
     }
 
     bool TBlocksCache::Find(ui64 tabletId, ui32 *outGen) const {
         Y_ABORT_UNLESS(Initialized);
-        if (const auto it = PersistentBlocks.find(tabletId); it != PersistentBlocks.end()) {
+        if (const auto it = PersistentBlocks->find(tabletId); it != PersistentBlocks->end()) {
             *outGen = it->second.Generation;
             return true;
         } else {
@@ -65,12 +65,12 @@ namespace NKikimr {
         Y_ABORT_UNLESS(Initialized);
 
         // Repeated or older records can remain in flight after the maximum is already persistent.
-        const auto persistentIt = PersistentBlocks.find(tabletId);
+        const auto persistentIt = PersistentBlocks->find(tabletId);
         if (const auto it = InFlightBlocks.find(tabletId); it != InFlightBlocks.end() &&
-                (persistentIt == PersistentBlocks.end() ||
+                (persistentIt == PersistentBlocks->end() ||
                 persistentIt->second.Generation < it->second.MaxBlockedGen.Generation)) {
             return {it->second.MaxBlockedGen.Generation, it->second.LsnForMaxBlockedGen};
-        } else if (persistentIt != PersistentBlocks.end()) {
+        } else if (persistentIt != PersistentBlocks->end()) {
             return {persistentIt->second.Generation, 0};
         } else {
             return {};
@@ -94,7 +94,7 @@ namespace NKikimr {
         THeapIterator<TKeyBlock, TMemRecBlock, true> heapIt(&it);
         auto callback = [&] (TKeyBlock key, auto* merger) -> bool {
             ui32 blockedGen = merger->GetMemRec().BlockedGeneration;
-            bool inserted = PersistentBlocks.emplace(key.TabletId, TBlockedGen(blockedGen, 0)).second;
+            bool inserted = PersistentBlocks.Mutable()->emplace(key.TabletId, TBlockedGen(blockedGen, 0)).second;
             Y_ABORT_UNLESS(inserted);
             return true;
         };
@@ -112,7 +112,7 @@ namespace NKikimr {
     }
 
     TBlocksCache::TBlockRes TBlocksCache::IsBlockedByPersistent(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const {
-        if (const auto it = PersistentBlocks.find(tabletId); it != PersistentBlocks.end() && it->second.IsBlocked(gen)) {
+        if (const auto it = PersistentBlocks->find(tabletId); it != PersistentBlocks->end() && it->second.IsBlocked(gen)) {
             if (actualGen) {
                 *actualGen = it->second.Generation;
             }
@@ -123,7 +123,10 @@ namespace NKikimr {
 
     void TBlocksCache::UpdatePersistent(ui64 tabletId, TBlockedGen gen) {
         Y_ABORT_UNLESS(Initialized);
-        auto& value = PersistentBlocks[tabletId];
+        if (const auto* value = PersistentBlocks->FindPtr(tabletId); value && value->Generation >= gen.Generation) {
+            return;
+        }
+        auto& value = (*PersistentBlocks.Mutable())[tabletId];
         if (value.Generation < gen.Generation) {
             value = gen;
         }

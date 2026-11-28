@@ -40,7 +40,7 @@ def setup_s3():
 class Utils:
     def __init__(self):
         self.config = KikimrConfigGenerator(
-            use_in_memory_pdisks=False, disabled_feature_flags=["disable_old_secret_creation"]
+            use_in_memory_pdisks=False, disabled_feature_flags=["disable_old_secret_creation", "disable_old_secrets"]
         )
         self.config.yaml_config["feature_flags"]["enable_external_data_sources"] = True
         self.config.yaml_config["feature_flags"]["enable_replace_if_exists_for_external_entities"] = True
@@ -82,7 +82,10 @@ class Utils:
     ):
         self._stop_client()
         self.config.yaml_config["feature_flags"]["disable_old_secret_creation"] = disable_old_secret_creation
-        self.config.yaml_config["feature_flags"]["disable_old_secrets"] = disable_old_secrets
+        if disable_old_secrets is None:
+            self.config.yaml_config["feature_flags"].pop("disable_old_secrets", None)
+        else:
+            self.config.yaml_config["feature_flags"]["disable_old_secrets"] = disable_old_secrets
         self.config.yaml_config["feature_flags"]["enable_schema_secrets"] = enable_schema_secrets
         self.cluster.update_configurator_and_restart(self.config)
         self._start_client_after_restart()
@@ -511,7 +514,8 @@ def test_disable_old_secret_creation(old_secrets_utils):
     )
 
 
-def test_disable_old_secrets_dont_crash_existing_objects(old_secrets_utils):
+@pytest.mark.parametrize("disable_old_secrets", [True, None], ids=["explicit", "default"])
+def test_disable_old_secrets_dont_crash_existing_objects(old_secrets_utils, disable_old_secrets):
     s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = setup_s3()
     s3_location = f"{s3_endpoint}/{s3_bucket}"
 
@@ -545,7 +549,7 @@ def test_disable_old_secrets_dont_crash_existing_objects(old_secrets_utils):
     )
     old_secrets_utils.assert_path_ready(f"{DATABASE}/transfer-old-secret")
 
-    old_secrets_utils.restart_cluster(disable_old_secrets=True)
+    old_secrets_utils.restart_cluster(disable_old_secrets=disable_old_secrets)
 
     with pytest.raises(Exception) as exc_info:
         # After restart eds resolves secret only while reading

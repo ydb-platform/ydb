@@ -45,20 +45,24 @@ class ExternalDataTableTestBase:
                 "metadata": {"kind": "MainConfig", "cluster": "", "version": 0},
                 "config": {
                     "yaml_config_enabled": True,
-                    "feature_flags": dict(self.config.yaml_config["feature_flags"], disable_old_secret_creation=False),
+                    "feature_flags": dict(
+                        self.config.yaml_config["feature_flags"],
+                        disable_old_secret_creation=False,
+                        disable_old_secrets=False,
+                    ),
                 },
             }
             DynamicConfigClient(self.driver).set_config(
                 yaml.safe_dump(config), dry_run=False, allow_unknown_fields=True
             )
-            assert wait_for(self.legacy_secrets_enabled, timeout_seconds=30), "Legacy secrets flag was not applied"
+            assert wait_for(self.legacy_secrets_enabled, timeout_seconds=30), "Legacy secrets flags were not applied"
             yield
 
     def legacy_secrets_enabled(self):
         for node in self.cluster.nodes.values():
             response = requests.get(
                 f"http://{node.host}:{node.mon_port}/viewer/json/feature_flags",
-                params={"direct": "true", "features": "DisableOldSecretCreation"},
+                params={"direct": "true", "features": "DisableOldSecretCreation,DisableOldSecrets"},
                 timeout=5,
             )
             response.raise_for_status()

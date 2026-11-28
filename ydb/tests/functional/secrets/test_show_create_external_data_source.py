@@ -11,7 +11,7 @@ from ydb.tests.functional.secrets.lib.secrets_plugin import (
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 CLUSTER_CONFIG = dict(
-    disabled_feature_flags=["disable_old_secret_creation"],
+    disabled_feature_flags=["disable_old_secret_creation", "disable_old_secrets"],
     extra_feature_flags=[
         "enable_external_data_sources",
         "enable_schema_secrets",

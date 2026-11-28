@@ -1157,6 +1157,7 @@ class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixtu
 
         AppConfig().MutableFeatureFlags()->SetEnableExternalDataSources(true);
         AppConfig().MutableFeatureFlags()->SetDisableOldSecretCreation(false);
+        AppConfig().MutableFeatureFlags()->SetDisableOldSecrets(false);
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {

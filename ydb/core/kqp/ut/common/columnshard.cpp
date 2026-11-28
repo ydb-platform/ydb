@@ -19,6 +19,9 @@ namespace NKqp {
         if (!kikimrSettings.FeatureFlags.HasDisableOldSecretCreation()) {
             kikimrSettings.FeatureFlags.SetDisableOldSecretCreation(false);
         }
+        if (!kikimrSettings.FeatureFlags.HasDisableOldSecrets()) {
+            kikimrSettings.FeatureFlags.SetDisableOldSecrets(false);
+        }
         if (!kikimrSettings.FeatureFlags.HasEnableTieringInColumnShard()) {
             kikimrSettings.SetEnableTieringInColumnShard(true);
         }

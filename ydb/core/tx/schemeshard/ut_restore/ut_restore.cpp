@@ -9699,6 +9699,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .InitYdbDriver(true);
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
+        runtime.GetAppData().FeatureFlags.SetDisableOldSecrets(false);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
@@ -9773,6 +9774,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .InitYdbDriver(true);
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
+        runtime.GetAppData().FeatureFlags.SetDisableOldSecrets(false);
         runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
@@ -10017,6 +10019,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
+        runtime.GetAppData().FeatureFlags.SetDisableOldSecrets(false);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
@@ -10075,6 +10078,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
+        runtime.GetAppData().FeatureFlags.SetDisableOldSecrets(false);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
@@ -10158,6 +10162,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
+        runtime.GetAppData().FeatureFlags.SetDisableOldSecrets(false);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
@@ -10235,6 +10240,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
+        runtime.GetAppData().FeatureFlags.SetDisableOldSecrets(false);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
@@ -10312,6 +10318,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
+        runtime.GetAppData().FeatureFlags.SetDisableOldSecrets(false);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
@@ -12229,6 +12236,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
                 if (createdByQuery) {
                     runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
+                    runtime.GetAppData().FeatureFlags.SetDisableOldSecrets(false);
                     runtime.GetAppData().FeatureFlags.SetEnableViews(true);
                     runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
                     runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);

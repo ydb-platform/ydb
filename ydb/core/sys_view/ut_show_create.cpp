@@ -73,6 +73,7 @@ public:
         , Session(QueryClient.GetSession().GetValueSync().GetSession())
     {
         Runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
+        Runtime.GetAppData().FeatureFlags.SetDisableOldSecrets(false);
         CreateTier("tier1");
         CreateTier("tier2");
     }

@@ -150,6 +150,8 @@ items:
       href: workload-fulltext.md
     - name: Vector нагрузка
       href: workload-vector.md
+    - name: Split/Merge нагрузка
+      href: workload-splitmerge.md
   - name: Работа с конфигурацией
     href: configs.md
     include:

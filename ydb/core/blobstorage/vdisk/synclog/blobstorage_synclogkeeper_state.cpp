@@ -533,9 +533,7 @@ namespace NKikimr {
         }
 
         void TSyncLogKeeperState::RequestPhantomFlagStorageSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const {
-            if (PhantomFlagStorageState.IsPersistent()) {
-                request->Get()->SyncLogSnapshot = SyncLogPtr->GetSnapshot();
-            }
+            request->Get()->SyncLogSnapshot = SyncLogPtr->GetSnapshot();
             PhantomFlagStorageState.RequestSnapshot(request);
         }
 

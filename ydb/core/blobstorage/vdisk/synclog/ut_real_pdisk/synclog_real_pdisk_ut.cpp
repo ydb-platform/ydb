@@ -2020,6 +2020,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         ui32 entryPointCommits = 0;
         ui32 syncLogCommitDoneEvents = 0;
         bool phantomFlagBuilderFinished = false;
+        TVector<TLogoBlobID> builtPhantomFlags;
         TString lastPDiskErrorReason;
 
         auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
@@ -2078,6 +2079,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
                 case TEvBlobStorage::EvPhantomFlagStorageFinishBuilder:
                     if (ev->Recipient == syncLogKeeperId) {
+                        for (const auto& flag : ev->Get<NSyncLog::TEvPhantomFlagStorageFinishBuilder>()->Flags) {
+                            builtPhantomFlags.push_back(flag.LogoBlobID());
+                        }
                         phantomFlagBuilderFinished = true;
                     }
                     break;
@@ -2293,6 +2297,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         }, 1000, TDuration::MilliSeconds(10)),
             "Phantom Flag Storage builder did not finish reading the SyncLog snapshot");
 
+        Sort(expectedPhantomFlags);
+        Sort(builtPhantomFlags);
+        UNIT_ASSERT_VALUES_EQUAL(builtPhantomFlags, expectedPhantomFlags);
+
         runtime.Send(new IEventHandle(syncLogKeeperId, edge,
             new NSyncLog::TEvPhantomFlagStorageGetSnapshot()), NodeIndex);
         auto phantomSnapshot = runtime.GrabEdgeEvent<NSyncLog::TEvPhantomFlagStorageGetSnapshotResult>(edge,
@@ -2305,8 +2313,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         for (const auto& flag : phantomSnapshot->Get()->Flags) {
             actualPhantomFlags.push_back(flag.LogoBlobID());
         }
-        Sort(expectedPhantomFlags);
-        Sort(actualPhantomFlags);
+        // The snapshot combines StoredFlags and the retained SyncLog tail, which can overlap.
+        SortUnique(actualPhantomFlags);
         UNIT_ASSERT_VALUES_EQUAL(actualPhantomFlags, expectedPhantomFlags);
     }
 

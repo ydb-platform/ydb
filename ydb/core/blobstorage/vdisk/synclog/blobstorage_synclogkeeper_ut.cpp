@@ -1,5 +1,7 @@
 #include "blobstorage_synclogkeeper_state.h"
 #include "blobstorage_synclogreader.h"
+#include "phantom_flag_storage/phantom_flag_storage_builder.h"
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/null.h>
@@ -64,8 +66,10 @@ namespace NKikimr {
         }
         void RunDisposeTest();
         void RunRecoveryBaseTest();
+        void RunPhantomFlagAtLogStartTest();
 
     private:
+        TIntrusivePtr<TSyncLogCtx> SlCtx;
         std::unique_ptr<TSyncLogKeeperState> State;
         TPayloadWriter PayloadWriter;
 
@@ -108,7 +112,7 @@ namespace NKikimr {
         const ui64 syncLogMaxDiskAmount = 0;
         const ui32 maxResponseSize = 10 << 20;
 
-        auto slCtx = MakeIntrusive<NSyncLog::TSyncLogCtx>(
+        SlCtx = MakeIntrusive<NSyncLog::TSyncLogCtx>(
             vctx,
             nullptr,
             nullptr,
@@ -127,7 +131,7 @@ namespace NKikimr {
             TControlWrapper(20'000'000, 1, 100'000'000'000),
             TControlWrapper(1'000'000, 1, 10'000'000));
 
-        State = std::make_unique<TSyncLogKeeperState>(slCtx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
+        State = std::make_unique<TSyncLogKeeperState>(SlCtx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
                 syncLogMaxEntryPointSize);
         State->Init(nullptr, std::make_shared<TFakeLoggerCtx>(), TActorId{});
 
@@ -393,7 +397,36 @@ namespace NKikimr {
         UNIT_ASSERT(!State->PerformInitialCommit());
     }
 
+    void TSyncLogKeeperTest::RunPhantomFlagAtLogStartTest() {
+        CreateState({});
+        const ui64 lsn = 10;
+        const TLogoBlobID blob(1, 1, 1, 0, 1, 0);
+        const auto& groupType = SlCtx->VCtx->Top->GType;
+        TIngress ingress;
+        ingress.SetKeep(TIngress::IngressMode(groupType), CollectModeDoNotKeep);
+        char buffer[MaxRecFullSize];
+        const ui32 size = TSerializeRoutines::SetLogoBlob(groupType, buffer, lsn, blob, ingress);
+        State->PutOne(reinterpret_cast<const TRecordHdr*>(buffer), size);
+        Trim(lsn - 1);
+        const auto snapshot = State->GetSyncLogSnapshot();
+        UNIT_ASSERT_VALUES_EQUAL(snapshot->LogStartLsn, lsn);
+
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        const TActorId edge = runtime.AllocateEdgeActor();
+        runtime.Register(CreatePhantomFlagStorageBuilderActor(SlCtx, edge, snapshot, false));
+        const auto result = runtime.GrabEdgeEvent<TEvPhantomFlagStorageFinishBuilder>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Flags.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Flags.front().LogoBlobID(), blob);
+        UNIT_ASSERT(result->Get()->Flags.front().Ingress.IsDoNotKeep(groupType));
+    }
+
     Y_UNIT_TEST_SUITE(TBlobStorageSyncLogKeeper) {
+        Y_UNIT_TEST(PhantomFlagBuilderIncludesLogStartLsn) {
+            TSyncLogKeeperTest test;
+            test.RunPhantomFlagAtLogStartTest();
+        }
+
         Y_UNIT_TEST(RecoveryBaseSurvivesEntryPointReload) {
             TSyncLogKeeperTest test;
             test.RunRecoveryBaseTest();

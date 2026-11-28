@@ -326,7 +326,14 @@ namespace NKikimr {
 
             const ui32 peerOrderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
             const bool fullSyncPending = FullSyncRequested.contains(peerOrderNumber);
-            TDuration interval = fullRecovery || fullSyncPending ? TDuration::Zero() : SyncTimeInterval;
+            TDuration interval;
+            if (fullRecovery && NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus)) {
+                interval = TDuration::Zero();
+            } else if (fullSyncPending) {
+                interval = TDuration::Zero();
+            } else {
+                interval = SyncTimeInterval;
+            }
             SyncerData->Neighbors->ApplyChanges(vDiskId, peerSyncState, interval);
             ActualizeUnsyncedDisksNum();
             const ui32 orderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));

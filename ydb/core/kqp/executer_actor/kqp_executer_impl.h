@@ -251,7 +251,7 @@ protected:
 
         // Prune partitions here outside of TasksGraph - in all possible cases.
         for (auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
-            AFL_ENSURE(TxManager);
+            YDB_LOG_ENSURE(TxManager);
             if (stageInfo.Meta.ShardKey) {
                 TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
             }

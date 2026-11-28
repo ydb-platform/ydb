@@ -22,7 +22,7 @@ public:
         , AllocationGuard(guard)
         , RequestGuard(std::move(requestGuard))
     {
-        AFL_VERIFY(RequestGuard);
+        YDB_LOG_VERIFY(RequestGuard);
     }
 
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& ExtractAllocationGuard() {
@@ -30,7 +30,7 @@ public:
     }
 
     std::unique_ptr<TFilterBuildingGuard>&& ExtractRequestGuard() {
-        AFL_VERIFY(RequestGuard);
+        YDB_LOG_VERIFY(RequestGuard);
         return std::move(RequestGuard);
     }
 };

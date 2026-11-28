@@ -215,7 +215,7 @@ struct TTestSchema {
                     break;
                 }
             }
-            AFL_VERIFY(found);
+            YDB_LOG_VERIFY(found);
         }
         return result;
     }

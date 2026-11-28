@@ -4,6 +4,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/metadata/service.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NUdfStore {
 
 namespace {
@@ -58,8 +60,8 @@ void TWasmArtifactTableInitializer::HandleTableCreated(TEvTableCreator::TEvCreat
         const TString errorMessage = TStringBuilder()
             << "failed to create wasm artifact table '" << tablePath
             << "': " << ev->Get()->Issues.ToString();
-        ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-            << "TWasmArtifactTableInitializer: " << errorMessage;
+        YDB_LOG_ERROR("TWasmArtifactTableInitializer",
+            {"errorMessage", errorMessage});
         Send(ParentId_, new TEvStoreInitFailed(errorMessage));
         PassAway();
         return;
@@ -71,9 +73,9 @@ void TWasmArtifactTableInitializer::HandleTableCreated(TEvTableCreator::TEvCreat
         return;
     }
 
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmArtifactTableInitializer: artifact tables ready at "
-        << ArtifactTablePath_ << " and " << ArtifactChunksTablePath_;
+    YDB_LOG_INFO("TWasmArtifactTableInitializer: artifact tables ready",
+        {"artifactTablePath", ArtifactTablePath_},
+        {"artifactChunksTablePath", ArtifactChunksTablePath_});
     Send(ParentId_, new TEvArtifactTableInitialized(ArtifactTablePath_));
     PassAway();
 }

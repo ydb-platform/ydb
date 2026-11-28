@@ -310,9 +310,8 @@ public:
             {
                 using enum TIndexCheckOperation::EOperation;
 
-                AFL_VERIFY(op == Less || op == LessOrEqual ||
-                    op == Greater || op == GreaterOrEqual || op == Equals
-                );
+                YDB_LOG_VERIFY(op == Less || op == LessOrEqual ||
+                    op == Greater || op == GreaterOrEqual || op == Equals);
             }
 
             switch(op) {
@@ -327,7 +326,7 @@ public:
                 case TIndexCheckOperation::EOperation::GreaterOrEqual:
                     return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual;
                 default:
-                    AFL_VERIFY(false);
+                    YDB_LOG_VERIFY(false);
             }
         }()),
           IsSimpleFunction(isSimpleFunction)

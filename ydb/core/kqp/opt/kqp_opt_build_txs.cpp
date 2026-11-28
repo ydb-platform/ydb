@@ -649,6 +649,39 @@ public:
 
         TKqlQuery query(inputExpr);
 
+<<<<<<< HEAD
+=======
+        if (auto truncate = GetUnsafeTruncate(query)) {
+            // The truncate must be the only effect so that no other operations are discarded.
+            YDB_LOG_ENSURE(query.Results().Empty() && query.Effects().Size() == 1,
+                {"results", query.Results().Size()},
+                {"effects", query.Effects().Size()});
+
+            const auto effects = Build<TExprList>(ctx, query.Pos())
+                .Add(BuildTableTruncateEffect(truncate.Cast(), ctx))
+                .Done();
+            const auto sinkQuery = Build<TKqlQuery>(ctx, query.Pos())
+                .Results().Build()
+                .Effects(effects)
+                .Done();
+            auto tx = BuildTx(KqpCtx->Config->GetEnableIndexStreamWrite() ? sinkQuery.Ptr() : effects.Ptr(),
+                ctx, /* isPrecompute */ false);
+            if (!tx) {
+                return TStatus::Error;
+            }
+
+            // Truncate has its own transaction and is never deferred as a regular table write.
+            TKqpPhyTxSettings txSettings;
+            txSettings.Type = EPhysicalTxType::Generic;
+            BuildCtx->PhysicalTxs.emplace_back(Build<TKqpPhysicalTx>(ctx, query.Pos())
+                .InitFrom(tx.Cast())
+                .Settings(txSettings.BuildNode(ctx, query.Pos()))
+                .Done());
+
+            return TStatus::Ok;
+        }
+
+>>>>>>> bdc49c403d1 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/kqp (#59329))
         if (auto status = TryBuildPrecomputeTx(query, outputExpr, ctx)) {
             return *status;
         }
@@ -848,12 +881,12 @@ private:
 
         for (const auto& expr : list) {
             auto sinkEffect = expr.Maybe<TKqpSinkEffect>();
-            AFL_ENSURE(sinkEffect);
+            YDB_LOG_ENSURE(sinkEffect);
             const auto sinkSettings = GetStageSinkSettings(sinkEffect.Cast());
             if (!sinkSettings) {
                 const auto dqSink = GetStageSink(sinkEffect.Cast());
-                AFL_ENSURE(dqSink);
-                AFL_ENSURE(!kqpCtx.UsePessimisticLocks);
+                YDB_LOG_ENSURE(dqSink);
+                YDB_LOG_ENSURE(!kqpCtx.UsePessimisticLocks);
                 externalEffects.emplace_back(sinkEffect.Cast());
             } else {
                 // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
@@ -864,7 +897,7 @@ private:
                     || kqpCtx.UsePessimisticLocks;
 
                 // At current time Read Committed (pessimistic locks) support only one effect per query.
-                AFL_ENSURE(!kqpCtx.UsePessimisticLocks || effectsInfos.empty());
+                YDB_LOG_ENSURE(!kqpCtx.UsePessimisticLocks || effectsInfos.empty());
 
                 if (needSingleEffect) {
                     const TStringBuf tablePathId = sinkSettings.Cast().Table().PathId().Value();
@@ -1056,11 +1089,11 @@ private:
     bool HasTableEffects(const TExprList& effectsList) const {
         for (const TExprBase& effect : effectsList) {
             auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>();
-            AFL_ENSURE(maybeSinkEffect);
+            YDB_LOG_ENSURE(maybeSinkEffect);
             // Both TDqSink and TDqTransform derive from TDqOutputAnnotationBase,
             // so the DataSink is read from the base uniformly for sinks and transforms.
             const auto output = GetStageOutput(maybeSinkEffect.Cast());
-            AFL_ENSURE(output);
+            YDB_LOG_ENSURE(output);
             auto dataSink = TCoDataSink(output.Cast().DataSink().Ptr());
             if (dataSink.Category() == YdbProviderName || dataSink.Category() == KikimrProviderName) {
                 return true;

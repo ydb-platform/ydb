@@ -11,7 +11,7 @@ private:
 public:
     TSchemaResolverColumnsOnly(const std::shared_ptr<NSchemeShard::TOlapSchema>& schema)
         : Schema(schema) {
-        AFL_VERIFY(Schema);
+        YDB_LOG_VERIFY(Schema);
     }
 
     virtual TString GetColumnName(ui32 id, bool required = true) const override;

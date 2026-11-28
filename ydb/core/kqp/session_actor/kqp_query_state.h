@@ -536,6 +536,15 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
+<<<<<<< HEAD
+=======
+        YDB_LOG_ENSURE(UserRequestContext);
+        if (UserRequestContext->IsStreamingQuery) {
+            // Streaming queries are long-running: held-open read locks would be
+            // broken by any concurrent write and abort the query.
+            return false;
+        }
+>>>>>>> bdc49c403d1 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/kqp (#59329))
         if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&
@@ -548,7 +557,7 @@ public:
             return false;
         }
 
-        AFL_ENSURE(!TxCtx->TxManager->BrokenLocks());
+        YDB_LOG_ENSURE(!TxCtx->TxManager->BrokenLocks());
         if (TxCtx->LockHandle.GetLockId() && !TxCtx->TxManager->GetLockIssue()) {
             return true;  // Continue to acquire locks
         }

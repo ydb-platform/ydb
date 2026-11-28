@@ -132,7 +132,7 @@ public:
             !HasOlapTable &&
             (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
-        AFL_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        YDB_LOG_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
         return forceSnapshot;
     }
@@ -219,7 +219,7 @@ public:
             MakeResponseAndPassAway();
             return;
         }  else if (Request.LocksOp == ELocksOp::Commit) {
-            AFL_ENSURE(!ReadOnlyTx);
+            YDB_LOG_ENSURE(!ReadOnlyTx);
             Become(&TKqpDataExecuter::FinalizeState);
             YDB_LOG_DEBUG("Send Commit to BufferActor",
                 {"marker", "KQPDATA"},
@@ -334,7 +334,7 @@ public:
     }
 
     void HandleFinalize(TEvents::TEvUndelivered::TPtr& ev) {
-        AFL_ENSURE(ev->Sender == BufferActorId);
+        YDB_LOG_ENSURE(ev->Sender == BufferActorId);
         YDB_LOG_WARN("Got Undelivered from BufferActor",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},
@@ -1417,8 +1417,22 @@ private:
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
 
+<<<<<<< HEAD
                     TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                     TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
+=======
+                    // Partitioning metadata is shipped by the input actor for the
+                    // shards it sent EvLocks to; other shards (e.g. locked by plain
+                    // reads) are registered without it.
+                    if (const auto* meta = shardMetas.FindPtr(lock.GetDataShard())) {
+                        YDB_LOG_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath, *meta);
+                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::PESSIMISTIC_LOCK | IKqpTransactionManager::EAction::READ, Request.QuerySpanId);
+                    } else {
+                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
+                    }
+>>>>>>> bdc49c403d1 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/kqp (#59329))
                     TxManager->AddLock(lock.GetDataShard(), lock, Request.QuerySpanId, deferredVictimSpanId);
                 }
 

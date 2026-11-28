@@ -10,6 +10,21 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 class ISSEntityUpdate {
 private:
     bool Initialized = false;
+<<<<<<< HEAD
+=======
+
+    template <class TInitializer>
+    TConclusionStatus InitializeOnce(TInitializer&& initializer) {
+        YDB_LOG_VERIFY(!Initialized);
+        auto result = initializer();
+        if (result.IsSuccess()) {
+            Initialized = true;
+        }
+
+        return result;
+    }
+
+>>>>>>> 0eeb313b336 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/tx/schemeshard (#59529))
 protected:
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) = 0;
     virtual TConclusionStatus DoStart(const TUpdateStartContext& context) = 0;
@@ -22,22 +37,22 @@ public:
     virtual NKikimrTxColumnShard::ETransactionKind GetShardTransactionKind() const = 0;
 
     std::set<ui64> GetShardIds() const {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoGetShardIds();
     }
 
     TString GetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& seqNo) const {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoGetShardTxBodyString(tabletId, seqNo);
     }
 
     TConclusionStatus Start(const TUpdateStartContext& context) {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoStart(context);
     }
 
     TConclusionStatus Finish(const TUpdateFinishContext& context) {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoFinish(context);
     }
 

@@ -144,9 +144,9 @@ public:
     };
 
     void FullValidation() const {
-        AFL_VERIFY(PathId);
-        AFL_VERIFY(PortionId);
-        AFL_VERIFY(SchemaVersion);
+        YDB_LOG_VERIFY(PathId);
+        YDB_LOG_VERIFY(PortionId);
+        YDB_LOG_VERIFY(SchemaVersion);
         Meta.FullValidation();
     }
 
@@ -223,7 +223,7 @@ public:
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
-        AFL_VERIFY(!HasRemoveSnapshot());
+        YDB_LOG_VERIFY(!HasRemoveSnapshot());
         RemoveSnapshot.Set(snap);
     }
 
@@ -388,7 +388,7 @@ public:
     }
 
     const TSnapshot& GetRemoveSnapshotVerified() const {
-        AFL_VERIFY(HasRemoveSnapshot());
+        YDB_LOG_VERIFY(HasRemoveSnapshot());
         return RemoveSnapshot.Get();
     }
 
@@ -405,7 +405,7 @@ public:
     }
 
     ui64 GetSchemaVersionVerified() const {
-        AFL_VERIFY(SchemaVersion);
+        YDB_LOG_VERIFY(SchemaVersion);
         return SchemaVersion;
     }
 

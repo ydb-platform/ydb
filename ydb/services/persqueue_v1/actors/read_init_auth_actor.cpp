@@ -49,8 +49,13 @@ void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
 void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bool showPrivate) {
     TVector<NPersQueue::TDiscoveryConverterPtr> topics;
     for (const auto& topic : Topics) {
+<<<<<<< HEAD
         topics.push_back(topic.second.DiscoveryConverter);
         AFL_ENSURE(topic.second.DiscoveryConverter->IsValid());
+=======
+        YDB_LOG_ENSURE(topic.second.DiscoveryConverter->IsValid());
+        topics.insert(topic.second.DiscoveryConverter->GetPrimaryPath());
+>>>>>>> 3b1bc685354 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/services/persqueue_v1 (#60169))
     }
 
     ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topics, true, showPrivate));
@@ -104,8 +109,22 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
 ) {
+<<<<<<< HEAD
     AFL_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     auto& pqDescr = entry.PQGroupInfo->Description;
+=======
+    YDB_LOG_ENSURE(topicInfo.Info);
+    // Scheme board describe leaves TopicPath empty. Metacache filled it from the
+    // navigate path before UpgradeToFullConverter; do the same here.
+    auto pqInfo = topicInfo.Info;
+    if (pqInfo->Description.GetPQTabletConfig().GetTopicPath().empty()) {
+        auto copy = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>(*pqInfo);
+        copy->Description.MutablePQTabletConfig()->SetTopicPath(
+            topicInfo.RealPath.empty() ? ("/" + topicsIter->first) : topicInfo.RealPath);
+        pqInfo = copy;
+    }
+    auto& pqDescr = pqInfo->Description;
+>>>>>>> 3b1bc685354 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/services/persqueue_v1 (#60169))
     topicsIter->second.TabletID = pqDescr.GetBalancerTabletID();
     topicsIter->second.CloudId = pqDescr.GetPQTabletConfig().GetYcCloudId();
     topicsIter->second.DbId = pqDescr.GetPQTabletConfig().GetYdbDatabaseId();
@@ -134,8 +153,13 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
         topicsIter->second.CdcStreamPath
     );
+<<<<<<< HEAD
     AFL_ENSURE(topicsIter->second.FullConverter->IsValid());
     return CheckTopicACL(entry, topicsIter->first, ctx);
+=======
+    YDB_LOG_ENSURE(topicsIter->second.FullConverter->IsValid());
+    return CheckTopicACL(topicInfo, topicsIter->first, ctx);
+>>>>>>> 3b1bc685354 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/services/persqueue_v1 (#60169))
 }
 
 
@@ -150,6 +174,7 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
         auto it = Topics.find(path);
         AFL_ENSURE(it != Topics.end());
 
+<<<<<<< HEAD
         if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
             AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
             const auto& topic = entry.ListNodeEntry->Children.at(0);
@@ -169,6 +194,43 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
 
         auto processResult = ProcessMetaCacheTopicResponse(entry);
         if (processResult.IsFatal) {
+=======
+    for (const auto& [path, topicInfo] : ev->Get()->Topics) {
+        TVector<TString> originals{path};
+        if (secondaryPass) {
+            auto mapped = SecondaryToOriginal.find(path);
+            YDB_LOG_ENSURE(mapped != SecondaryToOriginal.end(),
+                {"path", path});
+            originals = mapped->second;
+        }
+
+        for (const auto& original : originals) {
+            auto it = Topics.find(original);
+            YDB_LOG_ENSURE(it != Topics.end(),
+                {"path", original});
+
+            if (topicInfo.Status == NPQ::NDescriber::EStatus::Success) {
+                if (!ProcessTopicSchemeCacheResponse(topicInfo, it, ctx)) {
+                    return;
+                }
+                continue;
+            }
+
+            // Metacache looks up the legacy primary path first and, on a miss,
+            // retries the modern path under LbUserDatabaseRoot/account.
+            if (!secondaryPass && topicInfo.Status == NPQ::NDescriber::EStatus::NotFound) {
+                // The input converter is shared with the caller and must not be mutated.
+                auto converter = std::make_shared<NPersQueue::TDiscoveryConverter>(*it->second.DiscoveryConverter);
+                if (auto secondary = converter->TrySecondaryDiscoveryPath(lbRoot); secondary && *secondary != original) {
+                    it->second.DiscoveryConverter = std::move(converter);
+                    SecondaryToOriginal[*secondary].push_back(original);
+                    secondaryPaths.insert(*secondary);
+                    continue;
+                }
+            }
+
+            auto processResult = DescribeFailure(path, topicInfo.Status);
+>>>>>>> 3b1bc685354 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/services/persqueue_v1 (#60169))
             Topics.erase(it);
             if (Topics.empty()) {
                 TStringBuilder reason;
@@ -241,7 +303,7 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
     TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get();
     const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get();
 
-    AFL_ENSURE(navigate->ResultSet.size() == 1);
+    YDB_LOG_ENSURE(navigate->ResultSet.size() == 1);
     auto& entry = navigate->ResultSet.front();
     auto path = "/" + JoinPath(entry.Path); // ToDo [migration] - through converter ?
     if (navigate->ErrorCount > 0) {

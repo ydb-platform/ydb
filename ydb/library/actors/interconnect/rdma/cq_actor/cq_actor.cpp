@@ -41,8 +41,14 @@ class TCqActor: public TInterconnectLoggingBase, public TActorBootstrapped<TCqAc
     };
 
 public:
+<<<<<<< HEAD
     TCqActor(TCqFactory cqFactory)
         : TInterconnectLoggingBase("CqActor")
+=======
+    TCqActor(TCqFactory cqFactory, TRdmaActorParams params, NMonitoring::TDynamicCounters* counters)
+        : TInterconnectLoggingBase(YDB_LOG_CREATE_MESSAGE(
+            {"selfActorKind", "CqActor"}))
+>>>>>>> c484157e74b ([YDB_LOG] Interconnect uses log context (#58909))
         , CqFactory(std::move(cqFactory))
     {}
 
@@ -93,6 +99,7 @@ public:
                 return;
             }
             YDB_LOG_ERROR("Unable to register",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"asyncFd", rdmaCtx->GetContext()->async_fd});
         } else if (it->second.index() == 0) {
@@ -112,6 +119,7 @@ public:
 
     void Handle(NActors::TEvPollerRegisterResult::TPtr& ev) {
         YDB_LOG_DEBUG("Got TEvPollerRegisterResult",
+            {"logPrefix", LogPrefix},
             {"marker", "ICRDMA"},
             {"fd", ev->Get()->Socket.Get()->GetDescriptor()});
         auto rdmaCtx = static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get())->GetContext();
@@ -229,11 +237,36 @@ private:
     void ProcessCqErr(auto it) {
         TCtxData& c = std::get<0>(it->second);
         YDB_LOG_ERROR("CQ/SRQ error issued on ctx notify all pending cq callbacks",
+            {"logPrefix", LogPrefix},
             {"marker", "ICRDMA"},
             {"rdmaCtx", it->first->ToString().data()});
         c.Cq->NotifyErr();
     }
 
+<<<<<<< HEAD
+=======
+    void Handle(TEvPrivateInvalidateCq::TPtr& ev) {
+        auto it = CqMap.find(ev->Get()->Ctx);
+        if (it == CqMap.end() || it->second.index() != 0) {
+            return;
+        }
+
+        TCtxData& data = std::get<0>(it->second);
+        if (data.Cq != ev->Get()->Cq) {
+            return;
+        }
+
+        YDB_LOG_ERROR("Terminal error while filling RDMA QP cache",
+            {"logPrefix", LogPrefix},
+            {"marker", "ICRDMA"},
+            {"rdmaCtx", ev->Get()->Ctx->ToString().data()},
+            {"error", ev->Get()->Error},
+            {"strerror", strerror(ev->Get()->Error)});
+        data.Cq->NotifyErr();
+        CqMap.erase(it);
+    }
+
+>>>>>>> c484157e74b ([YDB_LOG] Interconnect uses log context (#58909))
     enum class EProcessAsyncEventResult {
         Processed,
         WouldBlock,
@@ -260,6 +293,7 @@ private:
         Y_ABORT_UNLESS(it != CqMap.end());
 
         YDB_LOG_DEBUG("RDMA async event issued on ctx",
+            {"logPrefix", LogPrefix},
             {"marker", "ICRDMA"},
             {"rdmaCtx", rdmaCtx->ToString().data()},
             {"eventDbg", GetAsyncEventDbg(rdmaCtx, async_event).data()});

@@ -17,7 +17,7 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
     {
         std::set<TString> selectorNames;
         for (auto&& i : SelectorConstructors) {
-            AFL_VERIFY(selectorNames.emplace(i->GetName()).second);
+            YDB_LOG_VERIFY(selectorNames.emplace(i->GetName()).second);
             selectors.emplace_back(i->BuildSelector());
         }
         if (selectors.empty()) {

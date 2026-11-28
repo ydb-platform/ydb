@@ -65,12 +65,12 @@ public:
     }
 
     const NActors::TActorId& GetActorIdVerified() const {
-        AFL_VERIFY(!!ActorId);
+        YDB_LOG_VERIFY(!!ActorId);
         return *ActorId;
     }
 
     void StartActor(const TStartContext& startContext) {
-        AFL_VERIFY(!ActorId);
+        YDB_LOG_VERIFY(!ActorId);
         std::unique_ptr<NActors::IActor> actor = LogicContainer->CreateActor(startContext);
         ActorId = NActors::TActivationContext::AsActorContext().Register(actor.release());
     }
@@ -91,9 +91,9 @@ public:
         , ChannelContainer(channel)
         , LogicContainer(logic)
     {
-        AFL_VERIFY(!!Identifier);
-        AFL_VERIFY(!!ChannelContainer);
-        AFL_VERIFY(!!LogicContainer);
+        YDB_LOG_VERIFY(!!Identifier);
+        YDB_LOG_VERIFY(!!ChannelContainer);
+        YDB_LOG_VERIFY(!!LogicContainer);
     }
 };
 

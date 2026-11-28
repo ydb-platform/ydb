@@ -83,7 +83,7 @@ protected:
                 continue;
             }
             PortionsInfo->RemovePortion(i);
-            AFL_VERIFY(i->GetCompactionLevel() < Levels.size());
+            YDB_LOG_VERIFY(i->GetCompactionLevel() < Levels.size());
             removePortionsByLevel[i->GetCompactionLevel()].emplace_back(i);
         }
         std::vector<TPortionInfo::TPtr> problemPortions;
@@ -108,8 +108,8 @@ protected:
             if (!i->GetCompactionLevel() && i->GetPortionType() != EPortionType::Written) {
                 i->MutableMeta().ResetCompactionLevel(GetAppropriateLevel(0, i->GetCompactionInfo()));
             }
-            AFL_VERIFY(i->GetCompactionLevel() < Levels.size());
-            AFL_VERIFY(Levels[i->GetMeta().GetCompactionLevel()]->ModifyPortions({ i }, {}).empty());
+            YDB_LOG_VERIFY(i->GetCompactionLevel() < Levels.size());
+            YDB_LOG_VERIFY(Levels[i->GetMeta().GetCompactionLevel()]->ModifyPortions({ i }, {}).empty());
         }
         RefreshWeights();
     }
@@ -126,7 +126,7 @@ protected:
     }
 
     virtual TOptimizationPriority DoGetUsefulMetric() const override {
-        AFL_VERIFY(LevelsByWeight.size());
+        YDB_LOG_VERIFY(LevelsByWeight.size());
         const ui64 levelPriority = LevelsByWeight.begin()->first;
         if (levelPriority) {
             return TOptimizationPriority::Critical(levelPriority);

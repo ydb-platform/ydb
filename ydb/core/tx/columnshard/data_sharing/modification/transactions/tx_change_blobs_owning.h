@@ -26,7 +26,7 @@ public:
         , SessionId(sessionId)
         , PackIdx(packIdx)
     {
-        AFL_VERIFY(!!Task);
+        YDB_LOG_VERIFY(!!Task);
     }
 
     TTxType GetTxType() const override {

@@ -222,7 +222,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
     TMaybeNode<TExprBase>& effect, const i64 order)
 {
     const i64 priority = 0;
-    AFL_ENSURE(order == 0);
+    YDB_LOG_ENSURE(order == 0);
     const bool csWriteAffinity = node.CtasShardingColumns().IsValid();
 
     const TKqpTable table = Build<TKqpTable>(ctx, node.Pos())
@@ -384,7 +384,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 settings.AllowInconsistentWrites, useStreamWrite,
                 node.IsBatch() == "true", settings.Mode, isIndexImplTable,
                 node.DefaultColumns(), node.ReturningColumns(), {}, priority, ctx);
-            AFL_ENSURE(returning);
+            YDB_LOG_ENSURE(returning);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Ptr())
                 .SinkIndex().Build("0")
@@ -558,7 +558,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                 false, useStreamWrite,
                 node.IsBatch() == "true", "delete", isIndexImplTable,
                 Build<TCoAtomList>(ctx, node.Pos()).Done(), node.ReturningColumns(), {}, priority, ctx);
-            AFL_ENSURE(returning);
+            YDB_LOG_ENSURE(returning);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Ptr())
                 .SinkIndex().Build("0")
@@ -698,7 +698,7 @@ bool BuildEffects(const TVector<TExprBase>& effects, TExprNode::TPtr& returning,
         TMaybeNode<TExprBase> newEffect;
         if (effect.Maybe<TKqlFillTable>()) {
             const auto maybeFillTable = effect.Maybe<TKqlFillTable>();
-            AFL_ENSURE(maybeFillTable);
+            YDB_LOG_ENSURE(maybeFillTable);
             if (!BuildFillTableEffect(maybeFillTable.Cast(), ctx, newEffect, builtEffects.size())) {
                 return false;
             }
@@ -798,14 +798,14 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
 
                 TExprBase effect = [&returning]() {
                     if (auto maybeList = returning.Cast().Update().Maybe<TExprList>()) {
-                        AFL_ENSURE(maybeList.Cast().Size() == 1);
+                        YDB_LOG_ENSURE(maybeList.Cast().Size() == 1);
                         return maybeList.Cast().Item(0);
                     } else {
                         return returning.Cast().Update();
                     }
                 }();
 
-                AFL_ENSURE(std::none_of(returningEffects.begin(), returningEffects.end(), [&](const auto& info) {
+                YDB_LOG_ENSURE(std::none_of(returningEffects.begin(), returningEffects.end(), [&](const auto& info) {
                     return info.Effect.Get() == effect.Raw();
                 }));
                 returningEffects.push_back({effect.Ptr(), index, returning.Cast().Ptr()});
@@ -833,7 +833,7 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
             if (!BuildEffects(pair.second, returning, ctx, kqpCtx, builtEffects)) {
                 return {};
             }
-            AFL_ENSURE(!returning);
+            YDB_LOG_ENSURE(!returning);
         }
     } else {
         builtEffects.reserve(query.Effects().Size() * 2);
@@ -848,7 +848,7 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
                 }
 
                 if (returning) {
-                    AFL_ENSURE(kqpCtx.Config->GetEnableIndexStreamWrite());
+                    YDB_LOG_ENSURE(kqpCtx.Config->GetEnableIndexStreamWrite());
                     auto returningInfo = std::find_if(returningEffects.begin(), returningEffects.end(), [&](const auto& info) {
                         return info.Effect.Get() == effect.Raw();
                     });
@@ -866,11 +866,11 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
                         };
 
                         returningInfo = std::find_if(returningEffects.begin(), returningEffects.end(), matchesStatement);
-                        AFL_ENSURE(returningInfo == returningEffects.end()
+                        YDB_LOG_ENSURE(returningInfo == returningEffects.end()
                             || std::find_if(returningInfo + 1, returningEffects.end(), matchesStatement) == returningEffects.end());
                     }
 
-                    AFL_ENSURE(returningInfo != returningEffects.end());
+                    YDB_LOG_ENSURE(returningInfo != returningEffects.end());
                     const auto resultIndex = returningInfo->ResultIndex;
                     const auto returningList = TKqlReturningList(returningInfo->ReturningList);
                     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, returningList.Table().Path());
@@ -879,7 +879,7 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
                         table, returningList.Pos(), ctx).Ptr();
 
                     if (resultValue.Get() != returning.Get()) {
-                        AFL_ENSURE(TDqCnUnionAll::Match(returning.Get()));
+                        YDB_LOG_ENSURE(TDqCnUnionAll::Match(returning.Get()));
 
                         auto rows = Build<TCoArgument>(ctx, resultValue->Pos())
                             .Name("returning_rows")

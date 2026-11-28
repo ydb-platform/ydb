@@ -3514,7 +3514,7 @@ public:
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
 
             if (isTableStore) {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
                         TStringBuilder() << "TABLESTORE with not COLUMN store"));

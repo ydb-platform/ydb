@@ -76,7 +76,7 @@ private:
                 return;
             }
 
-            AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
+            YDB_LOG_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
             std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
             for (auto&& i : Fetcher->GetInput().GetPortions()) {
                 accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
@@ -341,10 +341,10 @@ private:
         std::vector<std::shared_ptr<TPortionDataAccessor>> accessors = context.ExtractPortionAccessors();
         auto blobs = TPortionDataAccessor::DecodeBlobAddresses(accessors, schemas, context.ExtractBlobs());
         for (ui64 i = 0; i < fetchingContext->GetInput().GetPortions().size(); ++i) {
-            AFL_VERIFY(i < accessors.size());
+            YDB_LOG_VERIFY(i < accessors.size());
             const auto& accessor = accessors[i];
             const auto& portion = fetchingContext->GetInput().GetPortions()[i];
-            AFL_VERIFY(accessor->GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
+            YDB_LOG_VERIFY(accessor->GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
 
             std::shared_ptr<NArrow::TGeneralContainer> container =
                 accessor->PrepareForAssemble(*schemas[i], *schemas[i], blobs[i]).AssembleToGeneralContainer({}).DetachResult();

@@ -97,8 +97,8 @@ public:
         : Request(request)
         , Processor(processor)
     {
-        AFL_VERIFY(Request);
-        AFL_VERIFY(Processor);
+        YDB_LOG_VERIFY(Request);
+        YDB_LOG_VERIFY(Processor);
     }
 };
 
@@ -115,7 +115,7 @@ public:
 
     public:
         const NKikimrSchemeOp::TColumnTableSchema& GetSchemaVerified() const {
-            AFL_VERIFY(Schema);
+            YDB_LOG_VERIFY(Schema);
             return *Schema;
         }
 
@@ -127,6 +127,7 @@ public:
             AFL_VERIFY(Schema || Diff);
         }
 
+<<<<<<< HEAD
         TSchemaInitializationData(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
             if (info.HasSchema()) {
                 Schema = info.GetSchema();
@@ -134,13 +135,18 @@ public:
             if (info.HasDiff()) {
                 Diff = info.GetDiff();
             }
+=======
+        const NKikimrSchemeOp::TColumnTableSchemaDiff& GetDiffVerified() const {
+            YDB_LOG_VERIFY(Diff);
+            return *Diff;
+>>>>>>> cad11bc393f (Draft [YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/tx/columnshard/engines (#59535))
         }
 
         ui64 GetVersion() const {
             if (Schema) {
                 return Schema->GetVersion();
             }
-            AFL_VERIFY(Diff);
+            YDB_LOG_VERIFY(Diff);
             return Diff->GetVersion();
         }
     };

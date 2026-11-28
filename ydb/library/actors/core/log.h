@@ -125,6 +125,10 @@
 #define LOG_DEBUG_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, sampleBy, stream)
 #define LOG_TRACE_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, sampleBy, stream)
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 85b8e77f856 ([YDB_LOG] Reimplement TRACE_EVENT (#54073))
 #define TRACE_EVENT(component)                                                              \
     const auto& currentTracer = component;                                                  \
     if (ev->HasEvent()) {                                                                   \
@@ -140,6 +144,19 @@
             {"eventType", ev->Type},                                                        \
             {"sender", ev->Sender.ToString()},                                              \
             {"recipient", ev->Recipient.ToString()});                                       \
+<<<<<<< HEAD
+=======
+#define TRACE_EVENT(component)                                                                                                         \
+    const auto& currentTracer = component;                                                                                             \
+    if (ev->HasEvent()) {                                                                                                              \
+        LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s: %s",                                  \
+                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), SelfId().ToString().data(), ev->ToString().substr(0, 1000).data()); \
+    } else {                                                                                                                           \
+        LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s",                                      \
+                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), ev->Recipient.ToString().data());                                          \
+>>>>>>> b38a01406b5 ([YDB_LOG] Remove LOG_LOG_S_THROTTLE/LOG_LOG_THROTTLE (#53919))
+=======
+>>>>>>> 85b8e77f856 ([YDB_LOG] Reimplement TRACE_EVENT (#54073))
     }
 
 #define TRACE_EVENT_TYPE(eventType)                                                         \
@@ -675,6 +692,12 @@ namespace NActors {
 
         [[noreturn]] ~TEnsureFormattedRecordWriter() noexcept(false);
     };
+
+    [[noreturn]] void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui64 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage);
+
+    [[noreturn]] void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui64 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage);
 }
 
 #define AFL_VERIFY(condition) if (condition) { static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); } else [[unlikely]] NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
@@ -693,6 +716,7 @@ namespace NActors {
             static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
             )("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 
+<<<<<<< HEAD
 #define ACTORS_LOG_STREAM(mPriority, mComponent) \
     if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
         else NActors::TRecordWriter(\
@@ -709,6 +733,10 @@ namespace NActors {
 #define ALS_ALERT(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_ALERT, component)
 #define ALS_EMERG(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_EMERG, component)
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 7bdb93e849a ([YDB_LOG] Remove AFL_ macroses (#53904))
 #define DETECT_LOG_MACRO(_1, _2, NAME, ...) NAME
 
 #define BASE_CFL_TRACE2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
@@ -740,6 +768,22 @@ namespace NActors {
 #define ACFL_CRIT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_CRIT2, BASE_CFL_CRIT1)(__VA_ARGS__)
 #define ACFL_ALERT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_ALERT2, BASE_CFL_ALERT1)(__VA_ARGS__)
 #define ACFL_EMERG(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_EMERG2, BASE_CFL_EMERG1)(__VA_ARGS__)
+<<<<<<< HEAD
+=======
+#define AFL_TRACE(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, component)
+#define AFL_DEBUG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, component)
+#define AFL_INFO(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, component)
+#define AFL_NOTICE(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_NOTICE, component)
+#define AFL_WARN(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_WARN, component)
+#define AFL_ERROR(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ERROR, component)
+#define AFL_CRIT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, component)
+#define AFL_ALERT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, component)
+#define AFL_EMERG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, component)
+>>>>>>> 97fe4cefe07 ([YDBV_LOG] Remove ACFL macroses (#53895))
+=======
+>>>>>>> 7bdb93e849a ([YDB_LOG] Remove AFL_ macroses (#53904))
+=======
+>>>>>>> 21d0f87ada4 ([YDB_LOG] Remove ALS_ macroses (#54030))
 
 #define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
     do { \
@@ -827,3 +871,39 @@ namespace NActors {
 #define YDB_LOG_DEBUG(T, ...) YDB_LOG(PRI_DEBUG, T, __VA_ARGS__)
 #define YDB_LOG_DEBUG_FAIL(T, ...) YDB_LOG_COMP_FAIL(PRI_DEBUG, YDB_LOG_THIS_FILE_COMPONENT, T, __VA_ARGS__)
 #define YDB_LOG_TRACE(T, ...) YDB_LOG(PRI_TRACE, T, __VA_ARGS__)
+
+#define YDB_LOG_VERIFY(condition, ...)                                                                                              \
+    do {                                                                                                                            \
+        if (condition) {                                                                                                            \
+            static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+        } else [[unlikely]] {                                                                                                       \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+            NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+        }                                                                                                                           \
+    } while (false)
+
+#define YDB_LOG_ENSURE(condition, ...)                                                                                              \
+    do {                                                                                                                            \
+        if (condition) {                                                                                                            \
+            static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+        } else [[unlikely]] {                                                                                                       \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+            NActors::LogEnsureFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+        }                                                                                                                           \
+    } while (false)
+
+/// Assert that depends on NDEBUG macro; the message is built from structured key/value pairs.
+#ifndef NDEBUG
+#define YDB_LOG_VERIFY_DEBUG YDB_LOG_VERIFY
+#else
+#define YDB_LOG_VERIFY_DEBUG(condition, ...)                                                                                        \
+    do {                                                                                                                            \
+        if (true); else [[unlikely]] {                                                                                              \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+            NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+        }                                                                                                                           \
+    } while (false)
+#endif

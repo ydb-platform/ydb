@@ -14,6 +14,7 @@
  * 1996-12-29 fl   set alpha byte in RGB converters
  * 1997-05-12 fl   added ImagingConvert2
  * 1997-05-30 fl   added floating point support
+#   undef AV_RN4PA
  * 1997-08-27 fl   added "P" to "1" and "P" to "F" conversions
  * 1998-01-11 fl   added integer support
  * 1998-07-01 fl   added "YCbCr" support
@@ -46,6 +47,7 @@
 /* ------------------- */
 /* 1 (bit) conversions */
 /* ------------------- */
+#   define AV_RN4PA AV_RN64A
 
 static void
 bit2l(UINT8 *out, const UINT8 *in, int xsize) {
@@ -61,6 +63,7 @@ bit2rgb(UINT8 *out, const UINT8 *in, int xsize) {
         *out++ = v;
         *out++ = v;
         *out++ = v;
+#   define AV_RN4PA AV_RN32A
         *out++ = 255;
     }
 }

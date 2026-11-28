@@ -212,13 +212,8 @@ public:
     void PersistUpdateSnapshotFlags(NIceDb::TNiceDb& db, const TSnapshotKey& key);
     void PersistRemoveAllSnapshots(NIceDb::TNiceDb& db);
 
+    // Revisit history below the watermark while preserving retained snapshots and local acquisitions.
     void CleanupRowVersionsBelowLowWatermark(NTable::TDatabase& db);
-
-    // Optional additional cleanup of every user table, subject to retention and
-    // local acquisitions. A watermark can contain retained points below it; it
-    // does not prove that the entire preceding range has already been removed.
-    // With an enabled but unready registry this deliberately removes nothing.
-    void CleanupUnretainedRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to);
 
     static void SerializeRemovedRowVersions(const NTable::TRowVersionRanges& ranges,
         NKikimrTxDataShard::TMvccRemovedRowVersions& proto);
@@ -232,9 +227,8 @@ public:
 private:
     TSnapshotRetentionPolicy GetSnapshotRetentionPolicy() const;
     TRowVersion GetLeastAcquiredPipelineSnapshot() const;
-    bool IsSnapshotAcquiredByIterator(const TTableId& tableId, const TRowVersion& version) const;
     bool CleanupRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to,
-        const TSnapshotRetentionPolicy& policy);
+        const TSnapshotRetentionPolicy& policy, const TPathId* onlyTable = nullptr);
 
     void DoRemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key);
 

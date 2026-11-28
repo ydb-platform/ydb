@@ -20,7 +20,7 @@ namespace {
 class TSnapshotRetentionTest {
 public:
     explicit TSnapshotRetentionTest(bool serviceRegistry = false, ui32 nodeCount = 1,
-        bool enableDataShardLocking = true)
+        bool enableDataShardLocking = true, NKikimrHive::TEvCreateTablet* shardAPlacement = nullptr)
     {
         NKikimrConfig::TAppConfig app;
         app.MutableFeatureFlags()->SetEnableSnapshotsLocking(false);
@@ -62,10 +62,15 @@ public:
         }
         ui32 tableNode = 0;
         auto pinTables = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
-            ev->Get()->Record.ClearAllowedNodeIDs();
-            ev->Get()->Record.AddAllowedNodeIDs(runtime.GetNodeId(tableNode));
+            auto& record = ev->Get()->Record;
+            record.ClearAllowedNodeIDs();
+            record.AddAllowedNodeIDs(runtime.GetNodeId(tableNode));
+            if (shardAPlacement && record.GetTabletType() == TTabletTypes::DataShard) {
+                *shardAPlacement = record;
+            }
         });
         CreateShardedTable(Server, Sender, "/Root", "table-a", 1);
+        shardAPlacement = nullptr;
         tableNode = nodeCount - 1;
         CreateShardedTable(Server, Sender, "/Root", "table-b", 1);
         pinTables.Remove();
@@ -186,16 +191,19 @@ void TestPersistentAndRegistryRetention(bool registryReleasedFirst) {
     TSnapshotRetentionTest test;
     test.WriteVersion(1);
     const auto snapshot = CreateVolatileSnapshot(test.Server, {"/Root/table-a"}, TDuration::Hours(1));
+    // Pin the cleanup boundary just past the snapshot through both releases.
+    const TRowVersion boundary(snapshot.Step + 1, 0);
     test.GetRuntime().SimulateSleep(TDuration::Seconds(1));
     test.WriteVersion(2);
     test.GetRuntime().SimulateSleep(TDuration::Seconds(3));
-    test.PublishRegistry({snapshot}, {test.TableA});
+    test.PublishRegistry({snapshot}, {test.TableA}, boundary);
     test.RunCleanup();
+    UNIT_ASSERT_VALUES_EQUAL(test.GetCleanupBoundary(test.ShardA), boundary);
     UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
     UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
 
     if (registryReleasedFirst) {
-        test.PublishRegistry();
+        test.PublishRegistry({}, {}, boundary);
     } else {
         UNIT_ASSERT(DiscardVolatileSnapshot(test.Server, {"/Root/table-a"}, snapshot));
     }
@@ -205,10 +213,11 @@ void TestPersistentAndRegistryRetention(bool registryReleasedFirst) {
     if (registryReleasedFirst) {
         UNIT_ASSERT(DiscardVolatileSnapshot(test.Server, {"/Root/table-a"}, snapshot));
     } else {
-        test.PublishRegistry();
+        test.PublishRegistry({}, {}, boundary);
     }
     test.RunCleanup();
     UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+    UNIT_ASSERT_VALUES_EQUAL(test.GetCleanupBoundary(test.ShardA), boundary);
 }
 
 } // namespace
@@ -296,6 +305,55 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionCleanup) {
 
     Y_UNIT_TEST(RegistryRegistrationOutlivesPersistentSnapshot) {
         TestPersistentAndRegistryRetention(false);
+    }
+
+    Y_UNIT_TEST(DiscardedSnapshotStaysUnreadableAfterFailoverWithUnreadyRegistry) {
+        auto move = MakeHolder<TEvHive::TEvCreateTablet>();
+        TSnapshotRetentionTest test(false, 2, true, &move->Record);
+        auto& runtime = test.GetRuntime();
+        UNIT_ASSERT_VALUES_EQUAL(ResolveTablet(runtime, test.ShardA).NodeId(), runtime.GetNodeId(0));
+        test.WriteVersion(1);
+        const auto snapshot = CreateVolatileSnapshot(test.Server, {"/Root/table-a"}, TDuration::Hours(1));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        const auto control = test.WriteVersion(2);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        test.WriteVersion(3);
+        runtime.SimulateSleep(TDuration::Seconds(3));
+
+        // Let the scheduled sweep run with both points held, then keep the next one past discard.
+        runtime.GetAppData(0).DataShardConfig.SetCleanupSnapshotPeriod(TDuration::Hours(1).MilliSeconds());
+        test.PublishRegistry({control}, {test.TableA});
+        test.RunCleanup();
+        UNIT_ASSERT(control < test.GetCleanupBoundary(test.ShardA));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, control));
+
+        test.PublishRegistry();
+        UNIT_ASSERT(DiscardVolatileSnapshot(test.Server, {"/Root/table-a"}, snapshot));
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+        const auto before = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(before->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+
+        // Move the leader to the node whose registry is still loading.
+        UNIT_ASSERT(!runtime.GetAppData(1).SnapshotRegistryHolder->Get());
+        move->Record.ClearAllowedNodeIDs();
+        move->Record.AddAllowedNodeIDs(runtime.GetNodeId(1));
+        const auto hive = Tests::ChangeStateStorage(Tests::Hive, test.Server->GetSettings().Domain);
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(hive, sender, move.Release());
+        const auto reply = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(sender, TDuration::Seconds(5));
+        UNIT_ASSERT(reply);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetTabletID(), test.ShardA);
+        RebootTablet(runtime, test.ShardA, test.Sender);
+        UNIT_ASSERT_VALUES_EQUAL(ResolveTablet(runtime, test.ShardA).NodeId(), runtime.GetNodeId(1));
+        UNIT_ASSERT(!runtime.GetAppData(1).SnapshotRegistryHolder->Get());
+        const auto after = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(after->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+        // A periodic sweep after unregistering the control would have removed this point as well.
+        const auto other = test.ReadSnapshot(test.ShardA, test.TableA, control);
+        UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(other.get()), "1, 2\n");
     }
 
     Y_UNIT_TEST(RetainedPointSurvivesCompactionAndRestart) {

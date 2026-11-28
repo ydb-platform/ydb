@@ -10,6 +10,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
@@ -172,6 +173,15 @@ NKikimrPQ::TPQTabletConfig DescribeTabletConfig(
     return topic.Info->Description.GetPQTabletConfig();
 
 
+}
+
+void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query) {
+    NYdb::TDriver driver(setup.MakeDriverConfig());
+    NYdb::NQuery::TQueryClient client(driver);
+    auto session = client.GetSession().GetValueSync().GetSession();
+    auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    driver.Stop(true);
 }
 
 } // namespace
@@ -555,6 +565,57 @@ Y_UNIT_TEST(DescribeReplicateOffsets) {
                 rule.consumer_name() != "user" || replicateOffsets.value_or(true));
         }
     }
+}
+
+Y_UNIT_TEST(AlterCdcAddsReplicationConsumer) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
+    ExecuteDDL(*setup, "CREATE TABLE cdc_source (id Uint64, PRIMARY KEY (id))");
+    ExecuteDDL(*setup, "ALTER TABLE cdc_source ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
+
+    const TString path = "/Root/cdc_source/feed";
+    auto add = [&](const TString& name) {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* consumer = request.add_add_consumers();
+        consumer->set_name(name);
+        consumer->set_important(true);
+        (*request.mutable_alter_attributes())["_ydb_replication_consumer"] = name;
+        return request;
+    };
+    auto alter = [&](const Ydb::Topic::AlterTopicRequest& request) {
+        return DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, path);
+    };
+
+    auto request = add("mirror");
+    request.clear_alter_attributes();
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    const TString mismatch = "Existing CDC consumer does not match the replication consumer";
+    AssertStatus(alter(add("mirror")), Ydb::StatusIds::PRECONDITION_FAILED, mismatch);
+
+    // Explicit replacement remains a valid batch; duplicate replay must match the installed consumer.
+    request = add("mirror");
+    request.add_drop_consumers("mirror");
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    AssertStatus(alter(add("mirror")), Ydb::StatusIds::ALREADY_EXISTS);
+
+    request.Clear();
+    request.set_path(path);
+    auto* consumer = request.add_alter_consumers();
+    consumer->set_name("mirror");
+    consumer->set_set_important(false);
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    AssertStatus(alter(add("mirror")), Ydb::StatusIds::PRECONDITION_FAILED, mismatch);
+    consumer->set_set_important(true);
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    AssertStatus(alter(add("other")), Ydb::StatusIds::PRECONDITION_FAILED, "CDC stream already has a replication consumer");
+    const auto config = DescribeTabletConfig(runtime, path, "/Root", true);
+    const auto* mirror = NPQ::GetConsumer(config, "mirror");
+    UNIT_ASSERT(mirror && mirror->GetImportant());
+    UNIT_ASSERT(mirror->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    UNIT_ASSERT(!NPQ::GetConsumer(config, "other"));
 }
 
 } // Y_UNIT_TEST_SUITE(SchemaOps_TopicAPI)

@@ -4,6 +4,8 @@ option cc_enable_arenas = true;
 package Ydb.Cms;
 option java_package = "com.yandex.ydb.cms";
 
+import "google/protobuf/timestamp.proto";
+
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
@@ -250,10 +252,33 @@ message AlterDatabaseRequest {
     ScaleRecommenderPolicies scale_recommender_policies = 13;
     // Storage units to deallocate
     repeated StorageUnits storage_units_to_remove = 14;
+
+    // Enable data-read-only mode and wait for outstanding row-table updates and CDC delivery to topics.
+    // false resumes writes. Omission leaves the mode unchanged.
+    // Must not be combined with other database changes.
+    // ASYNC returns an operation id; SUCCESS means all participating shards applied it.
+    // Confirm cluster support before changing data_read_only; the SDK version is insufficient.
+    // Do not probe support with this call: an old Console may increment generation
+    // before UNSUPPORTED is returned.
+    // Before enabling data_read_only for a database served by a shared SchemeShard, wait until
+    // GetDatabaseStatus reports RUNNING after all prior quota changes.
+    // Prevent concurrent administrative changes during this check and mode transition.
+    // With a dedicated SchemeShard, RUNNING does not confirm quota propagation.
+    optional bool data_read_only = 15;
 }
 
 message AlterDatabaseResponse {
     Ydb.Operations.Operation operation = 1;
+}
+
+// Operation.metadata for an unfinished data_read_only mode transition.
+// Diagnostics are best-effort and become available again after Console recovery.
+message DatabaseReadOnlyMetadata {
+    // Latest diagnostic from SchemeShard: current stage and reasons for waiting.
+    // This is informational text, not the final operation status or an error.
+    string details = 1;
+    // Time Console last received this diagnostic. Details are not persisted.
+    google.protobuf.Timestamp update_time = 2;
 }
 
 // List all databases known by CMS.

@@ -1,3 +1,6 @@
+
+* Added `TAlterDatabaseSettings::DataReadOnly(bool)` to enable data-read-only mode, wait for outstanding row-table updates and CDC delivery to topics, or resume writes. `OperationTimeout` limits the wait without cancelling the accepted operation.
+
 ## v3.28.0
 
 * Fixed endpoint pessimization percentages so unhealthy endpoint pools trigger discovery correctly, including pools with more than 100 endpoints.

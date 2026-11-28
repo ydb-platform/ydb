@@ -2,6 +2,7 @@ RECURSE(
     build_info
     config
     connection_string
+    cms
     coordination
     discovery_mutator
     draft

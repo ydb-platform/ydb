@@ -11,6 +11,8 @@
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/cms/cms.h>
+
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -38,8 +40,31 @@ public:
         AddCommand(std::make_unique<TCommandDatabaseDump>());
         AddCommand(std::make_unique<TCommandDatabaseRestore>());
         AddCommand(std::make_unique<TCommandDatabaseAttribute>());
+        AddCommand(std::make_unique<TCommandDatabaseReadOnly>(true));
+        AddCommand(std::make_unique<TCommandDatabaseReadOnly>(false));
     }
 };
+
+TCommandDatabaseReadOnly::TCommandDatabaseReadOnly(bool dataReadOnly)
+    : TYdbSimpleCommand(dataReadOnly ? "data-read-only" : "data-read-write", {},
+        dataReadOnly ? "Enable data-read-only mode and wait for outstanding updates and CDC delivery to topics"
+                     : "Disable data-read-only mode and resume database modifications")
+    , DataReadOnly(dataReadOnly)
+{}
+
+void TCommandDatabaseReadOnly::Config(TConfig& config) {
+    TYdbSimpleCommand::Config(config);
+    config.SetFreeArgsNum(0);
+}
+
+int TCommandDatabaseReadOnly::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    NCms::TCmsClient client(driver);
+    auto settings = NCms::TAlterDatabaseSettings().DataReadOnly(DataReadOnly);
+    auto status = client.AlterDatabase(config.Database, FillSettings(settings)).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
+    return EXIT_SUCCESS;
+}
 
 TCommandDatabaseDump::TCommandDatabaseDump()
     : TYdbReadOnlyCommand("dump", {}, "Dump database into local directory")

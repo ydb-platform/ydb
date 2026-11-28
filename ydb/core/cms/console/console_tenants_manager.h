@@ -471,6 +471,7 @@ public:
         enum EAction {
             CREATE = 1,
             REMOVE,
+            SET_FREEZE,
         };
 
         TTenant(const TString &path,
@@ -487,6 +488,7 @@ public:
         bool IsCreating() const;
         bool IsRemoving() const;
         bool IsRunning() const;
+        ui64 FreezeEpoch = 0;
         bool HasPoolsToCreate() const;
         bool HasPoolsToDelete() const;
         bool HasSubDomainKey() const;
@@ -749,6 +751,16 @@ public:
 
 public:
     class TTxAlterTenant;
+    class TTxFreezeTenant;
+    class TTxFreezeTenantDone;
+    ITransaction* CreateTxFreezeTenant(TEvConsole::TEvAlterTenantRequest::TPtr& ev);
+    ITransaction* CreateTxFreezeTenantDone(ui64 epoch, ui32 status, const TString& issue);
+    void StartDatabaseFreeze(ui64 epoch, const TActorContext& ctx);
+    void IndexDatabaseFreezeOperation(const NKikimrConsole::TDatabaseFreezeOperation& operation);
+    void FillDatabaseFreezeOperation(ui64 epoch, Ydb::Operations::Operation& result);
+    void NotifyDatabaseFreeze(ui64 epoch, const TActorContext& ctx);
+    bool IsDatabaseFreezePending(TTenant::TPtr tenant) const;
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDatabaseFreezeResult::TPtr& ev, const TActorContext& ctx);
     class TTxCreateTenant;
     class TTxRemoveComputationalUnits;
     class TTxRemoveTenant;
@@ -853,7 +865,8 @@ public:
     void CreateTenantSubDomain(TTenant::TPtr tenant, const TActorContext &ctx);
     void DeleteTenantSubDomain(TTenant::TPtr tenant, const TActorContext &ctx);
     void ProcessTenantActions(TTenant::TPtr tenant, const TActorContext &ctx);
-    TTenant::TPtr FillOperationStatus(const TString &id, Ydb::Operations::Operation &operation);
+    TTenant::TPtr FillOperationStatus(const TString &id, const TString &token,
+                                      Ydb::Operations::Operation &operation, const TActorContext &ctx);
     void SendTenantNotifications(TTenant::TPtr tenant, TTenant::EAction action,
                                  Ydb::StatusIds::StatusCode code, const TActorContext &ctx);
     void DumpStateHTML(IOutputStream &os);
@@ -1000,6 +1013,7 @@ public:
         TRACE_EVENT(NKikimrServices::CMS_TENANTS);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvConsole::TEvAlterTenantRequest, Handle);
+            HFuncTraced(NSchemeShard::TEvSchemeShard::TEvDatabaseFreezeResult, Handle);
             HFuncTraced(TEvConsole::TEvCreateTenantRequest, Handle);
             HFuncTraced(TEvConsole::TEvDescribeTenantOptionsRequest, Handle);
             HFuncTraced(TEvConsole::TEvGetOperationRequest, Handle);
@@ -1071,6 +1085,12 @@ private:
     THashMap<TString, TTenant::TPtr> Tenants;
     THashMap<TDomainId, TString> TenantIdToName;
     THashMap<TString, TRemovedTenant> RemovedTenants;
+    ui64 NextDatabaseFreezeEpoch = 1;
+    THashMap<ui64, NKikimrConsole::TDatabaseFreezeOperation> DatabaseFreezeOperations;
+    THashMap<std::pair<TDomainId, TString>, ui64> DatabaseFreezeIdempotencyKeys;
+    THashMap<ui64, Ydb::Cms::DatabaseReadOnlyMetadata> DatabaseFreezeProgress;
+    THashMap<ui64, TActorId> DatabaseFreezeWorkers;
+    THashMap<ui64, TVector<TActorId>> DatabaseFreezeSubscribers;
     TTenantsConfig Config;
     TTxProcessor::TPtr TxProcessor;
     TQueue<THolder<ITransaction>> DelayedTxs;

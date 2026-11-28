@@ -12,6 +12,16 @@ protected:
     virtual void Config(TConfig& config) override;
 };
 
+class TCommandDatabaseReadOnly : public TYdbSimpleCommand {
+public:
+    explicit TCommandDatabaseReadOnly(bool dataReadOnly);
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    const bool DataReadOnly;
+};
+
 class TCommandDatabaseDump : public TYdbReadOnlyCommand {
 public:
     TCommandDatabaseDump();

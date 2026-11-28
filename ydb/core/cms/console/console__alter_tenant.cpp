@@ -71,6 +71,16 @@ public:
             return true;
         }
 
+        if (Self->IsDatabaseFreezePending(Tenant)) {
+            return Error(Ydb::StatusIds::UNAVAILABLE, "Database data_read_only operation is in progress", ctx);
+        }
+        if (Tenant->FreezeEpoch) {
+            const auto& freeze = Self->DatabaseFreezeOperations.at(Tenant->FreezeEpoch);
+            if (freeze.GetFreeze() || freeze.GetStatus() != Ydb::StatusIds::SUCCESS) {
+                return Error(Ydb::StatusIds::PRECONDITION_FAILED, "Disable data_read_only before altering the database", ctx);
+            }
+        }
+
         // Check generation.
         if (rec.generation() && rec.generation() != Tenant->Generation)
             return Error(Ydb::StatusIds::BAD_REQUEST,

@@ -1,3 +1,4 @@
+* Added `ydb admin database data-read-only` and `ydb admin database data-read-write` commands to enable data-read-only mode, wait for outstanding updates and CDC delivery to topics, and resume database modifications. Both commands wait for completion and support a client `--timeout`.
 
 ## 2.36.0 ##
 

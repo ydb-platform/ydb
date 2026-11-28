@@ -28,7 +28,13 @@ public:
     ~TAlterTopicOperationActor() = default;
 
     void Bootstrap() {
-        DoDescribe();
+        // Read the topic after the cluster list so ApplyIf uses a path version
+        // taken just before the alter, not one captured across the cluster-list round trip.
+        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            DoDescribe();
+        } else {
+            DoGetClustersList();
+        }
     }
 
     TStructuredMessage BuildLogPrefix() const override {
@@ -66,11 +72,7 @@ private:
         TopicInfo = std::move(topics.begin()->second);
         switch(TopicInfo.Status) {
             case NDescriber::EStatus::Success: {
-                if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-                    return DoAlter();
-                } else {
-                    return DoGetClustersList();
-                }
+                return DoAlter();
             }
             case NDescriber::EStatus::NotFound: {
                 if (Settings.IfExists) {
@@ -115,7 +117,7 @@ private:
             ClustersList = std::move(response.ClustersList);
         }
 
-        return DoAlter();
+        return DoDescribe();
     }
 
     STFUNC(GetClustersListState) {

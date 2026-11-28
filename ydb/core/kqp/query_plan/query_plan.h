@@ -32,7 +32,10 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const 
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans);
 
-TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan);
+// Shared runtime query statistics, published under the root Query node's Stats.
+NJson::TJsonValue BuildQueryStats(const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId);
+
+TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan, const NJson::TJsonValue& queryStats = {});
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");
 
 } // namespace NKikimr::NKqp

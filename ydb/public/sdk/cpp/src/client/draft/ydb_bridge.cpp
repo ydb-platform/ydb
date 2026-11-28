@@ -157,6 +157,7 @@ public:
                                     const std::vector<std::string>& quorumPiles, const TUpdateClusterStateSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::UpdateClusterStateRequest>(settings);
         UpdatesToProto(updates, &request);
+        request.set_skip_bootstrap_placement_check(settings.SkipBootstrapPlacementCheck_);
         for (const auto& quorumPile : quorumPiles) {
             request.add_quorum_piles(quorumPile);
         }

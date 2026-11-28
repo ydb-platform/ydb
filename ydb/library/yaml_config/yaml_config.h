@@ -91,6 +91,10 @@ NKikimrConfig::TAppConfig YamlToProto(
     bool preTransform = true,
     TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector = nullptr);
 
+// A null bootstrap section uses the merged startup configuration. Both arguments are valid only during the visit.
+void EnumerateBootstrapPlacementConfigs(NFyaml::TDocument& doc,
+    const std::function<void(const NKikimrConfig::TBootstrap*, const TProjectionMatches&)>& visit);
+
 /**
  * Resolves config for given labels and stores result to appConfig
  * Stores intermediate resolve data in resolvedYamlConfig and resolvedJsonConfig if given

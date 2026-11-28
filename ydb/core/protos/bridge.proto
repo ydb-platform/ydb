@@ -102,6 +102,10 @@ message TClusterStateDetails {
     // was started with), so that a notification of BSC delivered late can't finish the conversion following a rollback;
     // 0 for conversions started by older versions
     uint64 BscConversionId = 8;
+
+    // Cluster state generation whose pending planned promotion was explicitly authorized.
+    // A completed or superseded promotion cannot authorize a later one.
+    uint64 BootstrapPlacementOverrideGeneration = 9;
 }
 
 // left in the storage config by the rollback of the bridged cluster to ordinary one

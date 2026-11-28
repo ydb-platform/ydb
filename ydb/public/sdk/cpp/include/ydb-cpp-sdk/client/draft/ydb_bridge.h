@@ -24,6 +24,7 @@ struct TUpdateClusterStateSettings: public TOperationRequestSettings<TUpdateClus
     //! the update was applied: once a greater generation is observed, the update can no longer be applied.
     //! Nodes of older versions ignore it. If unset, the update is applied on top of the node's current state.
     FLUENT_SETTING_OPTIONAL(uint64_t, ExpectedGeneration);
+    FLUENT_SETTING_DEFAULT(bool, SkipBootstrapPlacementCheck, false);
 };
 
 struct TGetClusterStateSettings: public TOperationRequestSettings<TGetClusterStateSettings> {

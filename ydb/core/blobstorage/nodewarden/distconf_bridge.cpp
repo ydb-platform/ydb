@@ -62,8 +62,8 @@ namespace NKikimr::NStorage {
             if (clusterState->GetPrimaryPile() != clusterState->GetPromotedPile()) {
                 const auto promotedPileId = TBridgePileId::FromProto(clusterState, &NKikimrBridge::TClusterState::GetPromotedPile);
                 if (promotedPileId.GetPileIndex() < clusterState->PerPileStateSize() &&
-                        clusterState->GetPerPileState(promotedPileId.GetPileIndex()) == NKikimrBridge::TClusterState::SYNCHRONIZED) {
-                    // TODO(alexvru): some external conditions? wait for external components?
+                        clusterState->GetPerPileState(promotedPileId.GetPileIndex()) == NKikimrBridge::TClusterState::SYNCHRONIZED &&
+                        (HasBootstrapPlacementOverride(*config) || CheckBootstrapPlacement(GetBootstrapPlacement(*config), promotedPileId))) {
                     promotedPileId.CopyToProto(clusterState, &NKikimrBridge::TClusterState::SetPrimaryPile);
                     changes = true;
                 }

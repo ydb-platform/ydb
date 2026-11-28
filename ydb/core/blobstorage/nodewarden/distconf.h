@@ -88,6 +88,9 @@ namespace NKikimr::NStorage {
         using TEvGather = NKikimrBlobStorage::TEvNodeConfigGather;
         using TEvScatter = NKikimrBlobStorage::TEvNodeConfigScatter;
 
+        struct TBootstrapPlacement;
+        using TBootstrapPlacementIssues = TMap<TBridgePileId, std::vector<TString>>;
+
         struct TEvPrivate {
             enum {
                EvProcessPendingEvent = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -108,7 +111,16 @@ namespace NKikimr::NStorage {
                EvScatterTaskTimeout,
                EvUpdateBridgeFeatureRequirement,
                EvHalt,
+               EvBootstrapPlacement,
+               EvBootstrapPlacementReady,
             };
+
+            struct TEvBootstrapPlacement : TEventLocal<TEvBootstrapPlacement, EvBootstrapPlacement> {
+                std::shared_ptr<TBootstrapPlacement> Entry;
+                TBootstrapPlacementIssues Issues;
+            };
+
+            struct TEvBootstrapPlacementReady : TEventLocal<TEvBootstrapPlacementReady, EvBootstrapPlacementReady> {};
 
             struct TEvUpdateBridgeFeatureRequirement
                 : TEventLocal<TEvUpdateBridgeFeatureRequirement, EvUpdateBridgeFeatureRequirement> {
@@ -305,6 +317,16 @@ namespace NKikimr::NStorage {
         TString MainConfigFetchYaml; // the part we would get is we fetch from console
         ui64 MainConfigFetchYamlHash = 0;
         std::optional<TString> StorageConfigYaml; // set if dedicated storage yaml is enabled; otherwise nullopt
+
+        std::array<std::shared_ptr<TBootstrapPlacement>, 2> BootstrapPlacements;
+        std::shared_ptr<TBootstrapPlacement> GetBootstrapPlacement(const NKikimrBlobStorage::TStorageConfig& config);
+        static bool CheckBootstrapPlacement(const std::shared_ptr<TBootstrapPlacement>& entry, TBridgePileId target,
+            std::vector<TString>* warnings = nullptr);
+        void CheckBootstrapPlacementChange(const NKikimrBlobStorage::TStorageConfig& current,
+            NKikimrBlobStorage::TStorageConfig& proposed, bool force, std::vector<TString>& warnings);
+        static bool HasBootstrapPlacementOverride(const NKikimrBlobStorage::TStorageConfig& config);
+        static bool IsEmergencyPileDisconnect(const NKikimrBridge::TClusterState& before, const NKikimrBridge::TClusterState& after);
+        void Handle(TEvPrivate::TEvBootstrapPlacement::TPtr ev);
 
         // base config from config file
         TStorageConfigPtr BaseConfig;
@@ -692,7 +714,8 @@ namespace NKikimr::NStorage {
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev,
-            bool advancesConflictingGeneration = false, bool recoveryProposition = false);
+            bool advancesConflictingGeneration, bool recoveryProposition, bool skipBootstrapPlacementCheck,
+            std::vector<TString>& warnings);
 
         void CheckForConfigUpdate();
 

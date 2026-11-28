@@ -14,6 +14,12 @@
 namespace NYdb::NConsoleClient {
 
 namespace {
+    void AddBootstrapPlacementOption(TClientCommand::TConfig& config, bool& skip) {
+        config.Opts->AddLongOption("skip-bootstrap-placement-check",
+            "Allow promotion even if system tablet bootstrap placement cannot be verified.")
+            .StoreTrue(&skip);
+    }
+
     NYdb::NBridge::EPileState ParsePileState(TString stateStr) {
         TString stateStrUpper = stateStr;
         stateStrUpper.to_upper();
@@ -116,6 +122,7 @@ TCommandBridgeUpdate::TCommandBridgeUpdate(bool allowEmptyDatabase)
 
 void TCommandBridgeUpdate::Config(TConfig& config) {
     TYdbCommand::Config(config);
+    AddBootstrapPlacementOption(config, SkipBootstrapPlacementCheck);
     config.Opts->AddLongOption("set", "Set new state for a pile. Format: <pile-name>:<state>. Can be used multiple times.")
         .RequiredArgument("NAME:STATE").Handler([this](const TString& value) {
             PileStateUpdates.push_back(value);
@@ -182,6 +189,7 @@ int TCommandBridgeUpdate::Run(TConfig& config) {
     auto client = NYdb::NBridge::TBridgeClient(driver);
 
     NYdb::NBridge::TUpdateClusterStateSettings settings;
+    settings.SkipBootstrapPlacementCheck(SkipBootstrapPlacementCheck);
     if (ExpectedGeneration) {
         settings.ExpectedGeneration(*ExpectedGeneration);
     }
@@ -251,6 +259,7 @@ TCommandBridgeSwitchover::TCommandBridgeSwitchover(bool allowEmptyDatabase)
 
 void TCommandBridgeSwitchover::Config(TConfig& config) {
     TYdbCommand::Config(config);
+    AddBootstrapPlacementOption(config, SkipBootstrapPlacementCheck);
     config.Opts->AddLongOption("new-primary", "Name of the pile to become the new primary.")
         .Required().RequiredArgument("PILE_NAME").StoreResult(&NewPrimaryPile);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
@@ -268,7 +277,9 @@ int TCommandBridgeSwitchover::Run(TConfig& config) {
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTED});
 
-    auto result = client.UpdateClusterState(updates, {}).GetValueSync();
+    NYdb::NBridge::TUpdateClusterStateSettings settings;
+    settings.SkipBootstrapPlacementCheck(SkipBootstrapPlacementCheck);
+    auto result = client.UpdateClusterState(updates, {}, settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster state updated successfully." << Endl;
@@ -324,6 +335,7 @@ TCommandBridgeTakedown::TCommandBridgeTakedown(bool allowEmptyDatabase)
 
 void TCommandBridgeTakedown::Config(TConfig& config) {
     TYdbCommand::Config(config);
+    AddBootstrapPlacementOption(config, SkipBootstrapPlacementCheck);
     config.Opts->AddLongOption("pile", "Name of the pile to take down.")
         .Required().RequiredArgument("PILE_NAME").StoreResult(&DownPile);
     config.Opts->AddLongOption("new-primary", "Name of the pile to become the new primary (optional, only if the target pile was the primary).")
@@ -346,7 +358,9 @@ int TCommandBridgeTakedown::Run(TConfig& config) {
         updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTED});
     }
 
-    auto result = client.UpdateClusterState(updates, {}).GetValueSync();
+    NYdb::NBridge::TUpdateClusterStateSettings settings;
+    settings.SkipBootstrapPlacementCheck(SkipBootstrapPlacementCheck);
+    auto result = client.UpdateClusterState(updates, {}, settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster state updated successfully." << Endl;

@@ -571,6 +571,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvPrivate::TEvStorageConfigLoaded, Handle);
             hFunc(TEvPrivate::TEvStorageConfigStored, Handle);
             hFunc(TEvPrivate::TEvScatterTaskTimeout, Handle);
+            hFunc(TEvPrivate::TEvBootstrapPlacement, Handle);
             fFunc(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, HandleConfigConfirm);
             hFunc(TEvNodeWardenDynamicConfigSubscribe, Handle);
             hFunc(TEvNodeWardenDynamicConfigPush, Handle);

@@ -38,6 +38,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
+    bool SkipBootstrapPlacementCheck = false;
     bool AllowEmptyDatabase = false;
 
     TVector<TString> PileStateUpdates;
@@ -89,6 +90,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
+    bool SkipBootstrapPlacementCheck = false;
     bool AllowEmptyDatabase = false;
     TString NewPrimaryPile;
 };
@@ -115,6 +117,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
+    bool SkipBootstrapPlacementCheck = false;
     bool AllowEmptyDatabase = false;
     TString DownPile;
     TString NewPrimaryPile;

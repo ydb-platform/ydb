@@ -16,6 +16,8 @@
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <google/protobuf/util/message_differencer.h>
+#include <util/generic/algorithm.h>
+
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
@@ -419,7 +421,15 @@ namespace NKikimr::NStorage {
         if (!NewYaml && !NewStorageYaml) {
             if (request.HasSwitchDedicatedStorageSection()) {
                 throw TExError() << "Switching dedicated storage section mode without providing any new config";
-            } else if (!IsDryRun && Self->StorageConfig->GetGeneration()
+            }
+            const auto placement = Self->GetBootstrapPlacement(*Self->StorageConfig);
+            if (AwaitBootstrapPlacement(placement, [this] {
+                    ReplaceStorageConfig(std::get<TInvokeExternalOperation>(Query).Command.GetReplaceStorageConfig());
+                })) {
+                return;
+            }
+            Self->CheckBootstrapPlacement(placement, {}, &BootstrapPlacementWarnings);
+            if (!IsDryRun && Self->StorageConfig->GetGeneration()
                     && (Self->SelfManagementEnabled || IsDisablingDistconf(*Self->StorageConfig))) {
                 return StartCommitConfirmation();
             } else { // finish this request prematurely: no configs are actually changed
@@ -666,12 +676,21 @@ namespace NKikimr::NStorage {
             ReplaceStorageConfigExecute();
         } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml, request.GetAllowUnknownFields())) {
             throw TExRace() << "Console pipe is not available";
+        } else if (ControllerOp == EControllerOp::DISABLE_DISTCONF) {
+            ProposedStorageConfig.ClearConfigComposite();
+            ProposedStorageConfig.ClearCompressedStorageYaml();
+            ProposedStorageConfig.ClearExpectedStorageYamlVersion();
         }
     }
 
     void TInvokeRequestHandlerActor::ReplaceStorageConfigExecute() {
         Y_ABORT_UNLESS(!LifetimeToken.expired());
         WaitingForConfigValidation = false;
+        const auto placement = Self->GetBootstrapPlacement(ProposedStorageConfig);
+        if (AwaitBootstrapPlacement(placement, [this] { ReplaceStorageConfigExecute(); })) {
+            return;
+        }
+        Self->CheckBootstrapPlacement(placement, {}, &BootstrapPlacementWarnings);
 
         if (IsDryRun) {
             return Finish(TResult::OK, std::nullopt);
@@ -1116,9 +1135,6 @@ namespace NKikimr::NStorage {
                     : 0;
                 ReplaceStorageConfigResume(Self->StorageConfigYaml, expectedMainYamlVersion,
                     Self->StorageConfig->GetExpectedStorageYamlVersion(), false);
-                ProposedStorageConfig.ClearConfigComposite();
-                ProposedStorageConfig.ClearCompressedStorageYaml();
-                ProposedStorageConfig.ClearExpectedStorageYamlVersion();
                 break;
             }
 

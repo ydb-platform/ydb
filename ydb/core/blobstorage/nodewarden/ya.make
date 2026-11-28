@@ -9,6 +9,7 @@ SRCS(
     distconf.h
     distconf_binding.cpp
     distconf_bridge.cpp
+    distconf_bootstrap_placement.cpp
     distconf_cache.cpp
     distconf_connectivity.cpp
     distconf_console.cpp

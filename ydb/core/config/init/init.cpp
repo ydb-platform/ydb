@@ -838,10 +838,7 @@ void ApplyMainYamlConfig(
     auto main = LoadYamlAsJsonOrThrow(mainYamlConfigString, yamlConfigs.MainSource);
     if (storageYamlConfigString) {
         auto storage = LoadYamlAsJsonOrThrow(*storageYamlConfigString, yamlConfigs.StorageSource ? *yamlConfigs.StorageSource : TStringBuf{});
-        auto& target = main["config"].GetMapSafe();
-        for (auto&& [key, value] : std::move(storage["config"].GetMapSafe())) {
-            target.emplace(std::move(key), std::move(value));
-        }
+        NYaml::MergeStorageConfig(main, std::move(storage));
     }
     ParseJsonConfigOrThrow(main, yamlConfigs.MainSource, parsedConfig, yamlConfigs.AllowUnknownFields);
 

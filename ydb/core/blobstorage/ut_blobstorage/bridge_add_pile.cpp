@@ -2,6 +2,8 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #include <util/generic/scope.h>
 
@@ -32,6 +34,265 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeAddPile) {
+    Y_UNIT_TEST(BootstrapPlacementOnPileExpansion) {
+        const auto named = std::make_shared<bool>(false);
+        TEnvironmentSetup env(MakeConvertedClusterSettings(named));
+        TDataChecker checker(env);
+        ConvertCluster(env, checker);
+        NameConvertedClusterNodes(env, *named);
+
+        // All of the Hive's configured nodes belong to the original pile.
+        auto result = ReplaceMainConfig(env, [](YAML::Node& config) {
+            config["system_tablets"] = YAML::Load("{flat_hive: [{node: [1, 2, 3, 4, 5, 6, 7, 8, 9]}]}");
+        });
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.IssuesSize(), 0, result.DebugString());
+        result = AddPileToConfig(env, "pile_2", 10, 17);
+        auto checkWarning = [](const TResult& result) {
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.GetErrorReason());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.IssuesSize(), 1, result.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_WARNING));
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "FLAT_HIVE tablet 72057594037968897");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "pile 'pile_2'");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "Eligible nodes elsewhere: 9");
+        };
+        checkWarning(result);
+
+        const auto current = FetchMainConfigYaml(env);
+        auto dryRun = [&](const TString& yaml) {
+            return InvokeDistconf(env, [&](auto& record) {
+                auto* cmd = record.MutableReplaceStorageConfig();
+                cmd->SetYAML(yaml);
+                cmd->SetDryRun(true);
+                cmd->SetSkipConsoleValidation(true);
+            });
+        };
+        checkWarning(dryRun(current));
+        checkWarning(dryRun(MakeNextMainConfigYaml(env, [](YAML::Node&) {})));
+        auto fixed = MakeNextMainConfigYaml(env, [](YAML::Node& config) {
+            config["system_tablets"].remove("flat_hive");
+        });
+        result = dryRun(fixed);
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.IssuesSize(), 0, result.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(FetchMainConfigYaml(env), current);
+    }
+
+    Y_UNIT_TEST(BootstrapPlacementWithDedicatedStorageYaml) {
+        TEnvironmentSetup env(MakeExpandableSettings());
+        CreatePoolAndGetGroup(env);
+        auto unified = YAML::Load(MakeNextMainConfigYaml(env, [](YAML::Node& config) {
+            config["system_tablets"] = YAML::Load("{flat_hive: [{node: [1]}]}");
+        }));
+        YAML::Node main = YAML::Load("{config: {}}");
+        main["metadata"] = YAML::Clone(unified["metadata"]);
+        auto storage = YAML::Clone(unified);
+        storage["metadata"]["kind"] = "StorageConfig";
+        storage["metadata"]["version"] = QueryStorageConfig(env).GetExpectedStorageYamlVersion();
+        auto result = InvokeDistconf(env, [&](auto& record) {
+            auto* cmd = record.MutableReplaceStorageConfig();
+            cmd->SetYAML(YAML::Dump(main));
+            cmd->SetStorageYAML(YAML::Dump(storage));
+            cmd->SetSwitchDedicatedStorageSection(true);
+            cmd->SetDedicatedStorageSectionConfigMode(true);
+            cmd->SetSkipConsoleValidation(true);
+        });
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.IssuesSize(), 1, result.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "pile 'pile_2'");
+        UNIT_ASSERT(QueryStorageConfig(env).HasCompressedStorageYaml());
+
+        unified["metadata"]["version"] = main["metadata"]["version"].as<ui64>() + 1;
+        unified["config"]["system_tablets"]["flat_hive"][0]["node"].push_back(9);
+        result = InvokeDistconf(env, [&](auto& record) {
+            auto* cmd = record.MutableReplaceStorageConfig();
+            cmd->SetYAML(YAML::Dump(unified));
+            cmd->SetSwitchDedicatedStorageSection(false);
+            cmd->SetSkipConsoleValidation(true);
+        });
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.IssuesSize(), 0, result.DebugString());
+        UNIT_ASSERT(!QueryStorageConfig(env).HasCompressedStorageYaml());
+    }
+
+    Y_UNIT_TEST(BootstrapPlacementOnPromotion) {
+        using TState = NKikimrBridge::TClusterState;
+        TEnvironmentSetup env(MakeExpandableSettings());
+        CreatePoolAndGetGroup(env);
+
+        auto yaml = YAML::Load(MakeNextMainConfigYaml(env, [](YAML::Node& config) {
+            config["system_tablets"] = YAML::Load("{default_node: [1, 9, 10], flat_hive: [{node: [1, 9]}]}");
+        }));
+        // Node 9 is in the base list, but its own bootstrapper is configured to start the Hive only on node 1.
+        yaml["selector_config"].push_back(YAML::Load(R"(
+description: Override bootstrap on node 9
+selector: {node_id: "9"}
+config:
+  bootstrap_config:
+    tablet:
+      - type: FLAT_HIVE
+        node: [1]
+        info:
+          tablet_id: 72057594037968897
+          channels: [{channel: 0, channel_erasure_name: block-4-2, history: [{from_generation: 0, group_id: 0}]}]
+)"));
+        auto byHost = YAML::Clone(yaml);
+        byHost["allowed_labels"]["node_host"]["type"] = "string";
+        auto hostOverride = byHost["selector_config"][byHost["selector_config"].size() - 1];
+        hostOverride["selector"] = YAML::Load("{node_host: host-9}");
+        hostOverride["config"] = YAML::Load("{system_tablets: {default_node: [1, 9, 10], flat_hive: [{node: [1]}]}}");
+        auto result = InvokeDistconf(env, [&](auto& record) {
+            auto* cmd = record.MutableReplaceStorageConfig();
+            cmd->SetYAML(YAML::Dump(byHost));
+            cmd->SetDryRun(true);
+            cmd->SetSkipConsoleValidation(true);
+        });
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.IssuesSize(), 1, result.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "FLAT_HIVE");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "pile 'pile_2'");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "unresolved node labels");
+
+        result = InvokeDistconf(env, [&](auto& record) {
+            auto* cmd = record.MutableReplaceStorageConfig();
+            cmd->SetYAML(YAML::Dump(yaml));
+            cmd->SetSkipConsoleValidation(true);
+        });
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.IssuesSize(), 1, result.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "FLAT_HIVE");
+
+        const auto current = QueryStorageConfig(env).GetClusterState();
+        auto promote = [&](TState::EPileState oldState) {
+            return InvokeDistconf(env, [&](auto& record) {
+                auto* next = record.MutableSwitchBridgeClusterState()->MutableNewClusterState();
+                next->CopyFrom(current);
+                next->SetGeneration(current.GetGeneration() + 1);
+                next->SetPromotedPile(2);
+                next->SetPerPileState(0, oldState);
+                if (oldState != TState::SYNCHRONIZED) {
+                    next->SetPrimaryPile(2);
+                }
+            }, 9, env.Runtime->GetClock() + TDuration::Seconds(60));
+        };
+        for (const auto oldState : {TState::SYNCHRONIZED, TState::SUSPENDED}) {
+            result = promote(oldState);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::PRECONDITION_FAILED, result.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetErrorReason(), "FLAT_HIVE");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetErrorReason(), "pile 'pile_2'");
+            UNIT_ASSERT_VALUES_EQUAL(QueryStorageConfig(env).GetClusterState().GetGeneration(), current.GetGeneration());
+        }
+        result = promote(TState::DISCONNECTED);
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.IssuesSize(), 1, result.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "FLAT_HIVE");
+        UNIT_ASSERT_VALUES_EQUAL(QueryStorageConfig(env, 9).GetClusterState().GetPrimaryPile(), 2);
+    }
+
+    Y_UNIT_TEST(BootstrapPlacementRecheckedAtPrimaryHandoff) {
+        using TState = NKikimrBridge::TClusterState;
+        TEnvironmentSetup env(MakeExpandableSettings());
+        CreatePoolAndGetGroup(env);
+        const auto initial = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); });
+        const auto root = initial.GetScepter().GetNodeId();
+        UNIT_ASSERT(root);
+        const auto state = initial.GetQueryConfig().GetConfig().GetClusterState();
+        const auto pinHive = MakeNextMainConfigYaml(env, [](YAML::Node& config) {
+            config["system_tablets"] = YAML::Load("{flat_hive: [{node: [1]}]}");
+        });
+        auto promote = [](auto& record, const TState& state, ui64 expected, bool force) {
+            auto* cmd = record.MutableSwitchBridgeClusterState();
+            cmd->SetExpectedGeneration(expected);
+            cmd->SetSkipBootstrapPlacementCheck(force);
+            auto* next = cmd->MutableNewClusterState();
+            next->CopyFrom(state);
+            next->SetGeneration(expected + 1);
+            next->SetPromotedPile(2);
+        };
+        const auto switchover = SendDistconf(env, [&](auto& record) {
+            promote(record, state, state.GetGeneration(), false);
+        }, root);
+        const auto replace = SendDistconf(env, [&](auto& record) {
+            auto* cmd = record.MutableReplaceStorageConfig();
+            cmd->SetYAML(pinHive);
+            cmd->SetSkipConsoleValidation(true);
+        }, root);
+        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(60);
+        auto result = WaitForDistconf(env, switchover, deadline);
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.DebugString());
+        result = WaitForDistconf(env, replace, deadline);
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.IssuesSize(), 1, result.DebugString());
+
+        env.Sim(TDuration::Seconds(1));
+        const auto pending = QueryStorageConfig(env).GetClusterState();
+        UNIT_ASSERT_VALUES_EQUAL(pending.GetPrimaryPile(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pending.GetPromotedPile(), 2);
+        result = InvokeDistconf(env, [&](auto& record) { promote(record, pending, state.GetGeneration(), true); }, root, deadline);
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::GENERATION_MISMATCH, result.DebugString());
+        result = InvokeDistconf(env, [&](auto& record) { promote(record, pending, pending.GetGeneration(), true); }, root, deadline);
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(result.DebugString(), "FLAT_HIVE");
+        WaitUntil(env, [&] { return QueryStorageConfig(env).GetClusterState().GetPrimaryPile() == 2; }, "forced switchover");
+        const auto final = QueryStorageConfig(env);
+        UNIT_ASSERT_EQUAL(final.GetClusterState().GetPerPileState(0), TState::SYNCHRONIZED);
+        UNIT_ASSERT_VALUES_EQUAL(final.GetClusterStateDetails().GetBootstrapPlacementOverrideGeneration(), 0);
+    }
+
+    Y_UNIT_TEST(BootstrapPlacementAnalysisDoesNotBlockEmergencyFailover) {
+        using TState = NKikimrBridge::TClusterState;
+        TEnvironmentSetup env(MakeExpandableSettings());
+        CreatePoolAndGetGroup(env);
+        const auto yaml = FetchMainConfigYaml(env);
+        auto next = QueryStorageConfig(env).GetClusterState();
+        next.SetGeneration(next.GetGeneration() + 1);
+        next.SetPerPileState(0, TState::DISCONNECTED);
+        next.SetPrimaryPile(2);
+        next.SetPromotedPile(2);
+        for (ui32 id = 1; id <= 8; ++id) {
+            env.StopNode(id);
+        }
+
+        TEventHold placementResults(env, [](IEventHandle& ev) {
+            return ev.GetTypeName().EndsWith("::TEvBootstrapPlacement");
+        });
+        TEventHold placementWaits(env, [](IEventHandle& ev) {
+            return ev.GetTypeName().EndsWith("::TEvBootstrapPlacementReady");
+        });
+        env.Runtime->FilterFunction = [&](ui32 node, auto& ev) {
+            return placementResults.Filter(node, ev) && placementWaits.Filter(node, ev);
+        };
+        Y_DEFER { env.Runtime->FilterFunction = {}; };
+        const auto deadline = env.Runtime->GetClock() + TDuration::Minutes(2);
+        TResult result;
+        do {
+            result = InvokeDistconf(env, [&](auto& record) {
+                *record.MutableSwitchBridgeClusterState()->MutableNewClusterState() = next;
+            }, 9, deadline);
+            if (result.GetStatus() != TResult::RACE && result.GetStatus() != TResult::NO_QUORUM) {
+                break;
+            }
+            env.Sim(TDuration::MilliSeconds(10));
+        } while (env.Runtime->GetClock() < deadline);
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.DebugString());
+        UNIT_ASSERT_C(placementResults.HasHeld(), "failover must complete while placement analysis is outstanding");
+        UNIT_ASSERT_STRING_CONTAINS(result.DebugString(), "analysis is in progress");
+        UNIT_ASSERT(!placementWaits.HasHeld());
+        placementWaits.Release();
+
+        result = InvokeDistconf(env, [](auto& record) { record.MutableQueryPileConnectivity(); },
+            9, env.Runtime->GetClock() + TDuration::Seconds(1));
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.DebugString());
+        result = InvokeDistconf(env, [&](auto& record) {
+            auto* cmd = record.MutableReplaceStorageConfig();
+            cmd->SetYAML(yaml);
+            cmd->SetDryRun(true);
+        }, 9, env.Runtime->GetClock() + TDuration::Seconds(5));
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), TResult::OK, result.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(result.DebugString(), "analysis is in progress");
+        placementResults.Release();
+    }
+
     Y_UNIT_TEST(GroupCreatedWhileBscCommitIsPending) {
         TEnvironmentSetup env(MakeExpandableSettings());
         CreatePoolAndGetGroup(env);

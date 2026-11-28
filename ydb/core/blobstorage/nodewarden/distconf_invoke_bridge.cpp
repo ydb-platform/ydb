@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 
 #include <ydb/core/protos/bridge.pb.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NStorage {
 
@@ -123,6 +124,17 @@ namespace NKikimr::NStorage {
             } else if (current.GetGeneration() + 1 != newClusterState.GetGeneration()) {
                 throw TExError() << "New cluster state generation# " << newClusterState.GetGeneration()
                     << " expected# " << current.GetGeneration() + 1;
+            }
+
+            const bool plannedPrimary = newClusterState.GetPrimaryPile() != current.GetPrimaryPile() &&
+                !Self->IsEmergencyPileDisconnect(current, newClusterState);
+            const bool newPromoted = newClusterState.GetPromotedPile() != current.GetPromotedPile() &&
+                newClusterState.GetPromotedPile() != newClusterState.GetPrimaryPile();
+            if ((plannedPrimary || newPromoted) && !cmd.GetSkipBootstrapPlacementCheck() &&
+                    AwaitBootstrapPlacement(Self->GetBootstrapPlacement(*Self->StorageConfig), [this] {
+                        SwitchBridgeClusterState(std::get<TInvokeExternalOperation>(Query).Command.GetSwitchBridgeClusterState());
+                    })) {
+                return;
             }
         }
 

@@ -136,7 +136,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         {
             auto r2 = me.ToLine().SelectRowVersionN(table1, 1_u64);
-            UNIT_ASSERT_VALUES_EQUAL(r2.Ready, EReady::Gone);
+            UNIT_ASSERT_VALUES_EQUAL(r2.Ready, EReady::Data);
+            UNIT_ASSERT_VALUES_EQUAL(r2.RowVersion, TRowVersion(1, 11));
+            UNIT_ASSERT_VALUES_EQUAL(r2.RowOp, ERowOp::Erase);
             UNIT_ASSERT_VALUES_EQUAL(r2.LockMode, ELockMode::Exclusive);
             UNIT_ASSERT_VALUES_EQUAL(r2.LockTxId, 123u);
         }
@@ -613,6 +615,121 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         UNIT_ASSERT(!me->HasTxData(table1, 101u));
         UNIT_ASSERT(!me->HasTxData(table1, 102u));
         UNIT_ASSERT(!me->HasTxData(table1, 103u));
+    }
+
+    Y_UNIT_TEST(UniqueIndexLockOverCompactedErase) {
+        TDbExec me;
+        constexpr ui32 table = 1;
+        constexpr ui64 lockTxId = 101;
+        const TRowVersion erased(1, 11);
+
+        me.ToLine().Begin().Apply(*TAlter()
+            .AddTable("index", table)
+            .AddColumn(table, "uniq", 1, ETypes::Uint64, false, false)
+            .AddColumn(table, "pk", 2, ETypes::Uint64, false, false)
+            .AddColumnToKey(table, 1)
+            .AddColumnToKey(table, 2));
+        me.ToLine().WriteVer(erased).EraseN(table, 1_u64, 2_u64).Commit();
+        me.ToLine().Begin().WriteTx(lockTxId).LockRowN(table, ELockMode::Exclusive, 1_u64, 2_u64).Commit();
+
+        const TVector<TCell> prefix{TCell::Make(1_u64)};
+        auto lookupPrefix = [&] {
+            return me.ToLine()->SelectRowVersionByKeyPrefix(table, prefix, nullptr);
+        };
+        me.ToLine().Begin();
+        auto before = lookupPrefix();
+        UNIT_ASSERT_VALUES_EQUAL(before.LockMode, ELockMode::Exclusive);
+        UNIT_ASSERT_VALUES_EQUAL(before.LockTxId, lockTxId);
+        me.ToLine().Commit();
+
+        me.ToLine().Snap(table).Compact(table, true);
+
+        me.ToLine().Begin();
+        auto fullKey = me.ToLine().SelectRowVersionN(table, 1_u64, 2_u64);
+        UNIT_ASSERT_VALUES_EQUAL(fullKey.RowOp, ERowOp::Erase);
+        UNIT_ASSERT_VALUES_EQUAL(fullKey.RowVersion, erased);
+        UNIT_ASSERT_VALUES_EQUAL(fullKey.LockTxId, lockTxId);
+        auto after = lookupPrefix();
+        UNIT_ASSERT_VALUES_EQUAL(after.RowOp, ERowOp::Erase);
+        UNIT_ASSERT_VALUES_EQUAL(after.RowVersion, erased);
+        UNIT_ASSERT_VALUES_EQUAL(after.LockMode, ELockMode::Exclusive);
+        UNIT_ASSERT_VALUES_EQUAL(after.LockTxId, lockTxId);
+        me.ToLine().RemoveTx(table, lockTxId).Commit();
+
+        me.ToLine().Begin();
+        auto released = lookupPrefix();
+        UNIT_ASSERT_VALUES_EQUAL(released.Ready, EReady::Gone);
+        UNIT_ASSERT_VALUES_EQUAL(released.LockMode, ELockMode::None);
+        UNIT_ASSERT_VALUES_EQUAL(released.LockTxId, 0u);
+        me.ToLine().Commit();
+    }
+
+    Y_UNIT_TEST(UniqueIndexLockOnlyKeyPreservesCommittedPrefixVersion) {
+        TDbExec me;
+        constexpr ui32 table = 1;
+        constexpr ui64 rowTxId = 101;
+        constexpr ui64 lockTxId = 102;
+        const TRowVersion version(1, 11);
+
+        me.ToLine().Begin().Apply(*TAlter()
+            .AddTable("index", table)
+            .AddColumn(table, "uniq", 1, ETypes::Uint64, false, false)
+            .AddColumn(table, "pk", 2, ETypes::Uint64, false, false)
+            .AddColumnToKey(table, 1)
+            .AddColumnToKey(table, 2));
+        me.ToLine().WriteTx(rowTxId).PutN(table, 1_u64, 1_u64).Commit();
+        me.ToLine().Begin().WriteVer(version).CommitTx(table, rowTxId).Commit();
+        me.ToLine().Begin().WriteTx(lockTxId).LockRowN(table, ELockMode::Exclusive, 1_u64, 2_u64).Commit();
+
+        me.ToLine().Begin();
+        const TVector<TCell> prefix{TCell::Make(1_u64)};
+        const auto row = me.ToLine()->SelectRowVersionByKeyPrefix(table, prefix, nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(row.Ready, EReady::Gone);
+        UNIT_ASSERT_VALUES_EQUAL(row.RowVersion, version);
+        UNIT_ASSERT_VALUES_EQUAL(row.RowTxId, rowTxId);
+        UNIT_ASSERT_VALUES_EQUAL(row.RowOp, ERowOp::Upsert);
+        UNIT_ASSERT_VALUES_EQUAL(row.LockMode, ELockMode::Exclusive);
+        UNIT_ASSERT_VALUES_EQUAL(row.LockTxId, lockTxId);
+        me.ToLine().Commit();
+    }
+
+    Y_UNIT_TEST(UniqueIndexLockedErasePreservesLiveRowAfterCompaction) {
+        TDbExec me;
+        constexpr ui32 table = 1;
+        constexpr ui64 lockTxId = 101;
+        const TRowVersion liveVersion(100, 1);
+        const TRowVersion newerErase(150, 1);
+
+        me.ToLine().Begin().Apply(*TAlter()
+            .AddTable("index", table)
+            .AddColumn(table, "uniq", 1, ETypes::Uint64, false, false)
+            .AddColumn(table, "pk", 2, ETypes::Uint64, false, false)
+            .AddColumnToKey(table, 1)
+            .AddColumnToKey(table, 2));
+        // Prefixes 1 and 2 place the older erase on opposite sides of the live row.
+        // Prefix 3 has a newer erase whose version is still needed for conflict checks.
+        me.ToLine().WriteVer({10, 1}).EraseN(table, 1_u64, 2_u64).EraseN(table, 2_u64, 1_u64);
+        me.ToLine().WriteVer(liveVersion)
+            .PutN(table, 1_u64, 1_u64).PutN(table, 2_u64, 2_u64).PutN(table, 3_u64, 1_u64);
+        me.ToLine().WriteVer(newerErase).EraseN(table, 3_u64, 2_u64);
+        me.ToLine().WriteTx(lockTxId)
+            .LockRowN(table, ELockMode::Exclusive, 1_u64, 2_u64)
+            .LockRowN(table, ELockMode::Exclusive, 2_u64, 1_u64)
+            .LockRowN(table, ELockMode::Exclusive, 3_u64, 2_u64).Commit();
+        me.ToLine().Snap(table).Compact(table, true);
+
+        me.ToLine().Begin();
+        for (ui64 uniq : {1_u64, 2_u64, 3_u64}) {
+            const TVector<TCell> prefix{TCell::Make(uniq)};
+            const auto row = me.ToLine()->SelectRowVersionByKeyPrefix(table, prefix, nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(row.Ready, EReady::Data);
+            UNIT_ASSERT_VALUES_EQUAL(row.RowVersion, uniq == 3 ? newerErase : liveVersion);
+            UNIT_ASSERT_VALUES_EQUAL(row.RowTxId, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(row.RowOp, ERowOp::Upsert);
+            UNIT_ASSERT_VALUES_EQUAL(row.LockMode, ELockMode::Exclusive);
+            UNIT_ASSERT_VALUES_EQUAL(row.LockTxId, lockTxId);
+        }
+        me.ToLine().Commit();
     }
 
     Y_UNIT_TEST(UniqueIndexRowLocks) {

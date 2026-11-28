@@ -120,5 +120,13 @@ public:
 
 IBlockSplitter::TPtr CreateBlockSplitter(const NKikimr::NMiniKQL::TType* type, ui64 chunkSizeLimit);
 
+/// Subset of rows via arrow::compute::Take; on failure caller uses IArrayBuilder::AddMany.
+bool TryGatherArrayByRowIndices(
+    const arrow::Datum& column,
+    const ui64* indexes,
+    ui64 count,
+    arrow::MemoryPool* pool,
+    arrow::Datum* out);
+
 } // NArrow
 } // NYql

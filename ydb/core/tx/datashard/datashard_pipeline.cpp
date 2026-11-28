@@ -2220,7 +2220,7 @@ TPipeline::TWaitingDataTxOp::TWaitingDataTxOp(TAutoPtr<IEventHandle>&& ev)
     : Event(std::move(ev))
 {
     if (Event->TraceId) {
-        Span = NWilson::TSpan(15 /*max verbosity*/, std::move(Event->TraceId), "DataShard.WaitSnapshot");
+        Span = NWilson::TSpan(12 /*tablet detail*/, std::move(Event->TraceId), "DataShard.WaitSnapshot");
         Event->TraceId = Span.GetTraceId();
     }
 }
@@ -2231,11 +2231,22 @@ bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, co
 
     Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
     TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
-    WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)));
+    auto waiting = WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)));
     const ui64 waitStep = snapshot.Step;
-    TRowVersion unreadableEdge;
-    if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
-        ActivateWaitingTxOps(unreadableEdge, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
+    auto& span = waiting->second.Span;
+    span.Attribute("ydb.tablet_id", static_cast<i64>(Self->TabletID()));
+    span.Attribute("ydb.snapshot.step", static_cast<i64>(snapshot.Step));
+    span.Attribute("ydb.snapshot.tx_id", static_cast<i64>(snapshot.TxId));
+    const bool waitPlanStep = Self->WaitPlanStep(waitStep);
+    span.Attribute("ydb.visibility.plan_step_wait_registered", waitPlanStep);
+    span.Event("visibility wait entered");
+    if (!waitPlanStep) {
+        const auto unreadableEdge = GetUnreadableEdge();
+        span.Attribute("ydb.visibility.initial_unreadable_step", static_cast<i64>(unreadableEdge.Step));
+        span.Attribute("ydb.visibility.initial_unreadable_tx_id", static_cast<i64>(unreadableEdge.TxId));
+        if (snapshot < unreadableEdge) {
+            ActivateWaitingTxOps(unreadableEdge, ctx);
+        }
     }
 
     return true;
@@ -2247,11 +2258,22 @@ bool TPipeline::AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev, const T
 
     Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
     TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
-    WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<NEvents::TDataEvents::TEvWrite>(std::move(ev)));
+    auto waiting = WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<NEvents::TDataEvents::TEvWrite>(std::move(ev)));
     const ui64 waitStep = snapshot.Step;
-    TRowVersion unreadableEdge;
-    if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
-        ActivateWaitingTxOps(unreadableEdge, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
+    auto& span = waiting->second.Span;
+    span.Attribute("ydb.tablet_id", static_cast<i64>(Self->TabletID()));
+    span.Attribute("ydb.snapshot.step", static_cast<i64>(snapshot.Step));
+    span.Attribute("ydb.snapshot.tx_id", static_cast<i64>(snapshot.TxId));
+    const bool waitPlanStep = Self->WaitPlanStep(waitStep);
+    span.Attribute("ydb.visibility.plan_step_wait_registered", waitPlanStep);
+    span.Event("visibility wait entered");
+    if (!waitPlanStep) {
+        const auto unreadableEdge = GetUnreadableEdge();
+        span.Attribute("ydb.visibility.initial_unreadable_step", static_cast<i64>(unreadableEdge.Step));
+        span.Attribute("ydb.visibility.initial_unreadable_tx_id", static_cast<i64>(unreadableEdge.TxId));
+        if (snapshot < unreadableEdge) {
+            ActivateWaitingTxOps(unreadableEdge, ctx);
+        }
     }
 
     return true;
@@ -2337,6 +2359,9 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
                 minWait = it->first;
                 break;
             }
+            it->second.Span.Attribute("ydb.visibility.release_edge_step", static_cast<i64>(edge.Step));
+            it->second.Span.Attribute("ydb.visibility.release_edge_tx_id", static_cast<i64>(edge.TxId));
+            it->second.Span.Event("visibility wait released");
             it->second.Span.EndOk();
             ctx.Send(it->second.Event.Release());
             it = WaitingDataTxOps.erase(it);
@@ -2348,6 +2373,9 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
                 minWait = Min(minWait, it->first);
                 break;
             }
+            it->second.Span.Attribute("ydb.visibility.release_edge_step", static_cast<i64>(edge.Step));
+            it->second.Span.Attribute("ydb.visibility.release_edge_tx_id", static_cast<i64>(edge.TxId));
+            it->second.Span.Event("visibility wait released");
             it->second.Span.EndOk();
             ctx.Send(it->second.Event.Release());
             it = WaitingDataReadIterators.erase(it);
@@ -2392,7 +2420,7 @@ TPipeline::TWaitingReadIterator::TWaitingReadIterator(TEvDataShard::TEvRead::TPt
     : Event(std::move(ev))
 {
     if (Event->TraceId) {
-        Span = NWilson::TSpan(15 /*max verbosity*/, std::move(Event->TraceId), "DataShard.Read.WaitSnapshot");
+        Span = NWilson::TSpan(12 /*tablet detail*/, std::move(Event->TraceId), "DataShard.Read.WaitSnapshot");
         Event->TraceId = Span.GetTraceId();
     }
 }
@@ -2406,13 +2434,25 @@ void TPipeline::AddWaitingReadIterator(
     RegisterWaitingReadIterator(TReadIteratorId(ev->Sender, ev->Get()->Record.GetReadId()), ev->Get());
 
     auto readId = ev->Get()->Record.GetReadId();
-    WaitingDataReadIterators.emplace(version, std::move(ev));
+    auto waiting = WaitingDataReadIterators.emplace(version, std::move(ev));
 
     const ui64 waitStep = version.Step;
+    auto& span = waiting->second.Span;
+    span.Attribute("ydb.tablet_id", static_cast<i64>(Self->TabletID()));
+    span.Attribute("ydb.read_id", static_cast<i64>(readId));
+    span.Attribute("ydb.snapshot.step", static_cast<i64>(version.Step));
+    span.Attribute("ydb.snapshot.tx_id", static_cast<i64>(version.TxId));
+    const bool waitPlanStep = Self->WaitPlanStep(waitStep);
+    span.Attribute("ydb.visibility.plan_step_wait_registered", waitPlanStep);
+    span.Event("visibility wait entered");
     TRowVersion unreadableEdge = TRowVersion::Min();
-    if (!Self->WaitPlanStep(waitStep) && version < (unreadableEdge = GetUnreadableEdge())) {
-        // Async MediatorTimeCastEntry update, need to reschedule transaction
-        ActivateWaitingTxOps(unreadableEdge, ctx);
+    if (!waitPlanStep) {
+        unreadableEdge = GetUnreadableEdge();
+        span.Attribute("ydb.visibility.initial_unreadable_step", static_cast<i64>(unreadableEdge.Step));
+        span.Attribute("ydb.visibility.initial_unreadable_tx_id", static_cast<i64>(unreadableEdge.TxId));
+        if (version < unreadableEdge) {
+            ActivateWaitingTxOps(unreadableEdge, ctx);
+        }
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Put read iterator to wait version",

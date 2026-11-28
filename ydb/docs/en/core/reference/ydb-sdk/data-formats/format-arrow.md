@@ -95,12 +95,8 @@ In Arrow, basic date/time types are represented as unsigned integers, while exte
 | `EmptyList` | `struct<>` | Singular type |
 | `EmptyDict` | `struct<>` | Singular type |
 | `Tagged<T>` | `T` | Tag stripped |
-| `Optional<T>` | `struct<opt: T>` | When `T` is `Variant`, `Optional`, `Pg`, or singular |
+| `Optional<T>` | `struct<opt: T>` | When `T` is `Variant`, `Optional`, or singular |
 | `Optional<T>` | `T` | For all other `T` |
-
-### Types in the `pg` family
-
-All `pg` types are represented as Arrow `string` values containing the textual form.
 
 ## Data compression {#compression}
 

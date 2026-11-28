@@ -411,7 +411,7 @@ View structure:
 | `Metadata` | Compilation metadata in JSON format. The `parameters` key contains query parameter names and types. Parameter values are never stored. Only the metadata system user can see the `user_group_sids` key. It contains an array of the user's group IDs, or `null` if the number of groups or the total size of their IDs exceeds the limit. Older entries may omit this key.<br/>Type: `Utf8`. |
 | `IsTruncated` | Flag indicating whether the query text was truncated due to exceeding the 10 KB limit.<br/>Type: `Bool`. |
 | `QueryType` | Query type, one of:<br/>`QUERY_TYPE_SQL_DML` — Table Service<br/>`QUERY_TYPE_SQL_GENERIC_QUERY` — Query Service<br/>`QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY` — Query Service in concurrent mode<br/>May be empty for old entries.<br/>Type: `Utf8`. |
-| `Syntax` | Query syntax, one of:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_UNSPECIFIED` — for old entries without syntax information<br/>`SYNTAX_PG` — deprecated value for entries compiled before the removal of experimental PostgreSQL compatibility; new queries with this syntax are not accepted<br/>Type: `Utf8`. |
+| `Syntax` | Query syntax, one of:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_UNSPECIFIED` — for old entries without syntax information<br/>Type: `Utf8`. |
 
 ### Example queries {#compile-cache-queries-examples}
 

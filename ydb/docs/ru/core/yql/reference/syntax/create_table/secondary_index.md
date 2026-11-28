@@ -3,17 +3,15 @@
 Конструкция `INDEX` используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} {% if backend_name == "YDB" and oss == true %}для [строковых](../../../../concepts/datamodel/table.md#row-oriented-tables) таблиц{% else %}на таблице{% endif %}:
 
 ```yql
-CREATE TABLE `<table_name>` (
-  ...
-    INDEX `<index_name>`
-    [GLOBAL|LOCAL]
-    [UNIQUE]
-    [SYNC|ASYNC]
-    [USING <index_type>]
-    ON ( <index_columns> )
-    [COVER ( <cover_columns> )]
-    [WITH ( <parameter_name> = <parameter_value>[, ...])]
-  [,   ...]
+CREATE TABLE <table_name> (
+    ...
+    INDEX <index_name>
+        { GLOBAL [UNIQUE] [SYNC | ASYNC] | LOCAL }
+        [USING <index_type>]
+        ON ( <index_columns> )
+        [COVER ( <cover_columns> )]
+        [WITH ( <parameter_name> = <parameter_value> [, ...] )]
+    [, ...]
 )
 ```
 

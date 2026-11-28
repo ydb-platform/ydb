@@ -5,16 +5,13 @@
 `ADD INDEX` — добавляет индекс с указанным именем и типом для заданного набора колонок в {% if backend_name == "YDB" and oss == true %}строковых таблицах.{% else %}таблицах.{% endif %} Грамматика:
 
 ```yql
-ALTER TABLE `<table_name>`
-  ADD INDEX `<index_name>`
-    [GLOBAL|LOCAL]
-    [UNIQUE]
-    [SYNC|ASYNC]
+ALTER TABLE <table_name>
+  ADD INDEX <index_name>
+    { GLOBAL [UNIQUE] [SYNC | ASYNC] | LOCAL }
     [USING <index_type>]
     ON ( <index_columns> )
     [COVER ( <cover_columns> )]
-    [WITH ( <parameter_name> = <parameter_value>[, ...])]
-  [,   ...]
+    [WITH ( <parameter_name> = <parameter_value> [, ...] )]
 ```
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
@@ -159,7 +156,7 @@ ALTER TABLE `/Root/Table`
 
 ```yql
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET <setting_name> <value>;
-ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value_1>, ...);
+ALTER TABLE <table_name> ALTER INDEX <index_name> SET ( <setting_name> = <value> [, ...] );
 ```
 
 * `<table_name>` - имя таблицы, индекс которой нужно изменить.

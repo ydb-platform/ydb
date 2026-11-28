@@ -42,6 +42,7 @@ SRCS(
     blobstorage_pdisk_ut_actions.cpp
     blobstorage_pdisk_ut_color_limits.cpp
     blobstorage_pdisk_ut_context.cpp
+    blobstorage_pdisk_ut_decommit_syslog.cpp
     blobstorage_pdisk_ut_env.cpp
     blobstorage_pdisk_ut_helpers.cpp
     blobstorage_pdisk_ut_log_restart.cpp

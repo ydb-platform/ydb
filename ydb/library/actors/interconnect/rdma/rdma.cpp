@@ -1,6 +1,5 @@
 #include "rdma_impl.h"
 #include <util/stream/output.h>
-#include <util/thread/lfqueue.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 

@@ -37,6 +37,7 @@ struct TChangeRecordSerializerOpts {
     bool TraceIds = false;
     TUserTable::TCdcStream::ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
     i32 CompressionLevel = 0;
+    bool WriteRowKeys = false;
 
     static TChangeRecordSerializerOpts DebugOpts();
 };

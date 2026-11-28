@@ -46,12 +46,27 @@ void TChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) {
         }
     }
 
-    for (const auto& [partitionId, sender] : Senders) {
+    for (const auto& [_, sender] : Senders) {
         ReEnqueueRecords(sender);
-        ProcessBroadcasting(&TChangeSender::RemoveBroadcastPartition, partitionId, sender.Broadcasting);
         if (sender.ActorId) {
             ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
         }
+    }
+
+    // Remove only partitions that actually left the topology. This also covers
+    // partitions already erased from Senders by OnGone while resolving.
+    // Completed partitions no longer have a delivery obligation and must not
+    // complete the same broadcast again after its last pending partition is removed.
+    THashMap<ui64, TVector<ui64>> removedPartitions;
+    for (const auto& [order, broadcast] : Broadcasting) {
+        for (const auto partitionId : broadcast.Partitions) {
+            if (!senders.contains(partitionId) && !broadcast.CompletedPartitions.contains(partitionId)) {
+                removedPartitions[partitionId].push_back(order);
+            }
+        }
+    }
+    for (const auto& [partitionId, broadcasts] : removedPartitions) {
+        ProcessBroadcasting(&TChangeSender::RemoveBroadcastPartition, partitionId, broadcasts);
     }
 
     Senders = std::move(senders);
@@ -336,6 +351,8 @@ void TChangeSender::ReEnqueueRecords(const TSender& sender) {
             MemUsage -= record->GetBodySize();
         }
     }
+    // Keep broadcasts in Broadcasting until the partition is recreated.
+    // LazyCreateSender will re-enqueue them, including unsent Prepared records.
 }
 
 TChangeSender::TBroadcast& TChangeSender::EnsureBroadcast(IChangeRecord::TPtr record) {

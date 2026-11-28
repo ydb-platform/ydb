@@ -553,6 +553,13 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
     auto response = MakeHolder<TEvResponse>();
     response->Record.SetTabletID(TabletID());
 
+    if (IsUserTableWriteBlocked()) {
+        response->Record.SetStatus(TEvResponse::ProtoRecordType::BAD_REQUEST);
+        response->Record.SetErrorDescription("Database or table is frozen for writes");
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        return;
+    }
+
     auto badRequest = [&record = response->Record](const TString& error) {
         record.SetStatus(TEvResponse::ProtoRecordType::BAD_REQUEST);
         record.SetErrorDescription(error);

@@ -5,6 +5,8 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
@@ -25,6 +27,7 @@ public:
 
 private:
     bool CheckSchemeTx(TActiveTransaction *activeTx);
+    bool IsDatabaseFreezeUnfreeze(const NKikimrSchemeOp::TTableDescription& alter) const;
     bool CheckCreate(TActiveTransaction *activeTx);
     bool CheckDrop(TActiveTransaction *activeTx);
     bool CheckAlter(TActiveTransaction *activeTx);
@@ -73,6 +76,89 @@ bool TCheckSchemeTxUnit::IsReadyToExecute(TOperation::TPtr) const
     return true;
 }
 
+bool TCheckSchemeTxUnit::IsDatabaseFreezeUnfreeze(const NKikimrSchemeOp::TTableDescription& alter) const {
+    const auto pathId = alter.HasPathId() ? TPathId::FromProto(alter.GetPathId())
+        : TPathId(DataShard.GetPathOwnerId(), alter.GetId_Deprecated());
+    if (pathId.OwnerId != DataShard.GetPathOwnerId()) {
+        return false;
+    }
+    const auto table = DataShard.FindUserTable(pathId);
+    if (!table) {
+        return false;
+    }
+    NKikimrSchemeOp::TTableDescription current;
+    table->GetSchema(current);
+    auto delta = alter;
+    // EQUIVALENT ignores unknown fields, including nested ones.
+    const auto originalSize = delta.ByteSizeLong();
+    delta.DiscardUnknownFields();
+    if (delta.ByteSizeLong() != originalSize) {
+        return false;
+    }
+    delta.ClearName();
+    delta.ClearId_Deprecated();
+    delta.ClearPathId();
+    delta.ClearPath();
+    delta.ClearTableSchemaVersion();
+    delta.MutablePartitionConfig()->ClearFreezeState();
+    current.MutablePartitionConfig()->ClearFreezeState();
+
+    // SchemeShard repeats the full partition config, while DataShard persists
+    // normalized column families without placement hints or blob thresholds.
+    // Compare the actual DataShard settings; only FreezeState may change.
+    if (delta.GetPartitionConfig().ByteSizeLong()) {
+        auto normalizeFamilies = [&](NKikimrSchemeOp::TPartitionConfig& config) {
+            for (auto& family : *config.MutableColumnFamilies()) {
+                const auto it = table->Families.find(family.GetId());
+                if (it == table->Families.end()) {
+                    return false;
+                }
+                auto& storage = *family.MutableStorageConfig();
+                const auto dataThreshold = storage.HasDataThreshold()
+                    ? TUserTable::TUserFamily::SaveGetThreshold(storage.GetDataThreshold())
+                    : it->second.OuterThreshold;
+                const auto externalThreshold = storage.GetExternalThreshold()
+                    ? TUserTable::TUserFamily::SaveGetThreshold(storage.GetExternalThreshold())
+                    : it->second.ExternalThreshold;
+                // Placement is represented by the storage rooms below. These
+                // hints are consumed by SchemeShard, not by TUserFamily::Update.
+                storage.ClearSysLog();
+                storage.ClearLog();
+                storage.ClearData();
+                storage.ClearExternal();
+                storage.ClearExternalChannelsCount();
+                storage.SetDataThreshold(dataThreshold);
+                storage.SetExternalThreshold(externalThreshold);
+            }
+            return true;
+        };
+        if (!normalizeFamilies(*delta.MutablePartitionConfig())
+            || !normalizeFamilies(*current.MutablePartitionConfig()))
+        {
+            return false;
+        }
+        google::protobuf::util::MessageDifferencer configDiff;
+        configDiff.set_message_field_comparison(google::protobuf::util::MessageDifferencer::EQUIVALENT);
+        const auto* config = delta.GetPartitionConfig().GetDescriptor();
+        configDiff.TreatAsSet(config->FindFieldByName("ColumnFamilies"));
+        configDiff.TreatAsSet(config->FindFieldByName("StorageRooms"));
+        if (!configDiff.Compare(delta.GetPartitionConfig(), current.GetPartitionConfig())) {
+            return false;
+        }
+    }
+    delta.ClearPartitionConfig();
+    const auto* reflection = delta.GetReflection();
+    std::vector<const google::protobuf::FieldDescriptor*> fields;
+    reflection->ListFields(delta, &fields);
+    for (const auto* field : fields) {
+        if (!field->is_repeated() && !reflection->HasField(current, field)) {
+            return false;
+        }
+    }
+    google::protobuf::util::MessageDifferencer diff;
+    return diff.CompareWithFields(delta, current, fields, fields);
+}
+
 EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
@@ -94,7 +180,15 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     }
 
     // Check state is proper for scheme transactions.
-    if (!DataShard.IsStateActive() || (DataShard.IsStateFrozen() && !unfreezeTx)) {
+    const bool finishCdcScan = tx.HasAlterCdcStreamNotice()
+        && tx.GetAlterCdcStreamNotice().GetStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateReady;
+    // Finalization changes CDC metadata only. Its retries must also work after
+    // DRAIN_CDC, when the shard is ready but SchemeShard may still await its ACK.
+    const bool databaseFreezeUnfreeze = DataShard.IsDatabaseFrozen() && unfreezeTx
+        && IsDatabaseFreezeUnfreeze(tx.GetAlterTable());
+    if (!DataShard.IsStateActive() || (DataShard.IsStateFrozen() && !unfreezeTx)
+        || (DataShard.IsDatabaseFrozen() && !finishCdcScan && !databaseFreezeUnfreeze))
+    {
         TString error = TStringBuilder()
             << "Wrong shard state for scheme transaction at tablet "
             << DataShard.TabletID() << " state: " << DataShard.GetState() << " txId: "

@@ -51,6 +51,7 @@ SRCS(
     datashard__init.cpp
     datashard_active_transaction.cpp
     datashard_change_sending.cpp
+    datashard_database_freeze.cpp
     datashard_outreadset.cpp
     datashard_s3_uploads.cpp
     datashard_snapshots.cpp
@@ -529,6 +530,7 @@ RECURSE_FOR_TESTS(
     ut_change_collector
     ut_change_exchange
     ut_compaction
+    ut_database_freeze
     ut_disk_quotas
     ut_direct_restore
     ut_erase_rows

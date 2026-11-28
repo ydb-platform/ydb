@@ -31,7 +31,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_CDC_STREAM_EMIT_HEARTBEATS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        if (Self->State != TShardState::Ready) {
+        if (Self->State != TShardState::Ready || Self->DatabaseFreeze.GetStage() >= NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC) {
             return true;
         }
 
@@ -85,7 +85,7 @@ void TDataShard::EmitHeartbeats() {
     YDB_LOG_DEBUG("[CdcStreamHeartbeat] Scheduling CDC stream heartbeat emission",
         {"tabletId", TabletID()});
 
-    if (State != TShardState::Ready) {
+    if (State != TShardState::Ready || DatabaseFreeze.GetStage() >= NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC) {
         return;
     }
 
@@ -255,6 +255,25 @@ THashMap<TPathId, TCdcStreamHeartbeatManager::THeartbeatInfo> TCdcStreamHeartbea
     return heartbeats;
 }
 
+THashMap<TPathId, TCdcStreamHeartbeatManager::THeartbeatInfo> TCdcStreamHeartbeatManager::EmitFinalHeartbeats(
+        NTable::TDatabase& db, const TRowVersion& edge)
+{
+    NIceDb::TNiceDb nicedb(db);
+    THashMap<TPathId, THeartbeatInfo> result;
+    for (auto& [streamId, info] : CdcStreams) {
+        if (info.Last < edge) {
+            info.Last = edge;
+            PersistUpdate(nicedb, info.TablePathId, streamId, info);
+            result.emplace(streamId, info);
+        }
+    }
+    Schedule.clear();
+    for (const auto& [streamId, info] : CdcStreams) {
+        Schedule.emplace(streamId, NextVersion(info.Last, info.Interval));
+    }
+    return result;
+}
+
 void TCdcStreamHeartbeatManager::PersistUpdate(NIceDb::TNiceDb& db,
         const TPathId& tablePathId, const TPathId& streamPathId, const THeartbeatInfo& info)
 {
@@ -281,4 +300,3 @@ void TCdcStreamHeartbeatManager::PersistRemove(NIceDb::TNiceDb& db,
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

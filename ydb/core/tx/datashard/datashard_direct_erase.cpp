@@ -245,6 +245,12 @@ bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
     Result = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
     Result->Record.SetTabletID(self->TabletID());
 
+    if (self->IsUserTableWriteBlocked()) {
+        Result->Record.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
+        Result->Record.SetErrorDescription("Database or table is frozen for writes");
+        return true;
+    }
+
     const auto params = TExecuteParams::ForExecute(this, &txc, mvccVersion, globalTxId, &volatileReadDependencies);
     NKikimrTxDataShard::TEvEraseRowsResponse::EStatus status;
     TString error;

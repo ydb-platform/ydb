@@ -173,6 +173,18 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
     TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(op);
     const bool readOnlyAdmission = op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare);
 
+    if (!op->IsReadOnly() && DataShard.IsDatabaseWriteBlocked(op.Get())) {
+        const TString error = "Database is frozen for writes";
+        if (writeOp) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE, error);
+        } else {
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)
+                ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, error);
+        }
+        op->Abort();
+        return true;
+    }
+
      // COUNTER_WRITE_COMPLETE / COUNTER_PREPARE_COMPLETE are updated in FinishProposeWrite / FinishPropose respectively
     auto incOverloaded = [this, writeOp]() {
         DataShard.IncCounter(writeOp ? COUNTER_WRITE_OVERLOADED : COUNTER_PREPARE_OVERLOADED);
@@ -340,4 +352,3 @@ TOutputOpData::TResultPtr &TExecutionUnit::BuildResult(TOperation::TPtr op,
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

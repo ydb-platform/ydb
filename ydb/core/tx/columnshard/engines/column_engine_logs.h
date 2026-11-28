@@ -6,6 +6,7 @@
 #include "changes/actualization/controller/controller.h"
 #include "scheme/tier_info.h"
 #include "scheme/versions/preset_schemas.h"
+#include "storage/actualizer/common/queue_sizes.h"
 #include "storage/granule/granule.h"
 #include "storage/granule/storage.h"
 
@@ -63,6 +64,7 @@ private:
     std::shared_ptr<NActualizer::TController> ActualizationController;
     std::shared_ptr<TSchemaObjectsCache> SchemaObjectsCache;
     TVersionedPresetSchemas VersionedSchemas;
+    std::optional<TInternalPathId> NextMoveDataGranule;
 
     void InitDerivedState();
     void RegisterSchemaVersion(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo);
@@ -182,11 +184,21 @@ public:
     std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(
         const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
-        const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
+        const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit,
+        NActualizer::EActualizationScope scope = NActualizer::EActualizationScope::TieringAndScheme) noexcept override;
 
     void ReturnToIndexes(const THashMap<TInternalPathId, THashSet<ui64>>& portions) const {
         return GranulesStorage->ReturnToIndexes(portions);
     }
+
+    void StopMoveData() {
+        NextMoveDataGranule.reset();
+        for (auto& [_, granule] : GranulesStorage->GetTables()) {
+            granule->StopMoveData();
+        }
+    }
+
+    NActualizer::TMoveDataQueueSizes UpdateMoveDataQueueSizes();
 
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
     virtual bool ApplyChangesOnExecute(

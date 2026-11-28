@@ -24,6 +24,7 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     ydb/core/base
     ydb/core/kqp/common/events
+    ydb/core/tx/columnshard/engines/storage/actualizer/common
     ydb/core/tx/columnshard/tracing
     ydb/library/actors/core
     ydb/library/signals

@@ -50,6 +50,8 @@ private:
     std::optional<TString> TargetTierName;
     const TString CurrentTierName;
     std::optional<NActualizer::TRWAddress> RWAddress;
+    // MoveData rewrites blobs even when tier and schema stay the same.
+    bool ForcedMove = false;
 
 public:
     TPortionEvictionFeatures(const ui64 portionSchemaVersion, const std::shared_ptr<ISnapshotSchema>& readScheme,
@@ -62,14 +64,22 @@ public:
         YDB_LOG_VERIFY(CurrentTierName);
     }
 
+    bool GetForcedMove() const noexcept {
+        return ForcedMove;
+    }
+
+    void SetForcedMove() noexcept {
+        ForcedMove = true;
+    }
+
     const TString& GetTargetTierName() const {
         YDB_LOG_VERIFY(TargetTierName);
         return *TargetTierName;
     }
 
-    void SetTargetTierName(const TString& value) {
+    void SetTargetTierName(TString value) {
         YDB_LOG_VERIFY(!TargetTierName);
-        TargetTierName = value;
+        TargetTierName = std::move(value);
     }
 
     void OnSkipPortionWithProcessMemory(const NColumnShard::TEngineLogsCounters& counters, const TDuration dWait) const {
@@ -105,6 +115,9 @@ public:
             return true;
         }
         if (PortionSchemaVersion != TargetScheme->GetVersion()) {
+            return true;
+        }
+        if (ForcedMove) {
             return true;
         }
         YDB_LOG_VERIFY(false);

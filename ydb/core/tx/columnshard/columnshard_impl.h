@@ -25,6 +25,7 @@
 #include "loading/deferred_portion_loader.h"
 #include "local_db_backup/events.h"
 #include "maintenance/cut_history/find_empty_history_intervals.h"
+#include "maintenance/move_data/events.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
@@ -133,6 +134,7 @@ class TGeneralCompactColumnEngineChanges;
 
 namespace NKikimr::NColumnShard {
 
+class TMoveDataCoordinator;
 class TArrowData;
 class TEvWriteCommitPrimaryTransactionOperator;
 class TEvWriteCommitSecondaryTransactionOperator;
@@ -200,6 +202,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInit;
+    friend class TMoveDataCoordinator;
     friend class TTxLoadPortionsBatch;
     friend class TTxCleanupSchemasWithnoData;
     friend class TTxInitSchema;
@@ -362,6 +365,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx);
+    virtual void MoveDataCompleted(const TActorContext& ctx) override;
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -570,6 +575,12 @@ private:
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
 
+    // Owned by the actor runtime; cleared before shutdown. The shared mailbox permits synchronous admission.
+    std::unique_ptr<TMoveDataCoordinator> MoveDataCoordinator;
+
+    // Outstanding metadata subscribers for this tablet; gates SetupMetadata.
+    std::shared_ptr<TAtomicCounter> MetadataSubscribersInFlight = std::make_shared<TAtomicCounter>();
+
     // The held forced compaction request (ALTER TABLE ... COMPACT), at most one: the shard hosts a single standalone
     // table and a repeated request supersedes the held one. In memory only, the schemeshard re-sends the request after
     // a restart. Answered OK once nothing is left to compact and, for CASCADE, to rewrite.
@@ -638,10 +649,17 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
+    void Handle(TEvMoveData::TEvBatch::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvMoveData::TEvWakeup::TPtr&, const TActorContext& ctx);
+    void Handle(TEvMoveData::TEvPoke::TPtr&, const TActorContext& ctx);
     void Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx);
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
+    void StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests,
+        const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& subscribersInFlight,
+        const TActorId& recipient);
     bool SetupTtl();
+    void StartTtlChanges(std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>>&& indexChanges);
     void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupSchemas();

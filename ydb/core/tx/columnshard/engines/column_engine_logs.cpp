@@ -713,8 +713,34 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     return changes;
 }
 
+NActualizer::TMoveDataQueueSizes TColumnEngineForLogs::UpdateMoveDataQueueSizes() {
+    const auto& tables = GranulesStorage->GetTables();
+    auto it = NextMoveDataGranule ? tables.find(*NextMoveDataGranule) : tables.begin();
+    if (it == tables.end()) {
+        it = tables.begin();
+    }
+    static constexpr size_t MaxPortionVisitsPerTurn = 1024;
+    size_t visitsLeft = MaxPortionVisitsPerTurn;
+    NActualizer::TMoveDataQueueSizes result;
+    for (size_t i = 0; i < tables.size(); ++i) {
+        const auto& [_, granule] = *it;
+        if (++it == tables.end()) {
+            it = tables.begin();
+        }
+
+        const size_t visitsBeforeGranule = visitsLeft;
+        // After the budget runs out, remaining granules still contribute their stored counts to the gate.
+        result += granule->UpdateMoveDataQueueSizes(visitsLeft);
+        if (visitsBeforeGranule > 0 && visitsLeft == 0) {
+            NextMoveDataGranule = it->first;
+        }
+    }
+    return result;
+}
+
 std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
-    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept {
+    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit,
+    NActualizer::EActualizationScope scope) noexcept {
     YDB_LOG_VERIFY(dataLocksManager);
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
         {"event", "StartTtl"},
@@ -732,7 +758,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
             }
             g->RefreshTiering(i.second);
             context.ResetActualInstantForTest();
-            g->BuildActualizationTasks(context, actualizationLag);
+            g->BuildActualizationTasks(context, actualizationLag, scope);
         }
     }
 
@@ -742,7 +768,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
             if (pathEviction.contains(i.first)) {
                 continue;
             }
-            i.second->BuildActualizationTasks(context, actualizationLag);
+            i.second->BuildActualizationTasks(context, actualizationLag, scope);
         }
     } else {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",

@@ -40,15 +40,14 @@ std::optional<TWritePortionInfoWithBlobsResult> TTTLColumnEngineChanges::UpdateE
     const TPortionInfo& portionInfo = *info.GetPortionInfo();
     auto& evictFeatures = info.GetFeatures();
     auto blobSchema = portionInfo.GetSchema(context.SchemaVersions);
-    Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName() ||
+    Y_ABORT_UNLESS(evictFeatures.GetForcedMove() || portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName() ||
                    portionInfo.GetSchemaVersionVerified() < evictFeatures.GetTargetScheme()->GetVersion());
 
     auto portionWithBlobs = TReadPortionInfoWithBlobs::RestorePortion(
         GetPortionDataAccessor(info.GetPortionInfo()->GetPortionId()), srcBlobs, blobSchema->GetIndexInfo());
-    std::optional<TWritePortionInfoWithBlobsResult> result =
-        TReadPortionInfoWithBlobs::SyncPortion(std::move(portionWithBlobs), blobSchema, evictFeatures.GetTargetScheme(),
-            evictFeatures.GetTargetTierName(), SaverContext.GetStoragesManager(), context.Counters.SplitterCounters);
-    return std::move(result);
+    return TReadPortionInfoWithBlobs::SyncPortion(std::move(portionWithBlobs), blobSchema,
+        evictFeatures.GetTargetScheme(), evictFeatures.GetTargetTierName(), SaverContext.GetStoragesManager(),
+        context.Counters.SplitterCounters, evictFeatures.GetForcedMove());
 }
 
 NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {

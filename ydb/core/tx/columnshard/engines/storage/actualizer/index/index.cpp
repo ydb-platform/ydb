@@ -1,16 +1,23 @@
 #include "index.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/move/move.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/scheme/scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/tiering/tiering.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NOlap::NActualizer {
 
 void TGranuleActualizationIndex::ExtractActualizationTasks(
-    TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const {
+    TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext, EActualizationScope scope) const {
     TInternalTasksContext internalContext;
-    for (auto&& i : Actualizers) {
-        i->ExtractTasks(tasksContext, externalContext, internalContext);
+    const bool moveDataOnly = scope == EActualizationScope::MoveDataOnly;
+    for (const auto& actualizer : Actualizers) {
+        const bool isMoveData = actualizer == MoveDataActualizer;
+        if (moveDataOnly == isMoveData) {
+            actualizer->ExtractTasks(tasksContext, externalContext, internalContext);
+        }
     }
 }
 
@@ -59,6 +66,28 @@ void TGranuleActualizationIndex::Start() {
     SchemeActualizer = std::make_shared<TSchemeActualizer>(PathId, VersionedIndex);
     Actualizers.emplace_back(TieringActualizer);
     Actualizers.emplace_back(SchemeActualizer);
+}
+
+void TGranuleActualizationIndex::AddMoveDataCandidate(ui64 portionId, bool committed) {
+    if (!MoveDataActualizer) {
+        MoveDataActualizer = std::make_shared<TMoveDataActualizer>(VersionedIndex);
+        Actualizers.emplace_back(MoveDataActualizer);
+    }
+    MoveDataActualizer->AddCandidate(portionId, committed);
+}
+
+void TGranuleActualizationIndex::StopMoveData() {
+    Erase(Actualizers, MoveDataActualizer);
+    MoveDataActualizer.reset();
+}
+
+TMoveDataQueueSizes TGranuleActualizationIndex::UpdateMoveDataQueueSizes(
+    const THashMap<ui64, TPortionInfo::TPtr>& portions, const TWrittenPortionsById& uncommitted, size_t& visitsLeft) {
+    if (!MoveDataActualizer) {
+        return TMoveDataQueueSizes();
+    }
+    visitsLeft -= MoveDataActualizer->UpdatePortionStates(portions, uncommitted, visitsLeft);
+    return MoveDataActualizer->GetMoveDataQueueSizes();
 }
 
 std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {

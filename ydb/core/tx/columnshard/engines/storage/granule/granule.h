@@ -34,7 +34,7 @@ private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
-    THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
+    TWrittenPortionsById InsertedPortionsById;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
     std::unique_ptr<PortionIntervalTree::TPortionIntervalTree> IntervalTree;
 
@@ -162,6 +162,18 @@ public:
         ActualizationIndex->RefreshScheme(context);
     }
 
+    void AddMoveDataCandidate(const TPortionInfo& portion) {
+        ActualizationIndex->AddMoveDataCandidate(portion.GetPortionId(), portion.IsCommitted());
+    }
+
+    void StopMoveData() {
+        ActualizationIndex->StopMoveData();
+    }
+
+    NActualizer::TMoveDataQueueSizes UpdateMoveDataQueueSizes(size_t& visitsLeft) {
+        return ActualizationIndex->UpdateMoveDataQueueSizes(Portions, InsertedPortionsById, visitsLeft);
+    }
+
     bool IsSchemeActualizationFinished() const {
         return ActualizationIndex->IsSchemeActualizationFinished();
     }
@@ -188,7 +200,8 @@ public:
         return OptimizerPlanner->GetBucketPositions();
     }
 
-    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
+    void BuildActualizationTasks(
+        NActualizer::TTieringProcessContext& context, const TDuration tieringDelay, NActualizer::EActualizationScope scope) const;
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {

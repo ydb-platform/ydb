@@ -74,7 +74,8 @@ public:
         Cleanup,
         GC,
         CleanupSchemas,
-        PortionLoading
+        PortionLoading,
+        MoveData
     };
     YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
 

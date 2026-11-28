@@ -2,16 +2,22 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/common/queue_sizes.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/counters/counters.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/move/metadata.h>
+
+#include <util/generic/hash_set.h>
 
 namespace NKikimr::NOlap {
 class TVersionedIndex;
 class TTiering;
+class TWrittenPortionInfo;
 }   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NActualizer {
 class TTieringActualizer;
 class TSchemeActualizer;
+class TMoveDataActualizer;
 
 class TGranuleActualizationIndex {
 private:
@@ -20,6 +26,7 @@ private:
 
     std::shared_ptr<TTieringActualizer> TieringActualizer;
     std::shared_ptr<TSchemeActualizer> SchemeActualizer;
+    std::shared_ptr<TMoveDataActualizer> MoveDataActualizer;
 
     const TInternalPathId PathId;
     const TVersionedIndex& VersionedIndex;
@@ -27,7 +34,6 @@ private:
 
 public:
     std::vector<TCSMetadataRequest> CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions);
-
     bool IsStarted() const {
         return Actualizers.size();
     }
@@ -36,11 +42,17 @@ public:
     TGranuleActualizationIndex(
         const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager);
 
-    void ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const;
+    void ExtractActualizationTasks(
+        TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext, EActualizationScope scope) const;
 
     void RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context);
     void RefreshScheme(const TAddExternalContext& context);
     bool IsSchemeActualizationFinished() const;
+
+    void AddMoveDataCandidate(ui64 portionId, bool committed);
+    void StopMoveData();
+    TMoveDataQueueSizes UpdateMoveDataQueueSizes(
+        const THashMap<ui64, TPortionInfo::TPtr>& portions, const TWrittenPortionsById& uncommitted, size_t& visitsLeft);
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TAddExternalContext& context);
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion);

@@ -2867,6 +2867,21 @@ void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
     out.set_trace_ids(in.GetTraceIds());
     out.set_aws_region(in.GetAwsRegion());
 
+    switch (in.GetCompression()) {
+    case NKikimrSchemeOp::ECdcStreamCompressionZstd: {
+        auto& zstd = *out.mutable_compression()->mutable_zstd();
+        if (in.HasCompressionLevel()) {
+            zstd.set_level(in.GetCompressionLevel());
+        }
+        break;
+    }
+    case NKikimrSchemeOp::ECdcStreamCompressionNone:
+        out.mutable_compression()->mutable_none();
+        break;
+    default:
+        break;
+    }
+
     if (const auto value = in.GetResolvedTimestampsIntervalMs()) {
         out.mutable_resolved_timestamps_interval()->set_seconds(TDuration::MilliSeconds(value).Seconds());
     }
@@ -2934,6 +2949,32 @@ bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out
     out.SetAwsRegion(in.aws_region());
     out.SetUserSIDs(in.user_sids());
     out.SetTraceIds(in.trace_ids());
+
+    if (in.has_compression()) {
+        const auto& compression = in.compression();
+        switch (compression.codec_case()) {
+        case Ydb::Table::ChangefeedCompression::kNone:
+            out.SetCompression(NKikimrSchemeOp::ECdcStreamCompressionNone);
+            break;
+        case Ydb::Table::ChangefeedCompression::kZstd: {
+            out.SetCompression(NKikimrSchemeOp::ECdcStreamCompressionZstd);
+            const auto& zstd = compression.zstd();
+            if (zstd.has_level()) {
+                if (zstd.level() < 1 || zstd.level() > 22) {
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Changefeed ZSTD compression level must be in range [1, 22]";
+                    return false;
+                }
+                out.SetCompressionLevel(zstd.level());
+            }
+            break;
+        }
+        case Ydb::Table::ChangefeedCompression::CODEC_NOT_SET:
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Invalid changefeed compression codec";
+            return false;
+        }
+    }
 
     if (in.has_resolved_timestamps_interval()) {
         if (in.resolved_timestamps_interval().seconds() < 1) {

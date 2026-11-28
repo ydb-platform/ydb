@@ -3846,6 +3846,11 @@ TChangefeedDescription& TChangefeedDescription::WithAwsRegion(const std::string&
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithCompression(TChangefeedCompression compression) {
+    Compression_ = std::move(compression);
+    return *this;
+}
+
 const std::string& TChangefeedDescription::GetName() const {
     return Name_;
 }
@@ -3892,6 +3897,10 @@ const std::unordered_map<std::string, std::string>& TChangefeedDescription::GetA
 
 const std::string& TChangefeedDescription::GetAwsRegion() const {
     return AwsRegion_;
+}
+
+const TChangefeedCompression& TChangefeedDescription::GetCompression() const {
+    return Compression_;
 }
 
 const std::optional<TChangefeedDescription::TInitialScanProgress>& TChangefeedDescription::GetInitialScanProgress() const {
@@ -3958,6 +3967,23 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     if (!proto.aws_region().empty()) {
         ret.WithAwsRegion(proto.aws_region());
     }
+    if (proto.has_compression()) {
+        const auto& compression = proto.compression();
+        switch (compression.codec_case()) {
+        case Ydb::Table::ChangefeedCompression::kNone:
+            ret.WithCompression(TChangefeedCompressionNone{});
+            break;
+        case Ydb::Table::ChangefeedCompression::kZstd:
+            ret.WithCompression(TChangefeedCompressionZstd{
+                compression.zstd().has_level()
+                    ? std::make_optional(compression.zstd().level())
+                    : std::nullopt
+            });
+            break;
+        case Ydb::Table::ChangefeedCompression::CODEC_NOT_SET:
+            break;
+        }
+    }
 
     if constexpr (std::is_same_v<TProto, Ydb::Table::ChangefeedDescription>) {
         switch (proto.state()) {
@@ -3998,6 +4024,19 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_aws_region(TStringType{AwsRegion_});
     proto.set_user_sids(UserSIDs_);
     proto.set_trace_ids(TraceIds_);
+
+    proto.clear_compression();
+    std::visit(TOverloaded{
+        [&](const TChangefeedCompressionNone&) {
+            proto.mutable_compression()->mutable_none();
+        },
+        [&](const TChangefeedCompressionZstd& zstdSettings) {
+            auto& zstd = *proto.mutable_compression()->mutable_zstd();
+            if (zstdSettings.Level) {
+                zstd.set_level(*zstdSettings.Level);
+            }
+        }
+    }, Compression_);
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:
@@ -4083,6 +4122,13 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
       << ", virtual_timestamps: " << (VirtualTimestamps_ ? "on": "off") << ""
       << ", schema_changes: " << (SchemaChanges_ ? "on": "off") << "";
 
+    if (const auto* zstd = std::get_if<TChangefeedCompressionZstd>(&Compression_)) {
+        o << ", compression: zstd";
+        if (zstd->Level) {
+            o << ", compression_level: " << *zstd->Level;
+        }
+    }
+
     if (ResolvedTimestamps_) {
         o << ", resolved_timestamps: " << *ResolvedTimestamps_;
     }
@@ -4109,7 +4155,8 @@ bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription&
         && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps()
         && lhs.GetSchemaChanges() == rhs.GetSchemaChanges()
         && lhs.GetResolvedTimestamps() == rhs.GetResolvedTimestamps()
-        && lhs.GetAwsRegion() == rhs.GetAwsRegion();
+        && lhs.GetAwsRegion() == rhs.GetAwsRegion()
+        && lhs.GetCompression() == rhs.GetCompression();
 }
 
 bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs) {

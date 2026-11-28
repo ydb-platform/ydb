@@ -581,6 +581,18 @@ message ChangefeedFormat {
     }
 }
 
+message ChangefeedCompression {
+    message Zstd {
+        // ZSTD compression level. If unspecified, level 3 is used.
+        optional int32 level = 2 [(Ydb.value) = "[1; 22]"];
+    }
+
+    oneof codec {
+        google.protobuf.Empty none = 1;
+        Zstd zstd = 2;
+    }
+}
+
 message Changefeed {
     // Name of the feed
     string name = 1;
@@ -608,6 +620,8 @@ message Changefeed {
     bool user_sids = 12;
     // Emit user trace identifier (trace_id) or not.
     bool trace_ids = 13;
+    // Compression applied to change records. Resolved timestamp messages remain uncompressed.
+    ChangefeedCompression compression = 14;
 }
 
 message ChangefeedDescription {
@@ -655,6 +669,8 @@ message ChangefeedDescription {
     bool user_sids = 11;
     // State of emitting of user trace identifier (trace_id) or not.
     bool trace_ids = 12;
+    // Compression applied to change records. Resolved timestamp messages remain uncompressed.
+    ChangefeedCompression compression = 13;
 }
 
 message StoragePool {

@@ -710,6 +710,29 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TChangefeedCompressionNone {
+    friend bool operator==(const TChangefeedCompressionNone&, const TChangefeedCompressionNone&) {
+        return true;
+    }
+};
+
+struct TChangefeedCompressionZstd {
+    explicit TChangefeedCompressionZstd(std::optional<int32_t> level = std::nullopt)
+        : Level(level)
+    {}
+
+    friend bool operator==(const TChangefeedCompressionZstd& lhs, const TChangefeedCompressionZstd& rhs) {
+        return lhs.Level == rhs.Level;
+    }
+
+    std::optional<int32_t> Level;
+};
+
+using TChangefeedCompression = std::variant<
+    TChangefeedCompressionNone,
+    TChangefeedCompressionZstd
+>;
+
 //! Represents changefeed description
 class TChangefeedDescription {
     friend class NYdb::TProtoAccessor;
@@ -754,6 +777,9 @@ public:
     TChangefeedDescription& SetAttributes(std::unordered_map<std::string, std::string>&& attrs);
     // Value that will be emitted in the `awsRegion` field of the record in DynamoDBStreamsJson format
     TChangefeedDescription& WithAwsRegion(const std::string& value);
+    // Compress change records. Resolved timestamp messages remain uncompressed.
+    // ZSTD uses level 3 when level is not specified.
+    TChangefeedDescription& WithCompression(TChangefeedCompression compression);
 
     const std::string& GetName() const;
     EChangefeedMode GetMode() const;
@@ -767,6 +793,7 @@ public:
     bool GetTraceIds() const;
     const std::unordered_map<std::string, std::string>& GetAttributes() const;
     const std::string& GetAwsRegion() const;
+    const TChangefeedCompression& GetCompression() const;
     const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
@@ -798,6 +825,7 @@ private:
     bool TraceIds_ = false;
     std::unordered_map<std::string, std::string> Attributes_;
     std::string AwsRegion_;
+    TChangefeedCompression Compression_ = TChangefeedCompressionNone{};
     std::optional<TInitialScanProgress> InitialScanProgress_;
 };
 

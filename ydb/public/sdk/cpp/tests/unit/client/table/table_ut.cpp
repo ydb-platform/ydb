@@ -278,6 +278,64 @@ TEST(TableTest, ColumnFamilyCompressionLevelRoundTrip) {
     }
 }
 
+TEST(TableTest, ChangefeedCompressionRoundTripAndOverwrite) {
+    using namespace NTable;
+
+    Ydb::Table::Changefeed proto;
+    proto.mutable_compression()->mutable_zstd()->set_level(22);
+
+    TChangefeedDescription("feed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+        .WithCompression(TChangefeedCompressionZstd{7})
+        .SerializeTo(proto);
+    ASSERT_TRUE(proto.has_compression());
+    ASSERT_TRUE(proto.compression().has_zstd());
+    ASSERT_TRUE(proto.compression().zstd().has_level());
+    EXPECT_EQ(proto.compression().zstd().level(), 7);
+
+    auto roundTrip = TProtoAccessor::FromProto(proto);
+    const auto* roundTripZstd = std::get_if<TChangefeedCompressionZstd>(&roundTrip.GetCompression());
+    ASSERT_NE(roundTripZstd, nullptr);
+    ASSERT_TRUE(roundTripZstd->Level);
+    EXPECT_EQ(*roundTripZstd->Level, 7);
+    EXPECT_NE(ToString(roundTrip).find("compression: zstd, compression_level: 7"), std::string::npos);
+
+    const auto sameCompression = TChangefeedDescription("feed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+        .WithCompression(TChangefeedCompressionZstd{7});
+    const auto differentCompression = TChangefeedDescription("feed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+        .WithCompression(TChangefeedCompressionZstd{8});
+    EXPECT_EQ(roundTrip, sameCompression);
+    EXPECT_NE(roundTrip, differentCompression);
+
+    TChangefeedDescription("feed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+        .WithCompression(TChangefeedCompressionZstd{})
+        .SerializeTo(proto);
+    ASSERT_TRUE(proto.compression().has_zstd());
+    EXPECT_FALSE(proto.compression().zstd().has_level());
+    roundTrip = TProtoAccessor::FromProto(proto);
+    roundTripZstd = std::get_if<TChangefeedCompressionZstd>(&roundTrip.GetCompression());
+    ASSERT_NE(roundTripZstd, nullptr);
+    EXPECT_FALSE(roundTripZstd->Level);
+    EXPECT_NE(ToString(roundTrip).find("compression: zstd"), std::string::npos);
+    EXPECT_EQ(ToString(roundTrip).find("compression_level"), std::string::npos);
+
+    TChangefeedDescription("feed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+        .WithCompression(TChangefeedCompressionNone{})
+        .SerializeTo(proto);
+    ASSERT_TRUE(proto.compression().has_none());
+    EXPECT_FALSE(proto.compression().has_zstd());
+    roundTrip = TProtoAccessor::FromProto(proto);
+    EXPECT_TRUE(std::holds_alternative<TChangefeedCompressionNone>(roundTrip.GetCompression()));
+
+    proto.mutable_compression()->clear_codec();
+    roundTrip = TProtoAccessor::FromProto(proto);
+    EXPECT_TRUE(std::holds_alternative<TChangefeedCompressionNone>(roundTrip.GetCompression()));
+
+    proto.clear_compression();
+    roundTrip = TProtoAccessor::FromProto(proto);
+    const auto uncompressed = TChangefeedDescription("feed", EChangefeedMode::Updates, EChangefeedFormat::Json);
+    EXPECT_EQ(roundTrip, uncompressed);
+}
+
 TEST(TableTest, ZstdColumnFamilyRequests) {
     TMockTableService tableService;
     std::unique_ptr<grpc::Server> grpcServer;

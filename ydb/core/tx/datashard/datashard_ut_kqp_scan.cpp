@@ -1,12 +1,14 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/library/yql/dq/actors/compute/events/events.h>
 
 #include <limits>
 
@@ -47,6 +49,48 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(KqpScan) {
+
+    Y_UNIT_TEST(WaitsForScanDataWithoutBusyPolling) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ExecSQL(server, sender, FillTableQuery());
+
+        ui64 result = 0;
+        auto streamObserver = runtime.AddObserver<TEvKqpExecuter::TEvStreamData>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetResultSet().rows_size(), 1);
+            result = record.GetResultSet().rows(0).items(0).uint64_value();
+            auto ack = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+            ack->Record.SetEnough(false);
+            ack->Record.SetFreeSpace(1 << 20);
+            runtime.Send(new IEventHandle(ev->Sender, sender, ack.Release()));
+            ev.Reset();
+        });
+        // KQP reads through its own fetcher, without DQ input channels or sources.
+        // Delay its data while keeping the compute actor's outputs writable.
+        TBlockEvents<TEvKqpCompute::TEvScanData> blockedData(runtime);
+        ui64 resumes = 0;
+        auto resumeObserver = runtime.AddObserver<NYql::NDq::TEvDqCompute::TEvResumeExecution>([&](auto&) {
+            UNIT_ASSERT_C(++resumes < 1000, "Scan compute actor busy-polls while waiting for its fetcher");
+        });
+        auto streamSender = runtime.AllocateEdgeActor();
+        SendRequest(runtime, streamSender,
+            MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false));
+        runtime.WaitFor("blocked scan data", [&] { return !blockedData.empty(); });
+        SimulateSleep(runtime, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(result, 0);
+
+        blockedData.Stop().Unblock();
+        auto response = runtime.GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(streamSender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result, 596400);
+    }
 
 
     /*

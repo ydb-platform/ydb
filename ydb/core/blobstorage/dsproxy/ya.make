@@ -90,5 +90,6 @@ RECURSE_FOR_TESTS(
     ut
     ut_fat
     ut_ftol
+    ut_get_min_iops
     ut_strategy
 )

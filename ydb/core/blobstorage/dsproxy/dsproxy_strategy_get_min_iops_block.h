@@ -276,15 +276,56 @@ public:
         }
     }
 
-    void IssueGetRequests(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
+    bool IsRestorationPossibleWithoutSlowDisks(TBlobState &state, const TBlobStorageGroupInfo &info) {
+        TIntervalSet<i32> toRestore;
+        FillIntervalsToRestoreRequestedFullData(state, info, toRestore);
+
+        const ui32 requiredParts = info.Type.MinimalRestorablePartCount();
+        // covered[n] contains the intervals available on at least n distinct parts.
+        TStackVec<TIntervalSet<i32>, TypicalPartsInBlob> covered(requiredParts + 1);
+        covered[0] = toRestore;
+        const ui32 totalPartCount = info.Type.TotalPartCount();
+        const i32 handoff = info.Type.Handoff();
+        const i32 minBlockSize = info.Type.MinimalBlockSize() / info.Type.DataParts();
+        for (ui32 partIdx = 0; partIdx < totalPartCount; ++partIdx) {
+            // Received bytes remain usable even if their source is now slow.
+            // As in restoration itself, only complete erasure blocks count.
+            TIntervalSet<i32> available;
+            for (auto [begin, end] : state.Parts[partIdx].Here()) {
+                begin = (begin + minBlockSize - 1) / minBlockSize * minBlockSize;
+                end = end / minBlockSize * minBlockSize;
+                if (begin < end) {
+                    available.Add(begin, end);
+                }
+            }
+            for (i32 niche = -1; niche < handoff; ++niche) {
+                const ui32 diskIdx = niche < 0 ? partIdx : totalPartCount + niche;
+                const auto& disk = state.Disks[diskIdx];
+                const auto situation = disk.DiskParts[partIdx].Situation;
+                if (!disk.IsSlow && (situation == TBlobState::ESituation::Unknown ||
+                        situation == TBlobState::ESituation::Present)) {
+                    available |= toRestore;
+                    break;
+                }
+            }
+            for (ui32 count = Min(partIdx + 1, requiredParts); count; --count) {
+                covered[count] |= covered[count - 1] & available;
+            }
+        }
+        return toRestore.IsSubsetOf(covered[requiredParts]);
+    }
+
+    bool IssueGetRequests(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
             bool considerSlowAsError, TGroupDiskRequests &groupDiskRequests) {
+        const size_t requestsBefore = groupDiskRequests.GetsPending.size();
         // Request minimal parts for each requested range of each blob
         bool isMinimalPossible = IsMinimalPossible(state, info, considerSlowAsError);
         if (isMinimalPossible) {
             IssueGetRequestsForMinimal(logCtx, state, info, considerSlowAsError, groupDiskRequests);
-        } else {
+        } else if (!considerSlowAsError || IsRestorationPossibleWithoutSlowDisks(state, info)) {
             IssueGetRequestsForRestoration(logCtx, state, info, considerSlowAsError, groupDiskRequests);
         }
+        return groupDiskRequests.GetsPending.size() != requestsBefore;
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
@@ -309,23 +350,11 @@ public:
             return *res;
         }
 
-        // Try excluding the slow disk
-        bool isDone = false;
-        // TODO: Mark disk that does not answer when accelerating requests
-        ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, blackboard, false, accelerationParams);
-        if (slowDiskSubgroupMask >= 0) {
-            TBlobStorageGroupInfo::EBlobState fastPessimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
-            TBlobStorageGroupInfo::EBlobState fastOptimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
-            TBlobStorageGroupInfo::EBlobState fastAltruisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
-            EvaluateCurrentLayout(logCtx, state, info, &fastPessimisticState, &fastOptimisticState,
-                    &fastAltruisticState, true);
-            if (!IsUnrecoverableAltruistic(fastAltruisticState)
-                    && !ProcessOptimistic(logCtx, fastAltruisticState, fastOptimisticState, true, state, info, blackboard.GroupQueues)) {
-                IssueGetRequests(logCtx, state, info, true, groupDiskRequests);
-                isDone = true;
-            }
-        }
-        if (!isDone) {
+        // Client-visible outcomes were checked above using actual disk states.
+        // A speculative read only needs enough readable data, even if excluding
+        // slow disks exceeds the group's failure model. Fall back on no new I/O.
+        const ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, blackboard, false, accelerationParams);
+        if (!slowDiskSubgroupMask || !IssueGetRequests(logCtx, state, info, true, groupDiskRequests)) {
             IssueGetRequests(logCtx, state, info, false, groupDiskRequests);
         }
 

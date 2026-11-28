@@ -737,6 +737,47 @@ protected:
         }
     }
 
+    void TestUnpackMemoryLimit(bool isStruct) {
+        if constexpr (Transport) {
+            auto* stringType = PgmBuilder_.NewDataType(NUdf::TDataType<char*>::Id);
+            TType* type;
+            if (isStruct) {
+                type = PgmBuilder_.NewStructType({{"a", stringType}, {"b", stringType}});
+            } else {
+                type = PgmBuilder_.NewTupleType({stringType, stringType});
+            }
+
+            TUnboxedValueVector fields;
+            fields.emplace_back(MakeString(TString(32, 'a')));
+            fields.emplace_back(MakeString(TString(1 << 20, 'b')));
+            const NUdf::TUnboxedValue value = HolderFactory_.VectorAsArray(fields);
+            auto packer = MakeValuePacker(/*stable=*/false, type, EValuePackerVersion::V0);
+            packer.AddItem(value);
+            auto serialized = packer.Finish();
+
+            TScopedAlloc unpackAlloc(__LOCATION__);
+            TMemoryUsageInfo memInfo("UnpackMemoryLimit");
+            THolderFactory holderFactory(unpackAlloc.Ref(), memInfo, FunctionRegistry_.Get());
+            // Allow the row and its first string, but reject the second string.
+            unpackAlloc.SetLimit(TAllocState::POOL_PAGE_SIZE);
+            TUnboxedValueBatch result;
+            UNIT_ASSERT_EXCEPTION(
+                packer.UnpackBatch(std::move(serialized), holderFactory, result),
+                TMemoryLimitExceededException);
+            UNIT_ASSERT_VALUES_EQUAL(result.RowCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(memInfo.GetUsage(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(unpackAlloc.GetUsed(), 0);
+        }
+    }
+
+    void TestStructUnpackMemoryLimit() {
+        TestUnpackMemoryLimit(/*isStruct=*/true);
+    }
+
+    void TestTupleUnpackMemoryLimit() {
+        TestUnpackMemoryLimit(/*isStruct=*/false);
+    }
+
     void TestCorruptedZeroSizedItemCount() {
         const TString payload = EncodeUi64(1ULL << 16) + TString(27, '\xff');
         TType* const voidType = Env_.GetTypeOfVoidLazy();
@@ -1543,6 +1584,8 @@ class TMiniKQLComputationNodeTransportPackTest: public TMiniKQLComputationNodePa
     UNIT_TEST(TestCorruptedData);
     UNIT_TEST(TestCorruptedZeroSizedItemCount);
     UNIT_TEST(TestCorruptedBatchData);
+    UNIT_TEST(TestStructUnpackMemoryLimit);
+    UNIT_TEST(TestTupleUnpackMemoryLimit);
     UNIT_TEST(TestIntegerPackPerformance);
     UNIT_TEST(TestShortStringPackPerformance);
     UNIT_TEST(TestPairPackPerformance);
@@ -1584,6 +1627,8 @@ class TMiniKQLComputationNodeTransportFastPackTest: public TMiniKQLComputationNo
     UNIT_TEST(TestCorruptedData);
     UNIT_TEST(TestCorruptedZeroSizedItemCount);
     UNIT_TEST(TestCorruptedBatchData);
+    UNIT_TEST(TestStructUnpackMemoryLimit);
+    UNIT_TEST(TestTupleUnpackMemoryLimit);
     UNIT_TEST(TestIntegerPackPerformance);
     UNIT_TEST(TestShortStringPackPerformance);
     UNIT_TEST(TestPairPackPerformance);

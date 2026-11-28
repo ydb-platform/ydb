@@ -14,14 +14,14 @@ TMaybe<TString> TEvQueryRequest::GetMvccVersion() const {
     return request.HasMvccVersion() ? TMaybe<TString>(request.GetMvccVersion()) : Nothing();
 }
 
-void TEvQueryRequest::SetClientLostAction(TActorId actorId, NActors::TActorSystem* as) {
+void TEvQueryRequest::SetClientLostAction(TActorId actorId, NActors::TActorSystem* as, ui64 requestId) {
     if (RequestCtx) {
-        RequestCtx->SetFinishAction([actorId, as]() {
-            as->Send(actorId, new NGRpcService::TEvClientLost());
+        RequestCtx->SetFinishAction([actorId, as, requestId]() {
+            as->Send(actorId, new NGRpcService::TEvClientLost(requestId));
             });
     } else if (Record.HasCancelationActor()) {
         auto cancelationActor = ActorIdFromProto(Record.GetCancelationActor());
-        NGRpcService::SubscribeRemoteCancel(cancelationActor, actorId, as);
+        NGRpcService::SubscribeRemoteCancel(cancelationActor, actorId, as, requestId);
     }
 }
 

@@ -305,7 +305,7 @@ public:
         YQL_ENSURE(!QueryClassifier);
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
-        ev->Get()->SetClientLostAction(selfId, as);
+        ev->Get()->SetClientLostAction(selfId, as, QueryId);
 
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, Settings.Database, Settings.ApplicationName, Settings.Cluster, Settings.DbCounters, Settings.LongSession,

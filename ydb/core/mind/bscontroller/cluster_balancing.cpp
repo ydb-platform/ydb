@@ -1,6 +1,5 @@
 #include "cluster_balancing.h"
-
-#include <ydb/core/blobstorage/base/pdisk_filter.h>
+#include "impl.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/mind/bscontroller/types.h>
@@ -17,6 +16,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <set>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -58,6 +58,8 @@ namespace NKikimr::NBsController {
                 return std::tie(left.BoxId, left.StoragePoolId) < std::tie(right.BoxId, right.StoragePoolId);
             }
         };
+
+        std::set<std::tuple<ui64, ui64, TString>> InvalidFilters;
 
         struct TStorageInfo {
             std::unordered_set<TGroupId> MovableGroups;
@@ -108,68 +110,15 @@ namespace NKikimr::NBsController {
             }
         };
 
-        static bool MatchTriStateBool(NKikimrBlobStorage::ETriStateBool actual, bool expected) {
-            return expected
-                ? actual == NKikimrBlobStorage::ETriStateBool::kTrue
-                : actual == NKikimrBlobStorage::ETriStateBool::kFalse;
-        }
-
-        static bool MatchPDiskFilter(
-            const NKikimrBlobStorage::TPDiskFilter& filter,
-            const NKikimrBlobStorage::TBaseConfig_TPDisk& pdisk,
-            const TNodeLocation* location
-        ) {
-            for (const auto& property : filter.GetProperty()) {
-                switch (property.GetPropertyCase()) {
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kType:
-                        if (property.GetType() != pdisk.GetType()) {
-                            return false;
-                        }
-                        break;
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kSharedWithOs:
-                        if (!MatchTriStateBool(pdisk.GetSharedWithOs(), property.GetSharedWithOs())) {
-                            return false;
-                        }
-                        break;
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kReadCentric:
-                        if (!MatchTriStateBool(pdisk.GetReadCentric(), property.GetReadCentric())) {
-                            return false;
-                        }
-                        break;
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
-                        if (property.GetKind() != pdisk.GetKind()) {
-                            return false;
-                        }
-                        break;
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation:
-                        if (!location || !MatchPDiskLocation(*location, TNodeLocation(property.GetLocation()))) {
-                            return false;
-                        }
-                        break;
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
-                        return false;
-                }
-            }
-
-            return true;
-        }
-
-        static bool MatchStoragePool(
-            const NKikimrBlobStorage::TDefineStoragePool& pool,
-            const NKikimrBlobStorage::TBaseConfig_TPDisk& pdisk,
-            const TNodeLocation* location
-        ) {
-            if (!pool.HasBoxId() || pool.GetBoxId() != pdisk.GetBoxId()) {
-                return false;
-            }
-
-            for (const auto& filter : pool.GetPDiskFilter()) {
-                if (MatchPDiskFilter(filter, pdisk, location)) {
+        static TMaybe<bool> ToMaybeBool(NKikimrBlobStorage::ETriStateBool value) {
+            switch (value) {
+                case NKikimrBlobStorage::ETriStateBool::kTrue:
                     return true;
-                }
+                case NKikimrBlobStorage::ETriStateBool::kFalse:
+                    return false;
+                default:
+                    return {};
             }
-
-            return false;
         }
 
         std::map<TPoolKey, TPDiskUsage> BuildImprovablePoolTargets(
@@ -183,14 +132,39 @@ namespace NKikimr::NBsController {
                 nodeLocations.emplace(node.GetNodeId(), TNodeLocation(node.GetLocation()));
             }
 
-            std::unordered_map<ui64, std::vector<const NKikimrBlobStorage::TDefineStoragePool*>> storagePoolsByBox;
+            using TPDiskFilter = TBlobStorageController::TStoragePoolInfo::TPDiskFilter;
+            struct TPoolFilters {
+                TPoolKey Key;
+                std::vector<TPDiskFilter> Filters;
+            };
+            std::unordered_map<ui64, std::vector<TPoolFilters>> storagePoolsByBox;
+            decltype(InvalidFilters) invalidFilters;
             for (const auto& pool : storagePoolsStatus.GetStoragePool()) {
                 if (!pool.HasBoxId()) {
                     continue;
                 }
-                storagePoolsByBox[pool.GetBoxId()].push_back(&pool);
+                TPoolFilters parsedPool{{pool.GetBoxId(), pool.GetStoragePoolId()}, {}};
+                for (const auto& filter : pool.GetPDiskFilter()) {
+                    try {
+                        parsedPool.Filters.push_back(TPDiskFilter::Parse(pool.GetBoxId(), pool.GetStoragePoolId(), filter));
+                    } catch (const yexception& ex) {
+                        // An invalid OR branch must not broaden the set of eligible disks.
+                        const auto key = std::make_tuple(pool.GetBoxId(), pool.GetStoragePoolId(), filter.SerializeAsString());
+                        if (invalidFilters.insert(key).second && !InvalidFilters.contains(key)) {
+                            YDB_LOG_WARN("Skipping invalid PDisk filter in cluster balancing",
+                                {"marker", "BSCB18"},
+                                {"BoxId", pool.GetBoxId()},
+                                {"StoragePoolId", pool.GetStoragePoolId()},
+                                {"error", ex.what()});
+                        }
+                    }
+                }
+                storagePoolsByBox[pool.GetBoxId()].push_back(std::move(parsedPool));
             }
 
+            InvalidFilters = std::move(invalidFilters);
+
+            const TNodeLocation emptyLocation;
             for (const auto& pdisk : config.GetPDisk()) {
                 const auto poolsIt = storagePoolsByBox.find(pdisk.GetBoxId());
                 if (poolsIt == storagePoolsByBox.end()) {
@@ -206,18 +180,18 @@ namespace NKikimr::NBsController {
                 const TPDiskUsage& usage = usageIt->second;
 
                 const auto nodeIt = nodeLocations.find(pdisk.GetNodeId());
-                const auto* location = nodeIt != nodeLocations.end() ? &nodeIt->second : nullptr;
-                for (const auto* pool : poolsIt->second) {
-                    if (!MatchStoragePool(*pool, pdisk, location)) {
+                const auto& location = nodeIt != nodeLocations.end() ? nodeIt->second : emptyLocation;
+                const TPDiskCategory category(PDiskTypeToPDiskType(pdisk.GetType()), pdisk.GetKind());
+                const auto sharedWithOs = ToMaybeBool(pdisk.GetSharedWithOs());
+                const auto readCentric = ToMaybeBool(pdisk.GetReadCentric());
+                for (const auto& pool : poolsIt->second) {
+                    if (!std::any_of(pool.Filters.begin(), pool.Filters.end(), [&](const auto& filter) {
+                        return filter.MatchPDisk(category.GetRaw(), sharedWithOs, readCentric, location);
+                    })) {
                         continue;
                     }
 
-                    const TPoolKey poolKey{
-                        .BoxId = pool->GetBoxId(),
-                        .StoragePoolId = pool->GetStoragePoolId(),
-                    };
-
-                    TPoolUsageSummary& summary = poolUsageSummaries[poolKey];
+                    TPoolUsageSummary& summary = poolUsageSummaries[pool.Key];
                     if (usage.NumVDisks && (!summary.HasMaxSourceUsage || IsUsageLess(summary.MaxSourceUsage, usage))) {
                         summary.MaxSourceUsage = usage;
                         summary.HasMaxSourceUsage = true;

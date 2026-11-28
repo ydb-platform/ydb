@@ -58,6 +58,26 @@ struct TFixture {
         });
     }
 
+    void InsertV2(const TString& key) {
+        Transaction([&] {
+            Db.Table<Schema::BoxStoragePoolPDiskFilterV2>().Key(7, 11, key).Update();
+        });
+    }
+
+    TSet<TString> V2Keys() {
+        TSet<TString> keys;
+        Transaction([&] {
+            using T = Schema::BoxStoragePoolPDiskFilterV2;
+            auto rows = Db.Table<T>().Range(7, 11).Select();
+            UNIT_ASSERT(rows.IsReady());
+            while (rows.IsValid()) {
+                keys.insert(rows.GetValue<T::Filter>());
+                UNIT_ASSERT(rows.Next());
+            }
+        });
+        return keys;
+    }
+
     template<typename T>
     size_t Count(ui64 boxId, ui64 poolId) {
         size_t count = 0;
@@ -95,6 +115,149 @@ void CheckFilters(const TFilters& actual, const TFilters& expected) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
+    Y_UNIT_TEST(UnknownMetadataKeepsExactKeysThroughEditAndDelete) {
+        TFixture f;
+        f.Transaction([&] { f.Db.Materialize<Schema>(); });
+        NKikimrBlobStorage::TPDiskFilter known;
+        known.AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        TSet<TString> originals;
+        for (const char* name : {"first", "second"}) {
+            NKikimrBlobStorage::TPDiskFilter metadata;
+            metadata.GetReflection()->MutableUnknownFields(&metadata)->AddLengthDelimited(100, name);
+            // Unknown fields precede known ones on the wire. Protobuf reserialization changes these bytes.
+            const TString raw = metadata.SerializeAsString() + known.SerializeAsString();
+            NKikimrBlobStorage::TPDiskFilter parsed;
+            UNIT_ASSERT(parsed.ParseFromString(raw));
+            UNIT_ASSERT(parsed.SerializeAsString() != raw);
+            originals.insert(raw);
+            f.InsertV2(raw);
+        }
+        auto loaded = f.Load(7, 11);
+        UNIT_ASSERT_VALUES_EQUAL(loaded.size(), 2); // Equal known fields must not hide different future metadata.
+        UNIT_ASSERT(f.V2Keys() == originals);
+        NKikimrBlobStorage::TDefineStoragePool command;
+        for (const auto& filter : loaded) {
+            UNIT_ASSERT(filter.SerializedFilter);
+            UNIT_ASSERT(originals.contains(*filter.SerializedFilter));
+            UNIT_ASSERT(filter.MatchPDisk(TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw(), {}, {}, {}));
+            NKikimrBlobStorage::TPDiskFilter proto;
+            TBlobStorageController::Serialize(&proto, filter);
+            UNIT_ASSERT_VALUES_EQUAL(proto.GetReflection()->GetUnknownFields(proto).field_count(), 1);
+            *command.AddPDiskFilter() = proto;
+        }
+        const auto edited = TPool::ParsePDiskFilters(7, 11, command.GetPDiskFilter(), &loaded);
+        f.Update(loaded, edited);
+        UNIT_ASSERT(f.V2Keys() == originals);
+        CheckFilters(f.Load(7, 11), loaded);
+
+        f.Update(f.Load(7, 11), {});
+        UNIT_ASSERT(f.V2Keys().empty());
+    }
+
+    Y_UNIT_TEST(OpaqueOneofKeepsWireOrderAndRejectsAmbiguousEdits) {
+        TFixture f;
+        f.Transaction([&] { f.Db.Materialize<Schema>(); });
+        NKikimrBlobStorage::TPDiskFilter known;
+        known.AddProperty()->SetType(NKikimrBlobStorage::SSD);
+        // Property 100 = 7 followed by Kind = 1. A future reader selects Kind (last oneof member wins).
+        const TString raw = known.SerializeAsString() + TString("\x0a\x05\xa0\x06\x07\x20\x01", 7);
+        f.InsertV2(raw);
+        auto loaded = f.Load(7, 11);
+        NKikimrBlobStorage::TDefineStoragePool command;
+        TBlobStorageController::Serialize(command.AddPDiskFilter(), *loaded.begin());
+        const TString reordered = command.GetPDiskFilter(0).SerializeAsString();
+        UNIT_ASSERT(raw != reordered); // A future reader would select property 100 after this reserialization.
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TPool::ParsePDiskFilters(7, 11, command.GetPDiskFilter(), nullptr),
+            yexception, "unsupported PDisk filter");
+        f.Update(loaded, TPool::ParsePDiskFilters(7, 11, command.GetPDiskFilter(), &loaded));
+        UNIT_ASSERT(f.V2Keys() == TSet<TString>{raw});
+
+        f.InsertV2(reordered); // Two distinct meanings now have identical responses to this old reader.
+        loaded = f.Load(7, 11);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TPool::ParsePDiskFilters(7, 11, command.GetPDiskFilter(), &loaded),
+            yexception, "Ambiguous PDisk filter edit");
+        *command.AddPDiskFilter() = command.GetPDiskFilter(0);
+        CheckFilters(TPool::ParsePDiskFilters(7, 11, command.GetPDiskFilter(), &loaded), loaded);
+        command.ClearPDiskFilter();
+        f.Update(loaded, TPool::ParsePDiskFilters(7, 11, command.GetPDiskFilter(), &loaded));
+        UNIT_ASSERT(f.V2Keys().empty());
+    }
+
+    Y_UNIT_TEST(InvalidStoredFiltersRemainInactiveAndRemovable) {
+        TFixture f;
+        f.Transaction([&] { f.Db.Materialize<Schema>(); });
+        NKikimrBlobStorage::TDefineStoragePool command;
+        command.AddPDiskFilter()->AddProperty()->SetKind(1); // No Type.
+        auto* duplicate = command.AddPDiskFilter();
+        duplicate->AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        duplicate->AddProperty()->SetType(NKikimrBlobStorage::SSD);
+        for (const auto& proto : command.GetPDiskFilter()) {
+            UNIT_ASSERT_EXCEPTION(TFilter::Parse(7, 11, proto), yexception);
+            f.InsertV2(proto.SerializeAsString());
+        }
+        const auto loaded = f.Load(7, 11);
+        UNIT_ASSERT_VALUES_EQUAL(loaded.size(), 2);
+        for (const auto& filter : loaded) {
+            UNIT_ASSERT(filter.IsUnsupported);
+            UNIT_ASSERT(!filter.MatchPDisk(TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 1).GetRaw(), {}, {}, {}));
+        }
+        CheckFilters(TPool::ParsePDiskFilters(7, 11, command.GetPDiskFilter(), &loaded), loaded);
+        f.Update(loaded, {});
+        UNIT_ASSERT(f.V2Keys().empty());
+    }
+
+    Y_UNIT_TEST(UnknownConstraintsSurviveWithoutMatchingDisks) {
+        for (ui32 variant = 0; variant < 4; ++variant) {
+            TFixture f;
+            f.Transaction([&] { f.Db.Materialize<Schema>(); });
+            NKikimrBlobStorage::TPDiskFilter proto;
+            if (variant != 3) {
+                proto.AddProperty()->SetType(NKikimrBlobStorage::ROT);
+            }
+            if (variant == 0 || variant == 3) {
+                auto* property = proto.AddProperty();
+                property->GetReflection()->MutableUnknownFields(property)->AddVarint(100, 7);
+            } else if (variant == 1) {
+                // A future oneof alternative can override a known field in the same nested message.
+                auto* property = proto.MutableProperty(0);
+                property->GetReflection()->MutableUnknownFields(property)->AddVarint(100, 7);
+            } else {
+                auto* location = proto.AddProperty()->MutableLocation();
+                location->SetDataCenter("dc1");
+                location->mutable_unknown_fields()->AddVarint(100, 7);
+            }
+            const auto bytes = proto.SerializeAsString();
+            f.InsertV2(bytes);
+            const auto loaded = f.Load(7, 11);
+            UNIT_ASSERT_VALUES_EQUAL(loaded.size(), 1);
+            const auto& filter = *loaded.begin();
+            UNIT_ASSERT(filter.IsUnsupported);
+            UNIT_ASSERT(!filter.MatchPDisk(TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw(), {}, {}, {}));
+            NKikimrBlobStorage::TPDiskFilter returned;
+            TBlobStorageController::Serialize(&returned, filter);
+            UNIT_ASSERT_VALUES_EQUAL(returned.SerializeAsString(), bytes);
+            f.Update(loaded, {});
+            UNIT_ASSERT(f.V2Keys().empty());
+        }
+    }
+
+    Y_UNIT_TEST(AllEncodingsOfTheSameKnownFilterAreDeleted) {
+        TFixture f;
+        f.Transaction([&] { f.Db.Materialize<Schema>(); });
+        NKikimrBlobStorage::TPDiskFilter proto;
+        proto.AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        proto.AddProperty()->SetKind(7);
+        f.Update({}, {TFilter::Parse(7, 11, proto)}); // Legacy table.
+        f.InsertV2(proto.SerializeAsString()); // V2 without Location still has to be deleted from V2.
+        proto.MutableProperty()->SwapElements(0, 1);
+        f.InsertV2(proto.SerializeAsString());
+        const auto loaded = f.Load(7, 11);
+        UNIT_ASSERT_VALUES_EQUAL(loaded.size(), 3);
+        f.Update(loaded, {});
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 0);
+        UNIT_ASSERT(f.V2Keys().empty());
+    }
+
     Y_UNIT_TEST(LegacyReadAndWriteAfterUpgrade) {
         TFixture f;
         f.Transaction([&] {
@@ -187,15 +350,12 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
 
     Y_UNIT_TEST(SerializedFilterKeyDoesNotDependOnPropertyOrder) {
         TFixture f;
-        f.Transaction([&] {
-            f.Db.Materialize<Schema>();
-        });
+        f.Transaction([&] { f.Db.Materialize<Schema>(); });
         NKikimrBlobStorage::TPDiskFilter first;
         first.AddProperty()->SetType(NKikimrBlobStorage::ROT);
         first.AddProperty()->SetKind(9);
         first.AddProperty()->SetSharedWithOs(false);
         first.AddProperty()->MutableLocation()->SetDataCenter("dc1");
-
         NKikimrBlobStorage::TPDiskFilter reversed;
         for (int i = first.PropertySize(); i > 0; --i) {
             *reversed.AddProperty() = first.GetProperty(i - 1);
@@ -203,12 +363,67 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         UNIT_ASSERT(first.SerializeAsString() != reversed.SerializeAsString());
         const TFilters a{TFilter::Parse(7, 11, first)};
         const TFilters b{TFilter::Parse(7, 11, reversed)};
+        CheckFilters(a, b);
         f.Update({}, a);
         f.Update({}, b);
         UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 1);
-        CheckFilters(f.Load(7, 11), b);
-        f.Update(b, {});
+        const auto loaded = f.Load(7, 11);
+        CheckFilters(loaded, b);
+        // A redefinition in either order edits the same row instead of writing a second encoding.
+        for (const auto* request : {&first, &reversed}) {
+            NKikimrBlobStorage::TDefineStoragePool command;
+            *command.AddPDiskFilter() = *request;
+            CheckFilters(TPool::ParsePDiskFilters(7, 11, command.GetPDiskFilter(), &loaded), loaded);
+        }
+        f.Update(loaded, {});
         UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 0);
+    }
+
+    Y_UNIT_TEST(GeometryOnlyPileOverrideKeepsInactiveStoredFilters) {
+        TFixture f;
+        f.Transaction([&] { f.Db.Materialize<Schema>(); });
+        NKikimrBlobStorage::TPDiskFilter invalid;
+        invalid.AddProperty()->SetKind(1); // No Type: Parse rejects it, load keeps it inactive.
+        f.InsertV2(invalid.SerializeAsString());
+
+        TPool pool;
+        pool.Name = "pool";
+        pool.Kind = "kind";
+        pool.ErasureSpecies = TBlobStorageGroupType::ErasureNone;
+        pool.VDiskKind = NKikimrBlobStorage::TVDiskKind::Default;
+        pool.NumGroups = 0;
+        pool.RandomizeGroupMapping = false;
+        pool.DefaultGroupSizeInUnits = 0;
+        f.Transaction([&] { UNIT_ASSERT(pool.LoadPDiskFilters(f.Db, {7, 11})); });
+        UNIT_ASSERT_VALUES_EQUAL(pool.PDiskFilters.size(), 1);
+        UNIT_ASSERT(pool.PDiskFilters.begin()->IsUnsupported);
+
+        TBridgeInfo bridgeInfo;
+        auto& pile = bridgeInfo.Piles.emplace_back();
+        pile.BridgePileId = TBridgePileId::FromPileIndex(0);
+        pile.Name = "pile";
+        TStoragePoolPileOverrideRules rules;
+        auto* rule = rules.Add();
+        rule->AddPileName("pile");
+        rule->AddKind("kind");
+        rule->SetErasureSpecies("block-4-2");
+        rule->MutableGeometry();
+
+        // The override changes only erasure and geometry, so the stored filters pass through as loaded. Layout
+        // calculation takes this path at startup; a throwing reparse here would restart the tablet.
+        const auto resolved = TBlobStorageController::ResolveStoragePoolForPile({7, 11}, pool, pile.BridgePileId,
+            &bridgeInfo, &rules);
+        UNIT_ASSERT(resolved.ErasureSpecies == TBlobStorageGroupType::Erasure4Plus2Block);
+        CheckFilters(resolved.PDiskFilters, pool.PDiskFilters);
+        UNIT_ASSERT(resolved.PDiskFilters.begin()->IsUnsupported);
+
+        // An override with its own filters replaces the stored set.
+        rule->MutablePDiskFilters()->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::SSD);
+        const auto replaced = TBlobStorageController::ResolveStoragePoolForPile({7, 11}, pool, pile.BridgePileId,
+            &bridgeInfo, &rules);
+        UNIT_ASSERT_VALUES_EQUAL(replaced.PDiskFilters.size(), 1);
+        UNIT_ASSERT(!replaced.PDiskFilters.begin()->IsUnsupported);
+        UNIT_ASSERT(replaced.PDiskFilters.begin()->Type == NKikimrBlobStorage::SSD);
     }
 }
 

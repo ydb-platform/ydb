@@ -1043,7 +1043,7 @@ namespace NKikimr {
                         << "," << storagePool.DomainLevelBegin << "," << storagePool.DomainLevelEnd
                         << "," << storagePool.NumFailRealms << "," << storagePool.NumFailDomainsPerFailRealm
                         << "," << storagePool.NumVDisksPerFailDomain;
-                    for (const auto& filter : storagePool.PDiskFilters) {
+                    for (const auto& filter : storagePool.GetMatchingFilters()) {
                         identifier << " Filter# " << filter.Type << "," << filter.SharedWithOs
                             << "," << filter.ReadCentric << "," << filter.Kind;
                         if (filter.Location) {

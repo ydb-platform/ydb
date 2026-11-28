@@ -8,6 +8,12 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/message.h>
+#include <google/protobuf/unknown_field_set.h>
+
+#include <vector>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
 
 namespace NKikimr::NBsController {
@@ -1480,6 +1486,64 @@ namespace NKikimr::NBsController {
             }
         }
 
+        TBlobStorageController::TStoragePoolInfo::TPDiskFilters
+        TBlobStorageController::TStoragePoolInfo::GetMatchingFilters() const {
+            TPDiskFilters result;
+            for (const auto& filter : PDiskFilters) {
+                if (!filter.IsUnsupported) {
+                    result.insert(TPDiskFilter{.Type = filter.Type, .SharedWithOs = filter.SharedWithOs,
+                        .ReadCentric = filter.ReadCentric, .Kind = filter.Kind, .Location = filter.Location,
+                        .RequiredLocation = filter.RequiredLocation});
+                }
+            }
+            return result;
+        }
+
+        TBlobStorageController::TStoragePoolInfo::TPDiskFilters
+        TBlobStorageController::TStoragePoolInfo::ParsePDiskFilters(ui64 boxId, ui64 storagePoolId,
+                const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& filters,
+                const TPDiskFilters* previous) {
+            std::map<TString, std::vector<const TPDiskFilter*>> stored;
+            if (previous) {
+                for (const auto& filter : *previous) {
+                    NKikimrBlobStorage::TPDiskFilter proto;
+                    Serialize(&proto, filter);
+                    stored[proto.SerializeAsString()].push_back(&filter);
+                }
+            }
+            struct TRequestedFilter {
+                const NKikimrBlobStorage::TPDiskFilter* Proto = nullptr;
+                size_t Count = 0;
+            };
+            std::map<TString, TRequestedFilter> requested;
+            for (const auto& proto : filters) {
+                auto& request = requested[proto.SerializeAsString()];
+                request.Proto = &proto;
+                ++request.Count;
+            }
+            TPDiskFilters result;
+            for (const auto& [bytes, request] : requested) {
+                if (const auto it = stored.find(bytes); it != stored.end()) {
+                    // A wire round trip can reorder unknown oneof alternatives. Reuse the original keys.
+                    // Several distinct keys may have the same wire response; never guess which one was removed.
+                    if (request.Count < it->second.size() && std::any_of(it->second.begin(), it->second.end(),
+                            [](const auto* filter) { return filter->IsUnsupported; })) {
+                        throw TExError() << "Ambiguous PDisk filter edit; preserve or remove all identical branches";
+                    }
+                    for (const auto* filter : it->second) {
+                        result.insert(*filter);
+                    }
+                } else {
+                    auto filter = TPDiskFilter::Parse(boxId, storagePoolId, *request.Proto);
+                    if (filter.IsUnsupported) {
+                        throw TExError() << "Cannot add an unsupported PDisk filter";
+                    }
+                    result.insert(std::move(filter));
+                }
+            }
+            return result;
+        }
+
         bool TBlobStorageController::TStoragePoolInfo::LoadPDiskFilters(NIceDb::TNiceDb& db,
                 const TBoxStoragePoolId& id) {
             PDiskFilters.clear();
@@ -1492,8 +1556,18 @@ namespace NKikimr::NBsController {
                     if constexpr (std::is_same_v<T, Schema::BoxStoragePoolPDiskFilter>) {
                         PDiskFilters.insert(TPDiskFilter::CreateFromRowset(rows));
                     } else {
-                        PDiskFilters.insert(TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id),
-                            rows.template GetValue<typename T::Filter>()));
+                        const auto key = rows.template GetValue<typename T::Filter>();
+                        NKikimrBlobStorage::TPDiskFilter proto;
+                        const auto [boxId, poolId] = id;
+                        Y_ABORT_UNLESS(proto.ParseFromString(key), "Invalid PDisk filter protobuf: BoxId# %" PRIu64
+                            " StoragePoolId# %" PRIu64, boxId, poolId);
+                        try {
+                            PDiskFilters.insert(TPDiskFilter::Parse(boxId, poolId, proto, &key));
+                        } catch (const TExError&) {
+                            // A future writer may use validation rules this binary does not understand.
+                            PDiskFilters.insert(TPDiskFilter{.BoxId = boxId, .StoragePoolId = poolId,
+                                .SerializedFilter = key, .IsUnsupported = true});
+                        }
                     }
                     if (!rows.Next()) {
                         return false;
@@ -1519,13 +1593,9 @@ namespace NKikimr::NBsController {
                     NTableAdapter::MapKey<T>(&keyTuple, rawKey);
                     db.Update(T::TableId, op, rawKey, {});
                 };
-                if (filter.Location) {
-                    // Serialize the parsed filter in a fixed property order: request ordering
-                    // must not change its persistent identity, including when deleting a row.
-                    NKikimrBlobStorage::TPDiskFilter proto;
-                    Serialize(&proto, filter);
+                if (filter.SerializedFilter) {
                     update.template operator()<Schema::BoxStoragePoolPDiskFilterV2>(
-                        std::make_tuple(filter.BoxId, filter.StoragePoolId, proto.SerializeAsString()));
+                        std::make_tuple(filter.BoxId, filter.StoragePoolId, *filter.SerializedFilter));
                 } else {
                     update.template operator()<Schema::BoxStoragePoolPDiskFilter>(filter.GetLegacyKey());
                 }
@@ -1534,13 +1604,18 @@ namespace NKikimr::NBsController {
 
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(ui64 boxId, ui64 storagePoolId,
-                const NKikimrBlobStorage::TPDiskFilter& proto) {
+                const NKikimrBlobStorage::TPDiskFilter& proto, const TString* serialized) {
             TPDiskFilter filter;
             filter.BoxId = boxId;
             filter.StoragePoolId = storagePoolId;
             bool hasLocation = false;
 
             for (const auto &property : proto.GetProperty()) {
+                if (HasUnknownPDiskFilterFields(property)) {
+                    // Preserve the whole constraint if any part of it is not understood.
+                    filter.IsUnsupported = true;
+                    continue;
+                }
                 switch (property.GetPropertyCase()) {
 #define PROPERTY(NAME) \
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::k ## NAME: { \
@@ -1563,9 +1638,9 @@ namespace NKikimr::NBsController {
                             throw TExError() << "Location already set";
                         }
                         if (!IsValidPDiskFilterLocation(property.GetLocation())) {
-                            throw TExError() << "Location requires current string fields; legacy numeric and unknown fields are not supported";
+                            throw TExError() << "Location requires current string fields; legacy numeric fields are not supported";
                         }
-                        // an empty location constrains nothing, so it is stored the same way as an absent one
+                        // An empty location imposes no matching constraint.
                         if (TNodeLocation location(property.GetLocation()); !location.GetItems().empty()) {
                             filter.SetLocation(location.GetSerializedLocation());
                         }
@@ -1578,14 +1653,32 @@ namespace NKikimr::NBsController {
                 throw TExError() << "TPDiskFilter.TRequiredProperty.Property has invalid case";
             }
 
-            if (!filter.Type) {
+            if (!filter.Type && !filter.IsUnsupported) {
                 throw TExError() << "TPDiskFilter did not specify Type property";
             }
 
+            if (serialized) {
+                // Loaded V2 rows must retain their original keys.
+                filter.SerializedFilter = *serialized;
+            } else if (filter.IsUnsupported || !proto.GetReflection()->GetUnknownFields(proto).empty()) {
+                // Opaque content keeps its exact wire bytes: field order decides which oneof alternative a newer
+                // reader selects.
+                filter.SerializedFilter = proto.SerializeAsString();
+            } else if (filter.Location) {
+                // A fully understood filter gets a canonical key, so the property order of a request does not
+                // create a second row for the same predicate. Plain filters stay readable by pre-V2 builds.
+                NKikimrBlobStorage::TPDiskFilter canonical;
+                Serialize(&canonical, filter);
+                filter.SerializedFilter = canonical.SerializeAsString();
+            }
             return filter;
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter) {
+            if (filter.SerializedFilter) {
+                Y_ABORT_UNLESS(pb->ParseFromString(*filter.SerializedFilter));
+                return;
+            }
 #define SERIALIZE_VARIABLE(NAME) (filter.NAME && (pb->AddProperty()->Set##NAME(*filter.NAME), true))
             SERIALIZE_VARIABLE(Type);
             SERIALIZE_VARIABLE(SharedWithOs);

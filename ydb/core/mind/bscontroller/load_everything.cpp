@@ -321,6 +321,12 @@ public:
             if (!storagePool.LoadPDiskFilters(db, storagePoolId)) {
                 return false;
             }
+            for (const auto& filter : storagePool.PDiskFilters) {
+                if (filter.IsUnsupported) {
+                    YDB_LOG_WARN("Loaded an invalid or unsupported PDisk filter; this branch matches no disks",
+                        {"BoxId", std::get<0>(storagePoolId)}, {"StoragePoolId", std::get<1>(storagePoolId)});
+                }
+            }
             Self->SysViewChangedStoragePools.insert(storagePoolId);
         }
 

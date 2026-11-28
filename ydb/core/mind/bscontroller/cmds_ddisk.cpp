@@ -60,9 +60,11 @@ namespace NKikimr::NBsController {
         }
         storagePool.RandomizeGroupMapping = false;
 
-        for (const auto &item : cmd.GetPDiskFilter()) {
-            storagePool.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(boxId, storagePoolId, item));
-        }
+        // Reuse the stored keys of unchanged filters and reject constraints this binary does not understand,
+        // exactly as DefineStoragePool does.
+        const auto current = pools.find(id);
+        storagePool.PDiskFilters = TStoragePoolInfo::ParsePDiskFilters(boxId, storagePoolId, cmd.GetPDiskFilter(),
+            current != pools.end() ? &current->second.PDiskFilters : nullptr);
 
         //if (cmd.HasScopeId()) {
         //    const auto& pb = cmd.GetScopeId();

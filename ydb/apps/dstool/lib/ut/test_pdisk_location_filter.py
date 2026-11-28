@@ -56,3 +56,37 @@ class TestPDiskLocationFilter(unittest.TestCase):
         self.assertEqual(set(common.build_pdisk_usage_map(self.config)), {(1, 1), (2, 1)})
         self.required.DataCenter = 'missing'
         self.assertEqual(common.build_pdisk_usage_map(self.config, storage_pool=self.pool), {})
+
+    def test_unknown_constraints_do_not_match_or_hide_alternatives(self):
+        for variant in ('unknown_only', 'known_and_unknown', 'nested'):
+            with self.subTest(variant=variant):
+                self.setUp()
+                if variant == 'unknown_only':
+                    target = self.filter.Property.add()
+                elif variant == 'known_and_unknown':
+                    target = self.filter.Property[0]
+                else:
+                    target = self.required
+                target.MergeFromString(b'\xa0\x06\x07')  # Future field 100 = 7.
+                self.assertFalse(self.matches())
+                self.pool.PDiskFilter.add().Property.add(Type=common.EPDiskType.ROT)
+                self.assertTrue(self.matches())
+
+    def test_invalid_branches_do_not_match_or_hide_alternatives(self):
+        for variant in ('missing_type', 'duplicate_property', 'legacy_location'):
+            with self.subTest(variant=variant):
+                self.setUp()
+                del self.pool.PDiskFilter[:]
+                invalid = self.pool.PDiskFilter.add()
+                if variant == 'missing_type':
+                    invalid.Property.add(Kind=self.pdisk.Kind)
+                elif variant == 'duplicate_property':
+                    invalid.Property.add(Type=common.EPDiskType.ROT)
+                    invalid.Property.add(Type=common.EPDiskType.ROT)
+                else:
+                    invalid.Property.add(Type=common.EPDiskType.ROT)
+                    invalid.Property.add().Location.DataCenterNum = 1
+                    self.location.DataCenterNum = 1
+                self.assertFalse(self.matches())  # The controller keeps this branch inactive.
+                self.pool.PDiskFilter.add().Property.add(Type=common.EPDiskType.ROT)
+                self.assertTrue(self.matches())

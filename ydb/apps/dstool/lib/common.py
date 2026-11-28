@@ -1047,11 +1047,37 @@ def deserialize_fail_domain(s):
     return res
 
 
+PDISK_FILTER_PROPERTIES = ('Type', 'SharedWithOs', 'ReadCentric', 'Kind', 'Location')
+PDISK_FILTER_LEGACY_LOCATION_FIELDS = ('DataCenterNum', 'RoomNum', 'RackNum', 'BodyNum', 'Body')
+
+
+def pdisk_filter_is_supported(pdisk_filter):
+    # Mirror the controller: a branch is usable only when every required property is fully understood, no property
+    # repeats, Type is present and Location uses the current string fields. The controller keeps any other branch
+    # inactive, so it must not match disks here either.
+    seen = set()
+    for prop in pdisk_filter.Property:
+        known = type(prop)()
+        known.CopyFrom(prop)
+        known.DiscardUnknownFields()  # Recursive, including unknown Location subfields.
+        if known != prop:
+            return False
+        name = prop.WhichOneof('Property')
+        if name not in PDISK_FILTER_PROPERTIES or name in seen:
+            return False
+        seen.add(name)
+        if name == 'Location' and any(prop.Location.HasField(field) for field in PDISK_FILTER_LEGACY_LOCATION_FIELDS):
+            return False
+    return 'Type' in seen
+
+
 def pdisk_matches_storage_pool(pdisk, sp, location=None):
     if pdisk.BoxId != sp.BoxId:
         return False
 
     for pdisk_filter in sp.PDiskFilter:
+        if not pdisk_filter_is_supported(pdisk_filter):
+            continue
         for prop in pdisk_filter.Property:
             if prop.HasField('Type'):
                 if prop.Type != pdisk.Type:
@@ -1071,9 +1097,6 @@ def pdisk_matches_storage_pool(pdisk, sp, location=None):
                     for field, value in prop.Location.ListFields()
                 ):
                     break
-            else:
-                print('ERROR: unknown property in StoragePool filter', file=sys.stderr)
-                sys.exit(1)
         else:
             return True
 

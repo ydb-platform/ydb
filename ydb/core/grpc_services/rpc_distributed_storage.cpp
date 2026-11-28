@@ -5,6 +5,7 @@
 #include <ydb/core/base/blobstorage_tablet_types.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/pdisk_filter.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk_color.pb.h>
@@ -14,6 +15,7 @@
 #include <util/string/builder.h>
 
 #include <optional>
+#include <set>
 
 namespace NKikimr::NGRpcService {
 
@@ -727,6 +729,43 @@ private:
                            !status.GetErrorDescription().empty() ? status.GetErrorDescription() : "BSC rejected the storage snapshot request",
                            NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
                 return;
+            }
+        }
+
+        if (WantStoragePools) {
+            for (const auto& pool : response.GetStatus(1).GetStoragePool()) {
+                for (const auto& filter : pool.GetPDiskFilter()) {
+                    using TProperty = NKikimrBlobStorage::TPDiskFilter::TRequiredProperty;
+                    std::set<TProperty::PropertyCase> properties;
+                    bool supported = true;
+                    for (const auto& property : filter.GetProperty()) {
+                        // Keep this list aligned with ConvertStoragePool: a new internal condition may still
+                        // have no representation in the public API, even when this binary knows its protobuf field.
+                        switch (property.GetPropertyCase()) {
+                            case TProperty::kType:
+                            case TProperty::kSharedWithOs:
+                            case TProperty::kReadCentric:
+                            case TProperty::kKind:
+                            case TProperty::kLocation:
+                                supported = !HasUnknownPDiskFilterFields(property)
+                                    && properties.insert(property.GetPropertyCase()).second
+                                    && (!property.HasLocation() || IsValidPDiskFilterLocation(property.GetLocation()));
+                                break;
+                            default:
+                                supported = false;
+                                break;
+                        }
+                        if (!supported) {
+                            break;
+                        }
+                    }
+                    if (!supported || !properties.contains(TProperty::kType)) {
+                        ReplyError(Ydb::StatusIds::UNSUPPORTED, TStringBuilder()
+                            << "Cannot represent a required PDisk filter condition: BoxId# " << pool.GetBoxId()
+                            << " StoragePoolId# " << pool.GetStoragePoolId(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
+                        return;
+                    }
+                }
             }
         }
 

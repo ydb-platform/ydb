@@ -87,17 +87,22 @@ public:
         }
 
         for (const auto& [key, value] : SystemViewsState.StoragePools) {
-            TEntityKey entityKey(value.GetPDiskFilter(), value.GetErasureSpeciesV2());
+            // Pool text is diagnostic and may include opaque branches; capacity uses only matching predicates.
+            TBlobStorageController::TStoragePoolInfo::TPDiskFilters filters;
+            TStringInput input(value.GetPDiskFilterData());
+            Load(&input, filters);
+            const TString matchingFilter = TBlobStorageController::TStoragePoolInfo::TPDiskFilter::ToString(filters);
+            TEntityKey entityKey(matchingFilter, value.GetErasureSpeciesV2());
             const size_t index = entityMap.try_emplace(entityKey, storageStats.size()).first->second;
             if (index == storageStats.size()) {
                 NKikimrSysView::TStorageStatsEntry entry;
-                entry.SetPDiskFilter(value.GetPDiskFilter());
+                entry.SetPDiskFilter(matchingFilter);
                 entry.SetErasureSpecies(value.GetErasureSpeciesV2());
                 entry.SetPDiskFilterData(value.GetPDiskFilterData());
                 storageStats.push_back(std::move(entry));
             } else {
                 const auto& entry = storageStats[index];
-                Y_ABORT_UNLESS(entry.GetPDiskFilter() == value.GetPDiskFilter());
+                Y_ABORT_UNLESS(entry.GetPDiskFilter() == matchingFilter);
                 Y_ABORT_UNLESS(entry.GetErasureSpecies() == value.GetErasureSpeciesV2());
                 Y_ABORT_UNLESS(entry.GetPDiskFilterData() == value.GetPDiskFilterData());
             }

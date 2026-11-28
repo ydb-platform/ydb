@@ -1,4 +1,5 @@
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/data_center_states.h>
@@ -20,6 +21,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
@@ -315,6 +317,38 @@ namespace {
         return lhs.GetNodeId() == rhs.GetNodeId()
             && lhs.GetPDiskId() == rhs.GetPDiskId()
             && lhs.GetVSlotId() == rhs.GetVSlotId();
+    }
+
+    TString QuoteBytes(const TString& bytes) {
+        TString result;
+        for (const unsigned char c : bytes) {
+            result += Sprintf("\\x%02x", c);
+        }
+        return result;
+    }
+
+    NKikimrTabletTxBase::TEvLocalMKQLResponse RunLocalMkql(TEnvironmentSetup& env, const TString& program) {
+        auto local = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        local->Record.MutableProgram()->MutableProgram()->SetText(program);
+        const auto edge = env.Runtime->AllocateEdgeActor();
+        env.Runtime->SendToPipe(env.TabletId, edge, local.Release(), env.NodeId, GetPipeConfigWithRetries());
+        const auto response = env.Runtime->GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), NKikimrProto::OK,
+            response->Get()->Record.ShortDebugString());
+        return response->Get()->Record;
+    }
+
+    TString PDiskFilterV2Key(ui64 boxId, ui64 storagePoolId, const TString& filter) {
+        return TStringBuilder() << "'('('BoxId (Uint64 '" << boxId << ")) '('StoragePoolId (Uint64 '" << storagePoolId
+            << ")) '('Filter (String '\"" << QuoteBytes(filter) << "\")))";
+    }
+
+    bool PDiskFilterV2RowExists(TEnvironmentSetup& env, ui64 boxId, ui64 storagePoolId, const TString& filter) {
+        const auto record = RunLocalMkql(env, TStringBuilder()
+            << "((return (AsList (SetResult 'Row (SelectRow 'BoxStoragePoolPDiskFilterV2 "
+            << PDiskFilterV2Key(boxId, storagePoolId, filter) << " '('Filter))))))");
+        // Present: Struct { Optional { Optional { Struct { ... } } } }; missing: Struct { Optional { } }.
+        return record.GetExecutionEngineEvaluatedResponse().GetValue().GetStruct(0).GetOptional().HasOptional();
     }
 
     bool IsVSlotOnPDisk(const TVSlot& vslot, const NKikimrBlobStorage::TPDiskId& pdisk) {
@@ -1644,7 +1678,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         auto matches = [&](const NActorsInterconnect::TNodeLocation& location) {
             return TFilter::Parse(1, 1, proto).MatchPDisk(category, false, {}, TNodeLocation(location));
         };
-        // An empty location imposes no constraint and is stored the same way as an absent one.
+        // An empty location imposes no matching constraint.
         UNIT_ASSERT(!TFilter::Parse(1, 1, proto).Location);
         UNIT_ASSERT(matches({}));
         for (const char* name : {"DataCenter", "Module", "Rack", "Unit", "BridgePileName"}) {
@@ -1685,7 +1719,159 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(TFilter::Parse(1, 1, proto), yexception, "legacy numeric");
         required->Clear();
         required->mutable_unknown_fields()->AddVarint(999, 1);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TFilter::Parse(1, 1, proto), yexception, "unknown fields");
+        UNIT_ASSERT(!matches(actual));
+    }
+
+    Y_UNIT_TEST(PDiskFilterUnknownPropertiesSurviveControllerRestart) {
+        TEnvironmentSetup env(1, 1);
+        bool activeZone;
+        env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
+        env.DisableLogging();
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreGroupReserve(true);
+        env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}},
+            env.GetNodes(), request);
+        env.DefineStoragePool(1, 1, "future filter", 1, NKikimrBlobStorage::ROT, {}, request, "none");
+        auto* initialFilter = request.MutableCommand(request.CommandSize() - 1)->MutableDefineStoragePool()->MutablePDiskFilter(0);
+        initialFilter->GetReflection()->MutableUnknownFields(initialFilter)->AddLengthDelimited(100, "future metadata");
+        const auto initialBytes = initialFilter->SerializeAsString();
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        const auto initialConfig = FetchBaseConfig(&env);
+        UNIT_ASSERT_VALUES_EQUAL(initialConfig.GroupSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(initialConfig.VSlotSize(), 1);
+
+        auto readPool = [&] {
+            NKikimrBlobStorage::TConfigRequest read;
+            auto* cmd = read.AddCommand()->MutableReadStoragePool();
+            cmd->SetBoxId(1);
+            cmd->AddStoragePoolId(1);
+            const auto result = env.Invoke(read);
+            UNIT_ASSERT_C(result.GetSuccess(), result.DebugString());
+            return result.GetStatus(0).GetStoragePool(0);
+        };
+
+        // Model a future writer adding a constraint after the group has already been placed.
+        auto futurePool = readPool();
+        auto* filter = futurePool.MutablePDiskFilter(0);
+        auto* property = filter->AddProperty();
+        property->GetReflection()->MutableUnknownFields(property)->AddLengthDelimited(100, "future constraint");
+        const auto expected = TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(1, 1, *filter);
+        request.Clear();
+        *request.AddCommand()->MutableDefineStoragePool() = futurePool;
+        response = env.Invoke(request);
+        UNIT_ASSERT(!response.GetSuccess()); // This binary must reject newly introduced opaque constraints.
+
+        RunLocalMkql(env, TStringBuilder()
+            << "((return (AsList (EraseRow 'BoxStoragePoolPDiskFilterV2 " << PDiskFilterV2Key(1, 1, initialBytes) << ")"
+            << " (UpdateRow 'BoxStoragePoolPDiskFilterV2 " << PDiskFilterV2Key(1, 1, filter->SerializeAsString())
+            << " '()))))");
+
+        // A restart alone must not advance the group generation. An ordinary edit may: renaming the pool marks its
+        // groups as changed, so the expected value is captured again after each successful edit.
+        ui32 expectedGeneration = initialConfig.GetGroup(0).GetGroupGeneration();
+        for (bool edit : {true, false}) {
+            RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+            auto pool = readPool();
+            UNIT_ASSERT_VALUES_EQUAL(pool.PDiskFilterSize(), 1);
+            const auto restored = TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(1, 1, pool.GetPDiskFilter(0));
+            UNIT_ASSERT(restored.GetKey() == expected.GetKey());
+            UNIT_ASSERT(restored.IsUnsupported);
+            const auto config = FetchBaseConfig(&env);
+            UNIT_ASSERT_VALUES_EQUAL(config.GroupSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetGroup(0).GetGroupId(), initialConfig.GetGroup(0).GetGroupId());
+            UNIT_ASSERT_VALUES_EQUAL(config.GetGroup(0).GetGroupGeneration(), expectedGeneration);
+            UNIT_ASSERT_VALUES_EQUAL(config.VSlotSize(), 1);
+            UNIT_ASSERT(SameVSlotId(config.GetVSlot(0).GetVSlotId(), initialConfig.GetVSlot(0).GetVSlotId()));
+            request.Clear();
+            request.SetIgnoreGroupReserve(true);
+            if (edit) {
+                pool.SetName("edited without losing future fields");
+            } else {
+                pool.SetNumGroups(2); // The old reader cannot safely evaluate the future constraint.
+            }
+            *request.AddCommand()->MutableDefineStoragePool() = pool;
+            response = env.Invoke(request);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GetSuccess(), edit, response.DebugString());
+            if (edit) {
+                expectedGeneration = FetchBaseConfig(&env).GetGroup(0).GetGroupGeneration();
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(readPool().GetNumGroups(), 1);
+    }
+
+    Y_UNIT_TEST(DDiskPoolPDiskFiltersFollowStoragePoolRules) {
+        TEnvironmentSetup env(1, 1);
+        bool activeZone;
+        env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
+        env.DisableLogging();
+        NKikimrBlobStorage::TConfigRequest request;
+        env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), request);
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+
+        ui64 generation = 0;
+        auto define = [&](const std::vector<NKikimrBlobStorage::TPDiskFilter>& filters) {
+            NKikimrBlobStorage::TConfigRequest defineRequest;
+            auto* cmd = defineRequest.AddCommand()->MutableDefineDDiskPool();
+            cmd->SetBoxId(1);
+            cmd->SetName("ddisk");
+            cmd->SetItemConfigGeneration(generation);
+            auto* geometry = cmd->MutableGeometry();
+            geometry->SetRealmLevelBegin(10);
+            geometry->SetRealmLevelEnd(20);
+            geometry->SetDomainLevelBegin(10);
+            geometry->SetDomainLevelEnd(40);
+            geometry->SetNumFailRealms(1);
+            geometry->SetNumFailDomainsPerFailRealm(1);
+            geometry->SetNumVDisksPerFailDomain(1);
+            for (const auto& filter : filters) {
+                *cmd->AddPDiskFilter() = filter;
+            }
+            const auto defineResponse = env.Invoke(defineRequest);
+            if (defineResponse.GetSuccess()) {
+                ++generation;
+            }
+            return defineResponse;
+        };
+        // A stored opaque branch whose wire order a round trip changes: an edit must keep the original key rather
+        // than write the re-encoded one.
+        const TString storedKey("\x0a\x05\xa0\x06\x07\x20\x01", 7); // Property { (field 100) = 7, Kind = 1 }
+        NKikimrBlobStorage::TPDiskFilter opaque;
+        UNIT_ASSERT(opaque.ParseFromString(storedKey));
+        const TString reencodedKey = opaque.SerializeAsString();
+        UNIT_ASSERT_VALUES_UNEQUAL(QuoteBytes(reencodedKey), QuoteBytes(storedKey));
+        auto checkStoredRows = [&](bool original, bool reencoded) {
+            UNIT_ASSERT_VALUES_EQUAL(PDiskFilterV2RowExists(env, 1, 1, storedKey), original);
+            UNIT_ASSERT_VALUES_EQUAL(PDiskFilterV2RowExists(env, 1, 1, reencodedKey), reencoded);
+        };
+
+        NKikimrBlobStorage::TPDiskFilter plain;
+        plain.AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        response = define({plain});
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        checkStoredRows(false, false);
+
+        // A newly supplied constraint this binary does not understand is rejected, as for ordinary pools.
+        NKikimrBlobStorage::TPDiskFilter future = plain;
+        auto* property = future.AddProperty();
+        property->GetReflection()->MutableUnknownFields(property)->AddVarint(100, 7);
+        response = define({plain, future});
+        UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response.DebugString(), "unsupported PDisk filter");
+
+        RunLocalMkql(env, TStringBuilder() << "((return (AsList (UpdateRow 'BoxStoragePoolPDiskFilterV2 "
+            << PDiskFilterV2Key(1, 1, storedKey) << " '()))))");
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        checkStoredRows(true, false);
+        response = define({plain, opaque});
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        checkStoredRows(true, false);
+
+        // Dropping the branch from the definition erases the row by its original key.
+        response = define({plain});
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        checkStoredRows(false, false);
     }
 
     Y_UNIT_TEST(PDiskLocationFilterPlacementAndRestart) {
@@ -1818,8 +2004,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         checkPlacement(1, "1", 2);
         checkPlacement(2, "2", 1);
 
-        // Exercise persistence through configuration commits when filters move
-        // between the legacy and location tables, including mixed filter sets.
+        // Exercise persistence through configuration commits with and without location constraints.
         const auto plainPool = readPool(3);
         pool = plainPool;
         location(pool.MutablePDiskFilter(0))->SetDataCenter("1");
@@ -3833,6 +4018,72 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(expectedSlotCount, 64);
         UNIT_ASSERT_VALUES_EQUAL(slotSizeInUnits, 0);
         UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 64);
+    }
+
+    Y_UNIT_TEST(StorageStatsCombineEquivalentFilters) {
+        using TPool = TBlobStorageController::TStoragePoolInfo;
+        TEnvironmentSetup env(1, 1);
+        env.SetupRuntime(1, 1);
+        auto& runtime = *env.Runtime;
+        const ui32 nodeId = runtime.GetNodeId(0);
+        TControllerSystemViewsState state;
+        auto& disk = state.PDisks[{nodeId, 1}];
+        disk.SetBoxId(1);
+        disk.SetCategory(TPDiskCategory(NPDisk::DEVICE_TYPE_SSD, 0).GetRaw());
+        disk.SetExpectedSlotCount(10);
+        disk.SetNumActiveSlots(4);
+
+        NKikimrBlobStorage::TPDiskFilter known, opaque;
+        known.AddProperty()->SetType(NKikimrBlobStorage::SSD);
+        known.AddProperty()->SetKind(0);
+        auto* property = opaque.AddProperty();
+        property->GetReflection()->MutableUnknownFields(property)->AddVarint(100, 7);
+        for (ui64 id = 1; id <= 3; ++id) {
+            TPool pool{};
+            pool.ErasureSpecies = TBlobStorageGroupType::ErasureNone;
+            if (id != 3) {
+                pool.PDiskFilters.insert(TPool::TPDiskFilter::Parse(1, id, known));
+            }
+            if (id != 1) {
+                pool.PDiskFilters.insert(TPool::TPDiskFilter::Parse(1, id, opaque));
+            }
+            if (id == 2) {
+                auto reversed = known;
+                reversed.MutableProperty()->SwapElements(0, 1);
+                const TString bytes = reversed.SerializeAsString();
+                pool.PDiskFilters.insert(TPool::TPDiskFilter::Parse(1, id, reversed, &bytes));
+                UNIT_ASSERT_VALUES_EQUAL(pool.GetMatchingFilters().size(), 1);
+            }
+            CopyInfo(&state.StoragePools[{1, id}], pool, {}, nullptr);
+            for (ui32 i = 0; i != (id == 3 ? 1u : 2u); ++i) {
+                auto& group = state.Groups[TGroupId::FromValue(0x80000000 + 2 * id + i)];
+                group.SetBoxId(1);
+                group.SetStoragePoolId(id);
+            }
+        }
+        NKikimrBlobStorage::TStorageConfig config;
+        auto* node = config.AddAllNodes();
+        node->SetNodeId(nodeId);
+        node->SetHost("host");
+        node->SetPort(19001);
+        node->MutableLocation()->SetDataCenter("dc");
+        const auto hosts = std::make_shared<THostRecordMapImpl>(config);
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Register(CreateStorageStatsCoroCalculator(state, hosts, 0, 500000).release(),
+            0, 0, TMailboxType::Simple, 0, edge);
+        auto response = runtime.GrabEdgeEventRethrow<TEvCalculateStorageStatsResponse>(edge);
+        ui32 entries = 0;
+        for (const auto& entry : response->Get()->StorageStats) {
+            if (entry.GetErasureSpecies() == "none") {
+                ++entries;
+                const bool supported = entry.GetPDiskFilter() == "Type:SSD,Kind:0";
+                UNIT_ASSERT(supported || entry.GetPDiskFilter().empty());
+                UNIT_ASSERT_VALUES_EQUAL(entry.GetCurrentGroupsCreated(), supported ? 4 : 1);
+                // Six free slots, five reserved against the combined ten existing/potential groups.
+                UNIT_ASSERT_VALUES_EQUAL(entry.GetAvailableGroupsToCreate(), supported ? 1 : 0);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(entries, 2);
     }
 
     Y_UNIT_TEST(StorageStatsReserveFixedQuotaCapacity) {

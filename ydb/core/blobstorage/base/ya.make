@@ -22,6 +22,7 @@ SRCS(
     blobstorage_space_color.h
     bridge_events.h
     blobstorage_host_record.h
+    pdisk_filter.cpp
     pdisk_filter.h
     storage_pool_pile_override.cpp
     infer_pdisk_slot_count_settings.h

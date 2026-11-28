@@ -23,7 +23,12 @@ select
  and s_store_sk  = ss_store_sk
  and s_state in ('TN','TN','TN','TN',
                  'TN','TN','TN','TN')
- group by rollup(item.i_category,item.i_class)
+ -- group by rollup(item.i_category,item.i_class)
+ group by grouping sets (
+   (item.i_category,item.i_class),
+   (item.i_category),
+   ((d1.d_year < 0) as FAKE)
+ )
  order by
    lochierarchy desc
   ,case when lochierarchy = 0 then item.i_category else null end

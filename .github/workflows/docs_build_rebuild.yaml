@@ -57,7 +57,9 @@ jobs:
               pull_number: context.payload.pull_request.number,
               per_page: 100,
             });
-            const hasDocs = files.some((f) => f.filename.startsWith('ydb/docs/'));
+            const hasDocs = files.some((f) =>
+              f.filename.startsWith('ydb/docs/') ||
+              f.filename.startsWith('yql/essentials/docs/'));
             core.setOutput('has_docs', hasDocs ? 'true' : 'false');
 
       - name: Dispatch docs build

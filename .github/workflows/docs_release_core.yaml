@@ -40,7 +40,7 @@ jobs:
             echo "build=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if grep -Eq '^(ydb/docs/|\.github/workflows/docs_)' <<< "$changed_files"; then
+          if grep -Eq '^(ydb/docs/|yql/essentials/docs/|\.github/workflows/docs_)' <<< "$changed_files"; then
             echo "build=true" >> "$GITHUB_OUTPUT"
           else
             echo "build=false" >> "$GITHUB_OUTPUT"
@@ -95,11 +95,26 @@ jobs:
           name: feature-flag-defaults
           path: feature-flag-defaults.json
 
+      - name: Prepare YQL documentation overlay
+        id: docs_source
+        env:
+          DOCS_SOURCE_ROOT: ${{ vars.SRC_ROOT }}
+        run: |
+          set -euo pipefail
+          if [[ -f ydb/docs/tools/yql_overlay/prepare.py ]]; then
+            overlay_dir=$(mktemp -d "$RUNNER_TEMP/yql-docs.XXXXXX")
+            python3 ydb/docs/tools/yql_overlay/prepare.py --output "$overlay_dir/input"
+            echo "root=$overlay_dir/input" >> "$GITHUB_OUTPUT"
+          else
+            # Older PRs and stable branches do not yet contain the overlay.
+            echo "root=$DOCS_SOURCE_ROOT" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
           revision: "${{ github.sha }}"
-          src-root: ${{ vars.SRC_ROOT }}
+          src-root: ${{ steps.docs_source.outputs.root }}
           cli-version: "stable"
           use-ya-opensource: false
 

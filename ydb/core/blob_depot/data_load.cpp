@@ -1,5 +1,6 @@
 #include "data.h"
 #include "schema.h"
+#include "blocks.h"
 #include "garbage_collection.h"
 #include "coro_tx.h"
 #include "s3.h"
@@ -276,6 +277,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::OnDataLoadComplete() {
         BarrierServer->OnDataLoaded();
+        BlocksManager->OnDataLoaded();
         S3Manager->OnDataLoaded();
         StartGroupAssimilator();
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADING_KEYS] = 0;

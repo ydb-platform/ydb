@@ -355,6 +355,11 @@ message TFeatureFlags {
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
+    // Treats a block with generation Max<ui32>() (the complete tablet deletion tombstone written by
+    // Hive) as enough to drop all the tablet's data and barrier records in VDisk and BlobDepot,
+    // without waiting for the hard barrier that follows it. Turning it off after it has been on is
+    // safe, but may leave some garbage of already deleted tablets until it is turned on again.
+    optional bool EnableCollectByCompleteDeletionBlock = 341 [default = false, (RequireRestart) = true];
     // Bumps GROUP BY HOP state version to 3
     optional bool EnableHoppingWindowStartCheck = 346 [default = false];
     // Creates asynchronous indexes on newly created asynchronous replication destinations.

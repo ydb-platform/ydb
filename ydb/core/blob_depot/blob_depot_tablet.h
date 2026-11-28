@@ -66,6 +66,9 @@ namespace NKikimr::NBlobDepot {
         TControlWrapper S3MaxDeletesInFlight = 3;
         TControlWrapper S3MaxObjectsToDeleteAtOnce = 10;
 
+        // EnableCollectByCompleteDeletionBlock, taken once at tablet start
+        bool CollectByCompleteDeletionBlock = false;
+
         struct TAgent {
             struct TConnection {
                 TActorId PipeServerId;
@@ -192,6 +195,7 @@ namespace NKikimr::NBlobDepot {
                 TControlBoard::RegisterSharedControl(S3MaxDeletesInFlight, controls.S3MaxDeletesInFlight);
                 TControlBoard::RegisterSharedControl(S3MaxObjectsToDeleteAtOnce, controls.S3MaxObjectsToDeleteAtOnce);
             }
+            CollectByCompleteDeletionBlock = AppData()->FeatureFlags.GetEnableCollectByCompleteDeletionBlock();
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
             ExecuteTxInitSchema();

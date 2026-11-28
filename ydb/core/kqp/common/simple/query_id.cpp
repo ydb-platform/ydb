@@ -146,6 +146,15 @@ TStringBuf TKqpQueryId::Field(EField field) const {
     return TStringBuf(Key_.data() + begin, ends[field] - begin);
 }
 
+bool TKqpQueryId::SetExecutionSettings(bool usePessimisticLocks, const TKqpEncodedGUC& gucSettings) {
+    if (Settings_.UsePessimisticLocks == usePessimisticLocks && Field(FieldGUCSettings) == gucSettings.Bytes()) {
+        return false;
+    }
+    Settings_.UsePessimisticLocks = usePessimisticLocks;
+    BuildKey(Cluster(), Database(), DatabaseId(), UserSid(), gucSettings.Bytes());
+    return true;
+}
+
 void TKqpQueryId::SetUserSid(TStringBuf userSid) {
     if (userSid != UserSid()) {
         BuildKey(Cluster(), Database(), DatabaseId(), userSid, Field(FieldGUCSettings));

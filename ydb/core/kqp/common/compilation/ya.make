@@ -8,6 +8,7 @@ SRCS(
 PEERDIR(
     library/cpp/json
     library/cpp/lwtrace
+    ydb/core/kqp/common/compile_cache
     ydb/core/kqp/common/simple
     ydb/core/protos
     ydb/core/util

@@ -955,10 +955,11 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         }
     }
 
-    Y_UNIT_TEST(CompileCacheQueriesOrderByDesc) {
+    Y_UNIT_TEST_TWIN(CompileCacheQueriesOrderByDesc, CompileCacheV2) {
         // Test ORDER BY DESC for compile_cache_queries sys view
         // Primary key: NodeId, QueryId
         auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
         auto client = kikimr.GetQueryClient();
@@ -1021,6 +1022,39 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                     << ". ORDER BY DESC is being ignored by sys view actors.");
             }
         }
+    }
+
+    // Warmup selects queries by AccessCount, so both versions must count client queries the same way.
+    Y_UNIT_TEST_TWIN(CompileCacheAccessCount, CompileCacheV2) {
+        auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        const std::string query = R"(--!syntax_v1
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = 101;
+        )";
+        // The first run compiles, the next two are served from the cache.
+        for (ui32 i = 0; i < 3; ++i) {
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto result = session.ExecuteQuery(R"(--!syntax_v1
+            SELECT Query, AccessCount FROM `/Root/.sys/compile_cache_queries`
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        TVector<ui64> accessCounts;
+        NYdb::TResultSetParser parser(result.GetResultSet(0));
+        while (parser.TryNextRow()) {
+            if (parser.ColumnParser("Query").GetOptionalUtf8().value_or("") == query) {
+                accessCounts.push_back(parser.ColumnParser("AccessCount").GetOptionalUint64().value_or(0));
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(accessCounts, TVector<ui64>{3});
     }
 
     Y_UNIT_TEST(TopQueriesOrderByDesc) {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/kqp/common/compile_cache/types.h>
+
 #include "kqp_host.h"
 
 #include <ydb/core/kqp/host/kqp_transform.h>
@@ -265,7 +267,7 @@ public:
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TIntrusivePtr<NYql::TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
     const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry, TActorSystem* actorSystem,
-    bool usePessimisticLocks);
+    bool usePessimisticLocks, TOptimizerInput optimizerInput = {});
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,

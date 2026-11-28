@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/core/kqp/common/compile_cache/types.h>
 #include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -1761,6 +1762,7 @@ public:
         bool NeedToSplit = false;
         bool AllowCache = true;
         TMaybe<TString> CommandTagName = {};
+        NKikimr::NKqp::TOptimizerCacheOutput CacheOutput;
     };
 
     struct TExecuteLiteralResult : public TGenericResult {

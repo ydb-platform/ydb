@@ -313,7 +313,6 @@ public:
         , ModuleResolverState()
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
         , S3ActorsFactory(std::move(s3ActorsFactory))
-        , QueryCache(new TKqpQueryCache(TableServiceConfig.GetCompileQueryCacheSize(), TDuration::Seconds(TableServiceConfig.GetCompileQueryCacheTTLSec())))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -324,6 +323,9 @@ public:
         ctx.Register(CreateVectorIndexLevelsCacheMaintainer(
             VectorIndexLevelsCache, GetKqpResourceManager(), TableServiceConfig.GetResourceManager()));
         FeatureFlags = AppData()->FeatureFlags;
+        // The implementation is chosen once per node start (EnableCompileCacheV2 requires a restart).
+        QueryCache = CreateKqpQueryCache(FeatureFlags.GetEnableCompileCacheV2(),
+            TableServiceConfig.GetCompileQueryCacheSize(), TDuration::Seconds(TableServiceConfig.GetCompileQueryCacheTTLSec()));
         WarmupApplicable = IsCompileCacheWarmupEnabled(TableServiceConfig, AppData()->TenantName,
             AppData()->DomainsInfo->Domain ? AppData()->DomainsInfo->Domain->Name : TString());
         WarmupGateOpen = !WarmupApplicable;

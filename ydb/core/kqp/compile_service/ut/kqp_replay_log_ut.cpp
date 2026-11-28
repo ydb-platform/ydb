@@ -130,7 +130,7 @@ void ExecuteQueryWithParams(TKikimrRunner& kikimr, const TString& query, const N
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpReplayLog) {
-    Y_UNIT_TEST(SensitiveQueriesAreNotWrittenToReplayLog) {
+    Y_UNIT_TEST_TWIN(SensitiveQueriesAreNotWrittenToReplayLog, CompileCacheV2) {
         auto collected = std::make_shared<TVector<TString>>();
         auto replayFactory = std::make_shared<TTestQueryReplayBackendFactory>(collected);
 
@@ -155,6 +155,7 @@ Y_UNIT_TEST_SUITE(KqpReplayLog) {
             TKikimrSettings settings;
             settings.SetUseRealThreads(false);
             settings.SetQueryReplayBackendFactory(replayFactory);
+            settings.AppConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
 
             TKikimrRunner kikimr(settings);
             auto& runtime = *kikimr.GetTestServer().GetRuntime();

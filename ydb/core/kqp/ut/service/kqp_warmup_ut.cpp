@@ -1,5 +1,6 @@
 #include <atomic>
 
+#include <ydb/core/kqp/ut/common/kqp_compile_cache_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -333,24 +334,22 @@ namespace {
         ui32 nodeIndex,
         const TString& tenantName)
     {
-        auto edgeActor = runtime.AllocateEdgeActor(nodeIndex);
-        auto compileServiceId = MakeKqpCompileServiceID(runtime.GetNodeId(nodeIndex));
-
-        auto* request = new TEvKqp::TEvListQueryCacheQueriesRequest();
-        request->Record.SetTenantName(tenantName);
-        request->Record.SetFreeSpace(1024 * 1024);
-
-        runtime.Send(new IEventHandle(compileServiceId, edgeActor, request), nodeIndex);
-
-        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvListQueryCacheQueriesResponse>(
-            edgeActor, TDuration::Seconds(5));
-        UNIT_ASSERT_C(response, "Failed to get local cache entries from node " << nodeIndex);
-
+        auto response = NTest::ListQueryCache(runtime, nodeIndex, tenantName);
         THashSet<TString> userSids;
         for (const auto& query : response->Get()->Record.GetCacheCacheQueries()) {
             userSids.insert(query.GetUserSID());
         }
         return userSids;
+    }
+
+    // QueryId -> AccessCount of the entries in one node's compile cache.
+    THashMap<TString, ui64> GetLocalCacheAccessCounts(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& tenantName) {
+        auto response = NTest::ListQueryCache(runtime, nodeIndex, tenantName);
+        THashMap<TString, ui64> accessCounts;
+        for (const auto& query : response->Get()->Record.GetCacheCacheQueries()) {
+            accessCounts[query.GetQueryId()] = query.GetAccessCount();
+        }
+        return accessCounts;
     }
 
     void VerifyLocalCacheContainsUsers(
@@ -376,6 +375,7 @@ namespace {
         bool FillCache = true;
         bool FillImplicitParams = true;
         bool WaitBootstrap = false;
+        bool CompileCacheV2 = false;
     };
 
     struct TWarmupTestEnv {
@@ -391,6 +391,7 @@ namespace {
     TKikimrSettings MakeWarmupTestSettings(const TWarmupTestParams& params) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableCompileCacheView(true);
+        featureFlags.SetEnableCompileCacheV2(params.CompileCacheV2);
         auto settings = TKikimrSettings()
             .SetUseRealThreads(params.UseRealThreads)
             .SetNodeCount(params.NodeCount)
@@ -545,8 +546,9 @@ namespace {
 
     Y_UNIT_TEST_SUITE(KqpWarmup) {
 
-        Y_UNIT_TEST(WarmupActorBasic) {
+        Y_UNIT_TEST_TWIN(WarmupActorBasic, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0", "user1", "user2", "user3", "user4"};
 
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
@@ -564,6 +566,56 @@ namespace {
                 << ", expected unique: " << env.ExpectedUniqueCount);
             VerifyLocalCacheContainsUsers(env.Runtime, env.NodeId, "/Root", env.UserSids);
             VerifyQueriesServedFromCache(kikimr, env.UserSids, env.IsThreadLocked);
+        }
+
+        // Warmup is not a client use: it changes no AccessCount, whether it hits an entry or adds one.
+        // Otherwise warmup on other nodes would take its own work for popular queries.
+        Y_UNIT_TEST_TWIN(WarmupAccessCount, CompileCacheV2) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.NodeCount = 2;
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+            params.CompileCacheV2 = CompileCacheV2;
+            params.UserSids = {"user0", "user1"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+            const TString query = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = 42u;";
+            const NACLib::TUserToken local("user0@builtin", {"all-users@well-known"});
+            const NACLib::TUserToken remote("user1@builtin", {"all-users@well-known"});
+            UNIT_ASSERT_VALUES_EQUAL(ExecuteQueryWithToken(env.Runtime, 0, local, query), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ExecuteQueryWithToken(env.Runtime, 1, local, query), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ExecuteQueryWithToken(env.Runtime, 1, remote, query), Ydb::StatusIds::SUCCESS);
+            const auto peers = env.Runtime.AddObserver<TEvKqp::TEvListProxyNodesResponse>(
+                [&](TEvKqp::TEvListProxyNodesResponse::TPtr& ev) { ev->Get()->ProxyNodes = {env.Runtime.GetNodeId(1)}; });
+            const auto before = GetLocalCacheAccessCounts(env.Runtime, env.NodeId, "/Root");
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline, /*waitBootstrap=*/true);
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor did not complete within timeout");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should complete successfully: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL(warmupComplete->Get()->EntriesLoaded, 2);
+
+            const auto after = GetLocalCacheAccessCounts(env.Runtime, env.NodeId, "/Root");
+            if (!CompileCacheV2) {
+                // V1 counts warmup in the session.
+                ui64 sumBefore = 0, sumAfter = 0;
+                for (const auto& [_, accessCount] : before) {
+                    sumBefore += accessCount;
+                }
+                for (const auto& [_, accessCount] : after) {
+                    sumAfter += accessCount;
+                }
+                UNIT_ASSERT_GT(sumAfter, sumBefore);
+                return;
+            }
+            for (const auto& [queryId, accessCount] : after) {
+                const auto it = before.find(queryId);
+                UNIT_ASSERT_VALUES_EQUAL_C(accessCount, it == before.end() ? 0 : it->second,
+                    "Warmup changed AccessCount of " << queryId);
+            }
         }
 
         Y_UNIT_TEST_QUAD(WarmupLoadsOtherUsersQueriesWithRestrictedAdmins, LegacyMetadata, SysViewSource) {
@@ -946,8 +998,9 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, 0);
         }
 
-        Y_UNIT_TEST(WarmupEmptyCache) {
+        Y_UNIT_TEST_TWIN(WarmupEmptyCache, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0"};
             params.FillCache = false;
             params.FillImplicitParams = false;
@@ -1031,8 +1084,9 @@ namespace {
                 "Baseline: " << baselineLoaded << ", filtered: " << filteredLoaded);
         }
 
-        Y_UNIT_TEST(WarmupAfterSchemaChange) {
+        Y_UNIT_TEST_TWIN(WarmupAfterSchemaChange, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0", "user1"};
 
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
@@ -1673,8 +1727,9 @@ namespace {
                 TParamsBuilder().AddParam("$implKey").Uint32(1).Build().Build());
         }
 
-        Y_UNIT_TEST(ObservationWindowHitsAreAttributedToWarmup) {
+        Y_UNIT_TEST_TWIN(ObservationWindowHitsAreAttributedToWarmup, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0"};
 
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
@@ -1713,8 +1768,9 @@ namespace {
                 "Repeated client hits on the same warmup uid must not be counted again");
         }
 
-        Y_UNIT_TEST(ObservationWindowHitsAreAttributedToWarmupQueryApi) {
+        Y_UNIT_TEST_TWIN(ObservationWindowHitsAreAttributedToWarmupQueryApi, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0"};
             params.FillCache = false;
             params.FillImplicitParams = false;
@@ -1776,8 +1832,9 @@ namespace {
             pinnedDriver.Stop(true);
         }
 
-        Y_UNIT_TEST(ObservationWindowCountsMissesOnly) {
+        Y_UNIT_TEST_TWIN(ObservationWindowCountsMissesOnly, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0"};
 
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
@@ -1808,8 +1865,9 @@ namespace {
                 << " (was " << missesBeforeFreshQuery << ", now " << missesAfterFreshQuery << ")");
         }
 
-        Y_UNIT_TEST(ObservationWindowDoesNotOpenWithoutWarmupInserts) {
+        Y_UNIT_TEST_TWIN(ObservationWindowDoesNotOpenWithoutWarmupInserts, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0"};
             params.FillCache = false;
             params.FillImplicitParams = false;

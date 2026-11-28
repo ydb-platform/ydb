@@ -1,5 +1,6 @@
 #pragma once
 #include "result.h"
+#include <ydb/core/kqp/common/compile_cache/types.h>
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -144,6 +145,7 @@ struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::Ev
 
     TKqpCompileResult::TConstPtr CompileResult;
     TKqpStatsCompile Stats;
+    TOptimizerCacheOutput CacheOutput; // compile actor to compile service only
     std::optional<TString> ReplayMessage;
 
     NLWTrace::TOrbit Orbit;

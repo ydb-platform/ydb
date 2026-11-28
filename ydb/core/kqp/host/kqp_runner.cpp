@@ -185,7 +185,7 @@ public:
     TKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
         const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
         const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry,
-        TActorSystem* actorSystem, bool usePessimisticLocks = false)
+        TActorSystem* actorSystem, bool usePessimisticLocks = false, TOptimizerInput optimizerInput = {})
         : Gateway(gateway)
         , Cluster(cluster)
         , TypesCtx(*typesCtx)
@@ -202,6 +202,7 @@ public:
             Config))
         , ActorSystem(actorSystem)
     {
+        OptimizeCtx->OptimizerInput = std::move(optimizerInput);
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
     }
 
@@ -342,6 +343,7 @@ private:
 
 
         TransformCtx->Reset();
+        OptimizeCtx->CacheOutput.Clear();
         BuildQueryCtx->Reset();
         Transformer->Rewind();
 
@@ -594,9 +596,9 @@ private:
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
     const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry, TActorSystem* actorSystem,
-    bool usePessimisticLocks)
+    bool usePessimisticLocks, TOptimizerInput optimizerInput)
 {
-    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, transformCtx, funcRegistry, actorSystem, usePessimisticLocks);
+    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, transformCtx, funcRegistry, actorSystem, usePessimisticLocks, std::move(optimizerInput));
 }
 
 } // namespace NKikimr::NKqp

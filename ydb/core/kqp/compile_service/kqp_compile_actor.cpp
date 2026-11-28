@@ -92,7 +92,7 @@ public:
         ECompileActorAction compileAction,
         std::shared_ptr<NYql::TExprContext> splitCtx,
         NYql::TExprNode::TPtr splitExpr,
-        bool usePessimisticLocks)
+        bool usePessimisticLocks, TOptimizerInput optimizerInput)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -121,6 +121,7 @@ public:
         , EnableNewRBO(ShouldUseNewRBO(tableServiceConfig, queryId))
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
+        , OptimizerInput(std::move(optimizerInput))
     {
         Config = BuildConfiguration(tableServiceConfig);
         // The compile actor works concurrently with the compile service that started it.
@@ -432,7 +433,8 @@ private:
         // Retain the session's temporary-table snapshot for compilation retries.
         KqpHost = CreateKqpHost(Gateway, TString(QueryId.Cluster()), TString(QueryId.Database()), Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
-            false, false, TempTablesState, nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks);
+            false, false, TempTablesState, nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks,
+            EnableNewRBO ? OptimizerInput : TOptimizerInput{});
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings().DocumentApiRestricted;
@@ -525,7 +527,7 @@ private:
         ReplayMessage = std::move(message);
     }
 
-    void Reply() {
+    void Reply(TOptimizerCacheOutput cacheOutput = {}) {
         Y_ENSURE(KqpCompileResult);
         YDB_LOG_DEBUG("Send response",
             {"self", SelfId()},
@@ -539,6 +541,7 @@ private:
         }
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(KqpCompileResult);
 
+        responseEv->CacheOutput = std::move(cacheOutput);
         responseEv->ReplayMessage = std::move(ReplayMessage);
         ReplayMessage = std::nullopt;
         ReplayMessageUserView = std::nullopt;
@@ -681,7 +684,7 @@ private:
             Counters->ReportCompileError(DbCounters);
         }
 
-        Reply();
+        Reply(status == Ydb::StatusIds::SUCCESS && EnableNewRBO ? std::move(kqpResult.CacheOutput) : TOptimizerCacheOutput{});
     }
 
     void HandleTimeout() {
@@ -816,6 +819,7 @@ private:
     TMaybe<NYql::TIssue> FallbackToYqlOptimizerIssue;
     bool EnableFallbackToYqlOptimizer;
     bool UsePessimisticLocks;
+    TOptimizerInput OptimizerInput;
 };
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
@@ -829,7 +833,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, bool collectFullDiagnostics,
     std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
-    bool usePessimisticLocks)
+    bool usePessimisticLocks, TOptimizerInput optimizerInput)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, pathNormalizer, queryServiceConfig,
                                 moduleResolverState, counters, gUCSettings, applicationName,
@@ -837,7 +841,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
                                 compileAction,
-                                std::move(splitCtx), std::move(splitExpr), usePessimisticLocks);
+                                std::move(splitCtx), std::move(splitExpr), usePessimisticLocks, std::move(optimizerInput));
 }
 
 } // namespace NKikimr::NKqp

@@ -1,12 +1,15 @@
 #pragma once
 
-#include "flat_page_iface.h"
+#include "flat_part_iface.h"
+#include "flat_transaction_pages.h"
 #include "flat_sausage_fetch.h"
 #include "flat_fwd_misc.h"
 #include "shared_handle.h"
 
 namespace NKikimr {
 namespace NTable {
+    struct TSubset;
+    struct TPartView;
     using EPage = NPage::EPage;
     using TPageId = NPage::TPageId;
 
@@ -16,6 +19,41 @@ namespace NFwd {
     using TPageLocation = NPage::TPageLocation;
 
     struct TPage;
+    struct TConf;
+    struct TSeen;
+
+    struct TFetch : TMoveOnly {
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<NTable::NPage::TPageLocation> Pages;
+        ui64 Cookie;
+
+        explicit operator bool() const {
+            return bool(Pages);
+        }
+    };
+
+    struct IEnv : public IPages {
+        virtual const NTabletFlatExecutor::IPageCacheProtocol& Protocol() const noexcept = 0;
+        virtual THolder<NActors::IEventBase> MakeRequest(
+            NTabletFlatExecutor::NBlockIO::EPriority priority, TFetch fetch) const = 0;
+        virtual THolder<IPartLoaderEnv> MakeLoaderEnvironment() const = 0;
+
+        // One working set covers the existing subset, cold loaders and newly discovered collections
+        virtual TIntrusivePtr<NTabletFlatExecutor::IPageMetadataWorkingSet> MetadataWorkingSet() const {
+            return {};
+        }
+
+        // Include physical and Pseudo identities in the backend's metadata group
+        virtual void AddCold(const TPartView& partView) = 0;
+        virtual bool MayProgress() const = 0;
+        virtual void Save(NActors::IEventBase& event) = 0;
+        virtual IPages* Reset() = 0;
+        virtual TStat Stats() const = 0;
+        virtual TFetch GetFetch() = 0;
+        virtual TAutoPtr<TSeen> GrabTraces() = 0;
+    };
+
+    THolder<IEnv> MakeEnv(const TConf& conf, const TSubset& subset);
 
     class IPageLoadingQueue {
     public:

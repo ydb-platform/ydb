@@ -8,6 +8,13 @@ namespace NKikimr {
 namespace NTable {
 
     struct TPageCollectionComponents {
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> MakePageCollection(bool outer) const {
+            if (outer) {
+                return MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(LargeGlobId, TSharedData(RawMeta));
+            }
+            return MakeIntrusiveConst<NPageCollection::TPageCollection>(LargeGlobId, TSharedData(RawMeta));
+        }
+
         // fully identified by this LargeGlobId
         NPageCollection::TLargeGlobId LargeGlobId;
         // raw serialized meta blob (parsed by StageParseMeta)

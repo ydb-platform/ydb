@@ -31,6 +31,7 @@ SRCS(
     shared_handle_ut.cpp
     ut_btree_index_nodes.cpp
     ut_btree_index_iter_charge.cpp
+    ut_page_read_env.cpp
     ut_self.cpp
     ut_iterator.cpp
     ut_key_blocks.cpp

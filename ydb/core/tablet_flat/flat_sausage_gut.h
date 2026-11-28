@@ -8,6 +8,19 @@
 namespace NKikimr {
 namespace NPageCollection {
 
+    // Index and data collection ids follow the part's slot layout and may differ
+    struct TBtreeSeed {
+        TLogoBlobID IndexCollectionId;
+        TLogoBlobID DataCollectionId;
+        NTable::NPage::TPageLocation Root;
+        ui32 LevelCount = 0;
+        bool QueueDataPages = true;
+        bool Sticky = false;
+        bool IndexCollectionSticky = false;
+
+        bool operator==(const TBtreeSeed&) const = default;
+    };
+
     class IPageCollection : public TAtomicRefCount<IPageCollection> {
     public:
         virtual ~IPageCollection() = default;

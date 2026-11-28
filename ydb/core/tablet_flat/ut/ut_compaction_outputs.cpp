@@ -112,7 +112,9 @@ namespace {
                 loaded.emplace_back(location.Offset, location.Size,
                     NSharedCache::TSharedPageRef::MakePrivate(*data));
             }
-            loader.Save(std::move(loaded));
+            NSharedCache::TEvResult reply(std::move(fetch.PageCollection), NKikimrProto::OK, 0);
+            reply.Pages = std::move(loaded);
+            loader.Save(reply);
         }
         return loader.Result();
     }
@@ -138,7 +140,7 @@ namespace {
     class TWrittenPages final : public IPages {
     public:
         void Add(const TPart* part) {
-            const auto* store = dynamic_cast<const NTable::TPartStore*>(part);
+            const auto* store = dynamic_cast<const NTable::TPrivatePartStore*>(part);
             UNIT_ASSERT(store);
             auto& slots = Pages[part];
             slots.resize(store->PageCollections.size());

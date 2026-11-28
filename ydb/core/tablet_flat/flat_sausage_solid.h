@@ -238,6 +238,8 @@ namespace NPageCollection {
         using TBodies = TVector<TString>;
 
     public:
+        TLargeGlobIdRestoreState() = default;
+
         TLargeGlobIdRestoreState(const TLargeGlobId& largeGlobId) {
             Blobs.reserve(largeGlobId.BlobCount());
             largeGlobId.MaterializeTo(Blobs);

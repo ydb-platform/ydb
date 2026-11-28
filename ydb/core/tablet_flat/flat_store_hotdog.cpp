@@ -58,12 +58,13 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const NTable::TPartView &pa
     auto *part = partView.As<NTable::TPartStore>();
 
     Y_ENSURE(part, "Cannot cast TPart to page collection backed up part");
-    Y_ENSURE(part->Label == part->PageCollections[0]->PageCollection->Label());
+    Y_ENSURE(part->Label == part->GetPageCollection(0)->Label());
 
-    bundle->MutablePageCollections()->Reserve(part->PageCollections.size());
+    bundle->MutablePageCollections()->Reserve(part->GetPageCollectionCount());
 
-    for (auto &cache : part->PageCollections)
-        Bundle(bundle->AddPageCollections(), *cache);
+    for (ui32 slot : xrange(part->GetPageCollectionCount())) {
+        Bundle(bundle->AddPageCollections(), *part->GetPageCollection(slot));
+    }
 
     if (auto legacy = NTable::TOverlay{ partView.Screen, nullptr }.Encode()) {
         bundle->SetLegacy(std::move(legacy));
@@ -102,9 +103,10 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TIntrusiveConstPtr<NT
     bundle->SetEpoch(partStore->Epoch.ToProto());
 }
 
-void TPageCollectionProtoHelper::Bundle(NKikimrExecutorFlat::TPageCollection *pageCollectionProto, const TPrivatePageCache::TPageCollection &pageCollection_)
+void TPageCollectionProtoHelper::Bundle(
+    NKikimrExecutorFlat::TPageCollection* pageCollectionProto, const NPageCollection::IPageCollection& pageCollection_)
 {
-    auto *pageCollection = CheckedCast<const NPageCollection::TPageCollection*>(pageCollection_.PageCollection.Get());
+    auto* pageCollection = CheckedCast<const NPageCollection::TPageCollection*>(&pageCollection_);
 
     return Bundle(pageCollectionProto, pageCollection->LargeGlobId, pageCollection);
 }

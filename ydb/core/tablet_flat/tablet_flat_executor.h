@@ -28,7 +28,7 @@ namespace NTabletFlatExecutor {
 
 class TTransactionContext;
 class TExecutor;
-struct TPageCollectionTxEnv;
+struct TTransactionEnv;
 struct TSeat;
 class TExecutorCounters;
 class TDirectPartWriter;
@@ -36,7 +36,7 @@ struct TDirectPartResult;
 
 class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend class TExecutor;
-    friend struct TPageCollectionTxEnv;
+    friend struct TTransactionEnv;
 
     class TImpl;
     THolder<TImpl> Impl;

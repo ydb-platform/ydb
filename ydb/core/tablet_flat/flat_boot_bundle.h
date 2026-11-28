@@ -16,6 +16,8 @@ namespace NTabletFlatExecutor {
 namespace NBoot {
 
     class TBundleLoadStep final: public NBoot::IStep {
+        friend class NTable::TMetadataLoadContext;
+
     public:
         static constexpr NBoot::EStep StepKind = NBoot::EStep::Bundle;
 
@@ -36,30 +38,31 @@ namespace NBoot {
     private: /* IStep, boot logic DSL actor interface   */
         void Start() override
         {
-            Prebuilt.resize(LargeGlobIds.size());
-            Components.resize(LargeGlobIds.size());
-
-            for (auto slot: xrange(LargeGlobIds.size())) {
-                if (auto *cached = Back->PageCollections.FindPtr(LargeGlobIds[slot].Lead)) {
-                    // Use existing cached collection as prebuilt
-                    Prebuilt[slot] = *cached;
-                } else {
-                    Prebuilt[slot] = nullptr;
-                    LeftMetas += Spawn<TLoadBlobs>(LargeGlobIds[slot], slot);
-                }
+            auto environment = Logic->PageCache.MakeLoaderEnvironment(LargeGlobIds, Back->PageCollections.Get());
+            TVector<NTable::TPageCollectionComponents> components(LargeGlobIds.size());
+            for (ui32 slot = 0; slot < LargeGlobIds.size(); ++slot) {
+                components[slot].LargeGlobId = LargeGlobIds[slot];
             }
-
-            TryLoad();
+            NTable::TPartComponents parts{
+                .PageCollectionComponents = std::move(components),
+                .Legacy = std::move(Legacy),
+                .Opaque = std::move(Opaque),
+                .Deltas = std::move(Deltas),
+                .Epoch = Epoch,
+            };
+            Loader = new NTable::TLoader(std::move(environment), std::move(parts));
+            Loader->BeginMetadata(MetadataContext());
+            TryFinalize();
         }
 
-        bool HandleBio(NSharedCache::TEvResult &msg) override
+        bool HandleBio(const TPageCacheResult& msg, NActors::IEventBase& event) override
         {
             Y_ENSURE(Loader, "PageCollections loader got un unexpected pages fetch");
 
             LeftReads -= 1;
 
             if (msg.Status == NKikimrProto::OK) {
-                Loader->Save(std::move(msg.Pages));
+                Loader->Save(event);
 
                 TryFinalize();
 
@@ -74,96 +77,101 @@ namespace NBoot {
 
         void HandleStep(TIntrusivePtr<IStep> step) override
         {
-            auto *load = step->ConsumeAs<TLoadBlobs>(LeftMetas);
-
-            if (Loader) {
-                Y_TABLET_ERROR("Got an unexpected load blobs result");
-            } else if (load->Cookie >= LargeGlobIds.size()) {
-                Y_TABLET_ERROR("Got blobs load step with an invalid cookie");
-            } else if (Prebuilt[load->Cookie]) {
-                Y_TABLET_ERROR("Page collection is already loaded at room " << load->Cookie);
-            } else {
-                // StageParseMeta constructs both NPageCollection::TPageCollection and TPrivatePageCache::TPageCollection
-                Components[load->Cookie].LargeGlobId = load->LargeGlobId;
-                Components[load->Cookie].RawMeta = load->PlainData();
+            auto* load = step->FinalCast<TLoadBlobs>();
+            const auto result = Loader->SaveMetadata(load->Cookie, load->PlainData());
+            if (result == NTable::EMetadataLoadResult::Error) {
+                Y_TABLET_ERROR("Got empty page collection metadata");
             }
-
-            TryLoad();
-        }
-
-    private:
-        void TryLoad()
-        {
-            if (!LeftMetas) {
-                NTable::TPartComponents parts{
-                    .PageCollectionComponents = std::move(Components),
-                    .Legacy = std::move(Legacy),
-                    .Opaque = std::move(Opaque),
-                    .Deltas = std::move(Deltas),
-                    .Epoch = Epoch,
-                };
-
-                // Pass pre-built collections — StageParseMeta fills null slots from components
-                Loader = new NTable::TLoader(std::move(parts), std::move(Prebuilt));
-
+            if (result != NTable::EMetadataLoadResult::Ignored) {
                 TryFinalize();
             }
         }
 
+        NTable::EMetadataLoadResult HandleMetadata(
+            ui32 slot, const TPageCacheMetadataResult& metadata, NActors::IEventBase& event) override {
+            const auto result = Loader->AcceptMetadata(slot, metadata, event, MetadataContext());
+            if (result == NTable::EMetadataLoadResult::Error) {
+                if (auto logl = Env->Logger()->Log(ELnLev::Error)) {
+                    logl << NFmt::Do(*Back) << " Collection metadata load failed for " << LargeGlobIds[slot].Lead
+                         << ": " << metadata.Error;
+                }
+                return result;
+            }
+            if (result != NTable::EMetadataLoadResult::Ignored) {
+                TryFinalize();
+            }
+            return result;
+        }
+
+        void CancelMetadata() noexcept override {
+            Loader->CancelMetadata();
+        }
+
+    private:
+        NTable::TMetadataLoadContext MetadataContext()
+        {
+            return { *this, TActivationContext::ActorSystem(), Logic->SelfId, Logic->BootAttempt,
+                NBlockIO::EPriority::Fast };
+        }
+
+        void LoadRawMetadata(ui32 slot, const NPageCollection::TLargeGlobId& id)
+        {
+            Spawn<TLoadBlobs>(id, slot);
+        }
+
+        bool SendMetadataRequest(ui32 slot, const void* request, THolder<NActors::IEventBase> event)
+        {
+            return Logic->LoadMetadata(this, slot, LargeGlobIds[slot], request, std::move(event));
+        }
+
+        void SendMetadataUpdate(THolder<NActors::IEventBase> event)
+        {
+            Logic->UpdateMetadata(std::move(event));
+        }
+
         void TryFinalize()
         {
+            if (!Loader->MetadataReady()) {
+                return;
+            }
             if (!LeftReads) {
                 if (auto fetch = Loader->Run({.PreloadIndex = true, .PreloadData = false})) {
-                    LeftReads += Logic->LoadPages(this, std::move(fetch));
+                    LeftReads += Logic->LoadPages(this, *Loader, std::move(fetch));
                 }
             }
 
             if (!LeftReads) {
                 NTable::TPartView partView = Loader->Result();
+                const auto* partStore = partView.As<NTable::TPartStore>();
 
                 if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
                     logl
                         << NFmt::Do(*Back) << " table " << Table
                         << " part loaded, page collections [";
 
-                    for (auto &cache : partView.As<NTable::TPartStore>()->PageCollections)
-                        logl << " " << cache->Id;
+                    for (ui32 slot : xrange(partStore->GetPageCollectionCount()))
+                        logl << " " << partStore->GetPageCollectionRef(slot)->Label();
 
                     logl << " ]";
                 }
 
-                PropagateSideEffects(partView);
+                Logic->PageCache.CaptureForRestart(*partStore, Logic->Result().PageCollections);
                 Back->DatabaseImpl->Merge(Table, std::move(partView));
 
                 Env->Finish(this); /* return self to owner */
             }
         }
 
-        void PropagateSideEffects(const NTable::TPartView &partView)
-        {
-            for (auto &pageCollection : partView.As<NTable::TPartStore>()->PageCollections)
-                Logic->Result().PageCollections.push_back(pageCollection);
-
-            if (auto &pageCollection = partView.As<NTable::TPartStore>()->Pseudo)
-                Logic->Result().PageCollections.push_back(pageCollection);
-        }
-
     private:
-        using TPageCollection = TPrivatePageCache::TPageCollection;
-
         const ui32 Table = Max<ui32>();
 
         TAutoPtr<NTable::TLoader> Loader;
         TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
-        TVector<NTable::TPageCollectionComponents> Components;
-        // Pre-built TPrivatePageCache::TPageCollection for slots found in Back->PageCollections cache
-        TVector<TIntrusivePtr<TPageCollection>> Prebuilt;
         TString Legacy;
         TString Opaque;
         TVector<TString> Deltas;
         NTable::TEpoch Epoch;
 
-        TLeft LeftMetas;
         TLeft LeftReads;
     };
 }

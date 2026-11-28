@@ -5,6 +5,7 @@
 #include "flat_dbase_scheme.h"
 #include "flat_boot_switch.h"
 #include "flat_boot_oven.h"
+#include "flat_transaction_pages.h"
 #include "logic_snap_waste.h"
 #include "logic_redo_queue.h"
 #include <ydb/core/base/tablet.h>
@@ -107,7 +108,7 @@ namespace NBoot {
         TDeque<TBody> TurnsLog;
         TDeque<TSwitch> Switches;
         THashMap<ui32, NTable::TSnapEdge> Edges;
-        THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
+        THolder<IPageCacheRestartState> PageCollections;
         THashMap<TLogoBlobID, TSharedData> TxStatusCaches;
     };
 

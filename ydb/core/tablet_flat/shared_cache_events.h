@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "flat_bio_events.h"
+#include "flat_transaction_pages.h"
 #include "shared_handle.h"
 #include "shared_page.h"
 #include <ydb/core/protos/shared_cache.pb.h>
@@ -40,14 +41,7 @@ namespace NKikimr::NSharedCache {
         /* +1024 range is reserved for scan events */
     };
 
-    enum class ERequestTypeCookie : ui64 {
-        Undefined = 0,
-        Transaction = 1,
-        StickyPages,
-        PendingInit,
-        BootLogic,
-        TryKeepInMemPages,
-    };
+    using ERequestTypeCookie = NTabletFlatExecutor::ERequestTypeCookie;
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
 
@@ -73,20 +67,7 @@ namespace NKikimr::NSharedCache {
     };
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
-        // One B-tree per group: index nodes always live in the main group's collection
-        // (IndexCollectionId), while the data pages they point at live in that group's
-        // collection (DataCollectionId) — the same collection for group 0.
-        struct TBtreeSeed {
-            TLogoBlobID IndexCollectionId;
-            TLogoBlobID DataCollectionId;
-            NTable::NPage::TPageLocation Root;
-            ui32 LevelCount = 0;
-            bool QueueDataPages = true;
-            bool Sticky = false;
-            bool IndexCollectionSticky = false;
-
-            bool operator==(const TBtreeSeed&) const = default;
-        };
+        using TBtreeSeed = NPageCollection::TBtreeSeed;
 
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         ECacheMode CacheMode;

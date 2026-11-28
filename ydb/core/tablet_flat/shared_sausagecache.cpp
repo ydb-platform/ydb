@@ -23,6 +23,21 @@
 
 namespace NKikimr::NSharedCache {
 
+TSharedCacheConfig ResolveSharedCacheConfig(const NKikimrConfig::TAppConfig& config, const TAppData* fallback) {
+    TSharedCacheConfig result;
+    if (config.HasBootstrapConfig() && config.GetBootstrapConfig().HasSharedCacheConfig()) {
+        result.MergeFrom(config.GetBootstrapConfig().GetSharedCacheConfig());
+    } else if (fallback && fallback->BootstrapConfig.HasSharedCacheConfig()) {
+        result.MergeFrom(fallback->BootstrapConfig.GetSharedCacheConfig());
+    }
+    if (config.HasSharedCacheConfig()) {
+        result.MergeFrom(config.GetSharedCacheConfig());
+    } else if (fallback) {
+        result.MergeFrom(fallback->SharedCacheConfig);
+    }
+    return result;
+}
+
 using namespace NTabletFlatExecutor;
 using TPageLocation = NTable::NPage::TPageLocation;
 
@@ -1631,18 +1646,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         const auto& record = ev->Get()->Record;
 
         {
-            auto* appData = AppData(ctx);
-            NKikimrSharedCache::TSharedCacheConfig config;
-            if (record.GetConfig().HasBootstrapConfig() && record.GetConfig().GetBootstrapConfig().HasSharedCacheConfig()) {
-                config.MergeFrom(record.GetConfig().GetBootstrapConfig().GetSharedCacheConfig());
-            } else if (appData->BootstrapConfig.HasSharedCacheConfig()) {
-                config.MergeFrom(appData->BootstrapConfig.GetSharedCacheConfig());
-            }
-            if (record.GetConfig().HasSharedCacheConfig()) {
-                config.MergeFrom(record.GetConfig().GetSharedCacheConfig());
-            } else {
-                config.MergeFrom(appData->SharedCacheConfig);
-            }
+            auto config = ResolveSharedCacheConfig(record.GetConfig(), AppData(ctx));
             LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Update config " << config.ShortDebugString());
             Config.Swap(&config);
         }

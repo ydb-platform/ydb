@@ -2,7 +2,6 @@
 
 #include "defs.h"
 #include "tablet_flat_executor.h"
-#include "flat_sausagecache.h"
 
 #include <util/generic/intrlist.h>
 #include <util/generic/ptr.h>
@@ -32,6 +31,8 @@ namespace NTabletFlatExecutor {
             , TxType(Self->GetTxType())
         {
         }
+
+        virtual ~TSeat() = default;
 
         void Describe(IOutputStream &out) const
         {
@@ -71,7 +72,6 @@ namespace NTabletFlatExecutor {
         const TTxType TxType;
         NWilson::TSpan WaitingSpan;
         ui64 Retries = 0;
-        THashMap<TLogoBlobID, THashMap<TPageOffset, TPrivatePageCache::TPinnedPage>> Pinned;
 
         THPTimer LatencyTimer;
         THPTimer CommitTimer;

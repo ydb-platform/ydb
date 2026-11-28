@@ -98,27 +98,26 @@ public:
         if (!partStore) {
             return {true, nullptr};
         }
-        // TPartStore::Locate aborts on anything it does not expect, and reaches past the end of its
-        // page collection list for an outer reference of a part that has no outer group.
+        // Check malformed references and missing outer collections before metadata lookup
         if ((lob != NTable::ELargeObj::Extern && lob != NTable::ELargeObj::Outer) || (ref >> 32)) {
             ++Stats.PagesCorrupt;
             Repeated.Add("A large value reference is malformed", ToString(ref));
             return {true, nullptr};
         }
         if (lob == NTable::ELargeObj::Outer
-                && partStore->OuterSlot() >= partStore->PageCollections.size()) {
+                && partStore->OuterSlot() >= partStore->GetPageCollectionCount()) {
             ++Stats.PagesMissing;
             Repeated.Add("A part refers to an outer value group it does not have",
                 partStore->Label.ToString());
             return {true, nullptr};
         }
-        auto* collection = partStore->Locate(lob, ref);
-        if (!collection || !collection->PageCollection) {
+        const auto* collection = partStore->GetPageCollection(lob, ref);
+        if (!collection) {
             return {true, nullptr};
         }
         // Extern and outer pages are addressed by page index: those collections have no byte offsets
         // to be addressed by, so the reference is turned into a location by the collection itself.
-        return {true, GetPage(collection, collection->PageCollection->GetLocation(ref))};
+        return {true, GetPage(collection, collection->GetLocation(ref))};
     }
 
     const TSharedData* TryGetPage(const NTable::TPart* part, const TPageLocation& location,
@@ -135,17 +134,17 @@ public:
 
     const TSharedData* GetSlotPage(const NTable::TPart* part, ui32 slot, const TPageLocation& location) {
         const auto* partStore = dynamic_cast<const NTable::TPartStore*>(part);
-        if (!partStore || slot >= partStore->PageCollections.size()) {
+        if (!partStore || slot >= partStore->GetPageCollectionCount()) {
             return nullptr;
         }
-        return GetPage(partStore->PageCollections[slot].Get(), location);
+        return GetPage(partStore->GetPageCollection(slot), location);
     }
 
-    const TSharedData* GetPage(const TPrivateCollection* collection, const TPageLocation& location) {
-        if (!collection || !collection->PageCollection) {
+    const TSharedData* GetPage(const NPageCollection::IPageCollection* collection, const TPageLocation& location) {
+        if (!collection) {
             return nullptr;
         }
-        return GetPage(collection->Id, *collection->PageCollection, location);
+        return GetPage(collection->Label(), *collection, location);
     }
 
     const TSharedData* GetPage(const TLogoBlobID& label,
@@ -796,7 +795,9 @@ bool TTabletBoot::TImpl::LoadBundle(ui32 table, TSwitch::TBundle& bundle) {
             loaded.emplace_back(location.Offset, location.Size,
                 NSharedCache::TSharedPageRef::MakePrivate(*page));
         }
-        loader.Save(std::move(loaded));
+        NSharedCache::TEvResult reply(std::move(fetch.PageCollection), NKikimrProto::OK, 0);
+        reply.Pages = std::move(loaded);
+        loader.Save(reply);
     }
 
     Repeated.Add("A part keeps asking for pages and never finishes loading",

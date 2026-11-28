@@ -2181,7 +2181,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         runtime.SetEventFilter(std::move(previousFilter));
 
         runtime.Send(new IEventHandle(sessionActor, sender,
-            new NGRpcService::TEvClientLost()));
+            new NGRpcService::TEvClientLost(tracing ? 42 : 0)));
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         const auto cancelled = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
@@ -2190,6 +2190,26 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             UNIT_ASSERT(uploader->BuildTraceTrees());
             UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1u);
             AssertStatus(*uploader, "Query session", NTraceProto::Status::STATUS_CODE_ERROR);
+            const auto* cancellation = FindSpan(*uploader, "Query cancellation handling");
+            UNIT_ASSERT(cancellation);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*cancellation, "ydb.cancel.origin")->value().string_value(), "unknown");
+            UNIT_ASSERT_VALUES_EQUAL(cancellation->events(0).name(), "cancellation handled");
+            bool sourceSeen = false;
+            bool mismatchSeen = false;
+            for (const auto& attribute : cancellation->events(0).attributes()) {
+                if (attribute.key() == "source_query_id") {
+                    UNIT_ASSERT_VALUES_EQUAL(attribute.value().int_value(), 42);
+                    sourceSeen = true;
+                } else if (attribute.key() == "source_matches_current_query") {
+                    UNIT_ASSERT(!attribute.value().bool_value());
+                    mismatchSeen = true;
+                }
+            }
+            UNIT_ASSERT(sourceSeen && mismatchSeen);
+            const auto* cleanup = FindSpan(*uploader, "Session query cleanup");
+            UNIT_ASSERT(cleanup);
+            UNIT_ASSERT(FindAttribute(*cleanup, "ydb.cleanup.resources_finished")->value().bool_value());
+            UNIT_ASSERT_VALUES_EQUAL(cleanup->events(cleanup->events_size() - 1).name(), "cleanup boundary reached");
         } else {
             UNIT_ASSERT(uploader->Spans.empty());
         }

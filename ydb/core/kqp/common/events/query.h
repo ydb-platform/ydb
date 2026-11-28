@@ -363,7 +363,7 @@ public:
         return req;
     }
 
-    void SetClientLostAction(TActorId actorId, NActors::TActorSystem* as);
+    void SetClientLostAction(TActorId actorId, NActors::TActorSystem* as, ui64 requestId = 0);
 
     void SetUserRequestContext(TIntrusivePtr<TUserRequestContext> userRequestContext) {
         UserRequestContext = userRequestContext;

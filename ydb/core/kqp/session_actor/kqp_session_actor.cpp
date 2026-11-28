@@ -305,7 +305,7 @@ public:
         YQL_ENSURE(!QueryClassifier);
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
-        ev->Get()->SetClientLostAction(selfId, as);
+        ev->Get()->SetClientLostAction(selfId, as, QueryId);
 
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, Settings.Database, Settings.ApplicationName, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
@@ -440,7 +440,34 @@ public:
         }
     }
 
-    void ClientLost() {
+    void TraceCancellation(ui64 sourceQueryId, TStringBuf source) {
+        if (!QueryState) {
+            return;
+        }
+        if (!CancellationSpan) {
+            CancellationSpan = QueryState->KqpSessionSpan.CreateChild(10,
+                "Query cancellation handling", NWilson::EFlags::AUTO_END);
+            CancellationTraceEvents = 0;
+            CancellationTraceDropped = 0;
+            CancellationSpan.Attribute("ydb.query.id", static_cast<i64>(QueryState->QueryId));
+            CancellationSpan.Attribute("ydb.cancel.origin", TString("unknown"));
+        }
+        if (CancellationSpan) {
+            if (CancellationTraceEvents++ < 8) {
+                CancellationSpan.Event("cancellation handled", {
+                    {"source", TString(source)},
+                    {"source_query_id", static_cast<i64>(sourceQueryId)},
+                    {"source_binding_known", sourceQueryId != 0},
+                    {"source_matches_current_query", sourceQueryId != 0 && sourceQueryId == QueryState->QueryId},
+                });
+            } else {
+                ++CancellationTraceDropped;
+            }
+        }
+    }
+
+    void ClientLost(ui64 sourceQueryId = 0, TStringBuf source = "unknown") {
+        TraceCancellation(sourceQueryId, source);
         YDB_LOG_DEBUG("Got ClientLost event, send AbortExecution to executer",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
@@ -450,14 +477,17 @@ public:
         if (ExecuterId) {
             auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Client lost"); // any status code can be here
 
+            if (CancellationSpan) {
+                CancellationSpan.Attribute("ydb.cancel.abort_dispatched", true);
+            }
             Send(ExecuterId, abortEv.Release());
         } else {
             Cleanup();
         }
     }
 
-    void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
-        ClientLost();
+    void HandleClientLost(NGRpcService::TEvClientLost::TPtr& ev) {
+        ClientLost(ev->Get()->Record.GetRequestId(), "grpc_finish_notification");
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -715,7 +745,7 @@ public:
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
                 {"traceId", TraceId()});
-            ClientLost();
+            ClientLost(ev->Cookie, "subscription_undelivered");
             return;
         }
     }
@@ -3046,6 +3076,10 @@ public:
     }
 
     void ProcessExecuterResult(TEvKqpExecuter::TEvTxResponse* ev) {
+        if (CancellationSpan) {
+            CancellationSpan.Attribute("ydb.cancel.executor_terminal_observed", true);
+            CancellationSpan.Attribute("ydb.cancel.executor_status", static_cast<i64>(ev->Record.GetResponse().GetStatus()));
+        }
         FinishCurrentExecutionStats(*ev);
         QueryState->Orbit = std::move(ev->Orbit);
 
@@ -3191,6 +3225,7 @@ public:
     }
 
     void HandleExecute(TEvKqp::TEvAbortExecution::TPtr& ev) {
+        TraceCancellation(0, "abort_execution_event");
         auto& msg = ev->Get()->Record;
 
         YDB_LOG_INFO("Got TEvAbortExecution, send it to Executer",
@@ -3788,6 +3823,9 @@ public:
         EndQueryTraceSpan(QueryState->AdmissionSpan, status);
         EndQueryTraceSpan(QueryState->AcquireSnapshotSpan, status);
         auto& querySpan = QueryState->KqpSessionSpan;
+        if (CleanupSpan) {
+            CleanupSpan.Event("query response finalized", {{"status", static_cast<i64>(status)}});
+        }
         if (querySpan && QueryState->RequestEv) {
             AddQueryResultAttributes(querySpan, QueryState->TraceDescription, QueryState->QueryStats,
                 CalcRequestUnit(QueryState->QueryStats), status,
@@ -3984,7 +4022,25 @@ public:
         Cleanup(true);
     }
 
+    void TraceCleanupEvent(const char* name) {
+        if (CleanupSpan) {
+            if (CleanupTraceEvents++ < 248) {
+                CleanupSpan.Event(name);
+            } else {
+                ++CleanupTraceDropped;
+            }
+        }
+    }
+
     void Cleanup(bool isFinal = false) {
+        if (QueryState && !CleanupSpan) {
+            CleanupSpan = QueryState->KqpSessionSpan.CreateChild(10,
+                "Session query cleanup", NWilson::EFlags::AUTO_END);
+            CleanupTraceEvents = 0;
+            CleanupTraceDropped = 0;
+            CleanupSpan.Attribute("ydb.query.id", static_cast<i64>(QueryState->QueryId));
+            TraceCleanupEvent("cleanup entered");
+        }
         isFinal = isFinal || QueryState && !QueryState->KeepSession;
 
         if (QueryState && QueryState->TxCtx) {
@@ -4023,6 +4079,7 @@ public:
             YQL_ENSURE(!CleanupCtx);
             CleanupCtx.reset(new TKqpCleanupCtx);
             CleanupCtx->IsWaitingForWorkerToClose = true;
+            TraceCleanupEvent("worker close dispatched");
         }
 
         if (Transactions.ToBeAbortedSize()) {
@@ -4030,6 +4087,7 @@ public:
                 CleanupCtx.reset(new TKqpCleanupCtx);
             CleanupCtx->Final = isFinal;
             CleanupCtx->TransactionsToBeAborted = Transactions.ReleaseToBeAborted();
+            TraceCleanupEvent("rollback dispatched");
             SendRollbackRequest(CleanupCtx->TransactionsToBeAborted.front().Get());
         }
 
@@ -4039,6 +4097,7 @@ public:
             }
             CleanupCtx->Final = isFinal;
             CleanupCtx->IsWaitingForWorkloadServiceCleanup = true;
+            TraceCleanupEvent("workload cleanup dispatched");
 
             const auto& stats = QueryState->QueryStats;
             auto event = std::make_unique<NWorkloadManager::TEvCleanupRequest>(
@@ -4076,6 +4135,7 @@ public:
     }
 
     void HandleCleanup(TEvKqp::TEvCloseSessionResponse::TPtr&) {
+        TraceCleanupEvent("worker close response received");
         CleanupCtx->IsWaitingForWorkerToClose = false;
         if (CleanupCtx->CleanupFinished()) {
             EndCleanup(CleanupCtx->Final);
@@ -4092,6 +4152,7 @@ public:
         if (ev->Sender != ExecuterId) {
             return;
         }
+        TraceCleanupEvent("rollback response received");
         if (QueryState) {
             FinishCurrentExecutionStats(*ev->Get());
             QueryState->Orbit = std::move(ev->Get()->Orbit);
@@ -4122,6 +4183,7 @@ public:
         YQL_ENSURE(CleanupCtx);
         CleanupCtx->TransactionsToBeAborted.pop_front();
         if (CleanupCtx->TransactionsToBeAborted.size()) {
+            TraceCleanupEvent("rollback dispatched");
             SendRollbackRequest(CleanupCtx->TransactionsToBeAborted.front().Get());
         } else if (CleanupCtx->CleanupFinished()) {
             EndCleanup(CleanupCtx->Final);
@@ -4129,6 +4191,7 @@ public:
     }
 
     void HandleCleanup(NWorkloadManager::TEvCleanupResponse::TPtr& ev) {
+        TraceCleanupEvent("workload cleanup response received");
         YQL_ENSURE(CleanupCtx);
         CleanupCtx->IsWaitingForWorkloadServiceCleanup = false;
 
@@ -4159,6 +4222,21 @@ public:
         }
         if (QueryResponse) {
             Reply();
+        }
+
+        const bool finished = !CleanupCtx || CleanupCtx->CleanupFinished();
+        if (CleanupSpan) {
+            CleanupSpan.Attribute("ydb.cleanup.resources_finished", finished);
+            CleanupSpan.Attribute("ydb.cleanup.final_session", isFinal);
+            CleanupSpan.Attribute("ydb.trace.events_dropped", static_cast<i64>(CleanupTraceDropped));
+            CleanupSpan.Event("cleanup boundary reached");
+            CleanupSpan.End();
+        }
+        if (CancellationSpan) {
+            CancellationSpan.Attribute("ydb.cancel.cleanup_finished", finished);
+            CancellationSpan.Attribute("ydb.trace.events_dropped", static_cast<i64>(CancellationTraceDropped));
+            CancellationSpan.Event("cancellation cleanup boundary reached");
+            CancellationSpan.End();
         }
 
         if (CleanupCtx)
@@ -4621,6 +4699,12 @@ private:
     std::shared_ptr<TKqpQueryState> QueryState;
     std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
+    NWilson::TSpan CleanupSpan;
+    NWilson::TSpan CancellationSpan;
+    ui64 CleanupTraceEvents = 0;
+    ui64 CleanupTraceDropped = 0;
+    ui64 CancellationTraceEvents = 0;
+    ui64 CancellationTraceDropped = 0;
     ui32 QueryId = 0;
     ui64 LastAcceptedWmAdmissionQueryId = 0;
     TIntrusiveConstPtr<TKikimrConfiguration> Config;

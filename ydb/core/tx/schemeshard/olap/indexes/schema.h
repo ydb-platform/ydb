@@ -25,7 +25,7 @@ public:
     bool ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexUpsert& upsert, IErrorCollector& errors);
 
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& indexSchema) const;
-    void DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema);
+    bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema);
 };
 
 class TOlapIndexesDescription {
@@ -76,6 +76,7 @@ public:
     bool ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexesUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId);
 
     void Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
+    bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors);
     void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
     bool ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
     bool ValidateNoDuplicateMinMaxAndBloomFilterIndexes(const TOlapSchema& currentSchema, IErrorCollector& errors) const;

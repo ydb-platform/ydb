@@ -5,9 +5,23 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/selector/transparent.h>
 
+#include <set>
+#include <util/string/builder.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
+
+TConclusionStatus TOptimizerPlannerConstructor::Validate() const {
+    std::set<TString> selectorNames;
+    for (auto&& i : SelectorConstructors) {
+        if (!selectorNames.emplace(i->GetName()).second) {
+            return TConclusionStatus::Fail(TStringBuilder() << "duplicate selector name '" << i->GetName()
+                << "' in lc-buckets compaction planner constructor");
+        }
+    }
+    return TConclusionStatus::Success();
+}
 
 TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
     auto counters = std::make_shared<TCounters>();

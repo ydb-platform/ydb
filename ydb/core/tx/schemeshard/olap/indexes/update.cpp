@@ -59,7 +59,7 @@ void TOlapIndexUpsert::SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& re
     IndexConstructor.SerializeToProto(requestedProto);
 }
 
-bool TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& indexSchema) {
+bool TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& indexSchema, IErrorCollector& errors) {
     Name = indexSchema.GetName();
     if (!!indexSchema.GetStorageId()) {
         StorageId = indexSchema.GetStorageId();
@@ -67,9 +67,11 @@ bool TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexReq
     if (indexSchema.HasInheritPortionStorage()) {
         InheritPortionStorage = indexSchema.GetInheritPortionStorage();
     }
-    YDB_LOG_VERIFY(IndexConstructor.DeserializeFromProto(indexSchema),
-        {"incorrectProto", indexSchema.DebugString()}
-    );
+    if (!IndexConstructor.DeserializeFromProto(indexSchema) || !IndexConstructor.HasObject()) {
+        errors.AddError(TStringBuilder() << "Unknown or unparsed index class name '" << indexSchema.GetClassName()
+            << "' for index '" << indexSchema.GetName() << "'");
+        return false;
+    }
     return true;
 }
 
@@ -94,7 +96,9 @@ bool TOlapIndexesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& a
     TSet<TString> upsertIndexNames;
     for (auto& indexSchema : alterRequest.GetUpsertIndexes()) {
         TOlapIndexUpsert index;
-        YDB_LOG_VERIFY(index.DeserializeFromProto(indexSchema));
+        if (!index.DeserializeFromProto(indexSchema, errors)) {
+            return false;
+        }
         if (!upsertIndexNames.emplace(index.GetName()).second) {
             errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "index '" << index.GetName() << "' duplication for add");
             return false;

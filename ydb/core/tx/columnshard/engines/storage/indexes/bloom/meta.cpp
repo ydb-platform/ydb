@@ -121,8 +121,9 @@ TConclusionStatus TBloomIndexMeta::DoCheckModificationCompatibility(const IIndex
 }
 
 bool TBloomIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
-    YDB_LOG_VERIFY(TBase::DoDeserializeFromProto(proto));
-    YDB_LOG_VERIFY(proto.HasBloomFilter());
+    if (!TBase::DoDeserializeFromProto(proto) || !proto.HasBloomFilter()) {
+        return false;
+    }
     auto& bFilter = proto.GetBloomFilter();
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);

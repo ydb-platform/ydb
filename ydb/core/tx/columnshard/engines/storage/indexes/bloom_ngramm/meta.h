@@ -89,8 +89,9 @@ protected:
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
-        YDB_LOG_VERIFY(TBase::DoDeserializeFromProto(proto));
-        YDB_LOG_VERIFY(proto.HasBloomNGrammFilter());
+        if (!TBase::DoDeserializeFromProto(proto) || !proto.HasBloomNGrammFilter()) {
+            return false;
+        }
         const auto& bFilter = proto.GetBloomNGrammFilter();
 
         {

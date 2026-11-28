@@ -29,7 +29,7 @@ private:
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
     virtual TConclusionStatus DoRestoreImpl(
         const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) override;
-    void InitializeTransfers(const TUpdateRestoreContext& context, const NKikimrSchemeOp::TAlterColumnTable& alter);
+    TConclusionStatus InitializeTransfers(const TUpdateRestoreContext& context, const NKikimrSchemeOp::TAlterColumnTable& alter);
 
     virtual TString DoGetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& /*seqNo*/) const override {
         auto it = DestinationSessions.find(tabletId);

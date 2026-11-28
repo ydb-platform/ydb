@@ -37,11 +37,22 @@ bool TOlapSchema::ValidateTtlSettings(
 }
 
 bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
+    THashMap<ui32, TString> droppedColumns;
+    for (const auto& columnName : schemaUpdate.GetColumns().GetDropColumns()) {
+        if (const auto* column = Columns.GetByName(columnName)) {
+            droppedColumns.emplace(column->GetId(), column->GetName());
+        }
+    }
+
     if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), errors, NextColumnId)) {
         return false;
     }
 
     if (!Indexes.ApplyUpdate(*this, schemaUpdate.GetIndexes(), errors, NextColumnId)) {
+        return false;
+    }
+
+    if (!ValidateDroppedColumns(droppedColumns, errors)) {
         return false;
     }
 
@@ -53,6 +64,24 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
     return true;
 }
 
+bool TOlapSchema::ValidateDroppedColumns(const THashMap<ui32, TString>& droppedColumns, IErrorCollector& errors) const {
+    for (const auto& [columnId, columnName] : droppedColumns) {
+        for (const auto& indexPair : Indexes.GetIndexes()) {
+            const auto& index = indexPair.second;
+            auto usedColumnIds = index.GetIndexMeta()->GetUsedColumnIds();
+            if (const auto singleColumnId = index.GetIndexMeta()->GetSingleColumnId()) {
+                usedColumnIds.insert(*singleColumnId);
+            }
+            if (usedColumnIds.contains(columnId)) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot drop column '" << columnName
+                    << "' because it is used by index '" << index.GetName() << "'");
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool TOlapSchema::ParseFromProto(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
     TOlapSchemaUpdate schemaDiff;
     if (!schemaDiff.Parse(tableSchema, errors, allowNullKeys)) {
@@ -61,7 +90,9 @@ bool TOlapSchema::ParseFromProto(const NKikimrSchemeOp::TColumnTableSchema& tabl
     if (!Update(schemaDiff, errors)) {
         return false;
     }
-    ParseIndexesFromFullSchema(tableSchema);
+    if (!ParseIndexesFromFullSchema(tableSchema, errors)) {
+        return false;
+    }
     if (!Indexes.ValidateNoDuplicateMinMaxAndBloomFilterIndexes(*this, errors)) {
         return false;
     }
@@ -78,9 +109,12 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
     AdvanceNextColumnIdPastIndexes(NextColumnId, tableSchema);
 }
 
-void TOlapSchema::ParseIndexesFromFullSchema(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
-    Indexes.Parse(tableSchema);
+bool TOlapSchema::ParseIndexesFromFullSchema(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors) {
+    if (!Indexes.Parse(tableSchema, errors)) {
+        return false;
+    }
     AdvanceNextColumnIdPastIndexes(NextColumnId, tableSchema);
+    return true;
 }
 
 void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {

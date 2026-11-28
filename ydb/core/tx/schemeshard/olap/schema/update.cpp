@@ -6,6 +6,9 @@ bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSc
     if (!Columns.Parse(tableSchema, errors, allowNullKeys)) {
         return false;
     }
+    if (!Options.ParseOptions(tableSchema.GetOptions(), errors)) {
+        return false;
+    }
 
     return true;
 }

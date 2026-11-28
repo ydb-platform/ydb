@@ -1,5 +1,6 @@
 #include "store.h"
 
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NSchemeShard {
@@ -164,6 +165,17 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
 
         if (!preset.Update(schemaDiff, errors)) {
             return false;
+        }
+
+        if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
+            for (auto& [_, column] : preset.GetColumns().GetColumns()) {
+                if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+                    errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                        << "Sparsed columns are disabled for column tables: column '" << column.GetName()
+                        << "' has a default value or a sparsed accessor");
+                    return false;
+                }
+            }
         }
 
         SchemaPresetByName[preset.GetName()] = preset.GetId();

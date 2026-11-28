@@ -12,6 +12,8 @@
 
 #include <library/cpp/object_factory/object_factory.h>
 
+#include <set>
+
 namespace NYql::NNodes {
 class TExprBase;
 }
@@ -76,6 +78,10 @@ public:
 
     virtual std::optional<ui32> GetSingleColumnId() const {
         return std::nullopt;
+    }
+
+    virtual std::set<ui32> GetUsedColumnIds() const {
+        return {};
     }
 
     // Ngram size when this index can serve a probe with the given case mode. Empty for every other index.

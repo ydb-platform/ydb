@@ -11,12 +11,13 @@ void TOlapIndexSchema::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& 
     IndexMeta.SerializeToProto(indexSchema);
 }
 
-void TOlapIndexSchema::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema) {
+bool TOlapIndexSchema::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema) {
     Id = indexSchema.GetId();
     Name = indexSchema.GetName();
-    YDB_LOG_VERIFY(IndexMeta.DeserializeFromProto(indexSchema),
-        {"incorrectProto", indexSchema.DebugString()}
-    );
+    if (!IndexMeta.DeserializeFromProto(indexSchema) || !IndexMeta.HasObject()) {
+        return false;
+    }
+    return true;
 }
 
 bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexUpsert& upsert, IErrorCollector& errors) {
@@ -67,7 +68,7 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
         renamedProto.SetName(rename.GetDestinationName());
 
         TOlapIndexSchema renamedIndex;
-        renamedIndex.DeserializeFromProto(renamedProto);
+        YDB_LOG_VERIFY(renamedIndex.DeserializeFromProto(renamedProto));
 
         YDB_LOG_VERIFY(IndexesByName.erase(rename.GetSourceName()));
         YDB_LOG_VERIFY(Indexes.erase(sourceIndexId));
@@ -125,12 +126,32 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
     return true;
 }
 
-void TOlapIndexesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
+bool TOlapIndexesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors) {
     for (const auto& indexProto : tableSchema.GetIndexes()) {
         TOlapIndexSchema index;
-        index.DeserializeFromProto(indexProto);
-        Y_ABORT_UNLESS(IndexesByName.emplace(indexProto.GetName(), indexProto.GetId()).second);
-        Y_ABORT_UNLESS(Indexes.emplace(indexProto.GetId(), std::move(index)).second);
+        if (!index.DeserializeFromProto(indexProto)) {
+            errors.AddError(TStringBuilder() << "Incorrect index '" << indexProto.GetName() << "' with id "
+                << indexProto.GetId() << ": cannot deserialize index description (incorrect id, empty name or unknown class name '"
+                << indexProto.GetClassName() << "')");
+            return false;
+        }
+        if (!IndexesByName.emplace(indexProto.GetName(), indexProto.GetId()).second) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate index name: " << indexProto.GetName());
+            return false;
+        }
+        if (!Indexes.emplace(indexProto.GetId(), std::move(index)).second) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate index id: " << indexProto.GetId()
+                << " for index '" << indexProto.GetName() << "'");
+            return false;
+        }
+    }
+    return true;
+}
+
+void TOlapIndexesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
+    TSimpleErrorCollector errors;
+    if (!Parse(tableSchema, errors)) {
+        Y_ABORT("Incorrect index description in validated schema data: %s", errors->GetErrorMessage().c_str());
     }
 }
 

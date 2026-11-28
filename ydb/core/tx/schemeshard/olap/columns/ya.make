@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/formats/arrow/serializer
     ydb/core/tx/schemeshard/olap/common
     ydb/core/tx/columnshard/engines/scheme/defaults/common
+    ydb/core/tx/columnshard/blobs_action/common
 )
 
 END()

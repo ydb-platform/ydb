@@ -2,6 +2,8 @@
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
 
+#include <algorithm>
+
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 TConclusionStatus TStandaloneSchemaUpdate::DoRestoreImpl(
@@ -63,6 +65,17 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     if (alterMultiColumnStatistics) {
         if (!targetMultiColumnStatistics.ApplyUpdate(targetSchema, *alterMultiColumnStatistics, collector)) {
             return TConclusionStatus::Fail("statistics update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
+        }
+    }
+
+    if (alterSchema) {
+        for (const auto& columnName : alterSchema->GetColumns().GetDropColumns()) {
+            for (const auto& [statName, statistics] : targetMultiColumnStatistics.GetMultiColumnStatisticsByName()) {
+                if (std::find(statistics.GetColumnNames().begin(), statistics.GetColumnNames().end(), columnName) != statistics.GetColumnNames().end()) {
+                    return TConclusionStatus::Fail(TStringBuilder() << "Cannot drop column '" << columnName
+                        << "' because it is used by statistics '" << statName << "'");
+                }
+            }
         }
     }
 

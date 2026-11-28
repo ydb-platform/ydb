@@ -7,6 +7,8 @@
 #include <ydb/core/tx/schemeshard/olap/indexes/update.h>
 #include <ydb/core/tx/schemeshard/olap/options/schema.h>
 
+#include <util/generic/hash.h>
+
 namespace NKikimr::NSchemeShard {
 struct TOperationContext;
 }
@@ -24,10 +26,11 @@ namespace NKikimr::NSchemeShard {
 
     public:
         bool Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors);
+        bool ValidateDroppedColumns(const THashMap<ui32, TString>& droppedColumns, IErrorCollector& errors) const;
 
         bool ParseFromProto(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys);
         void ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
-        void ParseIndexesFromFullSchema(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
+        bool ParseIndexesFromFullSchema(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors);
         void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
         bool ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
         bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings, const TOperationContext& context, IErrorCollector& errors) const;

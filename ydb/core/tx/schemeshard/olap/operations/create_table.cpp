@@ -1,4 +1,5 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/tx/schemeshard/olap/operations/checks.h>
 #include <ydb/core/tx/schemeshard/olap/statistics/schema.h>
 #include <ydb/core/tx/schemeshard/olap/statistics/update.h>
@@ -42,6 +43,29 @@ public:
             TtlSettings = description.GetTtlSettings();
             if (!GetSchema().ValidateTtlSettings(description.GetTtlSettings(), context, errors)) {
                 return false;
+            }
+        }
+
+        if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
+            if (description.HasSchema()) {
+                for (const auto& column : description.GetSchema().GetColumns()) {
+                    if ((column.HasDefaultValue() && column.GetDefaultValue().HasScalar()
+                            && column.GetDefaultValue().GetScalar().Value_case() != NKikimrColumnShardColumnDefaults::TScalar::VALUE_NOT_SET)
+                        || (column.GetDataAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+                        errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                            << "Sparsed columns are disabled for column tables: column '" << column.GetName()
+                            << "' has a default value or a sparsed accessor");
+                        return false;
+                    }
+                }
+            }
+            for (auto& [_, column] : GetSchema().GetColumns().GetColumns()) {
+                if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+                    errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                        << "Sparsed columns are disabled for column tables: column '" << column.GetName()
+                        << "' has a default value or a sparsed accessor");
+                    return false;
+                }
             }
         }
         return true;
@@ -132,13 +156,21 @@ public:
         PresetId = preset->GetId();
         PresetName = preset->GetName();
 
-        // A preset persisted by an older version may still contain PG columns.
+        // A preset persisted by an older version may still contain columns that are now flag-disabled (e.g. PG).
+        TVector<NKikimrSchemeOp::TOlapColumnDescription> presetColumnChecks;
         for (const auto& [_, column] : GetSchema().GetColumns().GetColumns()) {
             if (column.GetType().GetTypeId() == NScheme::NTypeIds::Pg) {
                 errors.AddError(TStringBuilder() << "Type '" << column.GetTypeName()
                     << "' specified for column '" << column.GetName() << "' is not supported for column tables");
                 return false;
             }
+            auto& check = presetColumnChecks.emplace_back();
+            check.SetName(column.GetName());
+            check.SetType(column.GetTypeName());
+        }
+        if (auto checkResult = NOlap::CheckColumns(presetColumnChecks, AppData()); !checkResult) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, checkResult.error());
+            return false;
         }
 
         if (description.HasSchema()) {
@@ -625,7 +657,7 @@ public:
                     .NotUnderOperation();
 
                 if (!storeChecks) {
-                    result->SetError(checks.GetStatus(), checks.GetError());
+                    result->SetError(storeChecks.GetStatus(), storeChecks.GetError());
                     return result;
                 }
             }
@@ -704,6 +736,15 @@ public:
             return result;
         }
 
+        TChannelsBindings channelsBindings;
+        if (!storeInfo) {
+            const NKikimrSchemeOp::TColumnStorageConfig& storageConfig = tableInfo->Description.GetStorageConfig();
+            if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(), storageConfig, channelsBindings, errStr)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
+            }
+        }
+
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
@@ -760,13 +801,6 @@ public:
             context.SS->PersistLastTxId(db, olapStorePath.Base());
         } else {
             tableInfo->StandaloneSharding = NKikimrSchemeOp::TColumnStoreSharding();
-            const NKikimrSchemeOp::TColumnStorageConfig& storageConfig = tableInfo->Description.GetStorageConfig();
-
-            TChannelsBindings channelsBindings;
-            if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(), storageConfig, channelsBindings, errStr)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-                return result;
-            }
 
             txState.State = TTxState::CreateParts;
             txState.Shards.reserve(shardsCount);

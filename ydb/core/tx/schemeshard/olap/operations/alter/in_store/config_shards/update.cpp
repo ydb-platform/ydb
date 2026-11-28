@@ -21,6 +21,13 @@ void TInStoreShardsUpdate::InitializeShardIds() {
         ShardIds.emplace(i);
         YDB_LOG_VERIFY(ModifiedShardIds.emplace(i).second);
     }
+
+    // Write-flag changes must reach the shards: the metadata-only fast path has no
+    // plan step, and DoFinishImpl needs a real snapshot to record the open barrier.
+    for (auto&& i : Alter.GetModification().GetOpenWriteIds()) {
+        ShardIds.emplace(i);
+        ModifiedShardIds.emplace(i);
+    }
 }
 
 TConclusionStatus TInStoreShardsUpdate::DoRestoreImpl(
@@ -46,7 +53,10 @@ TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializa
     auto description = tableInfo->Description;
 
     Sharding = tableInfo->GetShardingVerified(original.GetTableSchemaVerified());
-    Sharding->ApplyModification(Alter.GetModification()).Validate();
+    auto modification = Sharding->ApplyModification(Alter.GetModification());
+    if (modification.IsFail()) {
+        return modification;
+    }
     *description.MutableSharding() = Sharding->SerializeToProto();
     InitializeShardIds();
 

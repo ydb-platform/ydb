@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -31,6 +32,12 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
     Name = columnSchema.GetName();
     if (!!columnSchema.GetStorageId()) {
         StorageId = columnSchema.GetStorageId();
+        if (!NKikimr::NOlap::NBlobOperations::IsValidColumnStorageId(*StorageId)) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "Unsupported STORAGE_ID '" << *StorageId << "' for column '" << Name
+                << "': only '__DEFAULT' or an empty value are allowed for column tables");
+            return false;
+        }
     }
     if (!Name) {
         errors.AddError("empty field name");
@@ -89,6 +96,12 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
     NotNullFlag = columnSchema.GetNotNull();
     TypeName = columnSchema.GetType();
     StorageId = columnSchema.GetStorageId();
+    if (!NKikimr::NOlap::NBlobOperations::IsValidColumnStorageId(StorageId)) {
+        errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+            << "Unsupported STORAGE_ID '" << StorageId << "' for column '" << Name
+            << "': only '__DEFAULT' or an empty value are allowed for column tables");
+        return false;
+    }
     if (columnSchema.HasColumnFamilyId()) {
         errors.AddError("Column FAMILY is not supported for column tables");
         return false;

@@ -55,6 +55,7 @@ TOlapStoreInfo::TPtr ParseParams(const TOlapStoreInfo::TPtr& storeInfo,
 
         if (!storeInfo->SchemaPresetByName.contains(presetName)) {
             errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Cannot alter unknown schema preset '" << presetName << "'");
+            return nullptr;
         }
 
         TOlapSchemaUpdate schemaUpdate;

@@ -83,8 +83,14 @@ NKikimr::TConclusionStatus IShardingBase::DeserializeFromProto(const NKikimrSche
             if (shardInfo.IsFail()) {
                 return shardInfo;
             }
-            YDB_LOG_VERIFY(sortedTabletIds.emplace(shardInfo->GetSequenceIdx(), shardInfo->GetTabletId()).second);
-            YDB_LOG_VERIFY(Shards.emplace(shardInfo->GetTabletId(), shardInfo.GetResult()).second);
+            if (!sortedTabletIds.emplace(shardInfo->GetSequenceIdx(), shardInfo->GetTabletId()).second) {
+                return TConclusionStatus::Fail(TStringBuilder() << "duplicate sequence_idx " << shardInfo->GetSequenceIdx()
+                    << " in sharding shards_info");
+            }
+            if (!Shards.emplace(shardInfo->GetTabletId(), shardInfo.GetResult()).second) {
+                return TConclusionStatus::Fail(TStringBuilder() << "duplicate tablet id " << shardInfo->GetTabletId()
+                    << " in sharding shards_info");
+            }
         }
         for (auto&& i : sortedTabletIds) {
             OrderedShardIds.emplace_back(i.second);
@@ -156,7 +162,7 @@ NKikimr::TConclusionStatus IShardingBase::ApplyModification(const NKikimrSchemeO
         };
         OrderedShardIds.erase(std::remove_if(OrderedShardIds.begin(), OrderedShardIds.end(), pred), OrderedShardIds.end());
     }
-    
+
     {
         auto conclusion = DoApplyModification(proto);
         if (conclusion.IsFail()) {
@@ -308,7 +314,9 @@ NKikimr::TConclusionStatus TShardInfo::DeserializeFromProto(const NKikimrSchemeO
         }
         OpenForWriteSnapshot = ss;
     }
-    YDB_LOG_VERIFY(proto.HasShardingVersion());
+    if (!proto.HasShardingVersion()) {
+        return TConclusionStatus::Fail("TShardInfo proto has no sharding version");
+    }
     ShardingVersion = proto.GetShardingVersion();
     if (!TabletId) {
         return TConclusionStatus::Fail("incorrect TabletId for TShardInfo proto");

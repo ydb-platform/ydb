@@ -21,39 +21,63 @@ private:
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
 public:
-    bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
-        SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
-        if (alterRequest.GetOptions().HasTieringNeedActualization()) {
-            TieringNeedActualization = alterRequest.GetOptions().GetTieringNeedActualization();
+    static bool IsValidScanReaderPolicyName(const TString& name) {
+        return name == "PLAIN" || name == "SIMPLE" || name == "TRIVIAL";
+    }
+
+    // Shared by create (TColumnTableSchemeOptions) and alter (TColumnTableRequestedOptions); the two messages have the same fields.
+    template <class TOptionsProto>
+    bool ParseOptions(const TOptionsProto& options, IErrorCollector& errors) {
+        SchemeNeedActualization = options.GetSchemeNeedActualization();
+        if (options.HasTieringNeedActualization()) {
+            TieringNeedActualization = options.GetTieringNeedActualization();
         }
 
-        if (alterRequest.GetOptions().HasScanReaderPolicyName()) {
-            ScanReaderPolicyName = alterRequest.GetOptions().GetScanReaderPolicyName();
+        if (options.HasScanReaderPolicyName()) {
+            if (!IsValidScanReaderPolicyName(options.GetScanReaderPolicyName())) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Unsupported scan reader policy name '"
+                    << options.GetScanReaderPolicyName() << "': only 'PLAIN', 'SIMPLE', 'TRIVIAL' are allowed for column tables");
+                return false;
+            }
+            ScanReaderPolicyName = options.GetScanReaderPolicyName();
         }
-        if (alterRequest.GetOptions().HasDeduplicationEnabled()) {
-            DeduplicationEnabled = alterRequest.GetOptions().GetDeduplicationEnabled();
+        if (options.HasDeduplicationEnabled()) {
+            DeduplicationEnabled = options.GetDeduplicationEnabled();
         }
-        if (alterRequest.GetOptions().HasCacheBlobsAfterWrite()) {
-            CacheBlobsAfterWrite = alterRequest.GetOptions().GetCacheBlobsAfterWrite();
+        if (options.HasCacheBlobsAfterWrite()) {
+            CacheBlobsAfterWrite = options.GetCacheBlobsAfterWrite();
         }
-        if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
-            auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
+        if (options.HasMetadataManagerConstructor()) {
+            auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(options.GetMetadataManagerConstructor());
             if (container.IsFail()) {
                 errors.AddError(container.GetErrorMessage());
+                return false;
+            }
+            if (!container->HasObject()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, "Metadata manager constructor is not specified (missing or empty class name)");
                 return false;
             }
             MetadataManagerConstructor = container.DetachResult();
         }
-        if (alterRequest.GetOptions().HasCompactionPlannerConstructor()) {
-            auto container = NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetCompactionPlannerConstructor());
+        if (options.HasCompactionPlannerConstructor()) {
+            auto container = NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(options.GetCompactionPlannerConstructor());
             if (container.IsFail()) {
                 errors.AddError(container.GetErrorMessage());
                 return false;
             }
+            if (!container->HasObject()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, "Compaction planner constructor is not specified (missing or empty class name)");
+                return false;
+            }
+            auto validateConclusion = container->GetObjectVerified().Validate();
+            if (validateConclusion.IsFail()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, validateConclusion.GetErrorMessage());
+                return false;
+            }
             CompactionPlannerConstructor = container.DetachResult();
         }
-        if (alterRequest.GetOptions().HasInsertOptions()) {
-            const auto& optionsProto = alterRequest.GetOptions().GetInsertOptions();
+        if (options.HasInsertOptions()) {
+            const auto& optionsProto = options.GetInsertOptions();
             if (optionsProto.HasBuildIndexesEnabled()) {
                 InsertOptionsBuildIndexesEnabled = optionsProto.GetBuildIndexesEnabled();
             }
@@ -62,6 +86,10 @@ public:
             }
         }
         return true;
+    }
+
+    bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
+        return ParseOptions(alterRequest.GetOptions(), errors);
     }
     void SerializeToProto(NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest) const {
         alterRequest.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);

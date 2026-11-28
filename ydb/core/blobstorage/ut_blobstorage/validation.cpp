@@ -113,6 +113,57 @@ Y_UNIT_TEST_SUITE(RequestValidation) {
         UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrProto::ERROR);
     }
 
+    Y_UNIT_TEST(TestVMovedPatchDiffOutOfBounds) {
+        TestCtx ctx;
+        ctx.Initialize();
+
+        const ui32 blobSize = 100;
+        const TLogoBlobID originalId(100, 1, 1, 0, blobSize, 0);
+        ctx.Env->PutBlob(ctx.GroupId.GetRawId(), originalId, MakeData(blobSize));
+
+        // AddDiff refuses such a diff on the sender's side, so it goes into the record directly, the way a message
+        // from another node arrives. The deadline is set, because without one the actor cannot read the original blob.
+        // The second offset does not fit ui32: narrowed, it would look like an offset inside the blob.
+        const ui64 offsets[] = {blobSize, (ui64(1) << 32) + 10};
+        for (ui32 i = 0; i < std::size(offsets); ++i) {
+            const ui64 offset = offsets[i];
+            const TLogoBlobID patchedId(100, 1, 2 + i, 0, blobSize, 0);
+            auto ev = std::make_unique<TEvBlobStorage::TEvVMovedPatch>(ctx.GroupId.GetRawId(), ctx.GroupId.GetRawId(),
+                    originalId, patchedId, ctx.VDiskId, false, 0, ctx.Env->Runtime->GetClock() + TDuration::Minutes(1));
+            auto *diff = ev->Record.AddDiffs();
+            diff->SetOffset(offset);
+            diff->SetBuffer(TString(8, 'x'));
+            // each request comes from its own sender, as the VDisk queue expects increasing message ids from one sender
+            const TActorId edge = ctx.Env->Runtime->AllocateEdgeActor(ctx.Edge.NodeId(), __FILE__, __LINE__);
+            ctx.Env->Runtime->Send(new IEventHandle(ctx.VDiskActorId, edge, ev.release()), ctx.VDiskActorId.NodeId());
+
+            auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVMovedPatchResult>(edge, false,
+                TInstant::Max());
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Record.GetStatus(), NKikimrProto::ERROR, "offset# " << offset);
+        }
+    }
+
+    Y_UNIT_TEST(TestVMovedPatchWithoutDeadline) {
+        TestCtx ctx;
+        ctx.Initialize();
+
+        const ui32 blobSize = 100;
+        const TLogoBlobID originalId(100, 1, 1, 0, blobSize, 0);
+        const TLogoBlobID patchedId(100, 1, 2, 0, blobSize, 0);
+        ctx.Env->PutBlob(ctx.GroupId.GetRawId(), originalId, MakeData(blobSize));
+
+        // The DS proxy sends the deadline of the patch request, which may be TInstant::Max(), that is, no deadline.
+        auto ev = std::make_unique<TEvBlobStorage::TEvVMovedPatch>(ctx.GroupId.GetRawId(), ctx.GroupId.GetRawId(),
+                originalId, patchedId, ctx.VDiskId, false, 0, TInstant::Max());
+        ev->AddDiff(10, TString(8, 'x'));
+        ctx.Env->Runtime->Send(new IEventHandle(ctx.VDiskActorId, ctx.Edge, ev.release()), ctx.VDiskActorId.NodeId());
+
+        auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVMovedPatchResult>(ctx.Edge, false, TInstant::Max());
+        UNIT_ASSERT(res);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Record.GetStatus(), NKikimrProto::OK, res->Get()->Record.GetErrorReason());
+    }
+
     void TestSameId(bool changeData) {
         TestCtx ctx;
         ctx.Initialize();

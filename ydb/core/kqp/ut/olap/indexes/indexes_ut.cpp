@@ -2866,21 +2866,15 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         }
     };
 
-    Y_UNIT_TEST(IndexesInBS, EUseQueryService) {
-        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        Y_UNUSED(UseQueryService);
+    Y_UNIT_TEST(IndexesInBS) {
         TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().ExecuteSkipIndexesScenario();
     }
 
-    Y_UNIT_TEST(IndexesInLocalMetadata, EUseQueryService) {
-        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        Y_UNUSED(UseQueryService);
+    Y_UNIT_TEST(IndexesInLocalMetadata) {
         TTestIndexesScenario().SetStorageId("__LOCAL_METADATA").Initialize().ExecuteSkipIndexesScenario();
     }
 
-    Y_UNIT_TEST(CheckCompactionFailingOnIndexes, EUseQueryService) {
-        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        Y_UNUSED(UseQueryService);
+    Y_UNIT_TEST(CheckCompactionFailingOnIndexes) {
         TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().ExecuteAddColumnWithIndexesScenario();
     }
 

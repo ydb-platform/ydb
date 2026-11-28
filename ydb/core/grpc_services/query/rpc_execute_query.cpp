@@ -13,6 +13,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <library/cpp/time_provider/monotonic.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
 
@@ -205,6 +206,12 @@ bool NeedCollectDiagnostics(const Ydb::Query::ExecuteQueryRequest& req) {
     }
 }
 
+// The finish callback reports transport completion, without identifying whether
+// it was cancellation, a deadline or another transport outcome.
+struct TEvRpcFinishObserved : TEventLocal<TEvRpcFinishObserved, EventSpaceBegin(TEvents::ES_PRIVATE)> {
+    const TMonotonic ObservedAt = TMonotonic::Now();
+};
+
 class TExecuteQueryRPC : public TActorBootstrapped<TExecuteQueryRPC> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -231,7 +238,7 @@ public:
         auto as = TActivationContext::ActorSystem();
 
         Request_->SetFinishAction([selfId, as]() {
-            as->Send(selfId, new TEvents::TEvWakeup(EWakeupTag::ClientLostTag));
+            as->Send(selfId, new TEvRpcFinishObserved());
         });
 
         Request_->SetStreamingNotify([selfId, as](size_t left) {
@@ -245,7 +252,7 @@ private:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         try {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvents::TEvWakeup, Handle);
+                HFunc(TEvRpcFinishObserved, Handle);
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuterStreamData, Handle);
                 hFunc(NKqp::TEvKqpExecuterProgress, Handle);
@@ -343,11 +350,14 @@ private:
         PassSubscription(ev->Get(), Request_.get(), as);
     }
 
-    void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
-        switch ((EWakeupTag) ev->Get()->Tag) {
-            case EWakeupTag::ClientLostTag:
-                return HandleClientLost(ctx);
-        }
+    void Handle(TEvRpcFinishObserved::TPtr& ev, const TActorContext& ctx) {
+        FinishObserved_ = true;
+        Span_.Attribute("ydb.rpc.finish_origin", TString("unknown"));
+        Span_.Event("RPC finish callback observed", {
+            {"callback_monotonic_us", static_cast<i64>(ev->Get()->ObservedAt.MicroSeconds())},
+            {"handler_delay_us", static_cast<i64>((TMonotonic::Now() - ev->Get()->ObservedAt).MicroSeconds())},
+        });
+        HandleClientLost(ctx);
     }
 
     void Handle(TRpcServices::TEvGrpcNextReply::TPtr& ev, const TActorContext& ctx) {
@@ -517,6 +527,7 @@ private:
     void ReplySerializedAndFinishStream(Ydb::StatusIds::StatusCode status, TString&& buf) {
         const auto finishStreamFlag = NYdbGrpc::IRequestContextBase::EStreamCtrl::FINISH;
         Request_->SendSerializedResult(std::move(buf), status, finishStreamFlag);
+        TraceResponseFinish(status);
         NWilson::EndSpanWithStatus(Span_, status);
         this->PassAway();
     }
@@ -556,8 +567,16 @@ private:
         } else {
             Request_->FinishStream(status);
         }
+        TraceResponseFinish(status);
         NWilson::EndSpanWithStatus(Span_, status);
         this->PassAway();
+    }
+
+    void TraceResponseFinish(Ydb::StatusIds::StatusCode status) {
+        Span_.Attribute("ydb.rpc.finish_callback_observed", FinishObserved_);
+        Span_.Attribute("ydb.rpc.response_status", static_cast<i64>(status));
+        // This is the handoff to gRPC, not proof that the client received it.
+        Span_.Event("RPC response finish requested");
     }
 
     void InternalError(const TString& message) {
@@ -574,11 +593,6 @@ private:
     }
 
 private:
-    enum EWakeupTag : ui64 {
-        ClientLostTag = 1,
-    };
-
-private:
     std::shared_ptr<TEvExecuteQueryRequest> Request_;
 
     NKikimrKqp::EQueryAction QueryAction;
@@ -586,6 +600,7 @@ private:
     TMap<ui64, TProducerState> StreamChannels_;
 
     NWilson::TSpan Span_;
+    bool FinishObserved_ = false;
 };
 
 } // namespace

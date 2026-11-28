@@ -78,6 +78,7 @@ feature_flags:
 | `enable_access_to_index_impl_tables` | Ability to [specify the number of replicas](../../yql/reference/syntax/alter_table/indexes.md) for a secondary index |
 | `enable_backup_service` | [Backup collections](../../concepts/datamodel/backup-collection.md): full and incremental backups for row tables |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Support for change feeds (changefeed) in backup and restore operations |
+| `enable_checksum_table` | Checksum calculation with [`CHECKSUM TABLE`](../../yql/reference/syntax/checksum-table.md) and [`DigestAggregate`](../../yql/reference/udf/list/digest-aggregate.md). |
 | `enable_column_statistics` | Collecting [column statistics](../../yql/reference/syntax/analyze.md) with `ANALYZE` and using them in the [cost-based optimizer](../../concepts/query_execution/optimizer.md#statistics) to choose query plans |
 | `enable_view_export` | Support for views (`VIEW`) in backup and restore operations |
 | `enable_export_auto_dropping` | Automatic deletion of temporary directories and tables when exporting to S3 |

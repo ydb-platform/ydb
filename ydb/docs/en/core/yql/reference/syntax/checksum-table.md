@@ -1,5 +1,7 @@
 # CHECKSUM TABLE
 
+{% include [checksum-experimental-warning](../../../_includes/checksum-experimental-warning.md) %}
+
 `CHECKSUM TABLE` calculates a checksum: a short string that represents the data in a table. Use it to check whether a copy or restored table has the same contents as the original.
 
 To calculate the checksum of `my_table`, run:

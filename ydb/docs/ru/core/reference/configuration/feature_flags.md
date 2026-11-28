@@ -78,6 +78,7 @@ feature_flags:
 | `enable_access_to_index_impl_tables`                     | Возможность [указания числа реплик](../../yql/reference/syntax/alter_table/indexes.md) для вторичного индекса |
 | `enable_backup_service` | [Коллекции резервных копий](../../concepts/datamodel/backup-collection.md): полные и инкрементальные резервные копии строковых таблиц |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Поддержка потоков изменений (changefeed) в операциях резервного копирования и восстановления |
+| `enable_checksum_table` | Вычисление контрольных сумм с помощью [`CHECKSUM TABLE`](../../yql/reference/syntax/checksum-table.md) и [`DigestAggregate`](../../yql/reference/udf/list/digest-aggregate.md). |
 | `enable_column_statistics` | Сбор [статистики столбцов](../../yql/reference/syntax/analyze.md) командой `ANALYZE` и её использование [стоимостным оптимизатором](../../concepts/query_execution/optimizer.md#statistics) при выборе плана запроса |
 | `enable_view_export`                                     | Поддержка представлений (`VIEW`) в операциях резервного копирования и восстановления |
 | `enable_export_auto_dropping`                            | Автоудаление временных директорий и таблиц при экспорте в S3 |

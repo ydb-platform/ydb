@@ -1,5 +1,7 @@
 # DigestAggregate
 
+{% include [checksum-experimental-warning](../../../../_includes/checksum-experimental-warning.md) %}
+
 After copying or restoring data, you may need to check selected rows or columns, such as the data for one customer.
 
 To do this, calculate checksums for the required data in the original table and its copy using the same query, then compare the results.

@@ -25,7 +25,7 @@ SHOW CREATE [TABLE|VIEW] <name>;
 - **PathType** — тип объекта: `Table` или `View`.
 - **CreateQuery** — полный набор DDL-выражений, необходимых для создания объекта:
     - Для таблиц: основной оператор [CREATE TABLE](create_table/index.md) (с путем относительно базы), а также дополнительные команды, необходимые для описания текущего состояния и настроек:
-        - [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index)— для задания настроек партицирования вторичных индексов.
+        - [ALTER TABLE ... ALTER INDEX](alter_table/indexes#alter-index)— для задания настроек партицирования вторичных индексов.
         {% if feature_changefeed and backend_name == "YDB" %}
         - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md)— для добавления потока изменений.
         {% endif %}

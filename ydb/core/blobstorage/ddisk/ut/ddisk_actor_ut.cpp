@@ -9013,6 +9013,44 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
     }
 
+    Y_UNIT_TEST(ControlledFallbackWriteHandlesPDiskOwnerErrors) {
+        for (const auto status : {NKikimrProto::INVALID_OWNER, NKikimrProto::INVALID_ROUND}) {
+            for (bool metadataFailure : {false, true}) {
+                for (bool siblingFirst : {false, true}) {
+                    TControlledDDisk f(false);
+                    f.Initialize();
+                    const TString payload = MakeData('F', BlockSize);
+                    f.Write(BlockSize, 'F', 501);
+                    f.Until([&] { return f.Io.size() == 2; });
+                    const size_t index = f.FindIo([&](const auto& io) {
+                        return io.Write && (metadataFailure ? io.Data != payload : io.Data == payload);
+                    });
+                    auto failed = std::move(f.Io[index]);
+                    f.Io.erase(f.Io.begin() + index);
+                    if (siblingFirst) {
+                        f.Complete();
+                        f.Pump();
+                        UNIT_ASSERT(f.Replies.empty());
+                    }
+                    f.Ctx.Runtime.Send(new IEventHandle(failed.Event->Sender, f.Disk.PDiskEdge,
+                        new NPDisk::TEvChunkWriteRawResult(status, "PDisk owner session lost"),
+                        0, failed.Event->Cookie), NodeId);
+                    // Also deliver a late sibling response after the failure. Stopping ignores
+                    // canceled fallback replies; a critical failure still drains accepted I/O.
+                    f.FinishIo();
+                    const auto expected = metadataFailure ? TReplyStatus::ERROR : TReplyStatus::SESSION_MISMATCH;
+                    f.Reply<NDDisk::TEvWriteResult>(501, expected);
+                    UNIT_ASSERT_VALUES_EQUAL(f.DataRequests(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(f.RequestWaiters(), 0);
+                    f.Write(2 * BlockSize, 'G', 502);
+                    f.Reply<NDDisk::TEvWriteResult>(502, expected);
+                    UNIT_ASSERT_VALUES_EQUAL(f.Replies.size(), 2);
+                    f.Shutdown();
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(ControlledColdReadShutdownWaitsForActorCompletionAfterCallbackRetirement) {
         const auto image = TControlledDDisk::MakePersistedImage();
         for (bool router : {true}) {

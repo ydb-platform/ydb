@@ -7,6 +7,8 @@
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_ut_env.h"
 
+#include <algorithm>
+#include <tuple>
 #include <type_traits>
 #include <library/cpp/logger/record.h>
 #include <library/cpp/logger/stream.h>
@@ -659,6 +661,153 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 UNIT_ASSERT_C(line.Contains(isDDisk && state != TState::DATA_COMMITTED ? "WARN" : "ERROR"), line);
             }
         }
+    }
+
+    void TestRawChunkBounds(bool write) {
+        auto settings = FewChunksSettings();
+        settings.PlainDataChunks = true;
+        TActorTestContext testCtx(settings);
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        auto chunks = ReserveUntilOutOfSpace(testCtx, vdisk);
+        std::sort(chunks.begin(), chunks.end());
+        auto adjacent = std::adjacent_find(chunks.begin(), chunks.end(), [](ui32 a, ui32 b) { return b == a + 1; });
+        UNIT_ASSERT_C(adjacent != chunks.end(), "no adjacent reserved chunks");
+        const ui32 chunk = *adjacent;
+        const auto owner = vdisk.PDiskParams->Owner;
+        const auto round = vdisk.PDiskParams->OwnerRound;
+        const auto [chunkSize, sectorSize] = testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* p) {
+            return std::pair{p->Format.ChunkSize, p->Format.SectorSize};
+        });
+        const TString tail(sectorSize, 't');
+        const TString neighbor(2 * sectorSize, 'n');
+        testCtx.TestResponse<NPDisk::TEvChunkWriteRawResult>(
+            new NPDisk::TEvChunkWriteRaw(owner, round, chunk, chunkSize - sectorSize, TRope(tail)), NKikimrProto::OK);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteRawResult>(
+            new NPDisk::TEvChunkWriteRaw(owner, round, chunk + 1, 0, TRope(neighbor)), NKikimrProto::OK);
+
+        ui64 cookie = 0x1234'5678'9abc'def0ULL;
+        auto request = [&](ui32 offset, ui32 size, NKikimrProto::EReplyStatus status) {
+            ++cookie;
+            if (write) {
+                testCtx.Send(new NPDisk::TEvChunkWriteRaw(owner, round, chunk, offset, TRope(TString(size, 't'))), cookie);
+                auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkWriteRawResult>(
+                    testCtx.Sender, TDuration::Seconds(10));
+                UNIT_ASSERT(reply);
+                UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Status, status, reply->Get()->ToString());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, cookie);
+                if (status != NKikimrProto::OK) {
+                    UNIT_ASSERT(!reply->Get()->ErrorReason.empty());
+                }
+            } else {
+                testCtx.Send(new NPDisk::TEvChunkReadRaw(owner, round, chunk, offset, size), cookie);
+                auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkReadRawResult>(
+                    testCtx.Sender, TDuration::Seconds(10));
+                UNIT_ASSERT(reply);
+                UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Status, status, reply->Get()->ToString());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, cookie);
+                if (status == NKikimrProto::OK) {
+                    UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Data.ConvertToString(), tail);
+                } else {
+                    UNIT_ASSERT(!reply->Get()->ErrorReason.empty());
+                    UNIT_ASSERT(reply->Get()->Data.empty());
+                }
+            }
+        };
+
+        request(chunkSize - sectorSize, sectorSize, NKikimrProto::OK);
+        // On a broken PDisk this first invalid write only reaches another reserved data chunk.
+        request(chunkSize - sectorSize, 2 * sectorSize, NKikimrProto::ERROR);
+        request(chunkSize, sectorSize, NKikimrProto::ERROR);
+        request(chunkSize + sectorSize, sectorSize, NKikimrProto::ERROR);
+        const ui32 largeOffset = Max<ui32>() - Max<ui32>() % sectorSize;
+        UNIT_ASSERT(ui64(largeOffset) + 2 * sectorSize > Max<ui32>());
+        request(largeOffset, 2 * sectorSize, NKikimrProto::ERROR);
+        if (!write) {
+            request(2 * sectorSize, largeOffset, NKikimrProto::ERROR);
+        }
+
+        const auto tailRead = testCtx.TestResponse<NPDisk::TEvChunkReadRawResult>(
+            new NPDisk::TEvChunkReadRaw(owner, round, chunk, chunkSize - sectorSize, sectorSize), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(tailRead->Data.ConvertToString(), tail);
+        const auto neighborRead = testCtx.TestResponse<NPDisk::TEvChunkReadRawResult>(
+            new NPDisk::TEvChunkReadRaw(owner, round, chunk + 1, 0, 2 * sectorSize), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(neighborRead->Data.ConvertToString(), neighbor);
+    }
+
+    Y_UNIT_TEST(RawChunkReadChecksBounds) {
+        TestRawChunkBounds(false);
+    }
+
+    Y_UNIT_TEST(RawChunkWriteChecksBounds) {
+        TestRawChunkBounds(true);
+    }
+
+    void TestRawChunkOwnerRound(bool write) {
+        auto settings = FewChunksSettings();
+        settings.PlainDataChunks = true;
+        TActorTestContext testCtx(settings);
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const auto owner = vdisk.PDiskParams->Owner;
+        const auto staleRound = vdisk.PDiskParams->OwnerRound;
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        const ui32 chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+        const ui32 sectorSize = testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* p) { return p->Format.SectorSize; });
+        const TString data(sectorSize, 'a');
+        testCtx.TestResponse<NPDisk::TEvChunkWriteRawResult>(
+            new NPDisk::TEvChunkWriteRaw(owner, staleRound, chunk, 0, TRope(data)), NKikimrProto::OK);
+        vdisk.InitFull();
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->Owner, owner);
+        const auto round = vdisk.PDiskParams->OwnerRound;
+        UNIT_ASSERT_GT(round, staleRound);
+
+        const NPDisk::TOwner unregistered = NPDisk::OwnerEndUser - 1;
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            UNIT_ASSERT_VALUES_EQUAL(p->OwnerData[unregistered].VDiskId, TVDiskID::InvalidId);
+        });
+        ui64 cookie = 0x1234'5678'9abc'def0ULL;
+        for (const auto [requestOwner, requestRound, status] : {
+                std::tuple{owner, staleRound, NKikimrProto::INVALID_ROUND},
+                std::tuple{owner, round + 1, NKikimrProto::INVALID_ROUND},
+                std::tuple{unregistered, round, NKikimrProto::INVALID_OWNER}}) {
+            ++cookie;
+            if (write) {
+                testCtx.Send(new NPDisk::TEvChunkWriteRaw(requestOwner, requestRound, chunk, 0,
+                    TRope(TString(sectorSize, 'b'))), cookie);
+                auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkWriteRawResult>(
+                    testCtx.Sender, TDuration::Seconds(10));
+                UNIT_ASSERT(reply);
+                UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Status, status, reply->Get()->ToString());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, cookie);
+                UNIT_ASSERT_STRING_CONTAINS(reply->Get()->ErrorReason,
+                    status == NKikimrProto::INVALID_ROUND ? "OwnerRound" : "unregistered");
+            } else {
+                testCtx.Send(new NPDisk::TEvChunkReadRaw(requestOwner, requestRound, chunk, 0, sectorSize), cookie);
+                auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkReadRawResult>(
+                    testCtx.Sender, TDuration::Seconds(10));
+                UNIT_ASSERT(reply);
+                UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Status, status, reply->Get()->ToString());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, cookie);
+                UNIT_ASSERT_STRING_CONTAINS(reply->Get()->ErrorReason,
+                    status == NKikimrProto::INVALID_ROUND ? "OwnerRound" : "unregistered");
+                UNIT_ASSERT(reply->Get()->Data.empty());
+            }
+        }
+        const auto read = testCtx.TestResponse<NPDisk::TEvChunkReadRawResult>(
+            new NPDisk::TEvChunkReadRaw(owner, round, chunk, 0, sectorSize), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(read->Data.ConvertToString(), data);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteRawResult>(
+            new NPDisk::TEvChunkWriteRaw(owner, round, chunk, 0, TRope(data)), NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(RawChunkReadChecksOwnerRound) {
+        TestRawChunkOwnerRound(false);
+    }
+
+    Y_UNIT_TEST(RawChunkWriteChecksOwnerRound) {
+        TestRawChunkOwnerRound(true);
     }
 
     void TestChunkForgetWaitsForRawIo(bool write, bool failRead = false) {

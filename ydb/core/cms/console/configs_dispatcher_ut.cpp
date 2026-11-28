@@ -492,6 +492,54 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         UNIT_ASSERT(!notification->Config.HasCompositeConveyorConfig());
     }
 
+    Y_UNIT_TEST(TestLateNameserviceSubscriptionUsesProtoWhenYamlEnabled) {
+        using TConfigItem = NKikimrConsole::TConfigItem;
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        AddSubscriber(runtime, {TConfigItem::LogConfigItem});
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+
+        NKikimrConfig::TAppConfig proto;
+        for (ui32 id : {1u, 2u}) {
+            const TString host = TStringBuilder() << "node" << id;
+            auto* node = proto.MutableNameserviceConfig()->AddNode();
+            node->SetNodeId(id);
+            node->SetHost(host);
+            node->SetInterconnectHost(host);
+            node->SetPort(19001);
+        }
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(MakeConfigItem(
+            TConfigItem::NameserviceConfigItem, proto, {}, {}, "", "", 1, TConfigItem::OVERWRITE, "")));
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
+metadata:
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  log_config:
+    cluster_name: nameservice-ready
+  nameservice_config:
+    node:
+      - node_id: 1
+        host: node1
+        interconnect_host: node1
+        port: 19001
+)");
+        // Wait until the dispatcher has applied the YAML before subscribing.
+        auto log = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(log->Config.GetLogConfig().GetClusterName(), "nameservice-ready");
+
+        AddSubscriber(runtime, {TConfigItem::NameserviceConfigItem});
+        auto notification = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        const auto& nameservice = notification->Config.GetNameserviceConfig();
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.NodeSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(0).GetNodeId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(1).GetNodeId(), 2);
+    }
+
     Y_UNIT_TEST(TestSubscriptionNotification) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         TAutoPtr<IEventHandle> handle;

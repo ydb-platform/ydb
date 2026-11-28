@@ -1601,7 +1601,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
         if (!subscription->UpdateInProcess) {
             subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
             NKikimrConfig::TAppConfig trunc;
-            if (YamlConfigEnabled) {
+            if (subscription->Yaml && YamlConfigEnabled) {
                 ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(kinds), BaseConfig);
             } else {
                 ReplaceConfigItems(CurrentConfig, trunc, FilterKinds(kinds), BaseConfig);

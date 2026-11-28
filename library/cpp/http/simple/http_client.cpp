@@ -12,9 +12,15 @@
 
 
 TSpinLock TKeepAliveHttpClient::ConnectionQuarantineMutex;
-TQueue<THolder<NPrivate::THttpConnection>> TKeepAliveHttpClient::ConnectionQuarantine;
+TQueue<std::pair<TInstant, THolder<NPrivate::THttpConnection>>> TKeepAliveHttpClient::ConnectionQuarantine;
 
 namespace {
+    constexpr size_t ConnectionQuarantineMaxSize = 100;
+    // The quarantine lets the server close first (Connection: close), so the client gets no
+    // TIME_WAIT (DISTBUILD-4437). 2 s covers the server's FIN; a longer age keeps more sockets
+    // in CLOSE-WAIT, and without an age limit they sit there until a hundred requests follow.
+    constexpr TDuration ConnectionQuarantineMaxAge = TDuration::Seconds(2);
+
     TKeepAliveHttpClient::THeaders GetRedirectHeaders(const TKeepAliveHttpClient::THeaders& headers) {
         TKeepAliveHttpClient::THeaders redirectHeaders;
         for (const auto& header : headers) {
@@ -218,15 +224,17 @@ bool TKeepAliveHttpClient::CreateNewConnectionIfNeeded() {
 
 TKeepAliveHttpClient::~TKeepAliveHttpClient() {
     if (UseConnectionPool) {
-        THolder<NPrivate::THttpConnection> oldConnection;
+        const TInstant now = TInstant::Now();
         with_lock(ConnectionQuarantineMutex) {
-            while (ConnectionQuarantine.size() > 100) {
-                oldConnection = std::move(ConnectionQuarantine.front());
-
+            while (!ConnectionQuarantine.empty() && ConnectionQuarantine.front().first + ConnectionQuarantineMaxAge < now) {
                 ConnectionQuarantine.pop();
-                oldConnection.Reset();
             }
-            ConnectionQuarantine.push(std::move(Connection));
+            while (ConnectionQuarantine.size() > ConnectionQuarantineMaxSize) {
+                ConnectionQuarantine.pop();
+            }
+            if (Connection) {
+                ConnectionQuarantine.emplace(now, std::move(Connection));
+            }
         }
     }
 }

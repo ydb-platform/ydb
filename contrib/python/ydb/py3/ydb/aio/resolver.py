@@ -49,6 +49,7 @@ class DiscoveryEndpointsResolver(_DiscoveryEndpointsResolver):
                 _apis.DiscoveryService.ListEndpoints,
                 DiscoveryResult.from_response,
                 settings=settings_impl.BaseRequestSettings().with_timeout(self._ready_timeout),
+                wrap_args=(self._driver_config.use_all_nodes, self._driver_config.prefer_primary_pile),
             )
 
             self._add_debug_details(

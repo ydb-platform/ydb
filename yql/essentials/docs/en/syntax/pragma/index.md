@@ -35,6 +35,10 @@ With some exceptions, you can return the settings values to their default states
 
 For the full list of available settings, [see below](#pragmas).
 
+### Project settings
+
+Pragmas marked “Yes” in the “Allowed in project settings” column can be specified in project settings. They are applied before pragmas in the query text. Argument restrictions still apply, as do provider restrictions and service policies.
+
 ### Available pragmas {#pragmas}
 
 * [Global](global.md)

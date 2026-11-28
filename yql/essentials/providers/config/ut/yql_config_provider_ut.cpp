@@ -233,7 +233,7 @@ Y_UNIT_TEST(LineageFlagsFromConfigAreNormalizedAndSeparate) {
 Y_UNIT_TEST(LineageFlagsPragmaAccumulatesAndAcceptsNoArguments) {
     TTypeAnnotationContext types;
     TExprContext ctx;
-    auto provider = CreateConfigProvider(types, nullptr, "testuser", {});
+    auto provider = CreateConfigProvider(types, /*config=*/nullptr, "testuser", {});
     UNIT_ASSERT(provider->Initialize(ctx));
 
     UNIT_ASSERT(ApplyPragma(*provider, ctx, "LineageFlags") == IGraphTransformer::TStatus::Ok);
@@ -249,7 +249,7 @@ Y_UNIT_TEST(LineageFlagsPragmaAccumulatesAndAcceptsNoArguments) {
 Y_UNIT_TEST(LineageFlagsRejectEmptyFlag) {
     TTypeAnnotationContext types;
     TExprContext ctx;
-    auto provider = CreateConfigProvider(types, nullptr, "testuser", {});
+    auto provider = CreateConfigProvider(types, /*config=*/nullptr, "testuser", {});
     UNIT_ASSERT(provider->Initialize(ctx));
 
     UNIT_ASSERT(ApplyPragma(*provider, ctx, "LineageFlags", {""}) == IGraphTransformer::TStatus::Error);

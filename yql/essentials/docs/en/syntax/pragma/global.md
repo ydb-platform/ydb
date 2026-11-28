@@ -1,6 +1,5 @@
 # Global
 
-
 ## Scope {#pragmascope}
 
 Unless otherwise specified, a pragma affects all the subsequent expressions up to the end of the module where it's used. If necessary and logically possible, you can change the value of this setting several times within a given query to make it different at different execution steps.
@@ -9,25 +8,33 @@ There are also special scoped pragmas with the scope defined by the same rules a
 
 ## AutoCommit {#autocommit}
 
-| Value type | Default |
-| --- | --- |
-| Flag | false |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | Yes |
 
 Automatically run [COMMIT](../commit.md) after every statement.
 
+## UDF {#udf}
+
+| Arguments | Allowed in project settings |
+| --- | --- |
+| Attached library alias and optional module name prefix | Yes |
+
+Imports all UDFs from an attached shared library (`.so`, compiled for Linux x64). If a prefix is specified, it is prepended to each imported module name, allowing multiple versions of a library to be loaded under different names.
+
 ## RuntimeLogLevel {#runtime-log-level}
 
-| Value type | Default |
-| --- | --- |
-| String, one of `Trace`, `Debug`, `Info`, `Notice`, `Warn`, `Error`, `Fatal` | `Info` |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| String, one of `Trace`, `Debug`, `Info`, `Notice`, `Warn`, `Error`, `Fatal` | `Info` | No |
 
 Allows you to change the logging level of calculations (for example, for UDFs) during query execution or at the stage of declaring the UDF signature.
 
 ## TablePathPrefix {#table-path-prefix}
 
-| Value type | Default |
-| --- | --- |
-| String | — |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| String | — | Yes |
 
 Add the specified prefix to the cluster table paths. It uses standard file system path concatenation, supporting parent folder `..` referencing and requiring no trailing slash. For example,
 
@@ -40,17 +47,17 @@ The prefix is not added if the table name is an absolute path (starts with /).
 
 ## UseTablePrefixForEach {#use-table-prefix-for-each}
 
-| Value type | Default |
-| --- | --- |
-| Flag | false |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | Yes |
 
 `EACH` uses [TablePathPrefix](#table-path-prefix) for each list item.
 
 ## Warning {#warning}
 
-| Value type | Default |
-| --- | --- |
-| 1. Action<br/>2. Warning code or "*" | — |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| 1. Action<br/>2. Warning code or "*" | — | Yes |
 
 Action:
 
@@ -72,9 +79,9 @@ In this case, all the warnings are treated as errors, except for the warning `11
 
 `SimpleColumns` / `DisableSimpleColumns`
 
-| Value type | Default |
-| --- | --- |
-| Flag | true |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | true | Yes |
 
 When you use `SELECT foo.* FROM ... AS foo`, remove the `foo.` prefix from the names of the result columns.
 
@@ -84,9 +91,9 @@ It can be also used with a [JOIN](../join.md), but in this case it may fail in t
 
 `CoalesceJoinKeysOnQualifiedAll` / `DisableCoalesceJoinKeysOnQualifiedAll`
 
-| Value type | Default |
-| --- | --- |
-| Flag | true |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | true | No |
 
 Controls implicit Coalesce for the key `JOIN` columns in the `SimpleColumns` mode. If the flag is set, the Coalesce is made for key columns if there is at least one expression in the format `foo.*` or `*` in `SELECT`: for example, `SELECT a.* FROM T1 AS a JOIN T2 AS b USING(key)`. If the flag is not set, then Coalesce for JOIN keys is made only if there is an asterisk '*' after `SELECT`
 
@@ -94,9 +101,9 @@ Controls implicit Coalesce for the key `JOIN` columns in the `SimpleColumns` mod
 
 `StrictJoinKeyTypes` / `DisableStrictJoinKeyTypes`
 
-| Value type | Default |
-| --- | --- |
-| Flag | false |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | Yes |
 
 If the flag is set, then [JOIN](../join.md) will require strict matching of key types.
 By default, `JOIN` preconverts keys to a shared type, which might result in performance degradation.
@@ -104,9 +111,9 @@ By default, `JOIN` preconverts keys to a shared type, which might result in perf
 
 ## AnsiInForEmptyOrNullableItemsCollections
 
-| Value type | Default |
-| --- | --- |
-| Flag | false |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | Yes |
 
 This pragma brings the behavior of the `IN` operator in accordance with the standard when there's `NULL` in the left or right side of `IN`. The behavior of `IN` when on the right side there is a Tuple with elements of different types also changed. Examples:
 
@@ -118,9 +125,9 @@ For more information about the `IN` behavior when operands include `NULL`s, see 
 
 ## AnsiRankForNullableKeys
 
-| Value type | Default |
-| --- | --- |
-| Flag | false |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | Yes |
 
 Aligns the `RANK`/`DENSE_RANK` behavior with the standard if there are optional types in the window sort keys or in the argument of such window functions. It means that:
 
@@ -131,11 +138,13 @@ You can explicitly select the old behavior by using the `DisableAnsiRankForNulla
 
 ## AnsiCurrentRow
 
-| Value type | Default |
-| --- | --- |
-| Flag | false |
+`AnsiCurrentRow` / `DisableAnsiCurrentRow`
 
-Aligns the implicit setting of a window frame with the standard if there is `ORDER BY`.
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | Yes |
+
+`AnsiCurrentRow` aligns the implicit setting of a window frame with the standard if there is `ORDER BY`. `DisableAnsiCurrentRow` disables this mode. Both pragmas take no arguments.
 If `AnsiCurrentRow` is not set, then the `(ORDER BY key)` window is equivalent to `(ORDER BY key ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`.
 The standard also requires that this window behave as `(ORDER BY key RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`.
 The difference is in how `CURRENT ROW` is interpreted. In `ROWS` mode `CURRENT ROW` is interpreted literally: the current row in a partition.
@@ -143,28 +152,36 @@ In `RANGE` mode, the end of the `CURRENT ROW` frame means "the last row in a par
 
 ## OrderedColumns {#orderedcolumns}
 
+| Allowed in project settings |
+| --- |
+| Yes |
+
 `OrderedColumns`/`DisableOrderedColumns`
 
 Output the [column order](../select/order_by.md) in `SELECT`/`JOIN`/`UNION ALL` and preserve it when writing the results. The order of columns is undefined by default.
 
 ## PositionalUnionAll {#positionalunionall}
 
+| Allowed in project settings |
+| --- |
+| No |
+
 Enable the standard column-by-column execution for [UNION ALL](../select/union.md#unionall). This automatically enables
 [ordered columns](#orderedcolumns).
 
 ## RegexUseRe2
 
-| Value type | Default |
-| --- | --- |
-| Flag | false |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | Yes |
 
 Use Re2 UDF instead of Pcre to execute SQL the `REGEX`,`MATCH`,`RLIKE` statements. Re2 UDF can properly handle Unicode characters, unlike the default Pcre UDF.
 
 ## ClassicDivision
 
-| Value type | Default |
-| --- | --- |
-| Flag | true |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | true | Yes |
 
 In the classical version, the result of integer division remains integer (by default).
 If disabled, the result is always Double.
@@ -174,9 +191,9 @@ If disabled, the result is always Double.
 
 `UnicodeLiterals`/`DisableUnicodeLiterals`
 
-| Value type | Default |
-| --- | --- |
-| Flag | false |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | Yes |
 
 When this mode is enabled, string literals without suffixes like "foo"/'bar'/@@multiline@@ will be of type `Utf8`, when disabled - `String`.
 `UnicodeLiterals` is a [scoped](#pragmascope) setting.
@@ -185,9 +202,9 @@ When this mode is enabled, string literals without suffixes like "foo"/'bar'/@@m
 
 `WarnUntypedStringLiterals`/`DisableWarnUntypedStringLiterals`
 
-| Value type | Default |
-| --- | --- |
-| Flag | false |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | Yes |
 
 When this mode is enabled, a warning will be generated for string literals without suffixes like "foo"/'bar'/@@multiline@@. It can be suppressed by explicitly choosing the suffix `s` for the `String` type, or `u` for the `Utf8` type.
 `WarnUntypedStringLiterals` is a [scoped](#pragmascope) setting.
@@ -196,9 +213,9 @@ When this mode is enabled, a warning will be generated for string literals witho
 
 `SimplePg`/`DisableSimplePg`
 
-| Value Type | Default |
-| --- | --- |
-| Flag | false |
+| Value Type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | Yes |
 
 When enabled, functions from the [SimplePg](../../udf/list/simple_pg.md) module are imported into the global function scope.
 When disabled, the `SimplePg::` prefix is ​​required to call them.
@@ -207,34 +224,130 @@ When disabled, the `SimplePg::` prefix is ​​required to call them.
 
 ## AllowDotInAlias
 
-| Value type | Default |
-| --- | --- |
-| Flag | false |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | Yes |
 
 Enable dot in names of result columns. This behavior is disabled by default, since the further use of such columns in `JOIN` is not fully implemented.
 
 ## WarnUnnamedColumns
 
-| Value type | Default |
-| --- | --- |
-| Flag | false |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Flag | false | No |
 
 Generate a warning if a column name was automatically generated for an unnamed expression in `SELECT` (in the format `column[0-9]+`).
 
 ## GroupByLimit
 
-| Value type | Default |
-| --- | --- |
-| Positive number | 32 |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Positive number | 32 | Yes |
 
 Increasing the limit on the number of dimensions in [GROUP BY](../group_by.md).
 
 ## GroupByCubeLimit
 
-| Value type | Default |
-| --- | --- |
-| Positive number | 5 |
+| Value type | Default | Allowed in project settings |
+| --- | --- | --- |
+| Positive number | 5 | Yes |
 
 Increasing the limit on the number of dimensions in [GROUP BY](../group_by.md#rollup-cube-group-sets).
 
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
+
+## ResultRowsLimit
+
+| Arguments | Default | Allowed in project settings |
+| --- | --- | --- |
+| Non-negative integer | 0 | Yes |
+
+Limits the number of rows returned in a query result. `0` adds no limit.
+
+## ResultSizeLimit
+
+| Arguments | Default | Allowed in project settings |
+| --- | --- | --- |
+| Non-negative integer number of bytes | 0 | Yes |
+
+Limits the returned result size in bytes. `0` adds no limit.
+
+## BlockEngine
+
+| Arguments | Default | Allowed in project settings |
+| --- | --- | --- |
+| `disable`, `auto`, `force` | `disable` (may be overridden by service settings) | Yes |
+
+Controls block execution: `disable` turns it off, `auto` permits block processing for supported operations, and `force` requires block execution.
+
+## JsonQueryReturnsJsonDocument
+
+`JsonQueryReturnsJsonDocument` / `DisableJsonQueryReturnsJsonDocument`
+
+| Arguments | Default | Allowed in project settings |
+| --- | --- | --- |
+| None | false | Yes |
+
+Selects the result type of `JSON_QUERY`: `JsonQueryReturnsJsonDocument` enables `JsonDocument`, while `DisableJsonQueryReturnsJsonDocument` selects `Json`.
+
+## AnsiOptionalAs
+
+`AnsiOptionalAs` / `DisableAnsiOptionalAs`
+
+| Arguments | Default | Allowed in project settings |
+| --- | --- | --- |
+| None | true | Yes |
+
+Allows omitting `AS` before an alias in `SELECT` and `GROUP BY`. `DisableAnsiOptionalAs` makes `AS` mandatory.
+
+## WarnOnAnsiAliasShadowing
+
+`WarnOnAnsiAliasShadowing` / `DisableWarnOnAnsiAliasShadowing`
+
+| Arguments | Default | Allowed in project settings |
+| --- | --- | --- |
+| None | true | Yes |
+
+Enables a warning when an alias declared without `AS` matches an input column name, helping detect a missing comma. `DisableWarnOnAnsiAliasShadowing` disables the warning.
+
+## AnsiImplicitCrossJoin
+
+`AnsiImplicitCrossJoin` / `DisableAnsiImplicitCrossJoin`
+
+| Arguments | Default | Allowed in project settings |
+| --- | --- | --- |
+| None | false | Yes |
+
+Allows implicit cross joins in `FROM`, such as `FROM A, B`. `DisableAnsiImplicitCrossJoin` disables this syntax.
+
+## Greetings
+
+| Arguments | Default | Allowed in project settings |
+| --- | --- | --- |
+| Optional string | `"Hello, world! And best wishes from the YQL Team!"` | Yes |
+
+Emits an informational message during query translation. Without an argument, prints a greeting from the YQL team.
+
+## WarningMsg
+
+| Arguments | Default | Allowed in project settings |
+| --- | --- | --- |
+| String | — | Yes |
+
+Emits a warning with the specified text during query translation. The warning can be controlled with [Warning](#warning).
+
+## CheckedOps
+
+| Arguments | Default | Allowed in project settings |
+| --- | --- | --- |
+| `"true"` or `"false"` | false | Yes |
+
+Enables checked integer arithmetic. Addition, subtraction, multiplication, division, modulo, negation, and the aggregation functions `SUM`/`SUM_IF` return `NULL` on overflow or division by zero.
+
+## CostBasedOptimizer
+
+| Arguments | Default | Allowed in project settings |
+| --- | --- | --- |
+| `disable`, `pg`, or `native` | `disable` | Yes |
+
+Selects the cost-based optimizer for choosing the join order: `disable` disables it, `pg` selects the PostgreSQL optimizer, and `native` selects the native optimizer.

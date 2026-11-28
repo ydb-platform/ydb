@@ -7,6 +7,28 @@
 #include <library/cpp/monlib/service/format.h>
 
 namespace NMonitoring {
+    namespace {
+        IMetricEncoderPtr CreateSpackEncoder(IOutputStream* out, ECompression compression, TStringBuf version) {
+            if (version.empty()) {
+                return EncoderSpackV1(out, ETimePrecision::SECONDS, compression);
+            }
+            if (!version.SkipPrefix("SPACK_")) {
+                version.SkipPrefix("v");
+            }
+
+            if (version == "1.2" || version == "1_2") {
+                return EncoderSpackV12(out, ETimePrecision::SECONDS, compression, EMetricsMergingMode::DEFAULT, "sensor");
+            }
+            if (version == "1.3" || version == "1_3") {
+                return EncoderSpackV13(out, ETimePrecision::SECONDS, compression);
+            }
+            if (version == "1.4" || version == "1_4") {
+                return EncoderSpackV14(out, ETimePrecision::SECONDS, compression);
+            }
+            return EncoderSpackV1(out, ETimePrecision::SECONDS, compression);
+        }
+    } // namespace
+
     void TMetricRegistryPage::Output(NMonitoring::IMonHttpRequest& request) {
         const auto formatStr = TStringBuf{request.GetPathInfo()}.RNextTok('/');
         auto& out = request.Output();
@@ -20,8 +42,7 @@ namespace NMonitoring {
                 encoder = NMonitoring::EncoderJson(&out);
             } else if (formatStr == TStringBuf("spack")) {
                 resp = HTTPOKSPACK;
-                const auto compression = ParseCompression(request);
-                encoder = NMonitoring::EncoderSpackV1(&out, ETimePrecision::SECONDS, compression);
+                encoder = CreateSpackEncoder(&out, ParseCompression(request), request.GetParams().Get("spackVersion"));
             } else if (formatStr == TStringBuf("prometheus")) {
                 resp = HTTPOKPROMETHEUS;
                 encoder = NMonitoring::EncoderPrometheus(&out);
@@ -43,4 +64,4 @@ namespace NMonitoring {
         RegistryRawPtr_->Accept(TInstant::Zero(), encoder.Get());
     }
 
-}
+} // namespace NMonitoring

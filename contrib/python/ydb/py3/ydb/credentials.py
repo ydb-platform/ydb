@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import abc
+import base64
+import json
 import typing
 
 from . import tracing, issues, connection
@@ -100,7 +102,8 @@ class AbstractExpiringTokenCredentials(Credentials):
 
     def _update_token_info(self, token_response, current_time):
         self._refresh_in = current_time + min(self._hour / 2, token_response["expires_in"] / 10)
-        self._expires_in = current_time + token_response["expires_in"] - self._time_shift_protection_seconds
+        time_shift_protection = min(self._time_shift_protection_seconds, token_response["expires_in"] / 10)
+        self._expires_in = current_time + token_response["expires_in"] - time_shift_protection
         self._cached_token = token_response["access_token"]
 
     def _refresh_token(self, should_raise=False):
@@ -189,7 +192,9 @@ class StaticCredentials(AbstractExpiringTokenCredentials):
             )
         finally:
             conn.close()
-        return {"expires_in": 30 * 60, "access_token": result.token}
+        payload = result.token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        return {"expires_in": max(0, claims["exp"] - time.time()), "access_token": result.token}
 
     def _update_driver_config(self, driver_config):
         from .driver import DriverConfig

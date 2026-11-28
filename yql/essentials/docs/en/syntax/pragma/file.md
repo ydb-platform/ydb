@@ -2,9 +2,9 @@
 
 ## File {#file}
 
-| Value type | Default | Static/<br/>dynamic |
-| --- | --- | --- |
-| Two or three string arguments: alias, URL, and optional token name | — | Static |
+| Value type | Default | Static/<br/>dynamic | Allowed in project settings |
+| --- | --- | --- | --- |
+| Two or three string arguments: alias, URL, and optional token name | — | Static | Yes |
 
 Attach a file to the query by URL. For attaching files you can use the built-in functions [FilePath and FileContent](../../builtins/basic.md#filecontent).
 
@@ -12,9 +12,9 @@ When specifying the token name, its value will be used to access the target syst
 
 ## Folder {#folder}
 
-| Value type | Default | Static/<br/>dynamic |
-| --- | --- | --- |
-| Two or three string arguments: alias, URL, and optional token name | — | Static |
+| Value type | Default | Static/<br/>dynamic | Allowed in project settings |
+| --- | --- | --- | --- |
+| Two or three string arguments: alias, URL, and optional token name | — | Static | Yes |
 
 Attach a set of files to the query by URL. Works similarly to adding multiple files via [`PRAGMA File`](#file) by direct links to files with aliases obtained by combining a prefix with a file name using `/`.
 
@@ -22,9 +22,9 @@ When specifying the token name, its value will be used to access the target syst
 
 ## Library {#library}
 
-| Value type | Default | Static/<br/>dynamic |
-| --- | --- | --- |
-| One or two arguments: the file name and an optional URL | — | Static |
+| Value type | Default | Static/<br/>dynamic | Allowed in project settings |
+| --- | --- | --- | --- |
+| One or two arguments: the file name and an optional URL | — | Static | Yes |
 
 Treat the specified attached file as a library from which you can do [IMPORT](../export_import.md). The syntax type for the library is determined from the file extension:
 
@@ -58,9 +58,9 @@ SELECT $x;
 
 ## Package
 
-| Value type | Default | Static /<br/>dynamic |
-| --- | --- | --- |
-| Two or three arguments: package name, URL and optional token | — | Static |
+| Value type | Default | Static /<br/>dynamic | Allowed in project settings |
+| --- | --- | --- | --- |
+| Two or three arguments: package name, URL and optional token | — | Static | Yes |
 
 Attach a hierarchical set of files to the query by URL, treating them as a package with a given name - an interconnected set of libraries.
 
@@ -87,9 +87,9 @@ SELECT $foo, $bar;
 
 ## OverrideLibrary
 
-| Value type | Default | Static/<br/>dynamic |
-| --- | --- | --- |
-| One argument: the file name | — | Static |
+| Value type | Default | Static/<br/>dynamic | Allowed in project settings |
+| --- | --- | --- | --- |
+| One argument: the file name | — | Static | Yes |
 
 Treat the specified attached file as a library and override with it one of package's libraries.
 
@@ -104,3 +104,11 @@ PRAGMA override_library("project/package/maybe/nested/module/name.yql");
 IMPORT pkg.project.package.foo SYMBOLS $foo;
 SELECT $foo;
 ```
+
+## FileOption
+
+| Arguments | Allowed in project settings |
+| --- | --- |
+| File alias, option key, and value | Yes |
+
+Sets an option for a file already declared with [PRAGMA File](#file) or attached to the query.

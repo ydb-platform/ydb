@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+import typing
+from concurrent.futures import Future
+from typing import List, Optional, Union
+
+from .._grpc.grpcwrapper.common_utils import SupportedDriverType
+from .topic_writer import (
+    Message,
+    PublicWriteResult,
+    TopicWriterClosedError,
+)
+from .topic_writer_multi_asyncio import MultiWriterSettings, TopicWriterMultiAsyncIO
+from .._topic_common.common import (
+    _get_shared_event_loop,
+    TimeoutType,
+    CallFromSyncToAsync,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class TopicWriterMultiSync:
+    _caller: CallFromSyncToAsync
+    _async_writer: TopicWriterMultiAsyncIO
+    _closed: bool
+    _parent: typing.Any  # need for prevent close parent client by GC
+
+    def __init__(
+        self,
+        driver: SupportedDriverType,
+        settings: MultiWriterSettings,
+        *,
+        eventloop: Optional[asyncio.AbstractEventLoop] = None,
+        _parent=None,
+    ):
+        self._closed = False
+
+        if eventloop:
+            loop = eventloop
+        else:
+            loop = _get_shared_event_loop()
+
+        self._caller = CallFromSyncToAsync(loop)
+
+        async def create_async_writer():
+            return TopicWriterMultiAsyncIO(driver, settings)
+
+        self._async_writer = self._caller.safe_call_with_result(create_async_writer(), None)
+        self._parent = _parent
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            self.close()
+        except BaseException:
+            if exc_val is None:
+                raise
+
+    def __del__(self):
+        if not self._closed:
+            try:
+                logger.debug("Topic multi-writer was not closed properly. Consider using method close().")
+                self.close(flush=False)
+            except BaseException:
+                logger.warning("Something went wrong during multi-writer close in __del__")
+
+    def close(self, *, flush: bool = True, timeout: TimeoutType = None):
+        if self._closed:
+            return
+
+        logger.debug("Close topic multi-writer")
+        self._closed = True
+
+        self._caller.safe_call_with_result(self._async_writer.close(flush=flush), timeout)
+
+    def _check_closed(self):
+        if self._closed:
+            raise TopicWriterClosedError()
+
+    def async_flush(self) -> Future:
+        self._check_closed()
+        return self._caller.unsafe_call_with_future(self._async_writer.flush())
+
+    def flush(self, *, timeout: TimeoutType = None):
+        self._check_closed()
+        logger.debug("flush multi-writer")
+        return self._caller.unsafe_call_with_result(self._async_writer.flush(), timeout)
+
+    def async_wait_init(self) -> Future:
+        self._check_closed()
+        return self._caller.unsafe_call_with_future(self._async_writer.wait_init())
+
+    def wait_init(self, *, timeout: TimeoutType = None):
+        self._check_closed()
+        logger.debug("wait multi-writer init")
+        return self._caller.unsafe_call_with_result(self._async_writer.wait_init(), timeout)
+
+    def write(
+        self,
+        messages: Union[Message, List[Message]],
+        timeout: TimeoutType = None,
+    ):
+        self._check_closed()
+        logger.debug(
+            "write %s messages",
+            len(messages) if isinstance(messages, list) else 1,
+        )
+        self._caller.safe_call_with_result(self._async_writer.write(messages), timeout)
+
+    def async_write_with_ack(
+        self,
+        messages: Union[Message, List[Message]],
+    ) -> Future[Union[PublicWriteResult, List[PublicWriteResult]]]:
+        self._check_closed()
+        return self._caller.unsafe_call_with_future(self._async_writer.write_with_ack(messages))
+
+    def write_with_ack(
+        self,
+        messages: Union[Message, List[Message]],
+        timeout: Union[float, None] = None,
+    ) -> Union[PublicWriteResult, List[PublicWriteResult]]:
+        self._check_closed()
+        logger.debug(
+            "write_with_ack %s messages",
+            len(messages) if isinstance(messages, list) else 1,
+        )
+        return self._caller.unsafe_call_with_result(self._async_writer.write_with_ack(messages), timeout=timeout)

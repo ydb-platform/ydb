@@ -47,6 +47,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
         super(QuerySession, self).__init__(driver, settings)
         self._loop = loop if loop is not None else asyncio.get_running_loop()
         self._status_stream = None
+        self._status_task: Optional[asyncio.Task[None]] = None
 
     async def _attach(self) -> None:
         try:
@@ -69,7 +70,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
             self._close_session(invalidate=True)
             raise
 
-        self._loop.create_task(self._check_session_status_loop(), name="check session status task")
+        self._status_task = self._loop.create_task(self._check_session_status_loop(), name="check session status task")
 
     async def _check_session_status_loop(self) -> None:
         if self._status_stream is None:
@@ -93,16 +94,24 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
 
         :return: None
         """
-        if self._closed:
-            return
+        status_task = self._status_task
+        if status_task is not None:
+            status_task.cancel()
 
-        self._close_session()
+        try:
+            if self._closed:
+                return
 
-        if self._session_id:
-            try:
-                await self._delete_call(settings=settings)
-            except Exception:
-                pass
+            self._close_session()
+
+            if self._session_id:
+                try:
+                    await self._delete_call(settings=settings)
+                except Exception:
+                    pass
+        finally:
+            if status_task is not None:
+                await asyncio.gather(status_task, return_exceptions=True)
 
     async def create(self, settings: Optional[BaseRequestSettings] = None) -> "QuerySession":
         """Creates a Session of Query Service on server side and attaches it.

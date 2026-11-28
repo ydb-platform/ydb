@@ -744,6 +744,12 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             "Distconf should still be enabled after dry_run"
 
 
+class TestKiKiMRDistConfBlock82(DistConfKiKiMRTest):
+    erasure = Erasure.BLOCK_8_2
+    nodes_count = 12
+    test_cluster_is_operational_with_distconf = TestKiKiMRDistConfBasic.test_cluster_is_operational_with_distconf
+
+
 class TestDistConfBootstrapValidation:
 
     @pytest.mark.parametrize('invalid_selector', [False, True])

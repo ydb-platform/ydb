@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -33,6 +35,9 @@ struct TKqpProxyRequest {
     ui32 EventType;
     TString SessionId;
     TKqpDbCountersPtr DbCounters;
+    NWilson::TSpan Span;
+    NWilson::TSpan RedirectSpan;
+    bool QueryDispatched = false;
 
     TKqpProxyRequest(const TActorId& sender, ui64 senderCookie, const TString& traceId,
         ui32 eventType)
@@ -66,6 +71,10 @@ public:
     }
 
     const TKqpProxyRequest* FindPtr(ui64 requestId) const {
+        return PendingRequests.FindPtr(requestId);
+    }
+
+    TKqpProxyRequest* FindPtr(ui64 requestId) {
         return PendingRequests.FindPtr(requestId);
     }
 

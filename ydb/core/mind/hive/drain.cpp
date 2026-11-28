@@ -390,8 +390,7 @@ void THive::Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev) {
     auto* node = FindNode(nodeId);
     auto tenantHive = GetPipeToTenantHive(node);
     if (tenantHive) {
-        auto sender = ev->Sender;
-        NTabletPipe::SendData(sender, *tenantHive, std::move(ev)->Get());
+        NTabletPipe::SendData(ev->Sender, *tenantHive, ev->Release().Release(), ev->Cookie);
         return;
     }
     auto response = std::make_unique<TEvHive::TEvResponseDrainInfo>();

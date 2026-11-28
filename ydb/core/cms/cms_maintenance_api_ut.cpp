@@ -8,6 +8,8 @@
 #include <util/generic/algorithm.h>
 #include <util/random/fast.h>
 
+#include <set>
+
 namespace NKikimr::NCmsTest {
 
 using namespace Ydb::Maintenance;
@@ -496,6 +498,67 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         env.CheckMaintenanceTaskDrop("task-1", Ydb::StatusIds::UNAVAILABLE);
         hive.Alive = true;
         env.CheckMaintenanceTaskDrop("task-1", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(TestCordonActionFailed) {
+        TCmsTestEnv env(8);
+
+        auto observer = env.AddObserver([&](auto&& ev) {
+            if (ev->Type == TEvHive::EvSetDown) {
+                auto reply = std::make_unique<TEvHive::TEvSetDownReply>();
+                reply->Record.SetStatus(NKikimrProto::ERROR);
+                env.Send(new IEventHandle(ev->Sender, env.GetSender(), reply.release(), 0, ev->Cookie), 0);
+            }
+        });
+
+        env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::GENERIC_ERROR,
+            MakeActionGroup(
+                MakeCordonAction(env.GetNodeId(1))
+            )
+        );
+
+        // A failed cordon must not create the task in CMS
+        env.SimulateSleep(TDuration::Seconds(1));
+        env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(DropUndoesHiveActionsOfPendingActions) {
+        TCmsTestEnv env(8);
+
+        std::set<ui32> drainedNodes;
+        std::set<ui32> upNodes;
+        auto observer = env.AddObserver([&](auto&& ev) {
+            if (ev->Type == TEvHive::EvDrainNode) {
+                drainedNodes.insert(ev->template Get<TEvHive::TEvDrainNode>()->Record.GetNodeID());
+                env.Send(new IEventHandle(ev->Sender, env.GetSender(), new TEvHive::TEvDrainNodeAck(), 0, ev->Cookie), 0);
+            }
+            if (ev->Type == TEvHive::EvSetDown) {
+                const auto& record = ev->template Get<TEvHive::TEvSetDown>()->Record;
+                UNIT_ASSERT(!record.GetDown());
+                upNodes.insert(record.GetNodeId());
+                env.Send(new IEventHandle(ev->Sender, env.GetSender(), new TEvHive::TEvSetDownReply(), 0, ev->Cookie), 0);
+            }
+        });
+
+        auto createResult = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
+            /* maxInflightActions = */ 1u,
+            MakeActionGroup(MakeDrainAction(env.GetNodeId(1))),
+            MakeActionGroup(MakeDrainAction(env.GetNodeId(2)))
+        );
+
+        // max_inflight_actions does not limit Hive: both nodes are drained, but only one action is granted
+        UNIT_ASSERT(drainedNodes == (std::set<ui32>{env.GetNodeId(1), env.GetNodeId(2)}));
+        std::multiset<Ydb::Maintenance::ActionState::ActionStatus> statuses;
+        for (const auto& group : createResult.action_group_states()) {
+            statuses.insert(group.action_states(0).status());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(statuses.count(ActionState::ACTION_STATUS_PERFORMED), 1);
+        UNIT_ASSERT_VALUES_EQUAL(statuses.count(ActionState::ACTION_STATUS_PENDING), 1);
+
+        env.CheckMaintenanceTaskDrop("task-1", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(upNodes.size(), 2);
+        UNIT_ASSERT(upNodes == drainedNodes);
     }
 
     Y_UNIT_TEST(MaxInflightActionsBlocksRefresh) {

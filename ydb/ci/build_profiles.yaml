@@ -1,0 +1,45 @@
+# Shared compilation profiles. definition_flags are ya -D variables.
+release: &release
+  build_type: release
+  thinlto: true
+  definition_flags:
+    DEBUGINFO_LINES_ONLY: "yes"
+    HARDENING: "yes"
+    CFLAGS: "-fno-omit-frame-pointer -fdebug-info-for-profiling -Wno-unknown-argument"
+  sanitize: ""
+  # Deployment/profiling options are consumed by Arcadia CI after import.
+  profile_memory: false
+  collect_flamegraphs: false
+release_no_lto:
+  <<: *release
+  thinlto: false
+
+relwithdebinfo:
+  <<: *release
+  build_type: relwithdebinfo
+  thinlto: false
+profile:
+  <<: *release
+  build_type: profile
+  thinlto: false
+  collect_flamegraphs: true
+
+# Names used by the GitHub CI build matrix.
+debug:
+  <<: *release
+  build_type: debug
+  thinlto: false
+  definition_flags:
+    CFLAGS: "-fno-omit-frame-pointer -fdebug-info-for-profiling -Wno-unknown-argument"
+release-asan:
+  <<: *release
+  thinlto: false
+  sanitize: address
+release-tsan:
+  <<: *release
+  thinlto: false
+  sanitize: thread
+release-msan:
+  <<: *release
+  thinlto: false
+  sanitize: memory

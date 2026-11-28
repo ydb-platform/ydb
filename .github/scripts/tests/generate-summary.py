@@ -19,6 +19,11 @@ from error_type_utils import (
     source_has_tag,
 )
 
+_SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+from build_profile import reproduction_args  # noqa: E402
+
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
 if _ANALYTICS_DIR not in sys.path:
     sys.path.insert(0, _ANALYTICS_DIR)
@@ -403,7 +408,8 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     test_success_rates = {}
     
     print(f"Processing history for {len(history)} tests with history data")
-    print(f"Total tests in statuses: {len(tests_in_statuses)}")
+    print(f"Total report results: {len(all_tests)}")
+    print(f"Results requiring history (FAIL/MUTE/ERROR): {len(tests_in_statuses)}")
     
     for test in tests_in_statuses:
         if test.full_name in history:
@@ -426,16 +432,13 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     for current_status in status_for_history:
         status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
 
-    build_preset_params = '--build unknown_build_type'
-    if build_preset == 'release-asan' :
-        build_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'release-msan':
-        build_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'release-tsan':   
-        build_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'relwithdebinfo':
-        build_preset_params = '--build "relwithdebinfo"'
-    
+    effective_args_file = os.environ.get("BUILD_REPRODUCTION_ARGS_FILE")
+    if effective_args_file:
+        with open(effective_args_file) as stream:
+            build_preset_params = stream.read().rstrip("\n")
+    else:
+        build_preset_params = reproduction_args(build_preset)
+
     # Get GitHub server URL and repository from environment
     github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     github_repository = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
@@ -716,7 +719,7 @@ def main():
     parser.add_argument("--public_dir", required=True)
     parser.add_argument("--public_dir_url", required=True)
     parser.add_argument("--summary_links", required=True)
-    parser.add_argument('--build_preset', default="default-linux-x86-64-relwithdebinfo", required=False)
+    parser.add_argument('--build_preset', default="relwithdebinfo", required=False)
     parser.add_argument('--branch', default="main", required=False)
     parser.add_argument('--status_report_file', required=False)
     parser.add_argument('--is_retry', required=True, type=int)

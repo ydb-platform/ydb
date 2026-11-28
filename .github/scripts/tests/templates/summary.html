@@ -594,7 +594,10 @@
 
     function copyTestNameToClipboard(text) {
         const cmdArg = getTestRunCommand(text);
-        if (!cmdArg) return;
+        if (!cmdArg) {
+            window.alert("Run command is unavailable for this test result.");
+            return;
+        }
 
         console.log(cmdArg);
 
@@ -691,7 +694,9 @@
             filterName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
         }
 
-        return `./ya make -ttt {{ build_preset_params }} -F ${bashSingleQuote(filterName)} ${path}`;
+        const buildPresetParams = {{ build_preset_params | tojson }};
+        if (!buildPresetParams) return "";
+        return `./ya make -ttt ${buildPresetParams} -F ${bashSingleQuote(filterName)} ${path}`;
     }
 
     function getTestRunCommand(test) {
@@ -781,7 +786,9 @@
         }
         
         // Run command
-        body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
+        if (testRunCommand) {
+            body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
+        }
         
         // Owner
         body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";

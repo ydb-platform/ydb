@@ -153,6 +153,19 @@ jobs:
         with:
           ref: ${{ steps.resolve-ref.outputs.checkout_ref }}
 
+      - name: Resolve shared comparison profile
+        env:
+          INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
+        run: |
+          PROFILE_DIR=$(mktemp -d "$RUNNER_TEMP/comparison-profile.XXXXXX")
+          if [[ -f .github/scripts/build_profile.py && -f ydb/ci/build_profiles.yaml ]]; then
+            python3 -m pip install PyYAML
+            python3 .github/scripts/build_profile.py "$INPUT_BUILD_PRESET" --output-dir "$PROFILE_DIR"
+          else
+            printf '%s\n' "--build=$INPUT_BUILD_PRESET" '-DDEBUGINFO_LINES_ONLY' > "$PROFILE_DIR/args"
+          fi
+          echo "COMPARISON_PROFILE_DIR=$PROFILE_DIR" >> "$GITHUB_ENV"
+
       - name: Build baseline ydbd
         id: build-baseline
         if: ${{ inputs.build_baseline != 'false' }}
@@ -170,7 +183,8 @@ jobs:
           git fetch --depth=1 origin "$BASELINE_SHA"
           git worktree add ../baseline "$BASELINE_SHA"
           cd ../baseline
-          ./ya make -DDEBUGINFO_LINES_ONLY --build "$INPUT_BUILD_PRESET" ydb/apps/ydbd
+          mapfile -t PROFILE_ARGS < "$COMPARISON_PROFILE_DIR/args"
+          ./ya make "${PROFILE_ARGS[@]}" ydb/apps/ydbd
           BINARY=$(find . -name ydbd -path '*/ydb/apps/ydbd/ydbd' -not -path '*/ydb/apps/ydbd/ydbd/*' 2>/dev/null | head -1)
           BINARY=$(realpath "$BINARY")
           echo "binary=$BINARY" >> "$GITHUB_OUTPUT"
@@ -228,7 +242,8 @@ jobs:
             fi
           fi
 
-          ./ya make -DDEBUGINFO_LINES_ONLY --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
+          mapfile -t PROFILE_ARGS < "$COMPARISON_PROFILE_DIR/args"
+          ./ya make "${PROFILE_ARGS[@]}" -tA --test-disable-timeout \
             ydb/tests/stress/compare_index_performance/tests \
             --test-param compare_duration="$INPUT_DURATION" \
             --test-param compare_build_preset="$INPUT_BUILD_PRESET" \

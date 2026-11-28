@@ -51,6 +51,96 @@ void TBasicOpInfo::Serialize(NKikimrTxDataShard::TBasicOpInfo &info) const
 
 NMiniKQL::IEngineFlat::TValidationInfo TOperation::EmptyKeysInfo;
 
+TOperation::~TOperation() {
+    FinishPipelineTrace("operation_destroyed");
+}
+
+void TOperation::TracePipelineEvent(const char* name, const TOperation* cause, bool dryRun, ui64 externalCauseTxId, std::optional<ui32> executionStatus) {
+    if (PipelineTraceFinished) {
+        return;
+    }
+    const auto traceId = GetTraceId();
+    if (!traceId || traceId.GetVerbosity() < 12) {
+        return;
+    }
+    if (!PipelineTraceSpan) {
+        PipelineTraceSpan = NWilson::TSpan(12, NWilson::TTraceId(traceId), "Datashard pipeline", NWilson::EFlags::AUTO_END);
+        PipelineTraceSpan.Attribute("ydb.tx_id", static_cast<i64>(GetTxId()));
+    }
+    const bool recorded = PipelineTraceEvents.Event(PipelineTraceSpan, 12, name, [&] {
+        NWilson::TKeyValueList attributes;
+        attributes["plan_step"] = static_cast<i64>(GetStep());
+        attributes["unit"] = static_cast<i64>(GetCurrentUnit());
+        attributes["dry_run"] = dryRun;
+        attributes["normal_dependencies"] = static_cast<i64>(GetDependencies().size());
+        attributes["special_dependencies"] = static_cast<i64>(GetSpecialDependencies().size());
+        attributes["volatile_dependencies_present"] = HasVolatileDependencies();
+        attributes["volatile_dependencies"] = static_cast<i64>(GetVolatileDependencies().size());
+        attributes["in_progress"] = IsInProgress();
+        attributes["waiting_dependencies"] = IsWaitingDependencies();
+        attributes["executing"] = IsExecuting();
+        attributes["completed"] = IsCompleted();
+        attributes["immediate"] = IsImmediate();
+        attributes["readsets_loaded"] = HasLoadedInRSFlag();
+        if (HasLoadedInRSFlag()) {
+            attributes["remaining_readsets"] = static_cast<i64>(GetRemainReadSets());
+        }
+        if (executionStatus) {
+            attributes["execution_status"] = static_cast<i64>(*executionStatus);
+        }
+        NWilson::TArrayValue blockers;
+        auto append = [&](const auto& dependencies, const char* kind) {
+            for (const auto& dependency : dependencies) {
+                if (blockers.size() == 32) {
+                    break;
+                }
+                NWilson::TKeyValueList item;
+                item["tx_id"] = static_cast<i64>(dependency->GetTxId());
+                item["step"] = static_cast<i64>(dependency->GetStep());
+                item["kind"] = TString(kind);
+                blockers.push_back(std::move(item));
+            }
+        };
+        append(GetDependencies(), "normal");
+        append(GetSpecialDependencies(), "special");
+        for (const auto txId : GetVolatileDependencies()) {
+            if (blockers.size() == 32) {
+                break;
+            }
+            NWilson::TKeyValueList item;
+            item["tx_id"] = static_cast<i64>(txId);
+            item["kind"] = TString("volatile");
+            blockers.push_back(std::move(item));
+        }
+        attributes["blocker_ids_truncated"] = GetDependencies().size() + GetSpecialDependencies().size() + GetVolatileDependencies().size() > blockers.size();
+        attributes["blocker_ids"] = std::move(blockers);
+        if (externalCauseTxId) {
+            attributes["cause_tx_id"] = static_cast<i64>(externalCauseTxId);
+            attributes["cause_trace_context_available"] = false;
+        }
+        if (cause) {
+            attributes["cause_tx_id"] = static_cast<i64>(cause->GetTxId());
+            attributes["cause_step"] = static_cast<i64>(cause->GetStep());
+        }
+        return attributes;
+    });
+    if (recorded && cause && cause->GetTraceId() && PipelineCauseLinks < 32) {
+        PipelineTraceSpan.Link(cause->GetTraceId());
+        ++PipelineCauseLinks;
+    }
+}
+
+void TOperation::FinishPipelineTrace(const char* boundary) {
+    if (PipelineTraceSpan) {
+        PipelineTraceSpan.Attribute("ydb.pipeline.end_boundary", TString(boundary));
+        PipelineTraceSpan.Attribute("ydb.trace.event_budget.scope", TString("datashard_pipeline"));
+        PipelineTraceEvents.Event(PipelineTraceSpan, 12, "pipeline terminal boundary", NWilson::TSpanEventBudget::EKind::Terminal);
+        PipelineTraceEvents.Annotate(PipelineTraceSpan);
+        PipelineTraceSpan.End();
+    }
+    PipelineTraceFinished = true;
+}
+
 void TOperation::AddInReadSet(const NKikimrTx::TEvReadSet& rs)
 {
     AddInReadSet(TReadSetKey(rs), rs.GetBalanceTrackList(), rs.GetReadSet());
@@ -74,8 +164,12 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
                 Y_ENSURE(InputDataRef().RemainReadSets > 0, "RemainReadSets counter underflow");
                 --InputDataRef().RemainReadSets;
             }
+            TracePipelineEvent("readset accounted");
+        } else {
+            TracePipelineEvent("duplicate readset ignored");
         }
     } else {
+        TracePipelineEvent("unexpected readset ignored");
         YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Discarded readset",
             {"operation", *this},
             {"from", rsKey.From},
@@ -89,6 +183,7 @@ void TOperation::AddDependency(const TOperation::TPtr &op) {
 
     if (Dependencies.insert(op).second) {
         op->Dependents.insert(this);
+        TracePipelineEvent("normal dependency added", op.Get());
     }
 }
 
@@ -97,6 +192,7 @@ void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
 
     if (SpecialDependencies.insert(op).second) {
         op->SpecialDependents.insert(this);
+        TracePipelineEvent("special dependency added", op.Get());
     }
 }
 
@@ -224,11 +320,15 @@ void TOperation::ClearRepeatableReadConflicts() {
 }
 
 void TOperation::AddVolatileDependency(ui64 txId) {
-    VolatileDependencies.insert(txId);
+    if (VolatileDependencies.insert(txId).second) {
+        TracePipelineEvent("volatile dependency added", nullptr, false, txId);
+    }
 }
 
 void TOperation::RemoveVolatileDependency(ui64 txId, bool success) {
     if (VolatileDependencies.erase(txId)) {
+        TracePipelineEvent(success ? "volatile dependency committed" : "volatile dependency aborted",
+            nullptr, false, txId);
         if (!success) {
             VolatileDependenciesAborted = true;
         }

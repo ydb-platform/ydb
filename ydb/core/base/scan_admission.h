@@ -19,6 +19,7 @@ class TScanAdmissionControl {
         ui64 Count = 0;
         ui64 Bytes = 0;
         ui64 TotalLimit = 512_MB;
+        ui64 PendingByteLimit;
         ui64 ActiveLimit = Max<ui64>();
         ui64 BrokerLimit = Max<ui64>();
         ui64 BrokerLimitGeneration = 0;
@@ -36,6 +37,12 @@ class TScanAdmissionControl {
     };
 
 public:
+    explicit TScanAdmissionControl(ui64 pendingByteLimit = Max<ui64>())
+        : State(std::make_shared<TState>())
+    {
+        State->PendingByteLimit = pendingByteLimit;
+    }
+
     static ui64 CalculatePendingByteLimit(ui64 totalLimit, ui64 configuredLimit) {
         // A quarter leaves room for supported centroid requests on small
         // nodes, while preserving an independent bound on active scans.
@@ -104,7 +111,7 @@ public:
 
     ui64 GetByteLimit(ui64 configuredLimit) const {
         with_lock(State->Lock) {
-            return CalculatePendingByteLimit(State->TotalLimit, configuredLimit);
+            return Min(State->PendingByteLimit, CalculatePendingByteLimit(State->TotalLimit, configuredLimit));
         }
     }
 
@@ -151,13 +158,27 @@ public:
         }
     }
 
+    // Apply a pending-budget reduction before measuring outstanding leases.
+    // This prevents concurrent admissions from using the old, larger slice.
+    ui64 ShrinkPendingBudget(ui64 totalLimit, ui64 pendingLimit) {
+        with_lock(State->Lock) {
+            State->TotalLimit = Min(State->TotalLimit, totalLimit);
+            State->PendingByteLimit = Min(State->PendingByteLimit, pendingLimit);
+            return State->Bytes;
+        }
+    }
+
+    void SetPendingByteLimit(ui64 bytes) {
+        with_lock(State->Lock) {
+            State->PendingByteLimit = bytes;
+        }
+    }
+
     void SetTotalLimit(ui64 bytes, ui64 activeLimit = Max<ui64>(), bool configurationPending = false) {
         with_lock(State->Lock) {
             State->TotalLimit = bytes;
-            if (State->ActiveLimit != activeLimit) {
-                State->BrokerLimit = Max<ui64>();
-                ++State->BrokerLimitGeneration;
-            }
+            // A local budget change does not establish new broker capacity.
+            // Keep the effective broker cap until the configuration is acknowledged.
             State->ActiveLimit = activeLimit;
             State->BrokerConfigurationPending |= configurationPending;
         }
@@ -171,11 +192,11 @@ public:
 
 private:
     bool CanAcquireLocked(ui64 bytes, ui64 countLimit, ui64 bytesLimit) const {
-        bytesLimit = CalculatePendingByteLimit(State->TotalLimit, bytesLimit);
+        bytesLimit = Min(State->PendingByteLimit, CalculatePendingByteLimit(State->TotalLimit, bytesLimit));
         return State->Count < countLimit && State->Bytes <= bytesLimit && bytes <= bytesLimit - State->Bytes;
     }
 
-    const std::shared_ptr<TState> State = std::make_shared<TState>();
+    const std::shared_ptr<TState> State;
 };
 
 } // namespace NKikimr

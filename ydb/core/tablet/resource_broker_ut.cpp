@@ -263,6 +263,73 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         FinishTask(runtime, broker, sender, 6);
     }
 
+    Y_UNIT_TEST(CpuOnlyTaskRunsWhenMemoryLimitDropsBelowUsage) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        const auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeTestConfig();
+        config.MutableResourceLimit()->SetCpu(1);
+        auto* indexTask = config.AddTasks();
+        indexTask->SetName("build_index");
+        indexTask->SetQueueName("queue_scan");
+        const auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto broker = runtime.Register(CreateResourceBrokerActor(config, counters));
+        WaitForBootstrap(runtime);
+
+        SubmitTask(runtime, broker, sender, 1, 1, 400, "unknown", 5);
+        WaitForResourceAllocation(runtime, 1);
+        SubmitTask(runtime, broker, sender, 3, 1, 0, "build_index", 1);
+        SubmitTask(runtime, broker, sender, 2, 1, 0, "scan", 5);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 2, 0);
+
+        config.MutableResourceLimit()->SetCpu(2);
+        config.MutableResourceLimit()->SetMemory(300);
+        CheckConfigure(runtime, broker, sender, config, true);
+        WaitForResourceAllocation(runtime, 2);
+        CheckCounters(counters, "queue", "total", 2, 400, 0, 1, 2);
+        FinishTask(runtime, broker, sender, 1);
+        WaitForResourceAllocation(runtime, 3);
+        FinishTask(runtime, broker, sender, 2);
+        FinishTask(runtime, broker, sender, 3);
+    }
+
+    Y_UNIT_TEST(IndexBuildMemoryLimitInSharedQueue) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        const auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeTestConfig();
+        auto* indexTask = config.AddTasks();
+        indexTask->SetName("build_index");
+        indexTask->SetQueueName("queue_scan");
+        const auto broker = runtime.Register(CreateResourceBrokerActor(config, MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+        WaitForBootstrap(runtime);
+
+        auto configure = MakeHolder<TEvResourceBroker::TEvConfigure>();
+        configure->Merge = true;
+        configure->IndexBuildMemoryLimit = 100;
+        runtime.Send(new IEventHandle(broker, sender, configure.Release()));
+        auto reply = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigureResult>(sender);
+        UNIT_ASSERT(reply->Get()->Record.GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->IndexBuildMemoryLimit.value_or(0), 100);
+
+        SubmitTask(runtime, broker, sender, 1, 1, 101, "build_index", 5);
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
+        SubmitTask(runtime, broker, sender, 2, 1, 60, "build_index", 5);
+        WaitForResourceAllocation(runtime, 2);
+        SubmitTask(runtime, broker, sender, 3, 1, 60, "build_index", 5);
+        SubmitTask(runtime, broker, sender, 4, 1, 101, "scan", 5);
+        WaitForResourceAllocation(runtime, 4);
+        FinishTask(runtime, broker, sender, 2);
+        WaitForResourceAllocation(runtime, 3);
+        FinishTask(runtime, broker, sender, 3);
+        FinishTask(runtime, broker, sender, 4);
+
+        SubmitTask(runtime, broker, sender, 5, 1, 501, "scan", 5);
+        WaitForResourceAllocation(runtime, 5);
+        FinishTask(runtime, broker, sender, 5);
+    }
+
     Y_UNIT_TEST(StrictMemoryUpdateRejectsOversizeWithoutChangingTask) {
         for (const bool resubmit : {false, true}) {
             TTestBasicRuntime runtime;

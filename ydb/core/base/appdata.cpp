@@ -122,7 +122,7 @@ TAppData::TAppData(
     , Dcb(new TDynamicControlBoard())
     , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry())
     , SharedCachePages(new NSharedCache::TSharedCachePages())
-    , BuildIndexScanAdmission(std::make_shared<TScanAdmissionControl>())
+    , BuildIndexScanAdmission(std::make_shared<TScanAdmissionControl>(0))
     , StreamingConfig(Impl->StreamingConfig)
     , PQConfig(Impl->PQConfig)
     , PQClusterDiscoveryConfig(Impl->PQClusterDiscoveryConfig)

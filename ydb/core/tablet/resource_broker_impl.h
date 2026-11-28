@@ -33,6 +33,9 @@ public:
     TResourceLimit(const NKikimrResourceBroker::TResources &limit);
 
     bool HasResources(const TResourceValues &values) const;
+    bool IsMemoryOvercommitted() const {
+        return Used[NKikimrResourceBroker::MEMORY] > Limit[NKikimrResourceBroker::MEMORY];
+    }
     void HoldResources(const TResourceValues &values);
     void ReleaseResources(const TResourceValues &values);
 
@@ -74,6 +77,7 @@ public:
     TActorId Client;
     // Task queue task is currently attached to.
     TTaskQueuePtr Queue;
+    TResourceLimitPtr TypeLimit;
     // True if task has allocated resources.
     bool InFly;
     // When task was submitted.
@@ -230,6 +234,7 @@ public:
 
     TTaskPtr FrontTask();
     TTaskPtr FrontMemorylessTask();
+    TTaskPtr FrontTaskWithoutTypeMemoryLimit();
     void PopTask(TTaskPtr task);
 
     void UpdateRealResourceUsage(TInstant now);
@@ -255,6 +260,8 @@ public:
     bool StrictMemoryLimit;
     TSet<TTaskPtr, TTaskEarlier> Tasks;
     TSet<TTaskPtr, TTaskEarlier> MemorylessTasks;
+    bool HasTypeMemoryLimit = false;
+    TSet<TTaskPtr, TTaskEarlier> TasksWithoutTypeMemoryLimit;
     TResourceLimit QueueLimit;
     TResourceLimitPtr TotalLimit;
     double RealResourceUsage;
@@ -329,13 +336,16 @@ public:
     bool FitsMemoryLimit(const TString& type, const TResourceValues& resources) const {
         const auto& queue = TaskConfig(type).Queue;
         const auto bytes = resources[NKikimrResourceBroker::MEMORY];
-        return !queue->StrictMemoryLimit ||
-            bytes <= GetMemoryLimit(type);
+        return (!queue->StrictMemoryLimit && type != "build_index") || bytes <= GetMemoryLimit(type);
     }
 
     ui64 GetMemoryLimit(const TString& type) const {
-        return Min(TaskConfig(type).Queue->QueueLimit.Limit[NKikimrResourceBroker::MEMORY],
+        ui64 limit = Min(TaskConfig(type).Queue->QueueLimit.Limit[NKikimrResourceBroker::MEMORY],
             ResourceLimit->Limit[NKikimrResourceBroker::MEMORY]);
+        if (type == "build_index") {
+            limit = Min(limit, IndexBuildLimit->Limit[NKikimrResourceBroker::MEMORY]);
+        }
+        return limit;
     }
 
     /**
@@ -375,6 +385,8 @@ public:
      * Return true if any task was affected.
      */
     bool RemoveTasks(const TActorId &client, const TActorSystem &as);
+    bool HasPendingScanHeadroom(ui64 bytes = 0) const;
+
     /**
      * Try to allocate resources for next tasks until we are out of resources or tasks.
      */
@@ -386,7 +398,8 @@ public:
      * unknown task). On re-configuration tasks may migrate between queues according
      * to new mapping. Returns queued tasks rejected by the new strict memory limits.
      */
-    TVector<TTaskPtr> Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config, const TActorSystem &as);
+    TVector<TTaskPtr> Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config, const TActorSystem &as,
+        std::optional<ui64> indexBuildMemoryLimit = {}, std::optional<ui64> pendingScanMemory = {});
 
     /**
      * Update current scheduler time which is used for all resource consumption
@@ -400,6 +413,8 @@ public:
     void OutputState(IOutputStream &os) const;
 
 private:
+    ui64 GetSchedulingMemoryLimit() const;
+
     // Erase task from all structure.
     void EraseTask(TTaskPtr task, bool finished, const TActorSystem &as);
     void EraseTaskFromIndexes(const TTask &task);
@@ -424,6 +439,8 @@ private:
     THashMap<TString, TTaskQueuePtr> Queues;
     THashMap<TString, TTaskConfig> TaskConfigs;
     TResourceLimitPtr ResourceLimit;
+    const TResourceLimitPtr IndexBuildLimit;
+    ui64 PendingScanMemory = 0;
     THashMap<std::pair<TActorId, ui64>, TTaskPtr> Tasks;
     // Contains exactly the task IDs in Tasks for each client; empty clients are removed.
     THashMap<TActorId, THashSet<ui64>> TasksByClient;
@@ -449,7 +466,8 @@ public:
 
     NKikimrResourceBroker::TResourceBrokerConfig GetConfig() const;
     TVector<TEvResourceBroker::TQueueUsage> GetQueueUsage() const;
-    void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config);
+    void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config,
+        const TEvResourceBroker::TEvConfigure& request, TEvResourceBroker::TEvConfigureResult& result);
 
     using TOpError = THolder<TEvResourceBroker::TEvTaskOperationError>;
 

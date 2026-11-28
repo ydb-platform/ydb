@@ -37,7 +37,7 @@ TResourceLimit::TResourceLimit(const NKikimrResourceBroker::TResources &limit)
 bool TResourceLimit::HasResources(const TResourceValues &values) const
 {
     for (size_t i = 0; i < values.size(); ++i)
-        if (Used[i] > Limit[i] || values[i] > Limit[i] - Used[i])
+        if (values[i] && (Used[i] > Limit[i] || values[i] > Limit[i] - Used[i]))
             return false;
     return true;
 }
@@ -200,8 +200,11 @@ void TTaskQueue::InsertTask(TTaskPtr task, TInstant now)
         task->Counters->InFlyTasks->Inc();
     } else {
         Tasks.insert(task);
-        if (!task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
+        if (!task->TypeLimit && !task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
             MemorylessTasks.insert(task);
+        }
+        if (HasTypeMemoryLimit && !task->TypeLimit) {
+            TasksWithoutTypeMemoryLimit.insert(task);
         }
 
         // Update queue/task counters
@@ -237,6 +240,9 @@ void TTaskQueue::EraseTask(TTaskPtr task, bool finished, TInstant now)
         }
     } else {
         MemorylessTasks.erase(task);
+        if (HasTypeMemoryLimit) {
+            TasksWithoutTypeMemoryLimit.erase(task);
+        }
         // Removing the first element is the most common case.
         if (*Tasks.begin() == task) {
             Tasks.erase(Tasks.begin());
@@ -303,6 +309,11 @@ TTaskPtr TTaskQueue::FrontMemorylessTask()
     return *MemorylessTasks.begin();
 }
 
+TTaskPtr TTaskQueue::FrontTaskWithoutTypeMemoryLimit()
+{
+    return TasksWithoutTypeMemoryLimit.empty() ? TTaskPtr{} : *TasksWithoutTypeMemoryLimit.begin();
+}
+
 void TTaskQueue::PopTask(TTaskPtr task)
 {
     Y_ABORT_UNLESS(!Tasks.empty());
@@ -315,6 +326,9 @@ void TTaskQueue::HoldResources(TTaskPtr task)
 
     QueueLimit.HoldResources(values);
     TotalLimit->HoldResources(values);
+    if (task->TypeLimit) {
+        task->TypeLimit->HoldResources({{0, values[NKikimrResourceBroker::MEMORY]}});
+    }
 
     QueueCounters.HoldResources(values);
     TotalCounters->HoldResources(values);
@@ -327,6 +341,9 @@ void TTaskQueue::ReleaseResources(TTaskPtr task)
 
     QueueLimit.ReleaseResources(values);
     TotalLimit->ReleaseResources(values);
+    if (task->TypeLimit) {
+        task->TypeLimit->ReleaseResources({{0, values[NKikimrResourceBroker::MEMORY]}});
+    }
 
     QueueCounters.ReleaseResources(values);
     TotalCounters->ReleaseResources(values);
@@ -427,11 +444,13 @@ TScheduler::TTaskConfig::TTaskConfig(const TString &name,
 }
 
 TScheduler::TScheduler(const ::NMonitoring::TDynamicCounterPtr &counters)
-    : Counters(counters)
+    : IndexBuildLimit(new TResourceLimit(TResources{}))
+    , Counters(counters)
     , TotalCounters(new TQueueCounters(counters->GetSubgroup("queue", "total")))
     , MissingTaskTypeCounter(counters->GetCounter("MissingTaskType", true))
     , NextTaskId(1)
 {
+    IndexBuildLimit->Limit[NKikimrResourceBroker::MEMORY] = 448_MB; // 512 MiB minus the pending-request pool.
 }
 
 TScheduler::~TScheduler()
@@ -673,6 +692,23 @@ void TScheduler::EraseTaskFromIndexes(const TTask &task)
     }
 }
 
+ui64 TScheduler::GetSchedulingMemoryLimit() const
+{
+    const auto limit = ResourceLimit->Limit[NKikimrResourceBroker::MEMORY];
+    return limit - Min(limit, PendingScanMemory);
+}
+
+bool TScheduler::HasPendingScanHeadroom(ui64 bytes) const
+{
+    if (!PendingScanMemory) {
+        return true;
+    }
+    const auto limit = GetSchedulingMemoryLimit();
+    const auto used = ResourceLimit->Used[NKikimrResourceBroker::MEMORY];
+    return PendingScanMemory <= ResourceLimit->Limit[NKikimrResourceBroker::MEMORY] &&
+        used <= limit && bytes <= limit - used;
+}
+
 void TScheduler::ScheduleTasks(const TActorSystem &as,
                                std::function<void(const TTask &task)> &&onTaskSchedule)
 {
@@ -691,19 +727,29 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         pending.erase(pending.begin());
 
         auto task = queue->FrontTask();
+        if (task->TypeLimit && (task->TypeLimit->IsMemoryOvercommitted() ||
+                !task->TypeLimit->HasResources({{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}}))) {
+            // The index budget is independent of other work in this queue.
+            task = queue->FrontTaskWithoutTypeMemoryLimit();
+            if (!task) {
+                continue;
+            }
+        }
         bool blocked = task->GetRequiredResourcesMask() & blockedResources;
-        if (queue->StrictMemoryLimit && task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
-            const TResourceValues memory{{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}};
-            if (!queue->QueueLimit.HasResources(memory)) {
+        const ui64 bytes = task->RequiredResources[NKikimrResourceBroker::MEMORY];
+        if (task->TypeLimit || (queue->StrictMemoryLimit && bytes)) {
+            const TResourceValues memory{{0, bytes}};
+            if (queue->QueueLimit.IsMemoryOvercommitted() || !queue->QueueLimit.HasResources(memory)) {
                 blocked = true;
-            } else if (!ResourceLimit->HasResources(memory)) {
+            } else if (ResourceLimit->IsMemoryOvercommitted() || !ResourceLimit->HasResources(memory) || !HasPendingScanHeadroom(bytes)) {
                 // Let global memory accumulate for this reservation before later queues use it.
-                blockedResources |= ui64(1) << NKikimrResourceBroker::MEMORY;
+                if (bytes <= GetSchedulingMemoryLimit()) {
+                    blockedResources |= ui64(1) << NKikimrResourceBroker::MEMORY;
+                }
                 blocked = true;
             }
             if (blocked) {
-                // Legacy scans declare no memory. Keep their own priority
-                // ordering without letting a vector task monopolize the queue.
+                // Let CPU-only work proceed while memory is unavailable.
                 task = queue->FrontMemorylessTask();
                 if (!task) {
                     continue;
@@ -720,16 +766,19 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         // If task is out of total limits then we have to wait until
         // resources are released.
         // Allow resource over-usage if no tasks are running.
-        if (!ResourceLimit->HasResources(task->RequiredResources)
-            && *TotalCounters->InFlyTasks) {
+        const ui64 taskBytes = task->RequiredResources[NKikimrResourceBroker::MEMORY];
+        if ((taskBytes && !HasPendingScanHeadroom(taskBytes)) ||
+            (!ResourceLimit->HasResources(task->RequiredResources) && *TotalCounters->InFlyTasks)) {
             YDB_LOG_DEBUG_CTX(as, "Not enough resources to start task",
                 {"taskId", task->GetIdString().data()});
-            blockedResources |= task->GetRequiredResourcesMask();
+            if (!PendingScanMemory || taskBytes <= GetSchedulingMemoryLimit()) {
+                blockedResources |= task->GetRequiredResourcesMask();
+            }
             continue;
         }
 
         // If task is out of queue limits then skip it.
-        // Allow resource over-usage if no tasks are running in this queue.
+        // Allow over-usage if no tasks are running in this queue.
         if (!queue->QueueLimit.HasResources(task->RequiredResources)
             && *queue->QueueCounters.InFlyTasks) {
             YDB_LOG_DEBUG_CTX(as, "Skipping queue due to exceeded limits",
@@ -807,6 +856,7 @@ void TScheduler::AssignTask(TTaskPtr &task, const TActorSystem &as)
 
     if (forceUsage)
         queue->RealResourceUsage = Max(queue->RealResourceUsage, usage);
+    task->TypeLimit = task->Type == "build_index" ? IndexBuildLimit : nullptr;
     queue->InsertTask(task, Now);
 
     if (oldr != queue->RealResourceUsage)
@@ -842,8 +892,15 @@ TDuration TScheduler::EstimateTaskExecutionTime(TTaskPtr task)
     return TaskConfig(task->Type).ExecTime.GetAverage();
 }
 
-TVector<TTaskPtr> TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSystem &as)
+TVector<TTaskPtr> TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSystem &as,
+    std::optional<ui64> indexBuildMemoryLimit, std::optional<ui64> pendingScanMemory)
 {
+    if (pendingScanMemory) {
+        PendingScanMemory = *pendingScanMemory;
+    }
+    if (indexBuildMemoryLimit) {
+        IndexBuildLimit->Limit[NKikimrResourceBroker::MEMORY] = *indexBuildMemoryLimit;
+    }
     // Remove all tasks from queues.
     for (auto &entry : Tasks)
         entry.second->Queue->EraseTask(entry.second, false, Now);
@@ -874,6 +931,8 @@ TVector<TTaskPtr> TScheduler::Configure(const TResourceBrokerConfig &config, con
         TaskConfigs.emplace(taskConfig.Name, taskConfig);
     }
     Y_ABORT_UNLESS(TaskConfigs.contains(NLocalDb::UnknownTaskName), "task '%s' wasn't found in config", NLocalDb::UnknownTaskName.data());
+
+    TaskConfig("build_index").Queue->HasTypeMemoryLimit = true;
 
     TVector<TTaskPtr> rejected;
     for (auto &[_, task] : Tasks) {
@@ -967,19 +1026,24 @@ static TResourceBroker::TOpError MakeMemoryLimitError(ui64 taskId, const TIntrus
     return error;
 }
 
-void TResourceBroker::Configure(const TResourceBrokerConfig &config)
+void TResourceBroker::Configure(const TResourceBrokerConfig &config,
+    const TEvResourceBroker::TEvConfigure& request, TEvResourceBroker::TEvConfigureResult& result)
 {
     with_lock(Lock) {
         Config = config;
 
         Scheduler.UpdateTime(ActorSystem->Timestamp());
-        for (const auto &task : Scheduler.Configure(Config, *ActorSystem)) {
+        for (const auto &task : Scheduler.Configure(Config, *ActorSystem, request.IndexBuildMemoryLimit, request.PendingScanMemory)) {
             auto error = MakeMemoryLimitError(task->TaskId, task->Cookie, Scheduler.GetMemoryLimit(task->Type));
             ActorSystem->Send(task->Client, error.Release());
         }
         Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
             ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
         });
+        if (request.IndexBuildMemoryLimit) {
+            result.IndexBuildMemoryLimit = Scheduler.GetMemoryLimit("build_index");
+        }
+        result.PendingScanMemoryReady = Scheduler.HasPendingScanHeadroom();
     }
 }
 
@@ -1407,7 +1471,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     } else {
         response->Record.SetSuccess(true);
 
-        ResourceBroker->Configure(std::move(config));
+        ResourceBroker->Configure(config, *ev->Get(), *response);
     }
 
     YDB_LOG_CTX(ctx, success ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR, "TResourceBrokerActor::Handle TEvConfigure: configuration result",
@@ -1590,9 +1654,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue = config.AddQueues();
     queue->SetName("queue_build_index");
     queue->SetWeight(100);
-    queue->SetStrictMemoryLimit(true);
     queue->MutableLimit()->SetCpu(10);
-    queue->MutableLimit()->SetMemory(448_MB); // 512 MiB minus the pending-request pool.
 
     queue = config.AddQueues();
     queue->SetName("queue_ttl");

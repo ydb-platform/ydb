@@ -17,6 +17,9 @@ TString HumanReadableBytes(std::optional<ui64> bytes);
 struct TResourceBrokerConfig {
     ui64 LimitBytes = 0;
     TMap<TString, ui64> QueueLimits;
+    TString IndexBuildQueue = "queue_build_index";
+    ui64 IndexBuildMemoryLimit = 0;
+    ui64 PendingScanMemory = 0;
 
     auto operator<=>(const TResourceBrokerConfig&) const = default;
 
@@ -35,6 +38,7 @@ NActors::IActor* CreateMemoryController(
     TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
     const NKikimrConfig::TMemoryControllerConfig& config,
     const TResourceBrokerConfig& resourceBrokerSelfConfig,
-    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+    bool resourceBrokerEnabled = true);
 
 }

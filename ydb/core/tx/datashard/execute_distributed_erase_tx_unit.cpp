@@ -52,18 +52,28 @@ public:
         TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
         THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 
-        if (eraseTx->HasDependents()) {
+        if (!eraseTx->HasDependencies()) {
+            // Main table transaction. It may have no dependents at all when the
+            // expired rows don't map to any index table keys (e.g. rows with
+            // NULL vectors for a vector index), in which case it still erases
+            // all confirmed rows.
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
-            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), mvccVersion, op->GetGlobalTxId(),
+            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), nullptr, mvccVersion, op->GetGlobalTxId(),
                     &userDb, &groupProvider, changeCollector.Get()))
             {
                 return EExecutionStatus::Restart;
             }
-        } else if (eraseTx->HasDependencies()) {
+        } else {
             THashMap<ui64, TDynBitMap> presentRows;
+            THashMap<ui64, TVector<ui32>> mainRowIndexes;
             for (const auto& dependency : eraseTx->GetDependencies()) {
                 Y_ENSURE(!presentRows.contains(dependency.GetShardId()));
                 presentRows.emplace(dependency.GetShardId(), DeserializeBitMap<TDynBitMap>(dependency.GetPresentRows()));
+
+                if (dependency.MainRowIndexesSize()) {
+                    const auto& indexes = dependency.GetMainRowIndexes();
+                    mainRowIndexes.emplace(dependency.GetShardId(), TVector<ui32>(indexes.begin(), indexes.end()));
+                }
             }
 
             for (const auto& [_, readSets] : op->InReadSets()) {
@@ -73,15 +83,14 @@ public:
                     Y_ENSURE(presentRows.contains(rs.Origin));
 
                     auto confirmedRows = DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows());
-                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, mvccVersion, op->GetGlobalTxId(),
-                            &userDb, &groupProvider, changeCollector.Get()))
+                    const TVector<ui32>* rowIndexes = mainRowIndexes.FindPtr(rs.Origin);
+                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, rowIndexes, mvccVersion,
+                            op->GetGlobalTxId(), &userDb, &groupProvider, changeCollector.Get()))
                     {
                         return EExecutionStatus::Restart;
                     }
                 }
             }
-        } else {
-            Y_ENSURE(false, "Invalid distributed erase tx: " << eraseTx->GetBody().ShortDebugString());
         }
 
         if (!userDb.GetVolatileReadDependencies().empty()) {
@@ -117,7 +126,8 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-            const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TRowVersion& mvccVersion,
+            const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TVector<ui32>* mainRowIndexes,
+            const TRowVersion& mvccVersion,
             ui64 globalTxId,
             TDataShardUserDb* userDb,
             TDataShardChangeGroupProvider* groupProvider,
@@ -139,7 +149,10 @@ public:
         bool pageFault = false;
         bool commitAdded = false;
         Y_FOR_EACH_BIT(i, presentRows) {
-            if (!confirmedRows.Test(i)) {
+            const ui32 mainRow = mainRowIndexes
+                ? mainRowIndexes->at(row)
+                : static_cast<ui32>(i);
+            if (!confirmedRows.Test(mainRow)) {
                 ++row;
                 continue;
             }

@@ -742,6 +742,11 @@ message TDistributedEraseTransaction {
     message TDependency {
         optional uint64 ShardId = 1;
         optional bytes PresentRows = 2; // bitmap
+        // Main table row index for every key in the erase request, in the key
+        // order. When empty, index table keys are treated as 1:1 to main keys.
+        // Vector indexes need it because one main table row may produce
+        // multiple posting keys (one per resolved cluster).
+        repeated uint32 MainRowIndexes = 3;
     }
 
     optional TEvEraseRowsRequest EraseRowsRequest = 1;
@@ -1667,6 +1672,37 @@ message TEvConditionalEraseRowsRequest {
         repeated TKeyMap KeyMap = 4; // sorted
     };
 
+    // A vector index whose posting table rows have to be erased together with
+    // the expired main table rows. Unlike a regular index, the posting table key
+    // starts with the resolved cluster id, so the datashard has to resolve the
+    // vector column through the level table before it can compute the keys.
+    message TVectorIndexDescription {
+        optional uint64 OwnerId = 1;
+        optional uint64 PathId = 2;        // indexImplPostingTable
+        optional uint64 SchemaVersion = 3;
+
+        // Posting table key columns (except __ydb_parent) mapped to the main
+        // table columns, in the posting key order.
+        repeated TIndexDescription.TKeyMap KeyMap = 4;
+
+        // Column ids of __ydb_parent in the posting table and of the embedding
+        // column and the prefix columns in the main table.
+        optional uint32 ParentColumnId = 5;
+        optional uint32 EmbeddingColumnId = 6;
+        repeated uint32 PrefixColumnIds = 7;
+
+        // Prefix column names in the index key order. Empty for a non-prefixed index.
+        repeated string PrefixColumnNames = 8;
+
+        // Fully qualified paths of the level and prefix tables.
+        optional string LevelTablePath = 9;
+        optional string PrefixTablePath = 10;
+
+        optional Ydb.Table.VectorIndexSettings Settings = 11;
+        optional uint32 OverlapClusters = 12;
+        optional double OverlapRatio = 13;
+    };
+
     message TLimits {
         optional uint32 BatchMaxBytes = 1 [default = 512000];
         optional uint32 BatchMinKeys = 2 [default = 1000];
@@ -1678,6 +1714,7 @@ message TEvConditionalEraseRowsRequest {
     repeated TIndexDescription Indexes = 4;
     optional TLimits Limits = 5;
     optional string DatabaseName = 6;
+    repeated TVectorIndexDescription VectorIndexes = 7;
 
     oneof Condition {
         TExpirationCondition Expiration = 2;

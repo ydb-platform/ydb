@@ -395,9 +395,11 @@ public:
     explicit TIndexedCondEraseScan(
             TDataShard* ds, const TActorId& replyTo,
             const TString& databaseName, const TTableId& tableId, ui64 txId,
-            THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
+            THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes,
+            TVectorIndexes vectorIndexes)
         : TCondEraseScan(ds, replyTo, databaseName, tableId, txId, std::move(condition), limits)
         , Indexes(std::move(indexes))
+        , VectorIndexes(std::move(vectorIndexes))
     {
     }
 
@@ -411,20 +413,34 @@ protected:
             keys.insert(key.Tag);
         }
 
+        auto addColumn = [&](ui32 mainColumnId) {
+            if (keys.contains(mainColumnId)) {
+                return;
+            }
+
+            const TColInfo* col = scheme->ColInfo(mainColumnId);
+            Y_ENSURE(col);
+            Y_ENSURE(col->Tag == mainColumnId);
+
+            keyOrder.emplace_back().Tag = col->Tag;
+            keys.insert(col->Tag);
+        };
+
         for (const auto& [_, keyMap] : Indexes) {
             for (const auto& [indexColumnId, mainColumnId] : keyMap) {
                 Y_UNUSED(indexColumnId);
+                addColumn(mainColumnId);
+            }
+        }
 
-                if (keys.contains(mainColumnId)) {
-                    continue;
-                }
+        for (const auto& index : VectorIndexes) {
+            if (!index.EmbeddingColumnId) {
+                continue;
+            }
 
-                const TColInfo* col = scheme->ColInfo(mainColumnId);
-                Y_ENSURE(col);
-                Y_ENSURE(col->Tag == mainColumnId);
-
-                keyOrder.emplace_back().Tag = col->Tag;
-                keys.insert(col->Tag);
+            addColumn(index.EmbeddingColumnId);
+            for (const ui32 columnId : index.PrefixColumnIds) {
+                addColumn(columnId);
             }
         }
 
@@ -433,7 +449,8 @@ protected:
 
     TActorId CreateEraser() override {
         Y_ENSURE(!Eraser);
-        Eraser = this->Register(CreateDistributedEraser(this->SelfId(), DatabaseName, TableId, Indexes));
+        Eraser = this->Register(CreateDistributedEraser(
+            this->SelfId(), DatabaseName, TableId, Indexes, VectorIndexes));
         return Eraser;
     }
 
@@ -447,6 +464,7 @@ protected:
 
 private:
     const TIndexes Indexes;
+    const TVectorIndexes VectorIndexes;
 
     TActorId Eraser;
 
@@ -454,15 +472,16 @@ private:
 
 IScan* CreateCondEraseScan(
         TDataShard* ds, const TActorId& replyTo, const TString& databaseName, const TTableId& tableId, ui64 txId,
-        THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
+        THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes, TVectorIndexes vectorIndexes)
 {
     Y_ENSURE(ds);
     Y_ENSURE(condition.Get());
 
-    if (!indexes) {
+    if (!indexes && vectorIndexes.empty()) {
         return new TCondEraseScan(ds, replyTo, databaseName, tableId, txId, std::move(condition), limits);
     } else {
-        return new TIndexedCondEraseScan(ds, replyTo, databaseName, tableId, txId, std::move(condition), limits, std::move(indexes));
+        return new TIndexedCondEraseScan(ds, replyTo, databaseName, tableId, txId, std::move(condition), limits,
+            std::move(indexes), std::move(vectorIndexes));
     }
 }
 
@@ -479,6 +498,34 @@ static TIndexes GetIndexes(const NKikimrTxDataShard::TEvConditionalEraseRowsRequ
         }
 
         result.emplace(TTableId(index.GetOwnerId(), index.GetPathId(), index.GetSchemaVersion()), std::move(keyMap));
+    }
+
+    return result;
+}
+
+static TVectorIndexes GetVectorIndexes(const NKikimrTxDataShard::TEvConditionalEraseRowsRequest& record) {
+    TVectorIndexes result;
+    result.reserve(record.VectorIndexesSize());
+
+    for (const auto& index : record.GetVectorIndexes()) {
+        TVectorIndexDescription description;
+        description.TableId = TTableId(index.GetOwnerId(), index.GetPathId(), index.GetSchemaVersion());
+        description.ParentColumnId = index.GetParentColumnId();
+        description.EmbeddingColumnId = index.GetEmbeddingColumnId();
+        description.PrefixColumnIds.assign(index.GetPrefixColumnIds().begin(), index.GetPrefixColumnIds().end());
+        description.PrefixColumnNames.assign(index.GetPrefixColumnNames().begin(), index.GetPrefixColumnNames().end());
+        description.LevelTablePath = index.GetLevelTablePath();
+        description.PrefixTablePath = index.GetPrefixTablePath();
+        description.Settings = index.GetSettings();
+        description.OverlapClusters = index.GetOverlapClusters();
+        description.OverlapRatio = index.GetOverlapRatio();
+
+        description.KeyMap.reserve(index.KeyMapSize());
+        for (const auto& kv : index.GetKeyMap()) {
+            description.KeyMap.emplace_back(kv.GetIndexColumnId(), kv.GetMainColumnId());
+        }
+
+        result.push_back(std::move(description));
     }
 
     return result;
@@ -609,7 +656,8 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
                         localTxId = NextTieBreakerIndex++;
                         const auto tableId = TTableId(PathOwnerId, localPathId, record.GetSchemaVersion());
                         scan.Reset(CreateCondEraseScan(this, ev->Sender, record.GetDatabaseName(), tableId, localTxId,
-                            THolder(CreateEraseRowsCondition(record)), record.GetLimits(), GetIndexes(record)));
+                            THolder(CreateEraseRowsCondition(record)), record.GetLimits(), GetIndexes(record),
+                            GetVectorIndexes(record)));
                     } else {
                         badRequest(error);
                     }

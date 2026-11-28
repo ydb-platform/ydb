@@ -7,6 +7,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx.h>
+#include <ydb/core/tx/datashard/build_index/vector_resolve_actor.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -19,6 +20,8 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
+
+#include <utility>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
@@ -126,6 +129,16 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             PresentRows.Set(row);
         }
 
+        // Adds a key that does not correspond to its own main table row, e.g. a
+        // posting table key of a vector index: one row may resolve to several
+        // clusters and thus to several keys.
+        void AddMapped(TString&& key, ui32 mainRow) {
+            const size_t keyIndex = Keys.size();
+            Keys.emplace_back(std::move(key));
+            PresentRows.Set(keyIndex);
+            MainRowIndexes.push_back(mainRow);
+        }
+
         TVector<TString>& GetKeys() {
             return Keys;
         }
@@ -134,10 +147,28 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             return PresentRows;
         }
 
+        const TVector<ui32>& GetMainRowIndexes() const {
+            return MainRowIndexes;
+        }
+
     private:
         TVector<TString> Keys;
         TDynBitMap PresentRows;
+        TVector<ui32> MainRowIndexes;
     }; // TShardKeys
+
+    // Resolution of main table rows into posting clusters for one vector index.
+    struct TVectorResolveState {
+        size_t Index = 0;
+        NActors::TActorId ResolverId;
+        ui64 RequestId = 0;
+        bool InFlight = false;
+        TVector<TString> Vectors;
+        TVector<TSerializedCellVec> Prefixes;
+        TVector<TVector<NTableIndex::NKMeans::TClusterId>> Clusters;
+        // Main table key cells in the posting key order, per request row.
+        TVector<TSerializedCellVec> MainKeys;
+    };
 
     void Reply(TEvResponse::EStatus status = TEvResponse::OK, const TString& error = TString()) {
         if (status == TEvResponse::OK) {
@@ -335,6 +366,9 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         for (const auto& [tableId, _] : Indexes) {
             request->ResultSet.emplace_back(MakeNavigateEntry(tableId));
         }
+        for (const auto& index : VectorIndexes) {
+            request->ResultSet.emplace_back(MakeNavigateEntry(index.TableId));
+        }
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolveTables);
@@ -360,7 +394,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             return;
         }
 
-        if (!CheckEntriesCount(request, marker, 1 /* main */ + Indexes.size())) {
+        if (!CheckEntriesCount(request, marker, 1 /* main */ + Indexes.size() + VectorIndexes.size())) {
             return;
         }
 
@@ -408,13 +442,28 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                         << ", state# " << static_cast<ui32>(index.GetState()));
                 }
 
+                // Keep in sync with TSchemeShard::TTxRunConditionalErase::FillVectorIndexes:
+                // a vector index is only erased once its level table is complete
+                // (Ready or WriteOnly), not while it is still being built.
+                if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+                    && index.GetState() != NKikimrSchemeOp::EIndexStateReady
+                    && index.GetState() != NKikimrSchemeOp::EIndexStateWriteOnly)
+                {
+                    continue;
+                }
+
+                // Indexes that do not support TTL are not erased here.
+                if (!NTableIndex::DoesIndexSupportTTL(index.GetType())) {
+                    continue;
+                }
+
                 ++nIndexes;
             }
 
-            if (nIndexes != Indexes.size()) {
+            if (nIndexes != Indexes.size() + VectorIndexes.size()) {
                 return SchemeError(TStringBuilder() << "Indexes count mismatch"
-                    << ": expected# " << Indexes.size()
-                    << ", actual# " << entry.Indexes.size()
+                    << ": expected# " << Indexes.size() + VectorIndexes.size()
+                    << ", actual# " << nIndexes
                     << ", entry# " << entry.ToString());
             }
 
@@ -430,25 +479,27 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 return;
             }
 
-            if (!Indexes.contains(entry.TableId)) {
-                return SchemeError(TStringBuilder() << "Unknown index"
-                    << " (probably schema version mismatch)"
-                    << ": tableId# " << entry.TableId
-                    << ", path# " << JoinPath(entry.Path));
-            }
-
             if (!indexesSeen.insert(entry.TableId).second) {
                 return SchemeError(TStringBuilder() << "Duplicate index"
                     << ": tableId# " << entry.TableId
                     << ", path# " << JoinPath(entry.Path));
             }
 
-            AddTableInfo(entry, Indexes.at(entry.TableId));
+            if (auto it = Indexes.find(entry.TableId); it != Indexes.end()) {
+                AddTableInfo(entry, it->second);
+            } else if (auto it = VectorIndexByTableId.find(entry.TableId); it != VectorIndexByTableId.end()) {
+                AddTableInfo(entry, VectorIndexes.at(it->second).KeyMap);
+            } else {
+                return SchemeError(TStringBuilder() << "Unknown index"
+                    << " (probably schema version mismatch)"
+                    << ": tableId# " << entry.TableId
+                    << ", path# " << JoinPath(entry.Path));
+            }
         }
 
-        if (indexesSeen.size() != Indexes.size()) {
+        if (indexesSeen.size() != Indexes.size() + VectorIndexes.size()) {
             return SchemeError(TStringBuilder() << "Incomplete indexes"
-                << ": expected# " << Indexes.size()
+                << ": expected# " << Indexes.size() + VectorIndexes.size()
                 << ", actual# " << indexesSeen.size());
         }
 
@@ -573,6 +624,8 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         YDB_LOG_DEBUG("[DistEraser] Handle TEvDataShard::TEvEraseRowsRequest",
             {"selfId", SelfId()});
 
+        Request = ev;
+
         const auto& record = ev->Get()->Record;
 
         switch (record.GetConditionCase()) {
@@ -581,6 +634,10 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         default:
             return BadRequest(TStringBuilder() << "Unknown condition"
                 << ": condition# " << static_cast<ui32>(record.GetConditionCase()));
+        }
+
+        if (!record.KeyColumnsSize()) {
+            return Reply(TEvResponse::OK);
         }
 
         THashMap<ui32, ui32> keyColumnIdToIdx;
@@ -600,16 +657,40 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 mainTableKeys.insert(id);
             }
 
-            for (const auto& id : record.GetKeyColumnIds()) {
-                if (mainTableKeys.contains(id)) {
-                    continue;
+            THashSet<ui32> seen;
+            auto addIndexColumn = [&](ui32 id) {
+                if (!mainTableKeys.contains(id) && seen.insert(id).second) {
+                    indexColumnIds.push_back(id);
                 }
+            };
 
-                indexColumnIds.push_back(id);
+            for (const auto& id : record.GetKeyColumnIds()) {
+                addIndexColumn(id);
+            }
+
+            // Vector index columns are needed both to check that the row has not
+            // changed since the scan and to resolve the row into posting clusters.
+            for (const auto& index : VectorIndexes) {
+                addIndexColumn(index.EmbeddingColumnId);
+                for (const ui32 id : index.PrefixColumnIds) {
+                    addIndexColumn(id);
+                }
+            }
+
+            for (const ui32 id : indexColumnIds) {
+                if (!keyColumnIdToIdx.contains(id)) {
+                    return BadRequest(TStringBuilder() << "Index column is absent"
+                        << ": columnId# " << id);
+                }
             }
         }
 
-        THashMap<TTableId, THashMap<ui64, TShardKeys>> keys; // table to shard to keys
+        Keys.clear();
+        VectorResolveStates.assign(VectorIndexes.size(), TVectorResolveState());
+        for (size_t i = 0; i < VectorIndexes.size(); ++i) {
+            VectorResolveStates[i].Index = i;
+        }
+
         TVector<TString> indexColumnValues(Reserve(record.KeyColumnsSize()));
         for (ui32 i = 0; i < record.KeyColumnsSize(); ++i) {
             const auto& serializedKey = record.GetKeyColumns(i);
@@ -621,6 +702,10 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             }
 
             for (const auto& [tableId, info] : TableInfos) {
+                if (VectorIndexByTableId.contains(tableId)) {
+                    continue;
+                }
+
                 TVector<TCell> cells(Reserve(info.GetKeyMap().size()));
                 for (const auto& [_, id] : info.GetKeyMap()) {
                     if (!keyColumnIdToIdx.contains(id)) {
@@ -634,40 +719,78 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
                 const ui64 shardId = GetShardId(TTableRange(cells), info.GetKeyDesc());
 
-                auto it = keys[tableId].find(shardId);
-                if (it == keys[tableId].end()) {
-                    it = keys[tableId].emplace(shardId, TShardKeys()).first;
+                auto it = Keys[tableId].find(shardId);
+                if (it == Keys[tableId].end()) {
+                    it = Keys[tableId].emplace(shardId, TShardKeys()).first;
                 }
 
                 it->second.Add(TSerializedCellVec::Serialize(cells), i);
-
-                if (tableId != MainTableId) {
-                    continue;
-                }
-
-                TVector<TCell> indexCells(Reserve(indexColumnIds.size()));
-                for (const auto& id : indexColumnIds) {
-                    Y_ENSURE(keyColumnIdToIdx.contains(id));
-                    indexCells.push_back(keyCells.GetCells()[keyColumnIdToIdx.at(id)]);
-                }
-
-                indexColumnValues.push_back(TSerializedCellVec::Serialize(indexCells));
             }
+
+            for (auto& state : VectorResolveStates) {
+                const auto& index = VectorIndexes[state.Index];
+
+                TVector<TCell> mainCells(Reserve(index.KeyMap.size()));
+                for (const auto& [_, id] : index.KeyMap) {
+                    if (!keyColumnIdToIdx.contains(id)) {
+                        return BadRequest(TStringBuilder() << "Key column is absent"
+                            << ": tableId# " << index.TableId
+                            << ", columnId# " << id);
+                    }
+
+                    mainCells.push_back(keyCells.GetCells()[keyColumnIdToIdx.at(id)]);
+                }
+                state.MainKeys.emplace_back(mainCells);
+
+                const TCell& embedding = keyCells.GetCells()[keyColumnIdToIdx.at(index.EmbeddingColumnId)];
+                if (embedding.IsNull() || !embedding.Size()) {
+                    state.Vectors.emplace_back();
+                } else {
+                    state.Vectors.emplace_back(embedding.Data(), embedding.Size());
+                }
+
+                if (!index.PrefixColumnIds.empty()) {
+                    TVector<TCell> prefixCells(Reserve(index.PrefixColumnIds.size()));
+                    for (const ui32 id : index.PrefixColumnIds) {
+                        prefixCells.push_back(keyCells.GetCells()[keyColumnIdToIdx.at(id)]);
+                    }
+                    state.Prefixes.emplace_back(prefixCells);
+                }
+            }
+
+            TVector<TCell> indexCells(Reserve(indexColumnIds.size()));
+            for (const ui32 id : indexColumnIds) {
+                indexCells.push_back(keyCells.GetCells()[keyColumnIdToIdx.at(id)]);
+            }
+            indexColumnValues.push_back(TSerializedCellVec::Serialize(indexCells));
         }
 
-        Y_ENSURE(keys.contains(MainTableId));
-        if (keys.at(MainTableId).size() > 1) {
+        Y_ENSURE(Keys.contains(MainTableId));
+        if (Keys.at(MainTableId).size() > 1) {
             return ExecError(TStringBuilder() << "Too many main table's shards"
                 << ": tableId# " << MainTableId
                 << ", expected# " << 1
-                << ", actual# " << keys.at(MainTableId).size());
+                << ", actual# " << Keys.at(MainTableId).size());
         }
 
-        auto getDependents = [&keys](const TTableId& mainTableId) {
+        IndexColumnIds = std::move(indexColumnIds);
+        IndexColumnValues = std::move(indexColumnValues);
+
+        if (VectorResolveStates.empty()) {
+            return ProposeKeys();
+        }
+
+        return StartVectorResolve();
+    }
+
+    void ProposeKeys() {
+        const auto& record = Request->Get()->Record;
+
+        auto getDependents = [this]() {
             THashSet<ui64> dependents;
 
-            for (const auto& [tableId, shards] : keys) {
-                if (tableId != mainTableId) {
+            for (const auto& [tableId, shards] : Keys) {
+                if (tableId != MainTableId) {
                     for (const auto& [shardId, _] : shards) {
                         Y_DEBUG_ABORT_UNLESS(!dependents.contains(shardId));
                         dependents.insert(shardId);
@@ -678,9 +801,10 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             return dependents;
         };
 
-        for (auto& [tableId, data] : keys) {
+        for (auto& [tableId, data] : Keys) {
             Y_ENSURE(TableInfos.contains(tableId));
             const auto& keyMap = TableInfos.at(tableId).GetKeyMap();
+            const auto vectorIt = VectorIndexByTableId.find(tableId);
 
             for (auto& kv : data) {
                 const ui64 shardId = kv.first;
@@ -691,6 +815,10 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 auto& request = *tx.MutableEraseRowsRequest();
                 request.SetTableId(tableId.PathId.LocalPathId);
                 request.SetSchemaVersion(tableId.SchemaVersion);
+
+                if (vectorIt != VectorIndexByTableId.end()) {
+                    request.AddKeyColumnIds(VectorIndexes.at(vectorIt->second).ParentColumnId);
+                }
 
                 for (const auto& [id, _] : keyMap) {
                     request.AddKeyColumnIds(id);
@@ -713,24 +841,27 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 }
 
                 if (tableId == MainTableId) {
-                    for (const ui64 shardId : getDependents(MainTableId)) {
+                    for (const ui64 shardId : getDependents()) {
                         auto& dependents = *tx.AddDependents();
                         dependents.SetShardId(shardId);
                     }
 
-                    for (const auto& id : indexColumnIds) {
+                    for (const auto& id : IndexColumnIds) {
                         tx.AddIndexColumnIds(id);
                     }
 
-                    for (auto& value : indexColumnValues) {
+                    for (auto& value : IndexColumnValues) {
                         tx.AddIndexColumns(std::move(value));
                     }
                 } else {
-                    Y_ENSURE(keys.contains(MainTableId));
+                    Y_ENSURE(Keys.contains(MainTableId));
 
                     auto& dependency = *tx.AddDependencies();
-                    dependency.SetShardId(keys.at(MainTableId).begin()->first);
+                    dependency.SetShardId(Keys.at(MainTableId).begin()->first);
                     dependency.SetPresentRows(SerializeBitMap(shardKeys.GetPresentRows()));
+                    for (const ui32 mainRow : shardKeys.GetMainRowIndexes()) {
+                        dependency.AddMainRowIndexes(mainRow);
+                    }
                 }
 
                 YDB_LOG_DEBUG("[DistEraser] Propose tx",
@@ -756,6 +887,148 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         }
 
         Become(&TThis::StatePropose);
+    }
+
+    void StartVectorResolve() {
+        VectorResolvesRemaining = 0;
+
+        for (const auto& index : VectorIndexes) {
+            const auto& info = TableInfos.at(index.TableId);
+            if (info.GetKeyMap().size() + 1 != info.GetKeyDesc()->KeyColumnTypes.size()) {
+                return ExecError(TStringBuilder() << "Unexpected vector index key layout"
+                    << ": tableId# " << index.TableId
+                    << ", mappedKeys# " << info.GetKeyMap().size()
+                    << ", keyColumns# " << info.GetKeyDesc()->KeyColumnTypes.size());
+            }
+        }
+
+        for (auto& state : VectorResolveStates) {
+            const auto& index = VectorIndexes[state.Index];
+
+            bool hasVectors = false;
+            for (const auto& vector : state.Vectors) {
+                if (!vector.empty()) {
+                    hasVectors = true;
+                    break;
+                }
+            }
+
+            state.Clusters.resize(state.MainKeys.size());
+            if (!hasVectors) {
+                continue;
+            }
+
+            NBuildIndex::TVectorResolveSettings settings;
+            settings.DatabaseName = DatabaseName;
+            settings.LevelTablePath = index.LevelTablePath;
+            settings.PrefixTablePath = index.PrefixTablePath;
+            settings.PrefixColumns = index.PrefixColumnNames;
+            settings.IndexSettings = index.Settings;
+            settings.OverlapClusters = index.OverlapClusters;
+            settings.OverlapRatio = index.OverlapRatio;
+            // TTL conditional erase has no snapshot: the main table is scanned
+            // at the current state and the erase is re-validated by the main
+            // transaction. Snapshot in the resolver only applies to level table
+            // reads, while the prefix table is always read from its latest
+            // version (it is mutable: new prefixes are inserted on demand), so
+            // a snapshot would not make prefix resolution consistent.
+            settings.Snapshot = Nothing();
+
+            state.ResolverId = RegisterWithSameMailbox(NBuildIndex::CreateVectorResolveActor(settings));
+            state.RequestId = NextVectorResolveRequestId++;
+
+            auto request = MakeHolder<NBuildIndex::TEvVectorResolveRequest>();
+            request->RequestId = state.RequestId;
+            request->Vectors = state.Vectors;
+            request->Prefixes = state.Prefixes;
+
+            YDB_LOG_DEBUG("[DistEraser] Resolve vector index",
+                {"selfId", SelfId()},
+                {"tableId", index.TableId.PathId.LocalPathId},
+                {"rows", state.Vectors.size()});
+
+            state.InFlight = true;
+            ++VectorResolvesRemaining;
+            Send(state.ResolverId, request.Release());
+        }
+
+        if (!VectorResolvesRemaining) {
+            BuildVectorKeys();
+            return ProposeKeys();
+        }
+
+        Become(&TThis::StateResolveVectors);
+    }
+
+    void HandleVectorResolve(NBuildIndex::TEvVectorResolveResponse::TPtr& ev) {
+        if (Cancelled) {
+            return;
+        }
+
+        auto* msg = ev->Get();
+
+        TVectorResolveState* state = nullptr;
+        for (auto& candidate : VectorResolveStates) {
+            if (candidate.InFlight && candidate.RequestId == msg->RequestId) {
+                state = &candidate;
+                break;
+            }
+        }
+
+        if (!state) {
+            return;
+        }
+
+        state->InFlight = false;
+        if (!msg->Success) {
+            return ExecError(TStringBuilder() << "Cannot resolve vector index rows"
+                << ": index# " << VectorIndexes[state->Index].TableId
+                << ", issues# " << msg->Issues.ToString());
+        }
+
+        if (msg->Clusters.size() != state->MainKeys.size()) {
+            return ExecError(TStringBuilder() << "Vector index rows count mismatch"
+                << ": index# " << VectorIndexes[state->Index].TableId
+                << ", expected# " << state->MainKeys.size()
+                << ", actual# " << msg->Clusters.size());
+        }
+
+        state->Clusters = std::move(msg->Clusters);
+        if (--VectorResolvesRemaining) {
+            return;
+        }
+
+        BuildVectorKeys();
+        return ProposeKeys();
+    }
+
+    void BuildVectorKeys() {
+        for (const auto& state : VectorResolveStates) {
+            const auto& index = VectorIndexes[state.Index];
+            const auto& info = TableInfos.at(index.TableId);
+
+            Y_ENSURE(state.Clusters.size() == state.MainKeys.size());
+
+            for (size_t row = 0; row < state.Clusters.size(); ++row) {
+                const auto& mainKey = state.MainKeys[row];
+                for (const auto cluster : state.Clusters[row]) {
+                    TVector<TCell> cells(Reserve(1 + mainKey.GetCells().size()));
+                    cells.push_back(TCell::Make(cluster));
+                    for (const auto& cell : mainKey.GetCells()) {
+                        cells.push_back(cell);
+                    }
+
+                    const ui64 shardId = GetShardId(TTableRange(cells), info.GetKeyDesc());
+
+                    auto it = Keys[index.TableId].find(shardId);
+                    if (it == Keys[index.TableId].end()) {
+                        it = Keys[index.TableId].emplace(shardId, TShardKeys()).first;
+                    }
+
+                    it->second.AddMapped(TSerializedCellVec::Serialize(cells), static_cast<ui32>(row));
+                }
+            }
+        }
     }
 
     /// Propose
@@ -1045,6 +1318,12 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     void PassAway() override {
         Cancelled = true;
 
+        for (auto& state : VectorResolveStates) {
+            if (state.ResolverId) {
+                Send(std::exchange(state.ResolverId, TActorId()), new TEvents::TEvPoisonPill());
+            }
+        }
+
         if (ResolvingKeys) {
             return;
         }
@@ -1057,11 +1336,13 @@ public:
         return NKikimrServices::TActivity::DISTRIBUTED_ERASE_ROWS_ACTOR;
     }
 
-    TDistEraser(const TActorId& replyTo, const TString& databaseName, const TTableId& mainTableId, const TIndexes& indexes)
+    TDistEraser(const TActorId& replyTo, const TString& databaseName, const TTableId& mainTableId,
+            const TIndexes& indexes, const TVectorIndexes& vectorIndexes)
         : ReplyTo(replyTo)
         , DatabaseName(databaseName)
         , MainTableId(mainTableId)
         , Indexes(indexes)
+        , VectorIndexes(vectorIndexes)
         , Cancelled(false)
         , ResolvingKeys(false)
         , TxId(0)
@@ -1069,6 +1350,10 @@ public:
         , AggrMinStep(0)
         , AggrMaxStep(Max<ui64>())
     {
+        for (size_t i = 0; i < VectorIndexes.size(); ++i) {
+            Y_DEBUG_ABORT_UNLESS(!VectorIndexByTableId.contains(VectorIndexes[i].TableId));
+            VectorIndexByTableId.emplace(VectorIndexes[i].TableId, i);
+        }
     }
 
     void Bootstrap() {
@@ -1089,11 +1374,22 @@ public:
         }
     }
 
+    STATEFN(StateResolveVectors) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NBuildIndex::TEvVectorResolveResponse, HandleVectorResolve);
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
+        default:
+            return StatePrepareBase(ev);
+        }
+    }
+
 private:
     const TActorId ReplyTo;
     const TString DatabaseName;
     const TTableId MainTableId;
     const TIndexes Indexes;
+    const TVectorIndexes VectorIndexes;
+    THashMap<TTableId, size_t> VectorIndexByTableId;
 
     bool Cancelled;
     bool ResolvingKeys;
@@ -1104,6 +1400,14 @@ private:
 
     THashMap<TTableId, TTableInfo> TableInfos;
     TEvDataShard::TEvEraseRowsRequest::TPtr Request;
+
+    // Built while handling the request, completed by the vector resolution.
+    THashMap<TTableId, THashMap<ui64, TShardKeys>> Keys;
+    TVector<ui32> IndexColumnIds;
+    TVector<TString> IndexColumnValues;
+    TVector<TVectorResolveState> VectorResolveStates;
+    size_t VectorResolvesRemaining = 0;
+    ui64 NextVectorResolveRequestId = 1;
 
     THashSet<ui64> Shards;
     THashSet<ui64> PendingPrepare;
@@ -1116,8 +1420,8 @@ private:
 }; // TDistEraser
 
 IActor* CreateDistributedEraser(const TActorId& replyTo, const TString& databaseName,
-    const TTableId& mainTableId, const TIndexes& indexes) {
-    return new TDistEraser(replyTo, databaseName, mainTableId, indexes);
+    const TTableId& mainTableId, const TIndexes& indexes, const TVectorIndexes& vectorIndexes) {
+    return new TDistEraser(replyTo, databaseName, mainTableId, indexes, vectorIndexes);
 }
 
 } // NDataShard

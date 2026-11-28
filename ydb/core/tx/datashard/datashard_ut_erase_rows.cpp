@@ -1896,6 +1896,11 @@ tkey = 100, key = 4
         dependency.SetPresentRows(NDataShard::SerializeBitMap(TDynBitMap().Push(1)));
         DistributedEraseTx(server, sender, "/Root/table-1", txId++, tx,
             TProto::TEvProposeTxResult::BAD_REQUEST, "Present rows count mismatch");
+
+        dependency.SetPresentRows(NDataShard::SerializeBitMap(TDynBitMap().Push(1).Push(1)));
+        dependency.AddMainRowIndexes(0);
+        DistributedEraseTx(server, sender, "/Root/table-1", txId++, tx,
+            TProto::TEvProposeTxResult::BAD_REQUEST, "Key row indexes count mismatch");
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsCheckLimits) {

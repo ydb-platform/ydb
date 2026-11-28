@@ -782,6 +782,9 @@ namespace NTabletPipe {
 
                 auto msg = MakeHolder<TEvTabletPipe::TEvPush>(tabletId, Type, Sender, Buffer, cookie,
                     Buffer->GetSerializationInfo(), supportsDataInPayload);
+                if (auto* reservation = dynamic_cast<TEventMemoryReservation*>(Event.Get())) {
+                    msg->MemoryReservation = reservation->MemoryReservation;
+                }
 
                 if (SeqNo) {
                     msg->SetSeqNo(SeqNo);

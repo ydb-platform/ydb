@@ -2554,7 +2554,7 @@ void TMemoryControllerInitializer::InitializeServices(
 {
     auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider,
         Config.GetMemoryControllerConfig(), NKikimrConfigHelpers::CreateMemoryControllerResourceBrokerConfig(Config),
-        appData->Counters);
+        appData->Counters, ServicesMask.EnableResourceBroker);
     setup->LocalServices.emplace_back(
         NMemory::MakeMemoryControllerId(0),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->BatchPoolId)

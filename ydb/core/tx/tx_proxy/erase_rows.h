@@ -1,5 +1,7 @@
 #pragma once
 
+#include "upload_memory_reservation.h"
+
 #include <ydb/core/tx/tx_proxy/defs.h>
 
 #include <ydb/core/util/backoff.h>
@@ -28,6 +30,7 @@ IActor* CreateEraseRowsInternal(const TActorId& sender,
                                 bool writeToPrivateTable = false,
                                 bool writeToIndexImplTable = false,
                                 ui64 cookie = 0,
-                                TBackoff backoff = TBackoff(0));
+                                TBackoff backoff = TBackoff(0),
+                                TUploadMemoryReservation memoryReservation = {});
 } // namespace NTxProxy
 } // namespace NKikimr

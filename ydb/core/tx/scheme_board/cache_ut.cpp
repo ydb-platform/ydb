@@ -580,6 +580,26 @@ void TCacheTest::TablePartitioningVersion() {
         UNIT_ASSERT_VALUES_EQUAL(resolve.KeyDescription->Partitioning->GetVersion(), v1);
     }
 
+    ui64 schemaBytes = 0;
+    {
+        auto request = MakeHolder<TNavigate>();
+        request->RetainSchemaMemory = [&](ui64 bytes) {
+            schemaBytes += bytes;
+            return std::shared_ptr<void>(nullptr, [&, bytes](void*) { schemaBytes -= bytes; });
+        };
+        auto& navigate = request->ResultSet.emplace_back();
+        navigate.Path = {"Root", "Table1"};
+        navigate.Operation = TNavigate::OpTable;
+        const auto edge = Context->AllocateEdgeActor();
+        Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, 0, 0, true);
+        auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
+        const auto& result = ev->Get()->Request->ResultSet.at(0);
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, TNavigate::EStatus::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(result.Columns.size(), 1);
+        UNIT_ASSERT_GE(schemaBytes, sizeof(TSysTables::TTableColumnInfo));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(schemaBytes, 0);
+
     // Split into two partitions: TablePartitionVersion must bump and the
     // resolved partitioning must carry the new version
     // Disable the split/merge part count limit check, it requires the source
@@ -613,6 +633,32 @@ void TCacheTest::TablePartitioningVersion() {
         UNIT_ASSERT(resolve.KeyDescription->Partitioning);
         UNIT_ASSERT_VALUES_EQUAL(resolve.KeyDescription->Partitioning->GetVersion(), v2);
     }
+
+    // A point below the split copies the first partition and its boundary key.
+    ui64 charged = 0;
+    {
+        auto request = MakeHolder<TResolve>();
+        request->RetainPartitioningMemory = [&](ui64 bytes) {
+            charged += bytes;
+            return std::shared_ptr<void>(nullptr, [&, bytes](void*) { charged -= bytes; });
+        };
+        const TVector<TCell> key{TCell::Make(ui32(2))};
+        request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(entry.TableId, TTableRange(key),
+            TKeyDesc::ERowOperation::Read, TVector<NScheme::TTypeInfo>{NScheme::TTypeInfo(NScheme::NTypeIds::Uint32)},
+            TVector<TKeyDesc::TColumnOp>{}));
+        const auto edge = Context->AllocateEdgeActor();
+        Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvResolveKeySet(request.Release()), 0, 0, 0, true);
+        auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvResolveKeySetResult>(edge);
+        const auto& result = ev->Get()->Request->ResultSet.at(0);
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, TResolve::EStatus::OkData);
+        const auto& partitions = result.KeyDescription->GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        const auto& boundary = partitions[0].Range->EndKeyPrefix;
+        UNIT_ASSERT(!boundary.GetCells().empty());
+        UNIT_ASSERT_GE(charged, sizeof(TPartitioning) + sizeof(TKeyDesc::TPartitionInfo)
+            + boundary.GetCells().size() * sizeof(TCell) + boundary.GetBuffer().size());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(charged, 0);
 }
 
 void TCacheTest::TableDescription() {

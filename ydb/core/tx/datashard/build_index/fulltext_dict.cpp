@@ -698,7 +698,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
             TabletID(), userTable, request, ev->Sender, std::move(response)
         );
 
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, request.GetReadShadowData() ? userTable.ShadowTid : userTable.LocalTid);
+        StartScan<TEvDataShard::TEvBuildFulltextDictResponse>(this, std::move(scan), id, seqNo, rowVersion, request.GetReadShadowData() ? userTable.ShadowTid : userTable.LocalTid, ev->Sender);
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvBuildFulltextDictResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TBuildFulltextDictScan");
     }

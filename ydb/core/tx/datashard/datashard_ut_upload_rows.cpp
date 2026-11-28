@@ -130,6 +130,66 @@ static void DoUploadRows(
 } // namespace
 
 Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
+    Y_UNIT_TEST(SerializationReservationTracksIndividualRequestCopies) {
+        ui64 retainedBytes = 0;
+        ui64 minimumRetained = Max<ui64>();
+        const auto retain = [&](ui64 bytes) {
+            retainedBytes += bytes;
+            return std::shared_ptr<void>(new ui64(bytes), [&](void* value) {
+                const auto held = static_cast<ui64*>(value);
+                retainedBytes -= *held;
+                minimumRetained = Min(minimumRetained, retainedBytes);
+                delete held;
+            });
+        };
+        auto batch = retain(64_KB);
+        auto attempt = std::make_shared<int>();
+        std::weak_ptr<int> attemptLifetime = attempt;
+        NTxProxy::TUploadMemoryReservation reservation(std::move(attempt), std::move(batch), retain);
+        const ui64 routingBytes = 128_KB;
+        auto routing = reservation.RetainRoutingMemory(routingBytes);
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + routingBytes);
+        NKikimrTxDataShard::TEvUploadRowsRequest record;
+        record.AddRows()->SetValueColumns(TString(16_KB, 'x'));
+        const ui64 requestBytes = record.SpaceUsedLong() + record.ByteSizeLong() + 4_KB;
+
+        auto firstOverhead = reservation.RetainRequestOverhead();
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + routingBytes + 4_KB);
+        auto shardOne = reservation.RetainRequest(record, std::move(firstOverhead));
+        auto shardTwo = reservation.RetainRequest(record, reservation.RetainRequestOverhead());
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + 2 * requestBytes + routingBytes);
+        UNIT_ASSERT_VALUES_EQUAL(minimumRetained, Max<ui64>());
+        routing.reset();
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + 2 * requestBytes);
+
+        auto retry = reservation.RetainRequest(record, reservation.RetainRequestOverhead());
+        reservation = {};
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 3 * requestBytes);
+        UNIT_ASSERT(!attemptLifetime.expired());
+        shardTwo.reset();
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 2 * requestBytes);
+        shardOne.reset();
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, requestBytes);
+        retry.reset();
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 0);
+        UNIT_ASSERT(attemptLifetime.expired());
+    }
+
+    Y_UNIT_TEST(ShardRequestKeepsFallbackReservationAlive) {
+        auto fallback = std::make_shared<int>();
+        auto attempt = std::make_shared<int>();
+        std::weak_ptr<int> fallbackLifetime = fallback;
+        std::weak_ptr<int> attemptLifetime = attempt;
+        NTxProxy::TUploadMemoryReservation reservation(std::move(attempt), std::move(fallback), {});
+        NKikimrTxDataShard::TEvUploadRowsRequest record;
+        auto request = reservation.RetainRequest(record, reservation.RetainRequestOverhead());
+        reservation = {};
+        UNIT_ASSERT(!fallbackLifetime.expired());
+        UNIT_ASSERT(!attemptLifetime.expired());
+        request.reset();
+        UNIT_ASSERT(fallbackLifetime.expired());
+        UNIT_ASSERT(attemptLifetime.expired());
+    }
 
     Y_UNIT_TEST(TestUploadRows) {
         TPortManager pm;

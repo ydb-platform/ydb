@@ -88,6 +88,7 @@ SRCS(
     tablet.h
     tablet_history_cutter.h
     tablet_killer.cpp
+    tablet_pipe.cpp
     tablet_pipe.h
     tablet_pipecache.h
     tablet_resolver.h

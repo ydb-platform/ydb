@@ -417,6 +417,9 @@ struct TSchemeCacheNavigate {
 
     using TResultSet = TVector<TEntry>;
 
+    // These reservations outlive the schema copies in the result set.
+    TVector<std::shared_ptr<void>> SchemaMemory;
+    std::function<std::shared_ptr<void>(ui64)> RetainSchemaMemory;
     TResultSet ResultSet;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString DatabaseName;
@@ -484,6 +487,7 @@ struct TSchemeCacheRequest {
 
     using TResultSet = TVector<TEntry>;
 
+    std::function<std::shared_ptr<void>(ui64)> RetainPartitioningMemory;
     TResultSet ResultSet;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString DatabaseName;

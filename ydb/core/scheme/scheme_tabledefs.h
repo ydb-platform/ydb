@@ -735,8 +735,9 @@ public:
 
     using TCPtr = std::shared_ptr<const TPartitioning>;
 
-    explicit TPartitioning(TVector<TKeyDesc::TPartitionInfo>&& partitions, ui64 version = 0)
-        : Partitions(std::move(partitions))
+    explicit TPartitioning(TVector<TKeyDesc::TPartitionInfo>&& partitions, ui64 version = 0, std::shared_ptr<void> reservation = {})
+        : Reservation(std::move(reservation))
+        , Partitions(std::move(partitions))
         , Version(version) {}
 
     explicit TPartitioning(const TVector<TKeyDesc::TPartitionInfo>& partitions, ui64 version = 0)
@@ -766,6 +767,7 @@ public:
     std::vector<TIntersection> GetIntersectionWithRange(const std::vector<NScheme::TTypeInfo>& keyColumnTypes, const TTableRange& range) const;
 
 private:
+    std::shared_ptr<void> Reservation;
     TVector<TKeyDesc::TPartitionInfo> Partitions;
     ui64 Version = 0;
 };

@@ -106,8 +106,10 @@ namespace {
                 bool writeToPrivateTable,
                 bool writeToIndexImplTable,
                 ui64 cookie,
-                TBackoff backoff)
-            : Sender(sender)
+                TBackoff backoff,
+                TUploadMemoryReservation memoryReservation)
+            : MemoryReservation(std::move(memoryReservation))
+            , Sender(sender)
             , SchemeCache(MakeSchemeCacheID())
             , LeaderPipeCache(MakePipePerNodeCacheID(false))
             , Database(database)
@@ -159,6 +161,7 @@ namespace {
             entry.SyncVersion = true;
             entry.ShowPrivatePath = AllowWriteToPrivateTable;
             request->ResultSet.emplace_back(entry);
+            MemoryReservation.AccountNavigateRequest(*request);
 
             ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
 
@@ -260,6 +263,7 @@ namespace {
             TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
             request->DatabaseName = Database;
             request->ResultSet.emplace_back(std::move(keyRange));
+            MemoryReservation.AccountResolveRequest(*request);
 
             ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 
@@ -289,6 +293,7 @@ namespace {
         void RetryShardRequest(ui64 shardId, TShardEraseRetryState* state, const TActorContext& ctx) {
             Y_ABORT_UNLESS(ShardRepliesLeft.contains(shardId));
 
+            auto overhead = MemoryReservation.RetainRequestOverhead();
             auto ev = std::make_unique<TEvDataShard::TEvEraseRowsRequest>();
             ev->Record = state->Headers;
             for (const auto& key : state->Keys) {
@@ -299,15 +304,22 @@ namespace {
             ev->Record.SetOverloadSubscribe(seqNo);
             state->SentOverloadSeqNo = seqNo;
 
+            ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record, std::move(overhead));
             ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
         }
 
         void MakeShardRequests(const TActorContext& ctx) {
             const auto* keyRange = GetKeyRange();
+            ResolvedTableId = keyRange->TableId;
             Y_ABORT_UNLESS(!keyRange->GetPartitions().empty());
 
-            TVector<TShardEraseRetryState*> eraseRetryStates(keyRange->GetPartitions().size());
-            TVector<std::unique_ptr<TEvDataShard::TEvEraseRowsRequest>> shardRequests(keyRange->GetPartitions().size());
+            const size_t partitionCount = keyRange->GetPartitions().size();
+            using TShardRequest = std::unique_ptr<TEvDataShard::TEvEraseRowsRequest>;
+            const auto routingMemory = MemoryReservation.RetainRoutingMemory(
+                partitionCount * (sizeof(TShardEraseRetryState*) + sizeof(TShardRequest)));
+            TVector<TShardEraseRetryState*> eraseRetryStates(partitionCount);
+            TVector<TShardRequest> shardRequests(partitionCount);
+            size_t shardRequestCount = 0;
 
             for (const auto& key : *Keys) {
                 auto it = std::lower_bound(keyRange->GetPartitions().begin(), keyRange->GetPartitions().end(), key.GetCells(),
@@ -329,7 +341,10 @@ namespace {
 
                 auto& ev = shardRequests[shardIdx];
                 if (!ev) {
+                    auto overhead = MemoryReservation.RetainRequestOverhead();
                     ev = std::make_unique<TEvDataShard::TEvEraseRowsRequest>();
+                    ev->MemoryReservation = std::move(overhead);
+                    ++shardRequestCount;
                     ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
                     if (keyRange->TableId.SchemaVersion) {
                         ev->Record.SetSchemaVersion(keyRange->TableId.SchemaVersion);
@@ -348,13 +363,11 @@ namespace {
                 retryState->Keys.push_back(key);
             }
 
-            size_t shardRequestCount = 0;
             for (size_t idx = 0; idx < shardRequests.size(); ++idx) {
                 auto& ev = shardRequests[idx];
                 if (!ev) {
                     continue;
                 }
-                ++shardRequestCount;
 
                 const TTabletId shardId = keyRange->GetPartitions()[idx].ShardId;
 
@@ -362,10 +375,13 @@ namespace {
                 ev->Record.SetOverloadSubscribe(seqNo);
                 eraseRetryStates[idx]->SentOverloadSeqNo = seqNo;
 
+                ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record, std::move(ev->MemoryReservation));
                 ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
 
                 ShardRepliesLeft.insert(shardId);
             }
+
+            ResolvePartitionsResult.Destroy();
 
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Erase rows: sending requests to shards",
                 {"selfId", ctx.SelfID},
@@ -404,7 +420,7 @@ namespace {
                     return ReplyWithError(YdbStatusForEraseStatus(status), shardResponse.GetErrorDescription(), ctx);
                 }
 
-                ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
+                ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(ResolvedTableId, TActorId()));
             }
 
             // Notify the cache that we are done with the pipe
@@ -433,7 +449,7 @@ namespace {
         }
 
         void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx) {
-            ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
+            ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(ResolvedTableId, TActorId()));
 
             if (!Backoff.HasMore()) {
                 return ReplyWithError(Ydb::StatusIds::UNAVAILABLE,
@@ -550,6 +566,7 @@ namespace {
         }
 
     private:
+        TUploadMemoryReservation MemoryReservation;
         const TActorId Sender;
         const TActorId SchemeCache;
         const TActorId LeaderPipeCache;
@@ -568,6 +585,7 @@ namespace {
 
         std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> ResolvePartitionsResult;
+        TTableId ResolvedTableId;
 
         TVector<ui32> KeyColumnIds;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -594,10 +612,11 @@ IActor* CreateEraseRowsInternal(
     bool writeToPrivateTable,
     bool writeToIndexImplTable,
     ui64 cookie,
-    TBackoff backoff)
+    TBackoff backoff,
+    TUploadMemoryReservation memoryReservation)
 {
     return new TEraseRowsInternal(sender, database, table, std::move(keys),
-        writeToTableShadow, writeToPrivateTable, writeToIndexImplTable, cookie, backoff);
+        writeToTableShadow, writeToPrivateTable, writeToIndexImplTable, cookie, backoff, std::move(memoryReservation));
 }
 
 } // namespace NTxProxy

@@ -4,6 +4,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/pool_stats_collector.h>
+#include <ydb/core/base/scan_reservation_runtime.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
@@ -274,6 +275,7 @@ namespace NActors {
     }
 
     void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
+        NKikimr::TScanReservationRuntime::Install(setup);
         if (ActorSystemSetupConfig) {
             setup.Executors.Reset();
             setup.ExecutorsCount = 0;

@@ -49,15 +49,30 @@ namespace NOps {
             return NKikimrServices::TActivity::TABLET_OPS_HOST_A;
         }
 
-        TDriver(ui64 serial, TAutoPtr<IScan> scan, TConf args, THolder<TScanSnapshot> snapshot)
+        TDriver(ui64 serial, TAutoPtr<IScan>& scan, TConf args, THolder<TScanSnapshot>& snapshot,
+                std::function<void()> onStopped = {})
             : TActor(&TDriver::StateBoot)
-            , NTable::TFeed(scan.Release(), *snapshot->Subset, snapshot->Snapshot)
+            , NTable::TFeed(scan.Get(), *snapshot->Subset, snapshot->Snapshot)
             , Serial(serial)
             , Args(args)
-            , Snapshot(std::move(snapshot))
+            , OnStopped(std::move(onStopped))
             , MaxCyclesPerIteration(/* 10ms */ (NHPTimer::GetCyclesPerSecond() + 99) / 100)
             , ScanMemoryTag(NProfiling::MakeTag(TypeName(*Scan).c_str()))
         {
+            // Keep the caller's owners intact if any initialization throws.
+            Y_ABORT_UNLESS(scan.Release() == Scan);
+            Snapshot = std::move(snapshot);
+        }
+
+        TDriver(ui64 serial, TAutoPtr<IScan>& scan, TConf args, THolder<TScanSnapshot>&& snapshot)
+            : TDriver(serial, scan, args, snapshot)
+        {}
+
+        void RestoreUnstartedScan(TAutoPtr<IScan>& scan, THolder<TScanSnapshot>& snapshot) noexcept
+        {
+            Y_ABORT_UNLESS(!Spent);
+            scan = DetachScan();
+            snapshot = std::move(Snapshot);
         }
 
         ~TDriver()
@@ -72,6 +87,9 @@ namespace NOps {
 
             if (Scan && Spent == nullptr)
                 delete DetachScan();
+            if (OnStopped) {
+                OnStopped();
+            }
         }
 
         void Describe(IOutputStream &out) const override
@@ -673,6 +691,7 @@ namespace NOps {
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */
             IScan* scan = DetachScan();
+            auto reservation = scan->GetResourceReservation();
             NProfiling::TMemoryTagScope scope(ScanMemoryTag);
             auto prod = exc
                 ? scan->Finish(*exc)
@@ -681,6 +700,7 @@ namespace NOps {
 
             if (status != EStatus::Lost) {
                 auto ev = new TEvResult(Serial, status, std::move(Snapshot), prod);
+                ev->ResourceReservation = std::move(reservation);
 
                 ev->Trace = std::move(trace);
 
@@ -742,6 +762,7 @@ namespace NOps {
     private:
         const ui64 Serial = 0;
         const NOps::TConf Args;
+        const std::function<void()> OnStopped;
         TAutoPtr<NUtil::ILogger> Logger;
         TActorId Owner;
 

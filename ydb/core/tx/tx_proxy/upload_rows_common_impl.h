@@ -1,5 +1,7 @@
 #pragma once
 
+#include "upload_memory_reservation.h"
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -131,6 +133,9 @@ private:
         ui64 SentOverloadSeqNo = 0;
     };
 
+protected:
+    TUploadMemoryReservation MemoryReservation;
+private:
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
@@ -140,6 +145,7 @@ private:
     TActorId TimeoutTimerActorId;
 
     TAutoPtr<NSchemeCache::TSchemeCacheRequest> ResolvePartitionsResult;
+    TTableId ResolvedTableId;
     std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
     TSerializedCellVec MinKey;
     TSerializedCellVec MaxKey;
@@ -718,6 +724,7 @@ private:
         entry.SyncVersion = true;
         entry.ShowPrivatePath = AllowWriteToPrivateTable;
         request->ResultSet.emplace_back(entry);
+        MemoryReservation.AccountNavigateRequest(*request);
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, Span.GetTraceId());
 
         TimeoutTimerActorId = CreateLongTimer(ctx, Timeout,
@@ -1148,6 +1155,7 @@ private:
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
         request->DatabaseName = GetDatabase();
         request->ResultSet.emplace_back(std::move(keyRange));
+        MemoryReservation.AccountResolveRequest(*request);
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         ctx.Send(SchemeCache, resolveReq.Release(), 0, 0, Span.GetTraceId());
@@ -1207,6 +1215,7 @@ private:
     void RetryShardRequest(ui64 shardId, TShardUploadRetryState* state, const TActorContext& ctx) {
         Y_ABORT_UNLESS(ShardRepliesLeft.contains(shardId));
 
+        auto overhead = MemoryReservation.RetainRequestOverhead();
         auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record = state->Headers;
         if (UserCtx != nullptr) {
@@ -1223,18 +1232,25 @@ private:
         ev->Record.SetOverloadSubscribe(seqNo);
         state->SentOverloadSeqNo = seqNo;
 
+        ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record, std::move(overhead));
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
         Span && Span.Event("MakeShardRequests", {{"rows", long(Rows->size())}});
         const auto* keyRange = GetKeyRange();
+        ResolvedTableId = keyRange->TableId;
 
         Y_ABORT_UNLESS(!keyRange->GetPartitions().empty());
 
         // Group rows by shard id
-        TVector<TShardUploadRetryState*> uploadRetryStates(keyRange->GetPartitions().size());
-        TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->GetPartitions().size());
+        const size_t partitionCount = keyRange->GetPartitions().size();
+        using TShardRequest = std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>;
+        const auto routingMemory = MemoryReservation.RetainRoutingMemory(
+            partitionCount * (sizeof(TShardUploadRetryState*) + sizeof(TShardRequest)));
+        TVector<TShardUploadRetryState*> uploadRetryStates(partitionCount);
+        TVector<TShardRequest> shardRequests(partitionCount);
+        size_t shardRequestCount = 0;
         for (const auto& keyValue : *Rows) {
             // Find partition for the key
             auto it = std::lower_bound(keyRange->GetPartitions().begin(), keyRange->GetPartitions().end(), keyValue.first.GetCells(),
@@ -1256,8 +1272,11 @@ private:
 
             TEvDataShard::TEvUploadRowsRequest* ev = shardRequests[shardIdx].get();
             if (!ev) {
+                auto overhead = MemoryReservation.RetainRequestOverhead();
                 shardRequests[shardIdx].reset(new TEvDataShard::TEvUploadRowsRequest());
                 ev = shardRequests[shardIdx].get();
+                ev->MemoryReservation = std::move(overhead);
+                ++shardRequestCount;
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
                 if (UserCtx != nullptr) {
                     UserCtx->SerializeToEvent(ev->Record);
@@ -1298,13 +1317,11 @@ private:
         }
 
         // Send requests to the shards
-        size_t shardRequestCount = 0;
         for (size_t idx = 0; idx < shardRequests.size(); ++idx) {
             auto& ev = shardRequests[idx];
             if (!ev) {
                 continue;
             }
-            ++shardRequestCount;
 
             TTabletId shardId = keyRange->GetPartitions()[idx].ShardId;
 
@@ -1316,6 +1333,7 @@ private:
             ev->Record.SetOverloadSubscribe(seqNo);
             uploadRetryStates[idx]->SentOverloadSeqNo = seqNo;
 
+            ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record, std::move(ev->MemoryReservation));
             ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
 
             auto res = ShardRepliesLeft.insert(shardId);
@@ -1324,6 +1342,8 @@ private:
                     {"shardId", shardId});
             }
         }
+
+        ResolvePartitionsResult.Destroy();
 
         TBase::Become(&TThis::StateWaitResults);
         Span && Span.Event("WaitResults", {{"shardRequests", long(shardRequests.size())}});
@@ -1343,7 +1363,7 @@ private:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
+        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(ResolvedTableId, TActorId()), 0, 0, Span.GetTraceId());
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Failed to connect to shard",
             {"selfId", ctx.SelfID},
@@ -1406,7 +1426,7 @@ private:
                     shardResponse.GetErrorDescription()), ctx);
             }
 
-            ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
+            ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(ResolvedTableId, TActorId()), 0, 0, Span.GetTraceId());
         }
 
         // Notify the cache that we are done with the pipe
@@ -1518,6 +1538,17 @@ private:
 
     void ReplyWithResult(const TUploadStatus& status, const TActorContext& ctx) {
         UploadCountersGuard.OnReply(status, WrittenBytes);
+        if (MemoryReservation) {
+            // Drop our payload ownership before publishing completion. In a
+            // different mailbox the receiver can start its next batch immediately.
+            for (auto& [_, state] : ShardUploadRetryStates) {
+                // Keep subscription metadata for Die(), which must unsubscribe
+                // even when a request terminates with an error.
+                decltype(state.Rows){}.swap(state.Rows);
+            }
+            Rows.reset();
+            Batch.reset();
+        }
         SendResult(ctx, status.GetCode());
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Completed",

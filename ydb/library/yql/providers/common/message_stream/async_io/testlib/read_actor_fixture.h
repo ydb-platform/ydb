@@ -150,6 +150,7 @@ struct TFixture {
     TFakeCASetup Setup;
     bool Finished = false;
     bool WatermarksEnabled = false;
+    bool ManagedAssignment = false;
     TMaybe<TInstant> LastWatermark;
     bool EnableStreamingAutopartitioning = false;
     NThreading::TFuture<std::shared_ptr<IMessageStreamReadSession>> PendingSession;
@@ -167,6 +168,7 @@ struct TFixture {
             settings.ComputeActorId = actor.SelfId();
             settings.Stream = "stream";
             settings.Consumer = "consumer";
+            settings.ManagedAssignment = ManagedAssignment;
             settings.StopAtCurrentEndOffsets = !streaming;
             settings.RequireWriteTime = requireTime;
             settings.BeginWriteTime = BeginWriteTime;

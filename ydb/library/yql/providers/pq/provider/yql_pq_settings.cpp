@@ -79,6 +79,8 @@ void TPqConfiguration::AddCluster(const NYql::TPqClusterConfig& cluster,
     clusterSettings.AddBearerToToken = cluster.GetAddBearerToToken();
     clusterSettings.SharedReading = cluster.GetSharedReading();
     clusterSettings.ReadGroup = cluster.GetReadGroup();
+    clusterSettings.Kafka = properties.Value("source_type", "") == "Kafka";
+    clusterSettings.SaslMechanism = properties.Value("sasl_mechanism", "PLAIN");
 
     const TString authToken =
         credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());

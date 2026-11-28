@@ -80,6 +80,8 @@ struct TMessageStreamReadActorSettings {
     NActors::TActorId ComputeActorId;
     TString Stream;
     TString Consumer;
+    // Assignment and resumption positions are selected by the backend consumer group.
+    bool ManagedAssignment = false;
     bool StopAtCurrentEndOffsets = false;
     bool EnableStreamingAutopartitioning = false;
     bool RequireWriteTime = false;

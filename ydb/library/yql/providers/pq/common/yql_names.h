@@ -7,6 +7,7 @@
 namespace NYql {
 
 constexpr TStringBuf PqSource = NDq::PqSource;
+constexpr TStringBuf KafkaSource = NDq::KafkaSource;
 constexpr TStringBuf PartitionsCountProp = "PartitionsCount";
 constexpr TStringBuf FederatedClustersProp = "FederatedClusters";
 constexpr TStringBuf ConsumerSetting = "Consumer";

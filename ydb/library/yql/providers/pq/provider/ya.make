@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 SRCS(
+    yql_kafka_configuration.cpp
     yql_pq_datasink.cpp
     yql_pq_datasink_execution.cpp
     yql_pq_datasink_io_discovery.cpp
@@ -42,6 +43,7 @@ PEERDIR(
     ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/expr_nodes
     ydb/library/yql/providers/pq/gateway/abstract
+    ydb/library/yql/providers/pq/gateway/clients/message_stream
     ydb/library/yql/providers/pq/proto
     ydb/public/sdk/cpp/src/client/driver
 

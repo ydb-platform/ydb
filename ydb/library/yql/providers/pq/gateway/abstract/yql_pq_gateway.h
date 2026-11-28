@@ -60,6 +60,7 @@ public:
         ui32 PartitionsCount = 0;
         THashSet<TString> Consumers;
         std::unordered_map<ui64, TInstant> MaxWriteTime;
+        bool ConsumersKnown = true;
     };
 
     using TDescribeFederatedTopicResult = std::vector<TClusterInfo>;

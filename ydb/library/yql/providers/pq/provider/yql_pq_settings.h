@@ -42,6 +42,21 @@ struct TPqClusterConfigurationSettings {
     bool SharedReading = false;
     TString ReconnectPeriod;
     TString ReadGroup;
+    bool Kafka = false;
+    TString SaslMechanism;
+};
+
+struct TKafkaSettings {
+    NCommon::TConfSetting<TString, NCommon::EConfSettingType::Static> Consumer;
+};
+
+struct TKafkaConfiguration: public NCommon::TDispatcherAndSettings<TKafkaSettings> {
+    explicit TKafkaConfiguration(bool strictConfigValidation)
+        : NCommon::TDispatcherAndSettings<TKafkaSettings>("kafka", TQContext(), strictConfigValidation)
+    {
+        REGISTER_SETTING(*this, Consumer);
+        FreezeDefaults();
+    }
 };
 
 struct TPqConfiguration: public NCommon::TDispatcherAndSettings<TPqSettings> {

@@ -140,6 +140,7 @@ private:
 };
 
 constexpr TStringBuf PqSource = "PqSource";
+constexpr TStringBuf KafkaSource = "KafkaSource";
 
 } // namespace NYql::NDq
 

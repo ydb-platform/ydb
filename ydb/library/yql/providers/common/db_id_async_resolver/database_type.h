@@ -29,6 +29,7 @@ enum class EDatabaseType {
     MongoDB,
     OpenSearch,
     YdbExternal,
+    Kafka,
 };
 
 std::set<TString> GetAllExternalDataSourceTypes();

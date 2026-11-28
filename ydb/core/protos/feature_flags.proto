@@ -368,6 +368,7 @@ message TFeatureFlags {
     optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
     optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
     optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
+<<<<<<< HEAD
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
     // (LOGBROKER-10680). Default false is
     // the legacy zeroing behaviour that undercounted the consumed
@@ -376,4 +377,24 @@ message TFeatureFlags {
     optional bool EnableTopicReplication = 396 [default = false];
     optional bool ShareShardedMkqlProgram = 399 [default = false];
     optional bool EnableChecksumTable = 402 [default = false];
+=======
+    optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
+    optional bool EnableCoroutineCompactionSelector = 379 [default = false];
+    // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
+    // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
+    optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
+    optional bool EnableCsPortionsCacheAcrossRestarts = 381 [default = false];
+    optional bool EnableCsGeneralCacheConsumerWeights = 382 [default = false];
+    
+    // Enables policy-driven data tiering for row-oriented tables.
+    // When disabled, no new migrations to colder tiers are scheduled.
+    // Existing data in all tiers remains readable.
+    optional bool EnableDataTiering = 383 [default = false];   
+    // Gate for HNSW creation and acceleration once the implementation is included.
+    optional bool EnableHnswIndex = 384 [default = false];
+    optional bool EnableColumnshardCutHistorySending = 385 [default = false];
+    optional bool EnableCdcAggregator = 386 [default = false];
+    // Requires EnableSnapshotsLocking to publish the registry consumed by DataShard.
+    optional bool EnableDataShardSnapshotLocking = 387 [default = false];
+>>>>>>> 7ae794351da (YDB-57975 Support retained MVCC snapshots in DataShard. (#57992))
 }

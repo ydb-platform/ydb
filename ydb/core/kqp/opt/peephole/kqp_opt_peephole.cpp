@@ -401,7 +401,6 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 {
     THashMap<ui64 /*stage uid*/, TKqpProgram> programs;
     THashMap<TString, TKqpParamBinding> nonDetParamBindings;
-    const bool constraintsEnabled = config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
 
     const auto topSortedStages = TopSortStages(tx.Stages());
     for (const auto& stage : topSortedStages) {
@@ -437,11 +436,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 auto oldArg = stage.Program().Args().Arg(i);
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
-
-                if (constraintsEnabled) {
-                    newArg.MutableRef().SetConstraints(oldArg.Ref().GetConstraintSet());
-                }
-
+                newArg.MutableRef().SetConstraints(oldArg.Ref().GetConstraintSet());
                 newArgs.emplace_back(newArg);
 
                 if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); scalarHashShuffleCount <= 1 && connection &&
@@ -487,10 +482,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
                     // Update the type annotation for an argument with return value of the input program.
                     newArg.MutableRef().SetTypeAnn(programs.at(stageUid).Lambda().Body().Ref().GetTypeAnn());
-
-                    if (constraintsEnabled) {
-                        newArg.MutableRef().SetConstraints(programs.at(stageUid).Lambda().Body().Ref().GetConstraintSet());
-                    }
+                    newArg.MutableRef().SetConstraints(programs.at(stageUid).Lambda().Body().Ref().GetConstraintSet());
                 } else {
                     argsMap.emplace(oldArg.Raw(), newArg.Ptr());
                 }
@@ -501,11 +493,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
                 YQL_ENSURE(argsMap.emplace(oldArg.Raw(), newArg.Ptr()).second);
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
-
-                if (constraintsEnabled) {
-                    newArg.MutableRef().SetConstraints(oldArg.Ref().GetConstraintSet());
-                }
-
+                newArg.MutableRef().SetConstraints(oldArg.Ref().GetConstraintSet());
                 newArgs.emplace_back(newArg);
             }
         }
@@ -523,27 +511,21 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             argTypes.push_back(arg.Ref().GetTypeAnn());
         }
 
-        TMaybeNode<TCoAtomList> argsConstraints;
-
-        if (constraintsEnabled) {
-            TExprNode::TListType argConstraints;
-            argConstraints.reserve(newArgs.size());
-            for (const auto& arg : newArgs) {
-                argConstraints.push_back(ctx.NewAtom(
-                    stage.Pos(),
-                    NYT::NodeToYsonString(arg.Ref().GetConstraintSet().ToYson(), NYson::EYsonFormat::Text),
-                    TNodeFlags::MultilineContent
-                ));
-            }
-
-            argsConstraints = TCoAtomList(ctx.NewList(stage.Pos(), std::move(argConstraints)));
+        TExprNode::TListType argConstraints;
+        argConstraints.reserve(newArgs.size());
+        for (const auto& arg : newArgs) {
+            argConstraints.push_back(ctx.NewAtom(
+                stage.Pos(),
+                NYT::NodeToYsonString(arg.Ref().GetConstraintSet().ToYson(), NYson::EYsonFormat::Text),
+                TNodeFlags::MultilineContent
+            ));
         }
 
         // TODO: get rid of TKqpProgram-callable (YQL-10078)
         auto program = Build<TKqpProgram>(ctx, stage.Pos())
             .Lambda(lambda)
             .ArgsType(ExpandType(stage.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
-            .ArgsConstraints(argsConstraints)
+            .ArgsConstraints(ctx.NewList(stage.Pos(), std::move(argConstraints)))
             .Done();
 
         TExprNode::TPtr newProgram;

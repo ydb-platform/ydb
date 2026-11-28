@@ -15,6 +15,7 @@ NYql::NNodes::TExprBase KqpBuildWideReadTable(const NYql::NNodes::TExprBase& nod
 NYql::NNodes::TExprBase KqpRewriteWriteConstraint(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
 NYql::NNodes::TExprBase KqpEliminateWideMapForLargeOlapTable(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typesCtx);
 NYql::NNodes::TExprBase KqpEliminateWideMapPackUnpack(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typesCtx);
+NYql::NNodes::TExprBase KqpEliminateBlockMemberOverBlockAsStruct(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typesCtx);
 
 NYql::IGraphTransformer::TStatus KqpBuildStreamingFlow(
     ui64 txIdx, const NYql::NNodes::TKqpPhysicalTx& tx, NYql::TExprNode::TPtr& output, THashSet<std::pair<ui64, ui64>>& streamingTxResults,

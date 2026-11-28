@@ -43,7 +43,8 @@ namespace NYql {
                     EFlag::ToStringFromStringExpressions | // To pushdown REGEXP over Utf8 column
                     EFlag::DecimalType | EFlag::DecimalCtor |
                     EFlag::IntervalCtor |
-                    EFlag::DateCtor
+                    EFlag::DateCtor |
+                    EFlag::UuidType
                 );
                 EnableFunction("Re2.Grep");  // For REGEXP pushdown
             }

@@ -5,6 +5,7 @@
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_checksums.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
@@ -166,6 +167,66 @@ CreateWaitSessionCbForSyncWithPBuffer(
     return cb;
 }
 
+// Builds the DBG read response from a translated transport error and the
+// checksums the source attached.
+//
+// A transport error is returned unchanged, with empty checksums. When
+// checksums are disabled, a successful read returns empty checksums: DDisk
+// and PBuffer attach none in that mode. When checksums are enabled, a
+// success must carry one entry per data part (rangeBytes / ChecksumUnitSize).
+// A different count, including zero, fails the read with E_IO. The entries
+// themselves are forwarded unchanged: this does not compare them with the
+// bytes. A checksum mismatch would mean the data does not match the provided
+// values, and that check is not done here.
+template <typename TChecksumList>
+TDBGReadBlocksResponse MakeReadBlocksResponse(
+    const NProto::TError& error,
+    const TChecksumList& checksums,
+    ui64 rangeBytes,
+    EChecksumMode checksumMode)
+{
+    if (HasError(error) || checksumMode == EChecksumMode::Disabled) {
+        return {.Error = error};
+    }
+
+    const ui64 expectedCount = rangeBytes / ChecksumUnitSize;
+    if (static_cast<ui64>(checksums.size()) != expectedCount) {
+        return {
+            .Error = MakeError(
+                E_IO,
+                TStringBuilder()
+                    << "checksum count " << checksums.size()
+                    << " does not match " << expectedCount << " data parts")};
+    }
+
+    TBlockChecksums result;
+    result.assign(checksums.begin(), checksums.end());
+    return {.Error = error, .Checksums = std::move(result)};
+}
+
+// Logs a successful read whose checksum count does not match the number of
+// data parts. The values are not compared with the data. A checksum mismatch
+// would mean the bytes do not match the provided checksums; that is not what
+// this log reports. The caller invokes this only while the DBG is still alive.
+void LogReadChecksumCountMismatch(
+    NActors::TActorSystem& actorSystem,
+    size_t dbgIndex,
+    const TString& host,
+    ui32 vChunkIndex,
+    const TString& range,
+    const char* source,
+    i64 actualCount,
+    ui64 expectedCount)
+{
+    LOG_CRIT_S(
+        actorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "DBG " << dbgIndex << " " << host << " vchunk " << vChunkIndex
+               << " range " << range << " source " << source
+               << ": checksum count " << actualCount << " does not match "
+               << expectedCount << " data parts");
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -188,6 +249,9 @@ TDirectBlockGroup::TDirectBlockGroup(
           std::make_shared<TArenaAllocatorPool>(std::move(arenaAllocator)))
     , ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
+    , ChecksumMode(
+          StorageConfig->GetEnableChecksums() ? EChecksumMode::Enabled
+                                              : EChecksumMode::Disabled)
     , Executor(std::move(executor))
     , TabletId(diskDescription.TabletId)
     , TabletGeneration(diskDescription.Generation)
@@ -467,14 +531,19 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
         NKikimr::NDDisk::TReadInstruction(true),
         guardedSglist,
         childSpan.get());
+    const ui64 rangeBytes = static_cast<ui64>(range.Size()) * BlockSize;
     future.Subscribe(
         [weakSelf = weak_from_this(),
          promise = std::move(promise),
          childSpan = std::move(childSpan),
          hostIndex,
+         vChunkIndex,
+         range,
          startAt,
          executor = Executor,
-         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+         threadChecker = ExecutorThreadChecker.CreateDelegate(),
+         rangeBytes,
+         checksumMode = ChecksumMode]   //
         (const TEvReadResultFuture& f) mutable
         {
             // ActorSystem thread
@@ -484,25 +553,49 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                  promise = std::move(promise),
                  childSpan = std::move(childSpan),
                  hostIndex,
+                 vChunkIndex,
+                 range,
                  startAt,
                  threadChecker,
+                 rangeBytes,
+                 checksumMode,
                  f]   //
                 () mutable
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
+                    // Keeps the trace span alive until this reply is built.
+                    Y_UNUSED(childSpan);
 
                     if (auto self = weakSelf.lock()) {
-                        NProto::TError error = TranslateError(f.GetValue());
+                        const NProto::TError translated =
+                            TranslateError(f.GetValue());
+                        auto response = MakeReadBlocksResponse(
+                            translated,
+                            f.GetValue().GetChecksums(),
+                            rangeBytes,
+                            checksumMode);
+                        // A wrong count is an error for this host read, so
+                        // host stats see it before the promise is completed.
+                        if (!HasError(translated) && HasError(response.Error)) {
+                            LogReadChecksumCountMismatch(
+                                *self->ActorSystem,
+                                self->DirectBlockGroupIndex,
+                                self->PrintHostAndNode(hostIndex),
+                                vChunkIndex,
+                                range.Print(),
+                                "DDisk",
+                                f.GetValue().GetChecksums().size(),
+                                rangeBytes / ChecksumUnitSize);
+                        }
 
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::ReadFromDDisk,
                             true,
-                            error);
+                            response.Error);
 
-                        promise.SetValue(
-                            TDBGReadBlocksResponse{.Error = std::move(error)});
+                        promise.SetValue(std::move(response));
                     } else {
                         promise.SetValue(TDBGReadBlocksResponse{
                             .Error = MakeDirectBlockGroupDestroyedError()});
@@ -545,14 +638,19 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
         NKikimr::NDDisk::TReadInstruction(true),
         guardedSglist,
         childSpan.get());
+    const ui64 rangeBytes = static_cast<ui64>(range.Size()) * BlockSize;
     future.Subscribe(
         [weakSelf = weak_from_this(),
          promise = std::move(promise),
          childSpan = std::move(childSpan),
          hostIndex,
+         vChunkIndex,
+         range,
          startAt,
          executor = Executor,
-         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+         threadChecker = ExecutorThreadChecker.CreateDelegate(),
+         rangeBytes,
+         checksumMode = ChecksumMode]   //
         (const TEvReadPersistentBufferResultFuture& f) mutable
         {
             // ActorSystem thread
@@ -562,26 +660,51 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
                  promise = std::move(promise),
                  childSpan = std::move(childSpan),
                  hostIndex,
+                 vChunkIndex,
+                 range,
                  startAt,
                  threadChecker,
+                 rangeBytes,
+                 checksumMode,
                  f]   //
                 () mutable
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
+                    // Keeps the trace span alive until this reply is built.
+                    Y_UNUSED(childSpan);
 
-                    NProto::TError error = TranslateError(f.GetValue());
+                    const NProto::TError translated =
+                        TranslateError(f.GetValue());
+                    auto response = MakeReadBlocksResponse(
+                        translated,
+                        f.GetValue().GetChecksums(),
+                        rangeBytes,
+                        checksumMode);
 
                     if (auto self = weakSelf.lock()) {
+                        // No ActorSystem once the DBG is gone, so the
+                        // critical log stays inside this branch.
+                        if (!HasError(translated) && HasError(response.Error)) {
+                            LogReadChecksumCountMismatch(
+                                *self->ActorSystem,
+                                self->DirectBlockGroupIndex,
+                                self->PrintHostAndNode(hostIndex),
+                                vChunkIndex,
+                                range.Print(),
+                                "PBuffer",
+                                f.GetValue().GetChecksums().size(),
+                                rangeBytes / ChecksumUnitSize);
+                        }
+
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::ReadFromPBuffer,
                             true,
-                            error);
+                            response.Error);
                     }
 
-                    promise.SetValue(
-                        TDBGReadBlocksResponse{.Error = std::move(error)});
+                    promise.SetValue(std::move(response));
                 });
         });
     return result;

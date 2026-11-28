@@ -5,6 +5,9 @@
 #include <ydb/core/grpc_services/service_yql_scripting.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
@@ -356,6 +359,106 @@ Y_UNIT_TEST_SUITE(ClientDataWrites) {
         NYdb::NImport::TImportClient import(kikimr.GetDriver());
         CheckWrite(import.ImportData("/Root/Test", TString("1,\"one\"\n"),
             NYdb::NImport::TImportYdbDumpDataSettings().AppendColumns("Key").AppendColumns("Value")).GetValueSync(), enableClientModifications);
+    }
+
+    Y_UNIT_TEST_TWIN(ImportDataCarriesSchemaVersion, AfterDefaultBackfill) {
+        TKikimrRunner kikimr(Settings(true).SetUseRealThreads(false));
+        auto client = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
+        kikimr.RunCall([&] { CreateTable(session); });
+
+        const TString tablePath = "/Root/Test";
+        const auto getSchemaVersion = [&] {
+            const auto describe = kikimr.RunCall([&] { return kikimr.GetTestClient().Ls(tablePath); });
+            UNIT_ASSERT_VALUES_EQUAL(describe->Record.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+            return describe->Record.GetPathDescription().GetTable().GetTableSchemaVersion();
+        };
+        auto expectedVersion = getSchemaVersion();
+        UNIT_ASSERT_GT(expectedVersion, 0u);
+
+        NYdb::NImport::TImportClient import(kikimr.GetDriver());
+        NYdb::NImport::TImportYdbDumpDataSettings importSettings;
+        importSettings.AppendColumns("Key").AppendColumns("Value");
+        TString row = "2,\"two\"\n";
+
+        if constexpr (AfterDefaultBackfill) {
+            const auto seed = kikimr.RunCall([&] {
+                return import.ImportData(tablePath, TString("1,\"one\"\n"), importSettings).GetValueSync();
+            });
+            UNIT_ASSERT_C(seed.IsSuccess(), seed.GetIssues().ToString());
+
+            auto query = kikimr.GetQueryClient();
+            const auto alter = kikimr.RunCall([&] {
+                return query.ExecuteQuery("ALTER TABLE `/Root/Test` ADD COLUMN DefaultValue Int32 NOT NULL DEFAULT 42",
+                    NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            });
+            UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToString());
+
+            const auto updatedVersion = getSchemaVersion();
+            UNIT_ASSERT_GT(updatedVersion, expectedVersion);
+            expectedVersion = updatedVersion;
+            importSettings.AppendColumns("DefaultValue");
+            row = "2,\"two\",42\n";
+        }
+
+        TMaybe<ui64> uploadSchemaVersion;
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto observer = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&](const auto& ev) {
+            uploadSchemaVersion = ev->Get()->Record.GetSchemaVersion();
+        });
+
+        const auto result = kikimr.RunCall([&] {
+            return import.ImportData(tablePath, row, importSettings).GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(uploadSchemaVersion.Defined(), "Expected a DataShard upload from ImportData");
+        UNIT_ASSERT_VALUES_EQUAL_C(*uploadSchemaVersion, expectedVersion, "ImportData must send the resolved table schema version");
+    }
+
+    Y_UNIT_TEST_TWIN(ImportDataRejectsStaleSchema, DuringDefaultBackfill) {
+        TKikimrRunner kikimr(Settings(true).SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto client = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
+        kikimr.RunCall([&] { CreateTable(session); });
+
+        const TString tablePath = "/Root/Test";
+        NYdb::NImport::TImportClient import(kikimr.GetDriver());
+        NYdb::NImport::TImportYdbDumpDataSettings importSettings;
+        importSettings.AppendColumns("Key").AppendColumns("Value");
+        const auto seed = runtime.WaitFuture(import.ImportData(tablePath, TString("1,\"one\"\n3,\"three\"\n"), importSettings));
+        UNIT_ASSERT_C(seed.IsSuccess(), seed.GetIssues().ToString());
+
+        NActors::TBlockEvents<TEvDataShard::TEvUploadRowsRequest> upload(runtime);
+        auto staleImport = import.ImportData(tablePath, TString("2,\"two\"\n"), importSettings);
+        runtime.WaitFor("ImportData upload", [&] { return !upload.empty(); });
+        upload.Stop();
+
+        NActors::TBlockEvents<TEvDataShard::TEvBuildIndexProgressResponse> backfillDone(runtime, [](const auto& ev) {
+            return DuringDefaultBackfill && ev->Get()->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::DONE;
+        });
+        auto query = kikimr.GetQueryClient();
+        auto alter = query.ExecuteQuery("ALTER TABLE `/Root/Test` ADD COLUMN DefaultValue Int32 NOT NULL DEFAULT 42",
+            NYdb::NQuery::TTxControl::NoTx());
+        if constexpr (DuringDefaultBackfill) {
+            // Hold the completion event after the scan has passed key 2 and before the schema is finalized.
+            runtime.WaitFor("backfill scan completion", [&] { return !backfillDone.empty(); });
+        } else {
+            runtime.WaitFor("ALTER TABLE completion", [&] { return alter.HasValue() || alter.HasException(); });
+        }
+
+        upload.Unblock();
+        const auto result = runtime.WaitFuture(staleImport);
+        backfillDone.Stop().Unblock();
+        const auto altered = runtime.WaitFuture(alter);
+        UNIT_ASSERT_C(altered.IsSuccess(), altered.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Schema version mismatch");
+        const auto read = runtime.WaitFuture(query.ExecuteQuery("SELECT Key, DefaultValue FROM `/Root/Test` ORDER BY Key",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()));
+        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+        CompareYson("[[1u;42];[3u;42]]", FormatResultSetYson(read.GetResultSet(0)));
     }
 }
 } // namespace NKikimr::NKqp

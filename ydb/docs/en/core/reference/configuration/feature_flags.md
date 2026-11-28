@@ -90,6 +90,7 @@ feature_flags:
 | `enable_topic_compactification_by_key` | Enabling topic compaction in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
 | `enable_kafka_transactions` | Enabling transactions in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
 | `enable_external_data_sources` | Enabling [external data sources](../../concepts/datamodel/external_data_source.md) |
+| `enable_resource_pools` | Enabling [resource pools](../../dev/resource-consumption-management.md) in Workload Manager |
 | `enable_grpc_audit` | Enabling [audit](../../security/audit-log.md#grpc-connection) of gRPC connection state changes |
 | `enable_fs_backups` | Enabling [backup and restore operations to a network file system](../../concepts/backup.md#nfs) |
 | `switch_to_config_v2` | Switching from configuration V1 to [configuration V2](../../devops/configuration-management/migration/migration-to-v2.md) |

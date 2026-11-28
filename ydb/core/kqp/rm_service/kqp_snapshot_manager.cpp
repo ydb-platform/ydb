@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_RESOURCE_MANAGER
 
@@ -56,6 +58,10 @@ private:
         MvccSnapshot = ev->Get()->MvccSnapshot;
         Orbit = std::move(ev->Get()->Orbit);
         Cookie = ev->Get()->Cookie;
+        AcquireSpan = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::Detailed, NWilson::TTraceId(ev->TraceId),
+            "Snapshot acquisition", NWilson::EFlags::AUTO_END);
+        AcquireSpan.Attribute("ydb.snapshot.mvcc", MvccSnapshot);
+        AcquireSpan.Event("request received");
 
         YDB_LOG_DEBUG("KqpSnapshotManager: got snapshot request",
             {"clientActorId", ClientActorId});
@@ -63,8 +69,9 @@ private:
         if (MvccSnapshot) {
             YDB_LOG_ENSURE(ev->Get()->Tables.empty());
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
+            AcquireSpan.Event("acquire dispatched");
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(ev->Get()->TableIds), std::move(Orbit)),
-                0, 0, std::move(ev->TraceId));
+                0, 0, AcquireSpan.GetTraceId());
 
             Become(&TThis::StateAwaitAcquireResult);
         } else {
@@ -79,7 +86,8 @@ private:
             createSnapshot->SetTimeoutMs(SnapshotTimeout.MilliSeconds());
             createSnapshot->SetIgnoreSystemViews(true);
 
-            Send(MakeTxProxyID(), req.Release(), 0, 0, std::move(ev->TraceId));
+            AcquireSpan.Event("create dispatched");
+            Send(MakeTxProxyID(), req.Release(), 0, 0, AcquireSpan.GetTraceId());
             Become(&TThis::StateAwaitCreation);
         }
     }
@@ -118,6 +126,7 @@ private:
         Orbit = std::move(ev->Get()->Orbit);
 
         const auto* msg = ev->Get();
+        AcquireSpan.Event("acquire result received");
         if (msg->Status == Ydb::StatusIds::SUCCESS) {
             Snapshot = IKqpGateway::TKqpSnapshot(msg->Snapshot.Step, msg->Snapshot.TxId);
 
@@ -126,7 +135,8 @@ private:
 
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                     Snapshot, std::move(ev->Get()->SnapshotHandle), NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
-                    0, Cookie);
+                    0, Cookie, AcquireSpan.GetTraceId());
+            FinishAcquire(NKikimrIssues::TStatusIds::SUCCESS);
 
             PassAway();
         } else {
@@ -139,6 +149,7 @@ private:
     }
 
     void HandleCleanup(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
+        AcquireSpan.Event("late create result received");
         Y_ABORT_UNLESS(!MvccSnapshot);
 
         using EStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus;
@@ -162,12 +173,14 @@ private:
 
         Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
             IKqpGateway::TKqpSnapshot::InvalidSnapshot, TSnapshotHandle(), NKikimrIssues::TStatusIds::TIMEOUT, std::move(issues), std::move(Orbit)),
-            0, Cookie);
+            0, Cookie, AcquireSpan.GetTraceId());
+        FinishAcquire(NKikimrIssues::TStatusIds::TIMEOUT);
 
         PassAway();
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
+        AcquireSpan.Event("create result received");
         Y_ABORT_UNLESS(!MvccSnapshot);
 
         using EStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus;
@@ -184,7 +197,8 @@ private:
 
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                 Snapshot, TSnapshotHandle(), NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
-                0, Cookie);
+                0, Cookie, AcquireSpan.GetTraceId());
+            FinishAcquire(NKikimrIssues::TStatusIds::SUCCESS);
 
             Become(&TThis::StateRefreshing);
             ScheduleRefresh();
@@ -300,11 +314,27 @@ private:
         if (CurrentStateFunc() == &TThis::StateAwaitCreation || CurrentStateFunc() == &TThis::StateAwaitAcquireResult) {
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                 IKqpGateway::TKqpSnapshot::InvalidSnapshot, TSnapshotHandle(), status, std::move(issues), std::move(Orbit)),
-                0, Cookie);
+                0, Cookie, AcquireSpan.GetTraceId());
         } else {
             SendDiscard();
         }
+        FinishAcquire(status);
         PassAway();
+    }
+
+    void FinishAcquire(NKikimrIssues::TStatusIds::EStatusCode status) {
+        if (!AcquireSpan) {
+            return;
+        }
+        AcquireSpan.Event("response dispatched");
+        AcquireSpan.Attribute("ydb.snapshot.status", static_cast<i64>(status));
+        if (status == NKikimrIssues::TStatusIds::SUCCESS) {
+            AcquireSpan.Attribute("ydb.snapshot.step", static_cast<i64>(Snapshot.Step));
+            AcquireSpan.Attribute("ydb.snapshot.tx_id", static_cast<i64>(Snapshot.TxId));
+            AcquireSpan.EndOk();
+        } else {
+            AcquireSpan.EndError("snapshot acquisition failed");
+        }
     }
 
     static TDuration MultiplyWithSaturation(TDuration duration, double value) {
@@ -319,6 +349,7 @@ private:
     NLWTrace::TOrbit Orbit;
     ui64 Cookie = 0;
 
+    NWilson::TSpan AcquireSpan;
     bool MvccSnapshot = false;
 
     TSchedulerCookieHolder RequestTimeoutCookieHolder_;

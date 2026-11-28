@@ -164,6 +164,40 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         return sessionId;
     }
 
+    Y_UNIT_TEST(SnapshotBatchLinksCoalescedRequests) {
+        auto [runtime, server, sender] = CreateServer();
+        auto* uploader = RegisterUploader(runtime);
+        const auto service = NLongTxService::MakeLongTxServiceID(runtime.GetNodeId());
+        const TActorId requesters[] = {sender, runtime.AllocateEdgeActor()};
+        ui64 cookie = 0;
+        for (const auto requester : requesters) {
+            runtime.Send(new IEventHandle(service, requester,
+                new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot("/Root"),
+                0, ++cookie, nullptr, TTraceId::NewTraceId(11, 4095)));
+        }
+        for (const auto requester : requesters) {
+            const auto response = runtime.GrabEdgeEventRethrow<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult>(requester);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, Ydb::StatusIds::SUCCESS);
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        size_t requests = 0;
+        size_t batches = 0;
+        for (const auto& span : uploader->Spans) {
+            if (span.name() == "Snapshot request queue") {
+                ++requests;
+                UNIT_ASSERT_VALUES_EQUAL(span.links_size(), 1);
+            } else if (span.name() == "Acquire snapshot batch") {
+                ++batches;
+                UNIT_ASSERT_VALUES_EQUAL(span.links_size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(span, "ydb.snapshot.request_count")->value().int_value(), 2);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(requests, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(batches, 1u);
+        UNIT_ASSERT(FindSpan(*uploader, "Resolve snapshot coordinators"));
+        UNIT_ASSERT(FindSpan(*uploader, "Wait for Coordinator read step"));
+    }
+
     Y_UNIT_TEST(CommonTreeIncludesKqpAndDatashard) {
         auto [runtime, server, sender] = CreateServer();
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);

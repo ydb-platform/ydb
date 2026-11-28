@@ -15,13 +15,14 @@ namespace NLongTxService {
 
     class TLongTxServiceActor::TAcquireSnapshotActor : public TActorBootstrapped<TAcquireSnapshotActor> {
     public:
-        TAcquireSnapshotActor(const TActorId& parent, ui64 cookie, const TString& databaseName)
+        TAcquireSnapshotActor(const TActorId& parent, ui64 cookie, const TString& databaseName, NWilson::TTraceId traceId)
             : Parent(parent)
             , Cookie(cookie)
             , DatabaseName(databaseName)
             , SchemeCache(MakeSchemeCacheID())
             , LeaderPipeCache(MakePipePerNodeCacheID(false))
             , LogPrefix("LongTxService.AcquireSnapshot ")
+            , Span(10, std::move(traceId), "Acquire snapshot attempt", NWilson::EFlags::AUTO_END)
         { }
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -36,11 +37,18 @@ namespace NLongTxService {
     private:
         void PassAway() override {
             Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
+            for (auto& [coordinator, wait] : CoordinatorSpans) {
+                if (wait) {
+                    wait.Attribute("ydb.snapshot.wait_outcome", TString("superseded"));
+                    wait.End();
+                }
+            }
             TActor::PassAway();
         }
 
     private:
         void SendNavigateRequest() {
+            NavigateSpan = Span.CreateChild(10, "Resolve snapshot coordinators", NWilson::EFlags::AUTO_END);
             YDB_LOG_DEBUG("Sending navigate request",
                 {"logPrefix", LogPrefix},
                 {"databaseName", DatabaseName});
@@ -50,7 +58,7 @@ namespace NLongTxService {
             entry.Path = ::NKikimr::SplitPath(DatabaseName);
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()),
-                IEventHandle::FlagTrackDelivery);
+                IEventHandle::FlagTrackDelivery, 0, NavigateSpan.GetTraceId());
             Become(&TThis::StateNavigate);
         }
 
@@ -70,6 +78,12 @@ namespace NLongTxService {
 
         void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
+            NavigateSpan.Attribute("ydb.resolve.status", static_cast<i64>(resp->ResultSet.at(0).Status));
+            if (resp->ResultSet.at(0).Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                NavigateSpan.EndOk();
+            } else {
+                NavigateSpan.EndError("snapshot coordinator resolution failed");
+            }
 
             const auto& entry = resp->ResultSet.at(0);
             YDB_LOG_DEBUG("Received navigate response status",
@@ -131,7 +145,17 @@ namespace NLongTxService {
                 YDB_LOG_DEBUG("Sending acquire step to coordinator",
                     {"logPrefix", LogPrefix},
                     {"coordinator", coordinator});
-                SendToTablet(coordinator, MakeHolder<TEvTxProxy::TEvAcquireReadStep>(coordinator));
+                NWilson::TTraceId trace = Span.GetTraceId();
+                if (Span && trace.GetVerbosity() >= 11 && CoordinatorSpans.size() < 32) {
+                    auto& wait = CoordinatorSpans[coordinator];
+                    wait = Span.CreateChild(11, "Wait for Coordinator read step", NWilson::EFlags::AUTO_END);
+                    wait.Attribute("ydb.coordinator_id", static_cast<i64>(coordinator));
+                    wait.Event("acquire step dispatched");
+                    trace = wait.GetTraceId();
+                } else if (Span && trace.GetVerbosity() >= 11) {
+                    Span.Attribute("ydb.snapshot.coordinator_spans_truncated", true);
+                }
+                SendToTablet(coordinator, MakeHolder<TEvTxProxy::TEvAcquireReadStep>(coordinator), trace);
             }
         }
 
@@ -152,6 +176,10 @@ namespace NLongTxService {
                 {"tabletId", tabletId},
                 {"notDelivered", msg->NotDelivered});
 
+            if (auto it = CoordinatorSpans.find(tabletId); it != CoordinatorSpans.end() && it->second) {
+                it->second.Attribute("ydb.delivery.not_delivered", msg->NotDelivered);
+                it->second.EndError("delivery problem");
+            }
             WaitingCoordinators.erase(tabletId);
             if (WaitingCoordinators.empty() && !BackupCoordinators.empty()) {
                 for (ui64 coordinator : BackupCoordinators) {
@@ -170,12 +198,19 @@ namespace NLongTxService {
             YDB_LOG_DEBUG("Received read step",
                 {"logPrefix", LogPrefix},
                 {"step", step});
+            if (auto it = CoordinatorSpans.find(msg->Record.GetCoordinatorID()); it != CoordinatorSpans.end() && it->second) {
+                it->second.Event("read step result received");
+                it->second.Attribute("ydb.snapshot.step", static_cast<i64>(step));
+                it->second.EndOk();
+            }
             ReplySuccess(TRowVersion(step, Max<ui64>()));
         }
 
     private:
         void ReplySuccess(const TRowVersion& snapshot) {
-            Send(Parent, new TEvPrivate::TEvAcquireSnapshotFinished(snapshot), 0, Cookie);
+            Span.Attribute("ydb.snapshot.step", static_cast<i64>(snapshot.Step));
+            Send(Parent, new TEvPrivate::TEvAcquireSnapshotFinished(snapshot), 0, Cookie, Span.GetTraceId());
+            Span.EndOk();
             PassAway();
         }
 
@@ -186,14 +221,19 @@ namespace NLongTxService {
                 {"message", message});
             NYql::TIssues issues;
             issues.AddIssue(message);
-            Send(Parent, new TEvPrivate::TEvAcquireSnapshotFinished(status, std::move(issues)), 0, Cookie);
+            Send(Parent, new TEvPrivate::TEvAcquireSnapshotFinished(status, std::move(issues)), 0, Cookie, Span.GetTraceId());
+            if (NavigateSpan) {
+                NavigateSpan.EndError("snapshot coordinator resolution failed");
+            }
+            Span.Attribute("ydb.snapshot.status", static_cast<i64>(status));
+            Span.EndError("snapshot acquisition failed");
             PassAway();
         }
 
     private:
-        void SendToTablet(ui64 tabletId, THolder<IEventBase> event, bool subscribe = true) {
+        void SendToTablet(ui64 tabletId, THolder<IEventBase> event, const NWilson::TTraceId& traceId, bool subscribe = true) {
             Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, subscribe),
-                IEventHandle::FlagTrackDelivery);
+                IEventHandle::FlagTrackDelivery, 0, NWilson::TTraceId(traceId));
         }
 
     private:
@@ -203,6 +243,9 @@ namespace NLongTxService {
         const TActorId SchemeCache;
         const TActorId LeaderPipeCache;
         TString LogPrefix;
+        NWilson::TSpan Span;
+        NWilson::TSpan NavigateSpan;
+        THashMap<ui64, NWilson::TSpan> CoordinatorSpans;
         THashSet<ui64> WaitingCoordinators;
         THashSet<ui64> BackupCoordinators;
     };
@@ -214,6 +257,30 @@ namespace NLongTxService {
         req.UserRequests.swap(state.PendingUserRequests);
         req.BeginTxRequests.swap(state.PendingBeginTxRequests);
         state.ActiveRequests.insert(reqId);
+        NWilson::TTraceId parent;
+        for (const auto& user : req.UserRequests) {
+            const auto trace = user.Span.GetTraceId();
+            if (trace && (!parent || trace.GetVerbosity() > parent.GetVerbosity())) {
+                parent = NWilson::TTraceId(trace);
+            }
+        }
+        req.Span = NWilson::TSpan(10, std::move(parent), "Acquire snapshot batch", NWilson::EFlags::AUTO_END);
+        req.Span.Attribute("ydb.snapshot.batch_id", static_cast<i64>(reqId));
+        req.Span.Attribute("ydb.snapshot.request_count", static_cast<i64>(req.UserRequests.size()));
+        size_t links = 0;
+        size_t tracedRequests = 0;
+        for (auto& user : req.UserRequests) {
+            if (!user.Span.GetTraceId()) {
+                continue;
+            }
+            ++tracedRequests;
+            user.Span.Link(req.Span.GetTraceId());
+            if (links < 32) {
+                req.Span.Link(user.Span.GetTraceId());
+                ++links;
+            }
+        }
+        req.Span.Attribute("ydb.snapshot.request_links_truncated", tracedRequests > links);
         StartAcquireSnapshotAttempt(reqId, databaseName);
 
         // Count the batch once, including any freshness retries it needs.
@@ -224,7 +291,8 @@ namespace NLongTxService {
     }
 
     void TLongTxServiceActor::StartAcquireSnapshotAttempt(ui64 requestId, const TString& databaseName) {
-        Register(new TAcquireSnapshotActor(SelfId(), requestId, databaseName));
+        auto& request = AcquireSnapshotInFlight.at(requestId);
+        Register(new TAcquireSnapshotActor(SelfId(), requestId, databaseName, request.Span.GetTraceId()));
     }
 
 } // namespace NLongTxService

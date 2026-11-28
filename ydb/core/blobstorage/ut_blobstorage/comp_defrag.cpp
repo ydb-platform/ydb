@@ -798,7 +798,9 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
     }
 
     Y_UNIT_TEST(NoCompactionRequestsUntilPreviousFinishes) {
-        TTestEnvCompDefragIndependent env(0.01);
+        // Every VDisk must request a compaction after the deletion. With 4064-byte sector payloads, as a real PDisk
+        // has, each VDisk can free about 200 MB here, so the threshold is kept well below that (about 107 MB).
+        TTestEnvCompDefragIndependent env(0.005);
         ui32 N = 50000;
         ui32 batchSize = 1000;
 

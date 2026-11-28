@@ -2087,6 +2087,13 @@ message TImmediateControlsConfig {
             MaxValue: 86400,
             DefaultValue: 0,
         }];
+
+        optional uint64 EnableVDiskSectorPreparation = 57 [(ControlOptions) = {
+            Description: "VDisk builds and checks PDisk data sectors itself, so PDisk threads do not copy, encrypt or hash the data; the on-disk format is unchanged, so it can be switched either way at any time",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {

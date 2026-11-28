@@ -218,7 +218,7 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
         return false;
     }
 
-    if (checkPile && Hive.BridgeInfo) {
+    if ((checkPile && Hive.BridgeInfo) || filter.BackupPileId) {
         if (!filter.IsAllowedPile(BridgePileId)) {
             return false;
         }

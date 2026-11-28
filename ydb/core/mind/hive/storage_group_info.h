@@ -15,6 +15,7 @@ struct TStoragePoolInfo;
 struct TGroupFilter {
     NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters GroupParameters;
     bool PhysicalGroupsOnly = false;
+    TBridgePileId BackupPileId;
 };
 
 struct TStorageResources {

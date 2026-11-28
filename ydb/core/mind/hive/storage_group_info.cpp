@@ -48,6 +48,10 @@ bool TStorageGroupInfo::IsMatchesParameters(const TGroupFilter& filter) const {
     if (groupParameters.GetStoragePoolSpecifier().GetName() != GroupParameters.GetStoragePoolName()) {
         return false;
     }
+    if (filter.BackupPileId != TBridgePileId::FromProto(&GroupParameters,
+            &TGroupMetrics::TGroupParameters::GetBackupPileId)) {
+        return false;
+    }
     if (filter.PhysicalGroupsOnly && GroupParameters.HasPhysicalGroup() && !GroupParameters.GetPhysicalGroup()) {
         return false;
     }

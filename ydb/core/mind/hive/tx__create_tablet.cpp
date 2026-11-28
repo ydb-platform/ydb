@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#include <ydb/core/base/tabletid.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
@@ -11,6 +13,7 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     const ui64 OwnerId;
     const ui64 OwnerIdx;
     const TTabletTypes::EType TabletType;
+    const TBridgePileId BackupPileId;
 
     const TActorId Sender;
     const ui64 Cookie;
@@ -42,6 +45,7 @@ public:
         , OwnerId(RequestData.GetOwner())
         , OwnerIdx(RequestData.GetOwnerIdx())
         , TabletType((TTabletTypes::EType)RequestData.GetTabletType())
+        , BackupPileId(TBridgePileId::FromProto(&RequestData, &NKikimrHive::TEvCreateTablet::GetBackupPileId))
         , Sender(sender)
         , Cookie(cookie)
         , TabletId(0)
@@ -207,6 +211,20 @@ public:
             {"request", RequestData.ShortDebugString()});
         SideEffects.Reset(Self->SelfId());
         ErrorReason = NKikimrHive::ERROR_REASON_UNKNOWN;
+        if (BackupPileId) {
+            const auto* pile = Self->BridgeInfo ? Self->BridgeInfo->FindPile(BackupPileId) : nullptr;
+            if (OwnerId != MakeBSControllerID() || TabletType != TTabletTypes::BlobDepot || Self->AreWeSubDomainHive() ||
+                    !RequestData.GetBackupPileAddedGeneration() || !FollowerGroups.empty()) {
+                ErrorReason = NKikimrHive::ERROR_REASON_INVALID_ARGUMENTS;
+                ReplyToSender(NKikimrProto::ERROR);
+                return true;
+            }
+            if (!pile || pile->Type != NKikimrBridge::BACKUP ||
+                    pile->AddedGeneration != RequestData.GetBackupPileAddedGeneration()) {
+                ReplyToSender(NKikimrProto::NOTREADY);
+                return true;
+            }
+        }
         for (const auto& domain : AllowedDomains) {
             if (!Self->SeenDomain(domain)) {
                 ++Self->ConfigurationGeneration;
@@ -236,6 +254,12 @@ public:
                     // make sure tablet type matches the requested one
                     TTabletTypes::EType existingTabletType = tablet->Type;
                     TabletId = tabletId;
+                    if (tablet->NodeFilter.BackupPileId != BackupPileId || tablet->NodeFilter.BackupPileAddedGeneration !=
+                            RequestData.GetBackupPileAddedGeneration()) {
+                        ErrorReason = NKikimrHive::ERROR_REASON_INVALID_ARGUMENTS;
+                        ReplyToSender(NKikimrProto::ERROR);
+                        return true;
+                    }
                     if (existingTabletType != TabletType || tablet->SeizedByChild) {
                         if (tablet->SeizedByChild) {
                             YDB_LOG_WARN("THive::TTxCreateTablet::Execute existing tablet seized by child, operation postponed",
@@ -402,6 +426,8 @@ public:
         tablet.ActorsToNotify.push_back(Sender);
         tablet.NodeFilter.AllowedNodes = AllowedNodeIds;
         tablet.NodeFilter.AllowedDataCenters = AllowedDataCenterIds;
+        tablet.NodeFilter.BackupPileId = BackupPileId;
+        tablet.NodeFilter.BackupPileAddedGeneration = RequestData.GetBackupPileAddedGeneration();
         tablet.Owner = ownerIdx;
         tablet.DataCentersPreference = DataCentersPreference;
         tablet.BootMode = BootMode;
@@ -427,6 +453,8 @@ public:
                                                         NIceDb::TUpdate<Schema::Tablet::State>(tablet.State),
                                                         NIceDb::TUpdate<Schema::Tablet::ActorsToNotify>(TVector<TActorId>(1, Sender)),
                                                         NIceDb::TUpdate<Schema::Tablet::AllowedNodes>(tablet.NodeFilter.AllowedNodes),
+                                                        NIceDb::TUpdate<Schema::Tablet::BackupPileId>(BackupPileId.GetLocalDb()),
+                                                        NIceDb::TUpdate<Schema::Tablet::BackupPileAddedGeneration>(tablet.NodeFilter.BackupPileAddedGeneration),
                                                         NIceDb::TUpdate<Schema::Tablet::NewAllowedDataCenterIds>(tablet.NodeFilter.AllowedDataCenters),
                                                         NIceDb::TUpdate<Schema::Tablet::DataCentersPreference>(tablet.DataCentersPreference),
                                                         NIceDb::TUpdate<Schema::Tablet::AllowedDomains>(AllowedDomains),

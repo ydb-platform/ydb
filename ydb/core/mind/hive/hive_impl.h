@@ -199,6 +199,7 @@ protected:
     friend class TTxReassignGroupsOnDecommit;
     friend class TTxStartTablet;
     friend class TTxCreateTablet;
+    friend struct TNodeFilter;
     friend class TTxCutTabletHistory;
     friend class TTxBlockStorageResult;
     friend class TTxAdoptTablet;

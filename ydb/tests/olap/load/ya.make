@@ -75,7 +75,10 @@ PY3TEST()
             ydb/tests/stress/cdc
             ydb/tests/stress/statistics_workload
             ydb/tests/tools/nemesis/driver
+            ydb/tests/olap/load/fill_tables
         )
     ENDIF()
 
 END()
+
+RECURSE(fill_tables)

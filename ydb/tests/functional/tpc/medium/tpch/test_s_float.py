@@ -1,3 +1,4 @@
+from ydb.tests.olap.lib.fill_tables import Dataset
 import pytest
 
 import ydb.tests.olap.load.lib.tpch as tpch
@@ -21,9 +22,7 @@ def tpch_cluster():
     try:
         ClusterOwner.setup_cluster()
         paths = {TestTpchS0_1._get_path(), TestTpchParallelS0_1T10.get_path()}
-        for path in sorted(paths):
-            ClusterOwner.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{path}', 'init', '--store=column', '--datetime-types=dt64'])
-            ClusterOwner.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{path}', 'import', 'generator', '--scale=0.1'])
+        ClusterOwner.fill_tables(*(Dataset('tpch', f'olap_yatests/{path}', scale='0.1') for path in sorted(paths)))
         yield ClusterOwner.cluster
     finally:
         if ClusterOwner.cluster is not None:

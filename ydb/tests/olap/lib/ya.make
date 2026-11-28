@@ -4,6 +4,7 @@ PY3_LIBRARY()
         allure_utils.py
         compaction.py
         errors_report.py
+        fill_tables.py
         results_processor.py
         remote_execution.py
         tpcc_deviation.py

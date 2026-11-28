@@ -1,3 +1,4 @@
+from ydb.tests.olap.lib.fill_tables import Dataset
 import ydb.tests.olap.load.lib.tpcds as tpcds
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 
@@ -10,16 +11,9 @@ class TestTpcdsS1(tpcds.TestTpcds1, FunctionalTestBase):
     }
 
     @classmethod
-    def addition_init_params(cls) -> list[str]:
-        if cls.float_mode:
-            return ['--float-mode', cls.float_mode]
-        return []
-
-    @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster(memory_controller_config=cls.memory_controller_config)
-        cls.run_cli(['workload', 'tpcds', '-p', f'olap_yatests/{cls._get_path()}', 'init', '--store=column', '--datetime-types=dt64'] + cls.addition_init_params())
-        cls.run_cli(['workload', 'tpcds', '-p', f'olap_yatests/{cls._get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
+        cls.fill_tables(Dataset('tpcds', f'olap_yatests/{cls._get_path()}', scale=cls.scale, float_mode=cls.float_mode))
         super().setup_class()
 
 

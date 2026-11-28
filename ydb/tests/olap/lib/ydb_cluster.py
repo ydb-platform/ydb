@@ -64,6 +64,7 @@ class YdbCluster:
             self.ic_port: int = ports.get('ic', 0)
             self.mon_port: int = ports.get('http-mon', 0)
             self.grpc_port: int = ports.get('grpc', 0)
+            self.grpcs_port: int = ports.get('grpcs', 0)
             self.kafka_port: int = self._load_kafka_port(self.host, self.mon_port) if load_kafka_port else 0
             self.disconnected: bool = desc.get('Disconnected', False)
             self.version: str = ss.get('Version', '')
@@ -118,8 +119,9 @@ class YdbCluster:
         return subpath if subpath else cls._tables_path
 
     @classmethod
-    def get_full_tables_path(cls, subpath: str = '') -> str:
-        return f'/{cls.ydb_database}/{cls.get_tables_path(subpath)}'
+    def get_full_tables_path(cls, subpath: str = '', *, use_tables_prefix: bool = True) -> str:
+        path = cls.get_tables_path(subpath) if use_tables_prefix else subpath
+        return f"/{cls.ydb_database.strip('/')}/{path}"
 
     @classmethod
     def get_monitoring_urls(cls) -> list[YdbCluster.MonitoringUrl]:

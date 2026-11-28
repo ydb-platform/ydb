@@ -3,6 +3,7 @@ import pytest
 import yatest.common
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
+from ydb.tests.olap.lib.fill_tables import Dataset
 
 
 @pytest.fixture(scope="module")
@@ -12,12 +13,10 @@ def clickbench_cluster():
 
     try:
         ClusterOwner.setup_cluster()
-        ClusterOwner.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column', '--datetime-types=dt64'])
-        ClusterOwner.run_cli([
-            'workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits',
-            'import', 'files', '--input',
-            yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv"),
-        ])
+        ClusterOwner.fill_tables(Dataset(
+            'clickbench', 'olap_yatests/clickbench/hits',
+            input_path=yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv"),
+        ))
         yield ClusterOwner.cluster
     finally:
         if ClusterOwner.cluster is not None:

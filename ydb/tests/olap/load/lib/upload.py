@@ -2,19 +2,18 @@ from __future__ import annotations
 from .conftest import LoadSuiteBase
 from .tpch import TpchSuiteBase
 from time import time, sleep
+from ydb.tests.olap.lib.compaction import wait_column_compaction
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.fill_tables import Dataset, TableFiller
 from ydb.tests.olap.lib.workload_result import Iteration, WorkloadRunResult
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 import allure
 import json
 import logging
-import os
-import shlex
 import pytest
 import yatest.common
 import ydb
-import ydb.tests.olap.lib.remote_execution as re
 
 
 class UploadSuiteBase(LoadSuiteBase):
@@ -104,23 +103,6 @@ class UploadClusterBase(UploadSuiteBase):
         })
 
     @classmethod
-    def __compaction_complete_for_table(cls, table_full_path: str) -> bool:
-        sth = ScenarioTestHelper(None)
-        result = sth.execute_query(f'''
-            SELECT COUNT(*)
-            FROM `{table_full_path}/.sys/primary_index_optimizer_stats`
-            WHERE CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.weight") AS Uint64) > 0
-        ''')
-        return result[0].rows[0][0] == 0
-
-    @classmethod
-    def __compaction_complete(cls) -> bool:
-        for table in YdbCluster.get_tables(cls.get_path()):
-            if not cls.__compaction_complete_for_table(table):
-                return False
-        return True
-
-    @classmethod
     @allure.step
     def __stats_ready_for_table(cls,  table_full_path: str) -> bool:
         def __max_e_rows(node: dict):
@@ -154,8 +136,12 @@ class UploadClusterBase(UploadSuiteBase):
     @classmethod
     @allure.step
     def wait_compaction(cls):
-        while not cls.__compaction_complete():
-            sleep(1)
+        helper = ScenarioTestHelper(None)
+
+        def execute_query(query, _remaining):
+            return helper.execute_query(query)[0].rows
+
+        wait_column_compaction(YdbCluster.get_tables(cls.get_path()), execute_query)
 
     @classmethod
     def before_import_data(cls):
@@ -202,71 +188,35 @@ class UploadClusterBase(UploadSuiteBase):
 
 
 class UploadTpchBase(UploadClusterBase):
-    __static_nodes: list[YdbCluster.Node] = []
     workload_type = TpchSuiteBase.workload_type
     iterations = TpchSuiteBase.iterations
     tables_size = TpchSuiteBase.tables_size
     check_canonical = TpchSuiteBase.check_canonical
 
     @classmethod
-    def __execute_on_nodes(cls, cmd):
-        execs = []
-        for i in range(len(cls.__static_nodes)):
-            node = cls.__static_nodes[i]
-            execs.append(cls.execute_ssh(node.host, cmd))
-        for e in execs:
-            e.wait()
-
-    @classmethod
     def get_path(cls):
         return f'upload/tpch/s{cls.scale}'
 
     @classmethod
-    def get_remote_tmpdir(cls):
-        tmpdir = '/tmp'
-        for node in cls.__static_nodes:
-            if re.is_localhost(node.host):
-                tmpdir = os.getenv('TMP') or os.getenv('TMPDIR') or yatest.common.work_path()
-                break
-        return os.path.join(tmpdir, 'scripts', cls.get_path())
-
-    @classmethod
     def do_setup_class(cls) -> None:
-        cls.__static_nodes = YdbCluster.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)
-        for i in range(len(cls.__static_nodes)):
-            node = cls.__static_nodes[i]
-            cli_path = YdbCliHelper.deploy_remote_cli(node.host, cls.get_remote_tmpdir())
-            script_path = yatest.common.work_path('ydb_upload_tpch.sh')
-            with open(script_path, 'w') as script_file:
-                script_file.write(f'''#!/bin/bash
-
-                    rm -f {cls.get_remote_tmpdir()}/state.json
-                    RET_CODE=1
-                    while [ $RET_CODE -ne 0 ]
-                    do
-                        {shlex.quote(cli_path)} -e grpc://{node.host}:{node.grpc_port} -d /{YdbCluster.ydb_database} \\
-                            workload tpch -p {YdbCluster.get_tables_path(cls.get_path())} \\
-                            import --bulk-size 50000 \\
-                            generator --scale {cls.scale} -i {i} -C {len(cls.__static_nodes)} --state {cls.get_remote_tmpdir()}/state.json
-                        RET_CODE="$?"
-                    done
-                ''')
-            res = re.deploy_binary(script_path, node.host, cls.get_remote_tmpdir())
-            assert res.get('success', False), f'slot: {node.slot}, bin: ydb_upload_tpch.sh, path: {res.get('path')}, error: {res.get('error')}'
-        super().do_setup_class()
+        cls.dataset = Dataset('tpch', YdbCluster.get_tables_path(cls.get_path()),
+                              scale=cls.scale, datetime_types='', clear=True,
+                              import_options=('--bulk-size', '50000'))
+        # Keep CLI deployment out of the measured import interval.
+        with TableFiller(YdbCliHelper.get_cli_path(), key_file=YdbCluster.ydb_iam_file) as cls.filler:
+            super().do_setup_class()
 
     @classmethod
     def init(cls):
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(cls.get_path()), 'init', '--store=column', '--clear'])
+        cls.filler.init(cls.dataset)
 
     @classmethod
     def import_data(cls):
-        cls.__execute_on_nodes(f'{cls.get_remote_tmpdir()}/ydb_upload_tpch.sh')
+        cls.filler.fill([cls.dataset], initialize=False, compaction_timeout=0)
 
     @classmethod
     def do_teardown_class(cls) -> None:
         yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(cls.get_path()), 'clean'])
-        cls.__execute_on_nodes(f'rm -rf {cls.get_remote_tmpdir()}')
 
     @pytest.mark.parametrize('query_num', [i for i in range(1, 23)])
     def test_tpch(self, query_num: int):

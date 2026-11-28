@@ -1,5 +1,4 @@
 import time
-from pathlib import Path
 
 import pytest
 
@@ -16,13 +15,9 @@ class TestWMOltpAdHoc(wm.TestWorkloadManagerOltpAdHoc, FunctionalTestBase):
         super().before_workload(result)
         deadline = time.monotonic() + 20
         execution = cls._tpcc_executions[0][1]
-        log = Path(execution._err_path)
         while time.monotonic() < deadline:
-            try:
-                if 'WM_TPCC_OK' in log.read_text():
-                    return
-            except FileNotFoundError:
-                pass
+            if 'WM_TPCC_OK' in execution.read_stderr():
+                return
             time.sleep(0.05)
         cls.terminate_tpcc()
         cls.wait_tpcc()

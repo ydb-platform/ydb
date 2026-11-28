@@ -7,6 +7,7 @@ import ydb
 
 import ydb.tests.workload_manager.common.workload_manager as wm
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
+from ydb.tests.olap.lib.fill_tables import Dataset
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
@@ -17,12 +18,10 @@ def clickbench_cluster():
 
     try:
         ClusterOwner.setup_cluster_ext(extra_feature_flags=['enable_composite_conveyor_scheduling'])
-        ClusterOwner.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column', '--datetime-types=dt64'])
-        ClusterOwner.run_cli([
-            'workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits',
-            'import', 'files', '--input',
-            yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv"),
-        ])
+        ClusterOwner.fill_tables(Dataset(
+            'clickbench', 'olap_yatests/clickbench/hits',
+            input_path=yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv"),
+        ))
         logging.info("ClickBench WM shared cluster and import are ready")
         yield ClusterOwner.cluster
     finally:

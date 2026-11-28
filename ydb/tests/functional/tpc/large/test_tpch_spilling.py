@@ -1,3 +1,4 @@
+from ydb.tests.olap.lib.fill_tables import Dataset
 import ydb.tests.olap.load.lib.tpch as tpch
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 
@@ -31,7 +32,6 @@ class TestTpchSpillingS10(tpch.TestTpch10, FunctionalTestBase):
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster(table_service_config=cls.table_service_config, memory_controller_config=cls.memory_controller_config)
-        cls.run_cli(['workload', 'tpch', '-p', 'olap_yatests/tpch/s10', 'init', '--store=column', '--datetime-types=dt64'])
-        cls.run_cli(['workload', 'tpch', '-p', 'olap_yatests/tpch/s10', 'import', 'generator', '--scale=10'])
+        cls.fill_tables(Dataset('tpch', 'olap_yatests/tpch/s10', scale=cls.scale))
 
         tpch.TestTpch10.setup_class()

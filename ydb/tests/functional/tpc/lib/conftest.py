@@ -2,6 +2,7 @@ import yatest.common
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
+from ydb.tests.olap.lib.fill_tables import Dataset, TableFiller
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 
 
@@ -102,6 +103,11 @@ class FunctionalTestBase:
         for slot in self.cluster.slots.values():
             if not slot.is_alive():
                 slot.stop()
+
+    @classmethod
+    def fill_tables(cls, *datasets: Dataset):
+        with TableFiller(YdbCliHelper.get_cli_path(), attempts=1) as filler:
+            filler.fill(list(datasets))
 
     @classmethod
     def run_cli(cls, argv: list[str]) -> yatest.common.process._Execution:

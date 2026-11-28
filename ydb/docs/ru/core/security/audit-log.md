@@ -500,3 +500,52 @@ audit_config:
     ```
 
 {% endlist %}
+
+## Выгрузка в локальную базу данных {#to-database}
+
+{% include [log_sink_columnshard](../_includes/log_sink_columnshard.md) %}
+
+Поддерживается выгрузка событий аудитного лога в локальную базу данных или какое-либо другое хранилище информации (см. [настройки логирования](../reference/configuration/log_config.md#events) ). Каждый источник событий аудитного лога представляется в виде независимого источника событий. Соответственно, для выгрузки событий аудитного лога в таблицы БД конфигурационный файл должен содержать примерно следующее:
+
+```yaml
+log_config:
+  sink:
+    - source: audit-schemeshard
+      destination: local-db
+      ...
+    - source: audit-grpc-proxy
+      destination: local-db
+      ...
+    - source: audit-grpc-conn
+      destination: local-db
+      ...
+    - source: audit-grpc-login
+      destination: local-db
+      ...
+    - source: audit-monitoring
+      destination: local-db
+      ...
+    - source: audit-heartbeat
+      destination: local-db
+      ...
+    - source: audit-bsc
+      destination: local-db
+      ...
+    - source: audit-distconf
+      destination: local-db
+      ...
+    - source: audit-web-login
+      destination: local-db
+      ...
+    - source: audit-console
+      destination: local-db
+    ...
+```
+
+{% note info %}
+
+Для более удобного задания параметров выгрузки событий можно задавать настройки, принимаемые по умолчанию для всех синков.
+
+{% endnote %}
+
+При выгрузке аудитного лога в локальную базу данных структура таблиц (перечень полей) полностью повторяет состав атрибутов соответствующих источников событий (см. выше). Кроме того, каждая таблица имеет [набор стандартных полей](../reference/configuration/log_config.md#event-local-database-columns).

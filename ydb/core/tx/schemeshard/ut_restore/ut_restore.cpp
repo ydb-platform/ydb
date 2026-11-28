@@ -754,6 +754,44 @@ value {
         UNIT_ASSERT_C(CheckDefaultFromLiteral(table), "Invalid default value");
     }
 
+    Y_UNIT_TEST_WITH_COMPRESSION_FLAG(ShouldSucceedWithDefaultFromExpression, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDefaultFromExpression(true);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+
+        const auto data = GenerateTestData(Codec, "a", 1);
+        constexpr char defaultExpr[] = "IF(RandomNumber(1) = 0ul, 'fallback'u, 'other'u)";
+        Restore(runtime, env, Sprintf(R"pb(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns {
+                Name: "value"
+                Type: "Utf8"
+                DefaultFromExpression {
+                    ExprText: "%s"
+                    Stored: true
+                    Writable: true
+                }
+            }
+            KeyColumnNames: ["key"]
+        )pb", defaultExpr), {data});
+
+        const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(data.YsonStr, content);
+
+        const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+        const auto& table = desc.GetPathDescription().GetTable();
+        const auto* value = FindIfPtr(table.GetColumns(), [](const auto& column) { return column.GetName() == "value"; });
+        UNIT_ASSERT_C(value && value->HasDefaultFromExpression(), table.ShortDebugString());
+        const auto& expression = value->GetDefaultFromExpression();
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetExprText(), defaultExpr);
+        UNIT_ASSERT(expression.GetStored());
+        UNIT_ASSERT(expression.GetWritable());
+        UNIT_ASSERT_VALUES_EQUAL(expression.DependencyColumnNamesSize(), 0);
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION_FLAG(ShouldSucceedOnMultiShardTable, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
 

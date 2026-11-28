@@ -662,9 +662,13 @@ using TColumnEncodingsList = TVector<TColumnEncoding>;
 
 struct TDefaultExpressionColumnInfo {
     TString ExprText;
-    NYql::TExprNode::TPtr Expr; // Compiled ExprText
     TVector<TString> Dependencies;
     bool Stored = false;
+    bool Writable = false;
+
+    bool IsGenerated() const {
+        return !Writable;
+    }
 };
 
 struct TKikimrColumnMetadata {
@@ -756,6 +760,7 @@ struct TKikimrColumnMetadata {
             DefaultExpression = TDefaultExpressionColumnInfo{};
             DefaultExpression->ExprText = defaultExpression.GetExprText();
             DefaultExpression->Stored = defaultExpression.GetStored();
+            DefaultExpression->Writable = defaultExpression.GetWritable();
             DefaultExpression->Dependencies.assign(defaultExpression.GetDependencies().begin(), defaultExpression.GetDependencies().end());
         }
     }
@@ -806,6 +811,7 @@ struct TKikimrColumnMetadata {
             auto& defaultExpression = *message->MutableDefaultFromExpression();
             defaultExpression.SetExprText(DefaultExpression->ExprText);
             defaultExpression.SetStored(DefaultExpression->Stored);
+            defaultExpression.SetWritable(DefaultExpression->Writable);
             for (const auto& dep : DefaultExpression->Dependencies) {
                 defaultExpression.AddDependencies(dep);
             }

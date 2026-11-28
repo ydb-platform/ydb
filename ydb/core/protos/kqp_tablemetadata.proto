@@ -33,6 +33,7 @@ message TDefaultExpression {
     optional string ExprText = 1;
     repeated string Dependencies = 2;
     optional bool Stored = 3 [default = false];
+    optional bool Writable = 4 [default = false];
 }
 
 message TKqpColumnMetadataProto {

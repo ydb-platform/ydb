@@ -360,6 +360,37 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Basic("/Root/Replicated");
     }
 
+    Y_UNIT_TEST(RejectsExpressionDefaultBootstrap) {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableDefaultFromExpression(true);
+        TEnv env(flags);
+        auto source = MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Uint64"}},
+            .ReplicationConfig = Nothing(),
+        });
+        auto* expression = source->MutableColumns(1)->MutableDefaultFromExpression();
+        expression->SetExprText("RandomNumber(1)");
+        expression->SetStored(true);
+        expression->SetWritable(true);
+        env.CreateTable("/Root", *source);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
+            "/Root/Table", "/Root/Replica", EReplicationMode::ReadOnly, EConsistencyLevel::Row));
+        auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusInvalidParameter, result->Get()->Error);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "replicating tables with DEFAULT expressions is not supported");
+        const auto replica = env.GetDescription("/Root/Replica");
+        UNIT_ASSERT_VALUES_EQUAL_C(replica.GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist, replica.ShortDebugString());
+        const auto describe = env.GetDescription("/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetTable().GetColumns(1)
+            .GetDefaultFromExpression().SerializeAsString(), expression->SerializeAsString());
+    }
+
     Y_UNIT_TEST(CreateTableWithLiteralDefaults) {
         TEnv env;
         auto source = MakeTableDescription(TTestTableDescription{

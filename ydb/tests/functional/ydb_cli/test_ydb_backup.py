@@ -389,60 +389,72 @@ class BaseTestBackupInFiles(BaseCliTestWithDatabase):
         self.create_user("eve")
 
 
-class TestDumpGeneratedColumns(BaseCliTestWithDatabase):
+class TestDumpColumnExpressions(BaseCliTestWithDatabase):
+    column_definitions = {
+        "STORED": "generated_stored Int32 GENERATED ALWAYS AS (value + 1) STORED",
+        "VIRTUAL": "generated_virtual Int32 GENERATED ALWAYS AS (value + 1) VIRTUAL",
+        "DEFAULT": "default_value Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul",
+    }
+
     @classmethod
     def get_cluster_configurator(cls):
-        return KikimrConfigGenerator(extra_feature_flags=["enable_generated_stored", "enable_generated_virtual"])
+        return KikimrConfigGenerator(extra_feature_flags=[
+            "enable_generated_stored", "enable_generated_virtual", "enable_default_from_expression",
+        ])
+
+    @staticmethod
+    def assert_dump_rejected(result, table_path, expression_kinds, backup_files_dir):
+        expression_type = "DEFAULT expressions" if "DEFAULT" in expression_kinds else "generated columns"
+        assert result.exit_code != 0, result.stdout
+        assert "UNSUPPORTED" in result.stderr, result.stderr
+        assert f"exporting tables with {expression_type} is not supported" in result.stderr, result.stderr
+        assert table_path in result.stderr, result.stderr
+        assert not os.path.exists(backup_files_dir)
 
     @pytest.mark.parametrize(
-        "generated_kinds",
-        [("STORED",), ("VIRTUAL",), ("STORED", "VIRTUAL")],
-        ids=["stored", "virtual", "stored_and_virtual"],
+        "expression_kinds",
+        [("STORED",), ("VIRTUAL",), ("STORED", "VIRTUAL"), ("DEFAULT",)],
+        ids=["stored", "virtual", "stored_and_virtual", "default_expression"],
     )
     @pytest.mark.parametrize(
         "dump_options",
         [[], ["--consistency-level", "table"], ["--avoid-copy"], ["--scheme-only"]],
         ids=["database_copy", "table_copy", "avoid_copy", "scheme_only"],
     )
-    def test_dump_rejects_generated_columns(self, generated_kinds, dump_options):
-        table_name = "_".join(("generated_columns", *generated_kinds, *dump_options)).replace("-", "_").lower()
-        generated_columns = ",\n".join(
-            f"generated_{kind.lower()} Int32 GENERATED ALWAYS AS (value + 1) {kind}"
-            for kind in generated_kinds
-        )
+    def test_dump_rejects_column_expressions(self, expression_kinds, dump_options):
+        table_name = "_".join(("column_expressions", *expression_kinds, *dump_options)).replace("-", "_").lower()
+        table_path = f"/Root/{table_name}"
+        expression_columns = ",\n".join(self.column_definitions[kind] for kind in expression_kinds)
         self.execute_ydb_cli_command(["sql", "-s", f"""
             CREATE TABLE `{table_name}` (
                 key Uint32 NOT NULL,
                 value Int32,
-                {generated_columns},
+                {expression_columns},
                 PRIMARY KEY (key)
             );
         """])
         self.execute_ydb_cli_command([
             "sql", "-s", f"UPSERT INTO `{table_name}` (key, value) VALUES (1, 42);",
         ])
-        self.execute_ydb_cli_command(["scheme", "describe", f"/Root/{table_name}"])
+        self.execute_ydb_cli_command(["scheme", "describe", table_path])
 
         backup_files_dir = yatest.common.output_path(table_name + "_dump")
         result = self.execute_ydb_cli_command([
-            "tools", "dump", "--path", f"/Root/{table_name}", "--output", backup_files_dir,
+            "tools", "dump", "--path", table_path, "--output", backup_files_dir,
         ] + dump_options, check_exit_code=False)
 
-        assert result.exit_code != 0, result.stdout
-        assert "UNSUPPORTED" in result.stderr, result.stderr
-        assert "exporting tables with generated columns is not supported" in result.stderr, result.stderr
-        assert f"/Root/{table_name}" in result.stderr, result.stderr
-        assert not os.path.exists(backup_files_dir)
+        self.assert_dump_rejected(result, table_path, expression_kinds, backup_files_dir)
 
-    @pytest.mark.parametrize("generated_kind", ["STORED", "VIRTUAL"])
+    @pytest.mark.parametrize("expression_kind", ["STORED", "VIRTUAL", "DEFAULT"])
     @pytest.mark.parametrize(
         "dump_options",
         [[], ["--consistency-level", "table"]],
         ids=["database_copy", "table_copy"],
     )
-    def test_dump_validates_directory_before_copying(self, generated_kind, dump_options):
-        folder_name = "_".join(("validate_before_copy", generated_kind, *dump_options)).replace("-", "_").lower()
+    def test_dump_validates_directory_before_copying(self, expression_kind, dump_options):
+        folder_name = "_".join(("validate_before_copy", expression_kind, *dump_options)).replace("-", "_").lower()
         folder_path = f"/Root/{folder_name}"
+        table_path = f"{folder_path}/nested/expressions"
         self.driver.scheme_client.make_directory(folder_path)
         self.driver.scheme_client.make_directory(f"{folder_path}/nested")
         session = self.driver.table_client.session().create()
@@ -450,10 +462,10 @@ class TestDumpGeneratedColumns(BaseCliTestWithDatabase):
         # The nested table is visited after the regular table, regardless of
         # the order in which ListDirectory returns the root's children.
         self.execute_ydb_cli_command(["sql", "-s", f"""
-            CREATE TABLE `{folder_path}/nested/generated` (
+            CREATE TABLE `{table_path}` (
                 key Uint32 NOT NULL,
                 value Int32,
-                generated Int32 GENERATED ALWAYS AS (value + 1) {generated_kind},
+                {self.column_definitions[expression_kind]},
                 PRIMARY KEY (key)
             );
         """])
@@ -464,11 +476,8 @@ class TestDumpGeneratedColumns(BaseCliTestWithDatabase):
             "-vv", "tools", "dump", "--path", folder_path, "--output", backup_files_dir,
         ] + dump_options, check_exit_code=False)
 
-        assert result.exit_code != 0, result.stdout
-        assert "UNSUPPORTED" in result.stderr, result.stderr
-        assert "exporting tables with generated columns is not supported" in result.stderr, result.stderr
+        self.assert_dump_rejected(result, table_path, (expression_kind,), backup_files_dir)
         assert "Copy table" not in result.stderr, result.stderr
-        assert not os.path.exists(backup_files_dir)
         root_children_after = {child.name for child in self.driver.scheme_client.list_directory("/Root").children}
         assert root_children_after == root_children_before
 
@@ -504,21 +513,21 @@ class TestDumpGeneratedColumns(BaseCliTestWithDatabase):
         else:
             assert os.path.getsize(data_file) > 0
 
-    @pytest.mark.parametrize("generated_kind", ["STORED", "VIRTUAL"])
+    @pytest.mark.parametrize("expression_kind", ["STORED", "VIRTUAL", "DEFAULT"])
     @pytest.mark.parametrize(
         "dump_options",
         [[], ["--consistency-level", "table"], ["--avoid-copy"], ["--scheme-only"]],
         ids=["database_copy", "table_copy", "avoid_copy", "scheme_only"],
     )
-    def test_dump_skips_omitted_generated_columns(self, generated_kind, dump_options):
-        folder_name = "_".join(("omitted_generated", generated_kind, *dump_options)).replace("-", "_").lower()
+    def test_dump_skips_omitted_column_expressions(self, expression_kind, dump_options):
+        folder_name = "_".join(("omitted_expressions", expression_kind, *dump_options)).replace("-", "_").lower()
         folder_path = f"/Root/{folder_name}"
         self.driver.scheme_client.make_directory(folder_path)
         self.execute_ydb_cli_command(["sql", "-s", f"""
             CREATE TABLE `{folder_path}/omitted` (
                 key Uint32 NOT NULL,
                 value Int32,
-                generated Int32 GENERATED ALWAYS AS (value + 1) {generated_kind},
+                {self.column_definitions[expression_kind]},
                 PRIMARY KEY (key)
             );
         """])
@@ -536,14 +545,14 @@ class TestDumpGeneratedColumns(BaseCliTestWithDatabase):
         if "--scheme-only" not in dump_options:
             assert os.path.isfile(os.path.join(backup_files_dir, "included", "data_00.csv"))
 
-    @pytest.mark.parametrize("generated_kind", ["STORED", "VIRTUAL"])
-    def test_dump_changefeed_of_generated_table(self, generated_kind):
-        table_path = f"/Root/generated_changefeed_{generated_kind.lower()}"
+    @pytest.mark.parametrize("expression_kind", ["STORED", "VIRTUAL", "DEFAULT"])
+    def test_dump_changefeed_of_table_with_column_expression(self, expression_kind):
+        table_path = f"/Root/expression_changefeed_{expression_kind.lower()}"
         self.execute_ydb_cli_command(["sql", "-s", f"""
             CREATE TABLE `{table_path}` (
                 key Uint32 NOT NULL,
                 value Int32,
-                generated Int32 GENERATED ALWAYS AS (value + 1) {generated_kind},
+                {self.column_definitions[expression_kind]},
                 PRIMARY KEY (key)
             );
         """])
@@ -551,7 +560,7 @@ class TestDumpGeneratedColumns(BaseCliTestWithDatabase):
             ALTER TABLE `{table_path}` ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'JSON');
         """])
 
-        backup_files_dir = yatest.common.output_path(f"changefeed_{generated_kind.lower()}_dump")
+        backup_files_dir = yatest.common.output_path(f"changefeed_{expression_kind.lower()}_dump")
         self.execute_ydb_cli_command([
             "tools", "dump", "--path", f"{table_path}/feed", "--output", backup_files_dir,
         ])

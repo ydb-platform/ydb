@@ -28,6 +28,11 @@ struct TSysTables {
             TString ExprText;
             TVector<TString> Dependencies;
             bool Stored = false;
+            bool Writable = false;
+
+            bool IsGenerated() const {
+                return !Writable;
+            }
         };
 
         TString Name;

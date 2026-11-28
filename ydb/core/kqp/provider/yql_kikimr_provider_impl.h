@@ -353,6 +353,9 @@ Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(st
 
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
 bool IsYqlNullExprNode(const NNodes::TExprBase& literal);
+// True when FillLiteralProto can turn the node into a Ydb::TypedValue, i.e. the DEFAULT is a
+// literal rather than an expression to evaluate per row
+bool IsLiteralDefaultValue(NNodes::TExprBase maybeLiteral);
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto);

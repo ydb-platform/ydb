@@ -113,7 +113,7 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsInline(const TExprB
                 .Done());
     }
 
-    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, generatedInputRow, pos, ctx);
+    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, table, generatedInputRow, pos, ctx);
     for (auto& name : std::move(genColumnNames)) {
         allColumns.push_back(std::move(name));
     }
@@ -211,6 +211,8 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
 
     TKqpStreamLookupSettings lookupSettings;
     lookupSettings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+    // A write addresses the full primary key, including NULL components.
+    lookupSettings.AllowNullKeysPrefixSize = pk.size();
 
     auto joined = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(BuildTableMeta(table, pos, ctx))
@@ -317,7 +319,7 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
                 .Done());
     }
 
-    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, mergedRow, pos, ctx);
+    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, table, mergedRow, pos, ctx);
     for (auto& name : std::move(genColumnNames)) {
         allColumns.push_back(std::move(name));
     }
@@ -376,7 +378,9 @@ TVector<const TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const TKikim
     TVector<const TKikimrColumnMetadata*> generatedColumns;
     for (const auto& name : table.Metadata->ColumnOrder) {
         const auto* colMeta = table.Metadata->Columns.FindPtr(name);
-        if (colMeta && colMeta->IsDefaultFromExpression() && colMeta->DefaultExpression->Stored) {
+        if (colMeta && colMeta->IsDefaultFromExpression()
+            && colMeta->DefaultExpression->IsGenerated() && colMeta->DefaultExpression->Stored)
+        {
             generatedColumns.push_back(colMeta);
         }
     }
@@ -384,7 +388,7 @@ TVector<const TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const TKikim
 }
 
 TGeneratedColumnMembers BuildGeneratedColumnMembers(const TVector<const TKikimrColumnMetadata*>& generatedColumns,
-    const TExprBase& depRow, TPositionHandle pos, TExprContext& ctx)
+    const TKikimrTableDescription& table, const TExprBase& depRow, TPositionHandle pos, TExprContext& ctx)
 {
     TGeneratedColumnMembers result;
     result.Names.reserve(generatedColumns.size());
@@ -392,10 +396,11 @@ TGeneratedColumnMembers BuildGeneratedColumnMembers(const TVector<const TKikimrC
 
     for (const auto* colMeta : generatedColumns) {
         YQL_ENSURE(colMeta->DefaultExpression.Defined(), "Generated column " << colMeta->Name << " has no expression metadata");
-        YQL_ENSURE(colMeta->DefaultExpression->Expr, "Generated column " << colMeta->Name << " has no compiled expression");
+        const auto* lambda = table.DefaultExpressionLambdas.FindPtr(colMeta->Name);
+        YQL_ENSURE(lambda, "Generated column " << colMeta->Name << " has no compiled expression");
 
         auto value = Build<TExprApplier>(ctx, pos)
-            .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
+            .Apply(TCoLambda(*lambda))
             .With(0, depRow)
             .Done();
 
@@ -485,7 +490,7 @@ TExprBase BuildVirtualGeneratedColumnProjection(
     auto row = Build<TCoArgument>(ctx, pos)
         .Name("row")
         .Done();
-    auto generated = BuildGeneratedColumnMembers(virtualColumns, row, pos, ctx);
+    auto generated = BuildGeneratedColumnMembers(virtualColumns, table, row, pos, ctx);
 
     TVector<TExprBase> members;
     members.reserve(logicalColumns.Size());
@@ -629,6 +634,28 @@ TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteT
 
     auto [rewritten, columns] = BuildStoredGeneratedColumnsInline(input, inputColumns, generatedColumns, table, pos, ctx);
     return { .Input=rewritten, .Columns=columns, .EmittedStreamLookup=false };
+}
+
+TVector<TExprBase> BuildDefaultExpressionMembers(const TCoAtomList& defaultExprColumns,
+    const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx)
+{
+    TVector<TExprBase> members;
+    auto emptyRow = Build<TCoAsStruct>(ctx, pos).Done();
+    for (const auto& col : defaultExprColumns) {
+        const auto* colMeta = table.Metadata->Columns.FindPtr(col.Value());
+        YQL_ENSURE(colMeta && colMeta->IsDefaultFromExpression(), "Column " << col.Value() << " has no DEFAULT expression");
+        const auto* lambda = table.DefaultExpressionLambdas.FindPtr(col.Value());
+        YQL_ENSURE(lambda, "DEFAULT expression of column " << col.Value() << " is not compiled");
+        members.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name(col)
+                .Value<TExprApplier>()
+                    .Apply(TCoLambda(*lambda))
+                    .With(0, emptyRow)
+                    .Build()
+                .Done());
+    }
+    return members;
 }
 
 }   // namespace NKikimr::NKqp::NOpt

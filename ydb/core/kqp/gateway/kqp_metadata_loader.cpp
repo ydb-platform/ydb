@@ -369,6 +369,7 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
             columnMeta.DefaultExpression.ConstructInPlace();
             columnMeta.DefaultExpression->ExprText = columnDesc.DefaultExpression->ExprText;
             columnMeta.DefaultExpression->Stored = columnDesc.DefaultExpression->Stored;
+            columnMeta.DefaultExpression->Writable = columnDesc.DefaultExpression->Writable;
             columnMeta.DefaultExpression->Dependencies.assign(
                 columnDesc.DefaultExpression->Dependencies.begin(), columnDesc.DefaultExpression->Dependencies.end());
         }

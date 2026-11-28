@@ -28,7 +28,8 @@ TVector<const NYql::TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const 
 // Applies each generated column's compiled lambda to depRow and produces the matching
 // (column name, name-value member) pair
 TGeneratedColumnMembers BuildGeneratedColumnMembers(const TVector<const NYql::TKikimrColumnMetadata*>& generatedColumns,
-    const NYql::NNodes::TExprBase& depRow, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    const NYql::TKikimrTableDescription& table, const NYql::NNodes::TExprBase& depRow, NYql::TPositionHandle pos,
+    NYql::TExprContext& ctx);
 
 // Replaces requested VIRTUAL generated columns with their physical dependencies
 // Returns logicalColumns itself when no virtual column is present
@@ -67,5 +68,10 @@ NYql::NNodes::TExprBase BuildGeneratedDependencyRow(const TVector<const NYql::TK
 TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const NYql::NNodes::TKiWriteTable& write,
     const NYql::NNodes::TExprBase& input, const NYql::NNodes::TCoAtomList& inputColumns,
     const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx, bool generatedLookup);
+
+// Applies DEFAULT lambdas to empty structs and builds members without projecting the input row.
+TVector<NYql::NNodes::TExprBase> BuildDefaultExpressionMembers(
+    const NYql::NNodes::TCoAtomList& defaultExprColumns, const NYql::TKikimrTableDescription& table,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 }   // namespace NKikimr::NKqp::NOpt

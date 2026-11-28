@@ -123,9 +123,13 @@ public:
             Y_ABORT_UNLESS(tableInfo);
 
             for (const auto& columnName : sortedSetNotNullColumns) {
-                auto id = tableInfo->GetColumnIdByNameSlow(columnName);
+                const auto id = tableInfo->GetColumnIdByNameSlow(columnName);
                 if (id == TTableInfo::InvalidColumnId) {
                     return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: Column '" << columnName << "' does not exist");
+                }
+                if (tableInfo->Columns.at(id).IsGenerated()) {
+                    return Reply(Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Cannot SET NOT NULL on GENERATED column '" << columnName << "'");
                 }
             }
         }

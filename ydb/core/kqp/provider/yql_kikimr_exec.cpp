@@ -2282,7 +2282,7 @@ public:
                     THashSet<TString> generatedDependencyColumns;
 
                     for (const auto& [genName, genMeta] : table.Metadata->Columns) {
-                        if (!genMeta.IsDefaultFromExpression()) {
+                        if (!genMeta.IsDefaultFromExpression() || !genMeta.DefaultExpression->IsGenerated()) {
                             continue;
                         }
 
@@ -2412,7 +2412,8 @@ public:
                                 return SyncError();
                             }
 
-                            auto defaultExpr = TExprBase(alterColumnList.Item(1));
+                            const auto setDefault = alterColumnList.Cast<TKiSetDefaultValue>();
+                            auto defaultExpr = setDefault.Expression();
 
                             if (IsYqlNullExprNode(defaultExpr)) {
                                 alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
@@ -2422,11 +2423,22 @@ public:
                                     defaultExpr = maybeJust.Cast().Input();
                                 }
 
-                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
-                                auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
-                                if (err) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
-                                    return SyncError();
+                                if (!IsLiteralDefaultValue(defaultExpr)) {
+                                    YQL_ENSURE(setDefault.SqlText());
+
+                                    alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION);
+                                    auto* expression = alter_columns->MutableDefaultFromExpression();
+                                    expression->SetExprText(TString(setDefault.SqlText().Cast().Value()));
+                                    expression->SetStored(true);
+                                    expression->SetWritable(true);
+                                } else {
+                                    alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
+                                    const auto& literalType = RemoveOptionality(*defaultExpr.Ref().GetTypeAnn());
+                                    auto err = FillLiteralProto(defaultExpr, &literalType, *alter_columns->MutableDefaultFromLiteral());
+                                    if (err) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
+                                        return SyncError();
+                                    }
                                 }
                             }
                         } else if (alterColumnAction == "dropDefault") {

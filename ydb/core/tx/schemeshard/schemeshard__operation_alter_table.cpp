@@ -343,6 +343,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
         .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
         .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
+        .EnableDefaultFromExpression = AppData()->FeatureFlags.GetEnableDefaultFromExpression(),
     };
 
 
@@ -920,6 +921,11 @@ public:
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot drop columns of replicated table");
                     return result;
                 }
+            }
+            if (AnyOf(alter.GetColumns(), [](const auto& column) { return column.HasDefaultFromExpression(); })) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Cannot set an expression default on replicated table");
+                return result;
             }
         }
 

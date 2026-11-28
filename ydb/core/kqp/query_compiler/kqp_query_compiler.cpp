@@ -1829,6 +1829,11 @@ private:
         FillDqInput(read.Ptr(), stageProto, stageProto.AddSources(), dataSourceCategory, ctx, false);
     }
 
+    static bool IsInsertOnlyDefaultColumn(const TKikimrColumnMetadata& column) {
+        return column.IsDefaultFromSequence() || column.IsDefaultFromLiteral()
+            || (column.IsDefaultFromExpression() && column.DefaultExpression && column.DefaultExpression->Writable);
+    }
+
     THashMap<TStringBuf, ui32> CreateColumnToOrder(
             const TVector<TStringBuf>& columns,
             const TKikimrTableMetadataPtr& tableMeta,
@@ -1849,9 +1854,7 @@ private:
         }
 
         const auto isDefaultColumn = [&tableMeta](const TString& columnName) {
-            const auto defaultKind = tableMeta->Columns.at(columnName).DefaultKind;
-            return defaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
-                || defaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+            return IsInsertOnlyDefaultColumn(tableMeta->Columns.at(columnName));
         };
 
         // Not DEFAULT columns
@@ -1988,9 +1991,7 @@ private:
             const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
             YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
-            const bool isDefault = columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
-                            ||  columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
-            if (isDefault) {
+            if (IsInsertOnlyDefaultColumn(*columnMeta)) {
                 result.Ids.insert(columnMeta->Id);
                 result.Names.insert(columnName);
             }
@@ -2611,7 +2612,6 @@ private:
 
             const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Path()).Metadata;
 
-            // Default columns processed locally (filled by the stream-write path only).
             TLocalDefaultColumns localDefaultColumns;
 
             const bool streamIndexWrite = Config->GetEnableIndexStreamWrite();
@@ -2619,6 +2619,12 @@ private:
                 localDefaultColumns = BuildStreamIndexWrite(settings, settingsProto, tablesMap, tableMeta, shape, streamIndexWrite);
             } else {
                 SetSinkOperationType(settings, settingsProto);
+                // A plain DataShard UPSERT passes insert-only defaults to the shard regardless of index stream writes.
+                if (!settings.DefaultColumns().Empty() && tableMeta->Kind == EKikimrTableKind::Datashard
+                    && std::ranges::none_of(tableMeta->Indexes, &TIndexDescription::ItUsedForWrite))
+                {
+                    localDefaultColumns = CollectLocalDefaultColumns(settings, tableMeta);
+                }
             }
 
             FillMainTableColumnsAndOrder(settings, settingsProto, tableMeta, shape, localDefaultColumns);

@@ -57,6 +57,31 @@ Y_UNIT_TEST_SUITE(KqpRboEffectsGuardsFallback) {
         CompareYson("[[1;[5];105];[2;[7];207]]", FormatResultSetYson(stored.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(PartialUpsertWithExpressionDefault) {
+        auto config = GuardConfig(/* fallback */ false);
+        config.MutableFeatureFlags()->SetEnableDefaultFromExpression(true);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
+        auto client = kikimr.GetQueryClient();
+        auto schema = client.ExecuteQuery(R"(
+            CREATE TABLE D (
+                k Int32 NOT NULL,
+                payload Int32,
+                v Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul,
+                PRIMARY KEY (k)
+            );
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+        auto seed = client.ExecuteQuery("INSERT INTO D (k, payload, v) VALUES (1, 0, 7ul);", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(seed.IsSuccess(), seed.GetIssues().ToString());
+
+        auto result = client.ExecuteQuery("UPSERT INTO D (k, payload) VALUES (1, 5), (2, 6);", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto stored = client.ExecuteQuery("SELECT k, payload, v FROM D ORDER BY k;", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(stored.IsSuccess(), stored.GetIssues().ToString());
+        CompareYson("[[1;[5];[7u]];[2;[6];[42u]]]", FormatResultSetYson(stored.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(SingleReturningWithoutStreamIndex) {
         TKikimrRunner kikimr(TKikimrSettings(GuardConfig(true, false)).SetWithSampleTables(false));
         CreateTables(kikimr);

@@ -197,6 +197,9 @@ public:
     const TStructExprType* SchemeNode = nullptr;
     TMaybe<TString> RelativePath;
 
+    // These lambdas belong to the current query's expression context.
+    THashMap<TString, TExprNode::TPtr> DefaultExpressionLambdas;
+
     bool Load(TExprContext& ctx, bool withVirtualColumns = false);
     void ToYson(NYson::TYsonWriter& writer) const;
 
@@ -235,6 +238,7 @@ public:
         ETableType tableType = ETableType::Table, bool sysViewRewritten = false);
     TKikimrTableDescription& GetTable(const TString& cluster, const TString& table);
 
+    TKikimrTableDescription* EnsureTableExists(const TString& cluster, const TString& table, TPositionHandle pos, TExprContext& ctx);
     const TKikimrTableDescription* EnsureTableExists(const TString& cluster, const TString& table,
         TPositionHandle pos, TExprContext& ctx) const;
 

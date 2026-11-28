@@ -303,8 +303,11 @@ namespace NKikimr {
             // if not enough memory try to remove cache pages
             bool memOverflow = SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages;
             if (memOverflow) {
-                ui64 lsn = CalculateFirstDataInRecovLogLsnToKeep();
-                SyncLogPtr->RemoveCachedPages(MaxMemPages, lsn);
+                // RemoveCachedPages takes the last lsn that is not needed: the records up to TrimTailLsn are trimmed,
+                // and the records before FirstLsnToKeep() are either trimmed or written to disk
+                const ui64 firstLsnToKeep = SyncLogPtr->FirstLsnToKeep();
+                Y_DEBUG_ABORT_UNLESS(firstLsnToKeep);
+                SyncLogPtr->RemoveCachedPages(MaxMemPages, Max(TrimTailLsn, firstLsnToKeep - 1));
             }
 
             // if we still have memory overflow, perform write swap to disk

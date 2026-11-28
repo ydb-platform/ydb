@@ -191,7 +191,8 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
 }
 
 EMaintenanceStatus::E TPDiskStatusComputer::ComputeMaintenanceStatus(EMaintenanceStatus::E current) const {
-    if (current == EMaintenanceStatus::NOT_SET) {
+    // NOT_SET status to set means that CMS does not manage the maintenance status
+    if (current == EMaintenanceStatus::NOT_SET || MaintenanceStatus == EMaintenanceStatus::NOT_SET) {
         return current;
     }
 
@@ -236,6 +237,10 @@ bool TPDiskStatusComputer::IsInitialDeploymentGracePeriod() const {
 
 void TPDiskStatusComputer::SetMaintenanceStatus(EMaintenanceStatus::E status) {
     MaintenanceStatus = status;
+}
+
+EMaintenanceStatus::E TPDiskStatusComputer::GetRequiredMaintenanceStatus() const {
+    return MaintenanceStatus;
 }
 
 /// TPDiskStatus
@@ -1222,7 +1227,16 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             bool hasGoodState = NKikimrBlobStorage::TPDiskState::Normal == info.GetState();
 
             info.ResetForcedStatus();
-            info.SetMaintenanceStatus(EMaintenanceStatus::NO_REQUEST);
+
+            // CMS manages the maintenance status only if that is what VDisks are evicted with: then it is the one to
+            // set and to reset the status. Otherwise the status kept in BSC is left as is, except for withdrawing
+            // the request made before the eviction mode was changed.
+            const bool maintenanceWasRequested =
+                info.GetRequiredMaintenanceStatus() == EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
+            info.SetMaintenanceStatus(
+                Config.EvictVDisksStatus == EEvictVDisksStatus::Maintenance || maintenanceWasRequested
+                    ? EMaintenanceStatus::NO_REQUEST
+                    : EMaintenanceStatus::NOT_SET);
 
             if (it->second.HasFaultyMarker()) {
                 switch (Config.EvictVDisksStatus) {

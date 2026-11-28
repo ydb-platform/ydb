@@ -1330,6 +1330,118 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         logObserverHolder.Remove();
         UNIT_ASSERT_C(maintenanceOnlyReasonSeen, "Maintenance-only status changes must have a meaningful reason");
     }
+
+    // CMS does not manage the maintenance status unless that is what VDisks are evicted with
+    void CheckMaintenanceStatusIsNotManaged(NKikimrCms::TCmsConfig::TSentinelConfig::EEvictVDisksStatus evictVDisksStatus) {
+        NKikimrCms::TCmsConfig cmsConfig;
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(evictVDisksStatus);
+        TTestEnv env(8, 4, cmsConfig);
+
+        // maintenance is requested directly in BSC
+        const TPDiskID id1 = env.PDiskId(0, 0);
+        const TPDiskID id2 = env.PDiskId(1, 0);
+        env.SetBscMaintenanceStatus(id1, EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED);
+        env.SetBscMaintenanceStatus(id2, EMaintenanceStatus::NO_NEW_VDISKS);
+
+        ui32 driveStatusUpdates = 0;
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            if (event->Sender != env.GetSentinelActor()) {
+                return;
+            }
+            for (const auto& command : event->Get()->Record.GetRequest().GetCommand()) {
+                if (!command.HasUpdateDriveStatus()) {
+                    continue;
+                }
+                ++driveStatusUpdates;
+                UNIT_ASSERT_VALUES_EQUAL_C(command.GetUpdateDriveStatus().GetMaintenanceStatus(), EMaintenanceStatus::NOT_SET,
+                    "Sentinel must not touch the maintenance status it does not manage");
+            }
+        });
+
+        // Sentinel learns the maintenance status of a PDisk upon discovering the PDisk; that was when it used to
+        // reset the status
+        env.RestartSentinel();
+        env.SetPDiskState({id1}, NKikimrBlobStorage::TPDiskState::Normal);
+        env.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(driveStatusUpdates, 0);
+
+        // drive status is changed without touching the maintenance status
+        env.SetPDiskState({id1}, ErrorStates[0], EPDiskStatus::INACTIVE);
+        env.SetPDiskState({id2}, ErrorStates[0], EPDiskStatus::INACTIVE);
+        UNIT_ASSERT(driveStatusUpdates > 0);
+
+        // and so it is with the faulty marker
+        env.SetNodeFaulty(id1.NodeId, true);
+        env.SetNodeFaulty(id2.NodeId, true);
+        env.SetPDiskState({id1}, ErrorStates[0]);
+        env.SimulateSleep(TDuration::Seconds(1));
+
+        observerHolder.Remove();
+    }
+
+    Y_UNIT_TEST(MaintenanceStatusNotManagedWithFaultyEviction) {
+        CheckMaintenanceStatusIsNotManaged(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+    }
+
+    Y_UNIT_TEST(MaintenanceStatusNotManagedWithEvictionDisabled) {
+        CheckMaintenanceStatusIsNotManaged(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
+    }
+
+    // at least one request has been made, and all of them are for the status expected
+    void CheckMaintenanceRequested(const TVector<EMaintenanceStatus::E>& requested, EMaintenanceStatus::E expected) {
+        UNIT_ASSERT_C(!requested.empty(), "Maintenance status " << expected << " has not been requested");
+        for (const auto status : requested) {
+            UNIT_ASSERT_VALUES_EQUAL(status, expected);
+        }
+    }
+
+    Y_UNIT_TEST(MaintenanceStatusResetAfterRestart) {
+        NKikimrCms::TCmsConfig cmsConfig;
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::MAINTENANCE);
+        TTestEnv env(8, 4, cmsConfig);
+
+        const TPDiskID id = env.PDiskId(0, 0);
+
+        TVector<EMaintenanceStatus::E> requested;
+        auto observerHolder = env.ObserveMaintenanceRequests(id, requested);
+
+        // BSC has the status while the node has no marker: either someone else has set it, or CMS was restarted before
+        // it withdrew its own request. CMS manages the status when VDisks are evicted with it, so the status is reset
+        // in both cases.
+        env.SetBscMaintenanceStatus(id, EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED);
+        env.RestartSentinel();
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal);
+        env.SimulateSleep(TDuration::Seconds(1));
+        CheckMaintenanceRequested(requested, EMaintenanceStatus::NO_REQUEST);
+
+        observerHolder.Remove();
+    }
+
+    Y_UNIT_TEST(MaintenanceStatusWithdrawnIfEvictionModeChanged) {
+        NKikimrCms::TCmsConfig cmsConfig;
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::MAINTENANCE);
+        TTestEnv env(8, 4, cmsConfig);
+
+        const TPDiskID id = env.PDiskId(0, 0);
+
+        TVector<EMaintenanceStatus::E> requested;
+        auto observerHolder = env.ObserveMaintenanceRequests(id, requested);
+
+        // CMS requests maintenance for the PDisks of the node with the faulty marker
+        env.SetNodeFaulty(id.NodeId, true);
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal);
+        env.SimulateSleep(TDuration::Seconds(1));
+        CheckMaintenanceRequested(requested, EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED);
+        requested.clear();
+
+        // VDisks are not evicted with the maintenance status anymore, so the request is withdrawn
+        env.SetEvictVDisksStatus(EEvictVDisksStatus::Faulty);
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal);
+        env.SimulateSleep(TDuration::Seconds(1));
+        CheckMaintenanceRequested(requested, EMaintenanceStatus::NO_REQUEST);
+
+        observerHolder.Remove();
+    }
 } // TSentinelTests
 
 }

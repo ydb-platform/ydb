@@ -65,12 +65,64 @@ class TTestEnv: public TCmsTestEnv {
 
     void WaitForSentinelBoot() {
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvSentinel::TEvConfigUpdated::EventType);
-        options.FinalEvents.emplace_back(TEvSentinel::TEvStateUpdated::EventType);
+        options.FinalEvents.emplace_back([this](IEventHandle& ev) {
+            return ev.GetRecipientRewrite() == Sentinel
+                && ev.GetTypeRewrite() == TEvSentinel::TEvConfigUpdated::EventType;
+        });
+        options.FinalEvents.emplace_back([this](IEventHandle& ev) {
+            return ev.GetRecipientRewrite() == Sentinel
+                && ev.GetTypeRewrite() == TEvSentinel::TEvStateUpdated::EventType;
+        });
         UNIT_ASSERT(DispatchEvents(options));
     }
 
 public:
+    void RestartSentinel() {
+        Send(new IEventHandle(Sentinel, TActorId(), new TEvents::TEvPoisonPill));
+        WaitFor("Sentinel termination", [this] { return !FindActor(Sentinel); }, TDuration::Seconds(1));
+        EnableScheduleForActor(Sentinel, false);
+
+        Sentinel = Register(CreateSentinel(State));
+        EnableScheduleForActor(Sentinel, true);
+        WaitForSentinelBoot();
+    }
+
+    void SetEvictVDisksStatus(EEvictVDisksStatus status) {
+        State->Config.SentinelConfig.EvictVDisksStatus = status;
+    }
+
+    void SetBscMaintenanceStatus(const TPDiskID& id, EMaintenanceStatus::E status) {
+        TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+        auto* config = TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig();
+        for (auto& pdisk : *config->MutablePDisk()) {
+            if (pdisk.GetNodeId() == id.NodeId && pdisk.GetPDiskId() == id.DiskId) {
+                pdisk.SetMaintenanceStatus(status);
+                return;
+            }
+        }
+        UNIT_FAIL("Target PDisk is missing from BSC config");
+    }
+
+    // collects maintenance statuses Sentinel asks BSC to set for the PDisk
+    auto ObserveMaintenanceRequests(const TPDiskID& id, TVector<EMaintenanceStatus::E>& requested) {
+        return AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([this, id, &requested](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            if (event->Sender != Sentinel) {
+                return;
+            }
+            for (const auto& command : event->Get()->Record.GetRequest().GetCommand()) {
+                if (!command.HasUpdateDriveStatus()) {
+                    continue;
+                }
+                const auto& update = command.GetUpdateDriveStatus();
+                if (update.GetHostKey().GetNodeId() == id.NodeId
+                        && update.GetPDiskId() == id.DiskId
+                        && update.GetMaintenanceStatus() != EMaintenanceStatus::NOT_SET) {
+                    requested.push_back(update.GetMaintenanceStatus());
+                }
+            }
+        });
+    }
+
     void UpdateConfig() {
         Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateConfig));
         TDispatchOptions options;

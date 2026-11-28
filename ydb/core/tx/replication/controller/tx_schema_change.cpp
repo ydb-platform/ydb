@@ -10,6 +10,8 @@
 
 #include <contrib/libs/zstd/include/zstd.h>
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
@@ -606,6 +608,9 @@ class TController::TTxSchemaChangeReport: public TTxBase {
                 barrier.Phase = ESchemaBarrierPhase::FlushingTarget;
                 barrier.TargetFlushTxIds.reserve(Self->AssignedTxIds.size());
                 for (const auto& [_, writeTxId] : Self->AssignedTxIds) {
+                    if (::Find(barrier.TargetFlushTxIds, writeTxId) != barrier.TargetFlushTxIds.end()) {
+                        continue;
+                    }
                     barrier.TargetFlushTxIds.push_back(writeTxId);
                     flushTxIds.AddWriteTxIds(writeTxId);
                 }
@@ -1026,6 +1031,9 @@ public:
             barrier.NextTargetFlushTxId = 0;
             NKikimrReplicationController::TSchemaBarrierFlushTxIds flushTxIds;
             for (const auto& [_, writeTxId] : Self->AssignedTxIds) {
+                if (::Find(barrier.TargetFlushTxIds, writeTxId) != barrier.TargetFlushTxIds.end()) {
+                    continue;
+                }
                 barrier.TargetFlushTxIds.push_back(writeTxId);
                 flushTxIds.AddWriteTxIds(writeTxId);
             }

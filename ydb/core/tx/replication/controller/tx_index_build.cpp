@@ -21,6 +21,10 @@ TRowVersion IntervalEnd(const TRowVersion& version, ui64 interval) {
     return TRowVersion((version.Step / interval + 1) * interval, 0);
 }
 
+TRowVersion IntervalBegin(const TRowVersion& version, ui64 interval) {
+    return TRowVersion(version.Step / interval * interval, 0);
+}
+
 bool IsValidCheckpoint(const NKikimrReplication::TIndexBuildProgress& progress,
         const NKikimrReplication::TIndexBuildProgress& previous)
 {
@@ -172,7 +176,7 @@ class TController::TTxIndexBuild: public TTxBase {
     }
 
     bool CanReuseLastGlobalAssignment(const TRowVersion& join) const {
-        if (Self->AssignedTxIds.size() < MaxOpenTxIds) {
+        if (Self->CountOpenWriteTxIds() < MaxOpenTxIds) {
             return false;
         }
 
@@ -211,18 +215,12 @@ class TController::TTxIndexBuild: public TTxBase {
                 if (global) {
                     auto assigned = Self->AssignedTxIds.lower_bound(end);
                     if (assigned != Self->AssignedTxIds.end()) {
-                        end = assigned->first;
                         txId = assigned->second;
+                        Self->ExtendWriteTx(db, txId, end);
                     } else if (CanReuseLastGlobalAssignment(join)) {
-                        auto node = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
-                        db.Table<Schema::TxIds>().Key(node.key().Step, node.key().TxId).Delete();
-                        node.key() = end;
-                        txId = node.mapped();
-                        db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
-                            NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-                        );
-                        Self->AssignedTxIds.insert(std::move(node));
-                    } else if (!Self->AllocatedTxIds.empty() && Self->AssignedTxIds.size() < MaxOpenTxIds + 1) {
+                        txId = Self->AssignedTxIds.rbegin()->second;
+                        Self->ExtendWriteTx(db, txId, end);
+                    } else if (!Self->AllocatedTxIds.empty() && Self->CountOpenWriteTxIds() < MaxOpenTxIds + 1) {
                         txId = Allocate(end, db);
                     }
                 } else {
@@ -233,7 +231,6 @@ class TController::TTxIndexBuild: public TTxBase {
                     for (const auto& assigned : build.GetAssignments()) {
                         if (TRowVersion::FromProto(assigned.GetVersion()) >= end) {
                             txId = assigned.GetWriteTxId();
-                            end = TRowVersion::FromProto(assigned.GetVersion());
                             break;
                         }
                     }
@@ -273,7 +270,8 @@ class TController::TTxIndexBuild: public TTxBase {
                 auto& assigned = *reply->Record.AddVersionTxIds();
                 end.ToProto(assigned.MutableVersion());
                 assigned.SetTxId(txId);
-                (global ? join : TRowVersion::Min()).ToProto(assigned.MutableBegin());
+                const auto begin = IntervalBegin(version, interval);
+                (global ? Max(begin, join) : begin).ToProto(assigned.MutableBegin());
             }
 
             if (reply->Record.VersionTxIdsSize()) {

@@ -36,6 +36,7 @@ namespace NKikimr::NReplication::NService {
 
 class TSessionInfo {
     using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
+    using TVersionTxId = NKikimrReplication::TEvTxIdResult::TVersionTxId;
 
     class TWorkerInfo {
         friend class TSessionInfo;
@@ -415,12 +416,13 @@ public:
             return;
         }
 
-        TMap<TRowVersion, ui64> result;
+        TMap<TRowVersion, TVersionTxId> result;
         TVector<TRowVersion> versionsWithoutTxId;
 
         for (const auto& v : ev->Get()->Record.GetVersions()) {
             const auto version = TRowVersion::FromProto(v);
-            if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
+            if (auto it = TxIds.upper_bound(version); it != TxIds.end()
+                    && TRowVersion::FromProto(it->second.GetBegin()) <= version) {
                 result[it->first] = it->second;
             } else {
                 versionsWithoutTxId.push_back(version);
@@ -456,19 +458,20 @@ public:
             return;
         }
 
-        THashMap<TActorId, TMap<TRowVersion, ui64>> results;
+        THashMap<TActorId, TMap<TRowVersion, TVersionTxId>> results;
 
         for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
+            const auto begin = TRowVersion::FromProto(kv.GetBegin());
             const auto version = TRowVersion::FromProto(kv.GetVersion());
-            TxIds.emplace(version, kv.GetTxId());
+            TxIds.emplace(version, kv);
 
-            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
+            for (auto it = PendingTxId.lower_bound(begin); it != PendingTxId.end();) {
                 if (it->first >= version) {
                     break;
                 }
 
                 for (const auto& actorId : it->second) {
-                    results[actorId].emplace(version, kv.GetTxId());
+                    results[actorId].emplace(version, kv);
                 }
 
                 PendingTxId.erase(it++);
@@ -551,13 +554,11 @@ private:
         }
     }
 
-    static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) {
+    static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, TVersionTxId>& result) {
         auto ev = MakeHolder<TEvService::TEvTxIdResult>();
 
-        for (const auto& [version, txId] : result) {
-            auto& item = *ev->Record.AddVersionTxIds();
-            version.ToProto(item.MutableVersion());
-            item.SetTxId(txId);
+        for (const auto& [_, item] : result) {
+            ev->Record.AddVersionTxIds()->CopyFrom(item);
         }
 
         ops->Send(recipient, ev.Release());
@@ -576,7 +577,7 @@ private:
     THashSet<TWorkerId> IndexBuildWorkers;
     THashMap<TWorkerId, TSet<TRowVersion>> PendingIndexTxIds;
     THashMap<TWorkerId, NKikimrReplication::TEvWorkerDataEnd> DataEnded;
-    TMap<TRowVersion, ui64> TxIds;
+    TMap<TRowVersion, TVersionTxId> TxIds;
     TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
     THashSet<TWorkerId> WorkersWithHeartbeat;
     TMap<TRowVersion, THashSet<TWorkerId>> WorkersByHeartbeat;

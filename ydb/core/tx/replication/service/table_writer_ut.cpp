@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         return ev;
     }
 
-    void CreateIndexBuildTable(TEnv<>& env) {
+    void CreateConsistentTable(TEnv<>& env) {
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
 
     Y_UNIT_TEST(IndexBuildSwitchCheckpointAndReplay) {
         TEnv env;
-        CreateIndexBuildTable(env);
+        CreateConsistentTable(env);
 
         NKikimrReplication::TLocalTableWriterSettings settings;
         settings.SetIndexBuild(true);
@@ -282,7 +282,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
 
     Y_UNIT_TEST(IndexBuildSeparatesLocalAndGlobalAssignmentsInFlight) {
         TEnv env;
-        CreateIndexBuildTable(env);
+        CreateConsistentTable(env);
 
         NKikimrReplication::TLocalTableWriterSettings settings;
         settings.SetIndexBuild(true);
@@ -377,6 +377,56 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             TRecord(order++, R"({"resolved":[30,0]})"),
         }));
         env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvPoll>(env.GetSender());
+    }
+
+    Y_UNIT_TEST(ShouldKeepSourceTransactionInOneCommitWhenVersionsInterleave) {
+        // given
+        TEnv env;
+        CreateConsistentTable(env);
+        const auto writer = env.GetRuntime().Register(CreateLocalTableWriter(
+            "/Root", env.GetPathId("/Root/Table"), EWriteMode::Consistent));
+        env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
+        env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData(0, "TestSource", {
+            TRecord(1, R"({"key":[1],"update":{"value":"first"},"ts":[5,9]})"),
+            TRecord(2, R"({"key":[2],"update":{"value":"second"},"ts":[15,7]})"),
+            TRecord(3, R"({"key":[3],"update":{"value":"first"},"ts":[5,9]})"),
+        }));
+        auto assignments = MakeTxIdResult({{TRowVersion(10, 0), 101}, {TRowVersion(20, 0), 102}});
+        TRowVersion(0, 0).ToProto(assignments->Record.MutableVersionTxIds(0)->MutableBegin());
+        TRowVersion(10, 0).ToProto(assignments->Record.MutableVersionTxIds(1)->MutableBegin());
+
+        // when
+        env.Send<TEvWorker::TEvPoll>(writer, std::move(assignments));
+
+        // then
+        CommitWrites(env.GetRuntime(), {"/Root/Table"}, 101);
+        auto rows = ReadShardedTable(env.GetRuntime(), "/Root/Table");
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(rows), "key = 1, value = first\nkey = 3, value = first");
+    }
+
+    Y_UNIT_TEST(ShouldRequestTxIdWhenCachedIntervalStartsAfterRecordVersion) {
+        // given
+        TEnv env;
+        CreateConsistentTable(env);
+        const auto writer = env.GetRuntime().Register(CreateLocalTableWriter(
+            "/Root", env.GetPathId("/Root/Table"), EWriteMode::Consistent));
+        env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
+        env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData(0, "TestSource", {
+            TRecord(1, R"({"key":[1],"update":{"value":"later"},"ts":[15,7]})"),
+        }));
+        auto later = MakeTxIdResult({{TRowVersion(20, 0), 102}});
+        TRowVersion(10, 0).ToProto(later->Record.MutableVersionTxIds(0)->MutableBegin());
+        env.Send<TEvWorker::TEvPoll>(writer, std::move(later));
+
+        // when
+        env.SendAsync(writer, new TEvWorker::TEvData(0, "TestSource", {
+            TRecord(2, R"({"key":[2],"update":{"value":"earlier"},"ts":[5,9]})"),
+        }));
+
+        // then
+        TAutoPtr<IEventHandle> next;
+        env.GetRuntime().GrabEdgeEvents<TEvService::TEvGetTxId, TEvWorker::TEvPoll>(next);
+        UNIT_ASSERT_VALUES_EQUAL(next->GetTypeRewrite(), TEvService::TEvGetTxId::EventType);
     }
 
     Y_UNIT_TEST(WaitTxIds) {

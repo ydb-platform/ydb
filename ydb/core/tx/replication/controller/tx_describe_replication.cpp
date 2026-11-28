@@ -232,7 +232,12 @@ public:
             auto* transactions = Result->Record.MutableTransactions();
             // CommittingTxId is already included in AssignedTxIds. Entries are
             // removed by TTxCommitChanges and restored from Schema::TxIds on restart.
-            for (const auto& [version, txId] : Self->AssignedTxIds) {
+            for (auto it = Self->AssignedTxIds.begin(); it != Self->AssignedTxIds.end(); ++it) {
+                const auto next = std::next(it);
+                if (next != Self->AssignedTxIds.end() && next->second == it->second) {
+                    continue;
+                }
+                const auto& [version, txId] = *it;
                 auto* item = transactions->add_assigned();
                 item->mutable_upper_bound_barrier()->set_plan_step(version.Step);
                 item->mutable_upper_bound_barrier()->set_tx_id(version.TxId);

@@ -202,6 +202,10 @@ private:
     bool IsHeartbeatParticipant(const TWorkerId& id) const;
     size_t CountHeartbeatParticipants() const;
     void AllocateTxIds(const TActorContext& ctx);
+    size_t CountOpenWriteTxIds() const;
+    void ExtendWriteTx(NIceDb::TNiceDb& db, ui64 writeTxId, const TRowVersion& intervalEnd);
+    TRowVersion GetFirstWriteTxEnd() const;
+    void EraseWriteTx(NIceDb::TNiceDb& db, ui64 writeTxId);
     TVector<TString> GetCommitTablePaths(const TRowVersion& version) const;
     bool CanCommitIndexBuilds(const TRowVersion& version) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);

@@ -9,6 +9,7 @@ namespace NKikimr::NReplication::NController {
 class TController::TTxAssignTxId: public TTxBase {
     THashMap<ui32, THolder<TEvService::TEvTxIdResult>> Result;
     bool TxIdsExhausted = false;
+    ui64 CommitIntervalMs = 0;
 
     struct TTxId {
         ui64 Value;
@@ -48,6 +49,9 @@ class TController::TTxAssignTxId: public TTxBase {
 
                 auto& item = *ev->Record.AddVersionTxIds();
                 it->first.ToProto(item.MutableVersion());
+                if (CommitIntervalMs) {
+                    TRowVersion(it->first.Step - CommitIntervalMs, 0).ToProto(item.MutableBegin());
+                }
                 item.SetTxId(txId);
             }
 
@@ -55,6 +59,10 @@ class TController::TTxAssignTxId: public TTxBase {
         }
 
         return result;
+    }
+
+    bool IsBetweenKeysOfWriteTx(TMap<TRowVersion, ui64>::const_iterator it) const {
+        return it != Self->AssignedTxIds.begin() && std::prev(it)->second == it->second;
     }
 
 public:
@@ -79,17 +87,22 @@ public:
             Self->PendingTxId.clear();
             return true;
         }
+        if (replication) {
+            CommitIntervalMs = replication->GetConfig().GetConsistencySettings().GetGlobal().GetCommitIntervalMilliSeconds();
+        }
 
         NIceDb::TNiceDb db(txc.DB);
 
         auto result = Process([&](const TRowVersion& version) -> TAssignResult {
-            auto it = Self->IndexBuilds.empty()
-                ? Self->AssignedTxIds.find(version) : Self->AssignedTxIds.lower_bound(version);
-            if (it != Self->AssignedTxIds.end()) {
-                return it->second;
+            auto it = Self->AssignedTxIds.lower_bound(version);
+            if (it != Self->AssignedTxIds.end()
+                    && (it->first == version || !Self->IndexBuilds.empty() || IsBetweenKeysOfWriteTx(it))) {
+                const auto txId = it->second;
+                Self->ExtendWriteTx(db, txId, version);
+                return txId;
             }
 
-            if (Self->AssignedTxIds.size() >= MaxOpenTxIds) {
+            if (Self->CountOpenWriteTxIds() >= MaxOpenTxIds) {
                 Self->TabletCounters->Cumulative()[COUNTER_TOO_MANY_OPEN_TX_IDS] += 1;
                 return EError::TooManyOpenTxIds;
             }
@@ -143,21 +156,16 @@ public:
                     NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
                 );
             } else {
-                auto nh = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
-                db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Delete();
-
-                nh.key() = it->first;
-                db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Update(
-                    NIceDb::TUpdate<Schema::TxIds::WriteTxId>(nh.mapped())
-                );
-                Self->AssignedTxIds.insert(std::move(nh));
+                Self->ExtendWriteTx(db, Self->AssignedTxIds.rbegin()->second, it->first);
             }
         }
 
         result = Process([&](const TRowVersion& version) -> TAssignResult {
             auto it = Self->AssignedTxIds.lower_bound(version);
             Y_ABORT_UNLESS(it != Self->AssignedTxIds.end());
-            return it->second;
+            const auto txId = it->second;
+            Self->ExtendWriteTx(db, txId, version);
+            return txId;
         });
 
         Y_ABORT_UNLESS(std::holds_alternative<TTxId>(result));
@@ -174,7 +182,7 @@ public:
 
         Self->TabletCounters->Simple()[COUNTER_PENDING_VERSIONS] = Self->PendingTxId.size();
         Self->TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = Self->AllocatedTxIds.size();
-        Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
+        Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->CountOpenWriteTxIds();
 
         if (Self->ReplicationsWithSourceOffsetMismatch.empty()) {
             for (auto& [nodeId, ev] : Result) {
@@ -204,6 +212,44 @@ void TController::AllocateTxIds(const TActorContext& ctx) {
 
     AllocateTxIdInFlight = true;
     ctx.Send(TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(MaxOpenTxIds));
+}
+
+size_t TController::CountOpenWriteTxIds() const {
+    THashSet<ui64> writeTxIds;
+    for (const auto& [_, writeTxId] : AssignedTxIds) {
+        writeTxIds.insert(writeTxId);
+    }
+    return writeTxIds.size();
+}
+
+void TController::ExtendWriteTx(NIceDb::TNiceDb& db, ui64 writeTxId, const TRowVersion& intervalEnd) {
+    std::optional<TRowVersion> first;
+    TRowVersion last = TRowVersion::Min();
+    for (const auto& [version, txId] : AssignedTxIds) {
+        if (txId == writeTxId) {
+            if (!first) {
+                first = version;
+            }
+            last = version;
+        }
+    }
+
+    Y_ABORT_UNLESS(first);
+    if (*first <= intervalEnd && intervalEnd <= last) {
+        return;
+    }
+
+    if (*first != last) {
+        const auto moved = intervalEnd < *first ? *first : last;
+        AssignedTxIds.erase(moved);
+        db.Table<Schema::TxIds>().Key(moved.Step, moved.TxId).Delete();
+    }
+
+    const bool inserted = AssignedTxIds.emplace(intervalEnd, writeTxId).second;
+    Y_ABORT_UNLESS(inserted);
+    db.Table<Schema::TxIds>().Key(intervalEnd.Step, intervalEnd.TxId).Update(
+        NIceDb::TUpdate<Schema::TxIds::WriteTxId>(writeTxId)
+    );
 }
 
 void TController::RunTxAssignTxId(const TActorContext& ctx) {

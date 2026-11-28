@@ -562,8 +562,9 @@ class TLocalTableWriter
                     continue;
                 }
 
-                if (auto it = TxIds.upper_bound(version); !IndexBuild && it != TxIds.end()) {
-                    record->RewriteTxId(it->second);
+                if (auto it = TxIds.upper_bound(version); !IndexBuild && it != TxIds.end()
+                        && TRowVersion::FromProto(it->second.GetBegin()) <= version) {
+                    record->RewriteTxId(it->second.GetTxId());
                     if (PendingTxId.empty()) {
                         records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
                     } else {
@@ -572,6 +573,7 @@ class TLocalTableWriter
                 } else {
                     versionsWithoutTxId.insert(version);
                     PendingTxId.insert(record->GetOrder());
+                    PendingTxIdVersions.emplace(version, record->GetOrder());
                 }
             } else {
                 records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
@@ -614,19 +616,7 @@ class TLocalTableWriter
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
         if (IndexBuild) {
             for (const auto& assignment : ev->Get()->Record.GetVersionTxIds()) {
-                const auto begin = TRowVersion::FromProto(assignment.GetBegin());
-                const auto end = TRowVersion::FromProto(assignment.GetVersion());
-                for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
-                    auto& record = PendingRecords.at(*it);
-                    const auto version = TRowVersion(record->GetStep(), record->GetTxId());
-                    if (begin <= version && version < end) {
-                        record->RewriteTxId(assignment.GetTxId());
-                        BlockedRecords.insert(*it);
-                        it = PendingTxId.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
+                RewritePendingTxIds(assignment);
             }
             if (PendingTxId.empty()) {
                 // Replies can cross in flight at C. Preserve topic order by
@@ -645,64 +635,31 @@ class TLocalTableWriter
         }
 
         for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
-            const auto version = TRowVersion::FromProto(kv.GetVersion());
-            TxIds.emplace(version, kv.GetTxId());
+            TxIds.emplace(TRowVersion::FromProto(kv.GetVersion()), kv);
+            RewritePendingTxIds(kv);
+        }
 
-            auto pendingIt = PendingTxId.begin();
-            auto blockedIt = BlockedRecords.begin();
-
-            auto processPending = [this, &records, &version, txId = kv.GetTxId()](auto& it) -> bool {
-                Y_ABORT_UNLESS(PendingRecords.contains(*it));
-                auto& record = PendingRecords.at(*it);
-
-                const auto recordVersion = TRowVersion(record->GetStep(), record->GetTxId());
-                if (recordVersion >= version) {
-                    return false;
-                }
-
-                record->RewriteTxId(txId);
-                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
-
-                it = PendingTxId.erase(it);
-                return true;
-            };
-
-            auto processBlocked = [this, &records](auto& it) {
-                Y_ABORT_UNLESS(PendingRecords.contains(*it));
-                auto& record = PendingRecords.at(*it);
-
-                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
-
-                it = BlockedRecords.erase(it);
-            };
-
-            while (pendingIt != PendingTxId.end() && blockedIt != BlockedRecords.end()) {
-                if (*pendingIt < *blockedIt) {
-                    if (!processPending(pendingIt)) {
-                        break;
-                    }
-                } else {
-                    processBlocked(blockedIt);
-                }
-            }
-
-            if (blockedIt == BlockedRecords.end()) {
-                for (; pendingIt != PendingTxId.end();) {
-                    if (!processPending(pendingIt)) {
-                        break;
-                    }
-                }
-            }
-
-            if (pendingIt == PendingTxId.end()) {
-                for (; blockedIt != BlockedRecords.end();) {
-                    processBlocked(blockedIt);
-                }
-            }
+        for (auto it = BlockedRecords.begin(); it != BlockedRecords.end()
+                && (PendingTxId.empty() || *it < *PendingTxId.begin());) {
+            Y_ABORT_UNLESS(PendingRecords.contains(*it));
+            records.emplace_back(*it, TablePathId, PendingRecords.at(*it)->GetBody().size());
+            it = BlockedRecords.erase(it);
         }
 
         if (records) {
             EnqueueRecords(std::move(records));
+        }
+    }
+
+    void RewritePendingTxIds(const NKikimrReplication::TEvTxIdResult::TVersionTxId& assignment) {
+        const auto end = TRowVersion::FromProto(assignment.GetVersion());
+        auto it = PendingTxIdVersions.lower_bound(TRowVersion::FromProto(assignment.GetBegin()));
+        while (it != PendingTxIdVersions.end() && it->first < end) {
+            Y_ABORT_UNLESS(PendingRecords.contains(it->second));
+            PendingRecords.at(it->second)->RewriteTxId(assignment.GetTxId());
+            BlockedRecords.insert(it->second);
+            PendingTxId.erase(it->second);
+            it = PendingTxIdVersions.erase(it);
         }
     }
 
@@ -907,8 +864,9 @@ private:
     bool RefreshingSchema = false;
 
     THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
-    TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
+    TMap<TRowVersion, NKikimrReplication::TEvTxIdResult::TVersionTxId> TxIds; // key is non-inclusive right hand edge
     TSet<ui64> PendingTxId;
+    TMultiMap<TRowVersion, ui64> PendingTxIdVersions;
     TSet<ui64> BlockedRecords;
     TRowVersion PendingHeartbeat = TRowVersion::Min();
     THolder<TEvWorker::TEvSchemaChange> PendingSchemaChange;

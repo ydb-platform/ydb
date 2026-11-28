@@ -880,6 +880,12 @@ struct TIndexBuildTestEnv: public TTestEnv {
         heartbeat.ToProto(progress.MutableHeartbeat());
         Send<TEvService::TEvIndexBuildProgressResult>(Info.ControllerId, std::move(event));
     }
+
+    auto RequestTxId(const TWorkerId& worker, ui64 step) {
+        auto event = MakeHolder<TEvService::TEvGetTxId>(TVector<TRowVersion>{TRowVersion(step, 0)});
+        worker.Serialize(*event->Record.MutableWorker());
+        return Send<TEvService::TEvTxIdResult>(Info.ControllerId, std::move(event));
+    }
 };
 
 TWorkerId RegisterSecondWorkerAndCompleteSet(TTestEnv& env, ui64 controllerId, const TWorkerId& first) {
@@ -5819,6 +5825,45 @@ Y_UNIT_TEST_SUITE(IndexBuild) {
 
     Y_UNIT_TEST(SyncIndexJoinBeyondCompletedGlobalFrontierAfterRestart) {
         CheckSyncIndexJoinBoundaryAndScopedAssignmentsSurviveRestart(true);
+    }
+
+    Y_UNIT_TEST(ShouldReplyRequestedIntervalWhenScopedIndexWriteReusesLaterTxId) {
+        // given
+        TIndexBuildTestEnv env;
+        const auto worker = env.StartIndexBuild();
+        env.ReportProgress(worker, 1, TRowVersion(200, 8));
+        const auto later = env.RequestTxId(worker, 55000);
+
+        // when
+        const auto earlier = env.RequestTxId(worker, 35000);
+
+        // then
+        const auto& assigned = earlier->Get()->Record.GetVersionTxIds(0);
+        UNIT_ASSERT_VALUES_EQUAL(assigned.GetTxId(), later->Get()->Record.GetVersionTxIds(0).GetTxId());
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(assigned.GetBegin()), TRowVersion(30000, 0));
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(assigned.GetVersion()), TRowVersion(40000, 0));
+    }
+
+    Y_UNIT_TEST(ShouldReplyRequestedIntervalWhenJoinedIndexWriteReusesLaterTxId) {
+        // given
+        TIndexBuildTestEnv env;
+        const auto worker = env.StartIndexBuild();
+        env.ReportProgress(worker, 1, TRowVersion(200, 10));
+        UNIT_ASSERT(WaitFor([&] {
+            return ReadIndexBuild(env, env.Info.ControllerId, worker).GetPhase()
+                == NKikimrReplication::TIndexBuildState::JOINING;
+        }));
+        const auto join = TRowVersion::FromProto(ReadIndexBuild(env, env.Info.ControllerId, worker).GetJoinVersion());
+        const auto later = env.RequestTxId(worker, join.Step + 35000);
+
+        // when
+        const auto earlier = env.RequestTxId(worker, join.Step + 15000);
+
+        // then
+        const auto& assigned = earlier->Get()->Record.GetVersionTxIds(0);
+        UNIT_ASSERT_VALUES_EQUAL(assigned.GetTxId(), later->Get()->Record.GetVersionTxIds(0).GetTxId());
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(assigned.GetBegin()), TRowVersion(join.Step + 10000, 0));
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(assigned.GetVersion()), TRowVersion(join.Step + 20000, 0));
     }
 
     enum class EIndexCancellationScenario {

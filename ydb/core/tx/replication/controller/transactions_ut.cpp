@@ -1,10 +1,12 @@
 #include "controller_impl.h"
 
 #include <ydb/core/base/hive.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/replication/ut_helpers/mock_service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 
@@ -127,6 +129,15 @@ struct TTransactionsEnv: TEnv<> {
         return Describe().assigned_size();
     }
 
+    size_t CountTxIdRows() {
+        NKikimrMiniKQL::TResult result;
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(GetRuntime(), TabletId, R"((
+            (let range '('('VersionStep (Null) (Void)) '('VersionTxId (Null) (Void))))
+            (return (AsList (SetResult 'Rows (SelectRange 'TxIds range '('WriteTxId) '())))))
+        ))", result), NKikimrProto::OK);
+        return result.GetValue().GetStruct(0).GetOptional().GetStruct(0).ListSize();
+    }
+
     std::optional<NYdb::NReplication::TReplicationDescription::TTransactions> SdkTransactions(bool stats) {
         return RunCall([&] {
             NYdb::NReplication::TReplicationClient client(GetDriver());
@@ -143,8 +154,8 @@ struct TTransactionsEnv: TEnv<> {
         return result->Get()->Record.GetVersionTxIds(0).GetTxId();
     }
 
-    void Heartbeat() {
-        auto* heartbeat = new TEvService::TEvHeartbeat(TRowVersion(10000, 0));
+    void Heartbeat(ui64 step = 10000) {
+        auto* heartbeat = new TEvService::TEvHeartbeat(TRowVersion(step, 0));
         heartbeat->Record.MutableWorker()->CopyFrom(Worker);
         SendAsync(Controller, heartbeat);
     }
@@ -271,6 +282,187 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         env.CommitStatus(txId, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
         UNIT_ASSERT_VALUES_EQUAL(env.Count(), 0);
         UNIT_ASSERT_VALUES_EQUAL(env.SdkTransactions(true).value().Assigned.size(), 0);
+    }
+
+    Y_UNIT_TEST(ShouldReuseExtendedTxIdForItsFirstIntervalAfterEarlierCommit) {
+        // given
+        TTransactionsEnv env;
+        const auto first = env.Assign(1);
+        env.Assign(19999);
+        env.Assign(29999);
+        env.Assign(39999);
+        const auto last = env.Assign(49999);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(59999), last);
+        env.HoldCommits();
+        env.Heartbeat();
+        env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        env.CommitStatus(first, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 4);
+
+        // when
+        const auto repeated = env.Assign(49999);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(repeated, last);
+    }
+
+    TVector<ui64> FoldLaterIntervalAtLimit(TTransactionsEnv& env) {
+        TVector<ui64> txIds;
+        for (const ui64 step : {1, 19999, 29999, 39999, 49999}) {
+            txIds.push_back(env.Assign(step));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(59999), txIds.back());
+        return txIds;
+    }
+
+    void CommitHeldWriteTxs(TTransactionsEnv& env, const TVector<ui64>& txIds) {
+        for (const auto txId : txIds) {
+            UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender(), TDuration::Seconds(30)));
+            env.CommitStatus(txId, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldNotCommitFoldedTxIdBeforeItsLastInterval) {
+        // given
+        TTransactionsEnv env;
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(69999), txIds.back());
+        env.HoldCommits();
+        env.Heartbeat(40000);
+        CommitHeldWriteTxs(env, TVector<ui64>(txIds.begin(), txIds.end() - 1));
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 1);
+
+        // when
+        env.Heartbeat(60000);
+
+        // then
+        UNIT_ASSERT(!env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender(), TDuration::Seconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 1);
+    }
+
+    Y_UNIT_TEST(ShouldKeepTwoKeysPerWriteTxWhenFoldingRepeatedly) {
+        // given
+        TTransactionsEnv env;
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(69999), txIds.back());
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(79999), txIds.back());
+
+        // when
+        const auto folded = env.Assign(89999);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(folded, txIds.back());
+        UNIT_ASSERT_VALUES_EQUAL(env.CountTxIdRows(), 6);
+    }
+
+    Y_UNIT_TEST(ShouldReuseFoldedTxIdForIntervalOfMovedKey) {
+        // given
+        TTransactionsEnv env;
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(69999), txIds.back());
+        env.HoldCommits();
+        env.Heartbeat();
+        CommitHeldWriteTxs(env, {txIds.front()});
+
+        // when
+        const auto repeated = env.Assign(59999);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(repeated, txIds.back());
+    }
+
+    Y_UNIT_TEST(ShouldRemoveAllKeysOfFoldedTxIdWhenItIsCommitted) {
+        // given
+        TTransactionsEnv env;
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        env.HoldCommits();
+        env.Heartbeat(60000);
+        CommitHeldWriteTxs(env, TVector<ui64>(txIds.begin(), txIds.end() - 1));
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender(), TDuration::Seconds(30)));
+
+        // when
+        env.CommitStatus(txIds.back(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 0);
+        env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+        env.Handshake();
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 0);
+    }
+
+    Y_UNIT_TEST(ShouldCountDistinctWriteTxsAgainstOpenLimit) {
+        // given
+        TTransactionsEnv env;
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        env.HoldCommits();
+        env.Heartbeat();
+        CommitHeldWriteTxs(env, {txIds.front()});
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 4);
+
+        // when
+        const auto later = env.Assign(69999);
+
+        // then
+        UNIT_ASSERT_VALUES_UNEQUAL(later, txIds.back());
+    }
+
+    Y_UNIT_TEST(ShouldRestoreBothKeysOfFoldedTxIdAfterRestart) {
+        // given
+        TTransactionsEnv env;
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(69999), txIds.back());
+        env.HoldCommits();
+        env.Heartbeat();
+        CommitHeldWriteTxs(env, {txIds.front()});
+        env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+        env.Handshake();
+
+        // when
+        const auto repeated = env.Assign(59999);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(repeated, txIds.back());
+    }
+
+    Y_UNIT_TEST(ShouldReuseFoldedTxIdForIntervalBetweenItsKeys) {
+        // given
+        TTransactionsEnv env;
+        TVector<ui64> txIds;
+        for (const ui64 step : {1, 19999, 29999, 39999, 49999}) {
+            txIds.push_back(env.Assign(step));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(79999), txIds.back());
+        env.HoldCommits();
+        env.Heartbeat();
+        CommitHeldWriteTxs(env, {txIds.front()});
+
+        // when
+        const auto between = env.Assign(65000);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(between, txIds.back());
+    }
+
+    Y_UNIT_TEST(ShouldReuseLaterTxIdForMergedIntervalAfterEarlierCommit) {
+        // given
+        TTransactionsEnv env;
+        const auto first = env.Assign(1);
+        const auto next = env.Assign(29999);
+        env.Assign(39999);
+        env.Assign(49999);
+        env.Assign(59999);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(19999), next);
+        env.HoldCommits();
+        env.Heartbeat();
+        env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        env.CommitStatus(first, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 4);
+
+        // when
+        const auto repeated = env.Assign(19999);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(repeated, next);
     }
 
     Y_UNIT_TEST(RestoresAssignedTransactionsAfterRestart) {

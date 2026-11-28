@@ -40,9 +40,8 @@ public:
 
     bool IsInitialDeploymentGracePeriod() const;
 
-    // NOT_SET target means that CMS has no maintenance request of its own, the status kept in BSC is left as is
-    void SetTargetMaintenanceStatus(EMaintenanceStatus::E status);
-    EMaintenanceStatus::E GetTargetMaintenanceStatus() const;
+    void SetMaintenanceStatus(EMaintenanceStatus::E status);
+    EMaintenanceStatus::E GetRequiredMaintenanceStatus() const;
 
 private:
     const ui32& DefaultStateLimit;
@@ -53,7 +52,7 @@ private:
     mutable EPDiskState PrevState = State;
     ui64 StateCounter;
     TMaybe<EPDiskStatus> ForcedStatus;
-    EMaintenanceStatus::E TargetMaintenanceStatus = EMaintenanceStatus::NOT_SET;
+    EMaintenanceStatus::E MaintenanceStatus = EMaintenanceStatus::NOT_SET;
     mutable bool HadBadStateRecently = false;
 
     TInstant CMSFirstBootTimestamp;
@@ -91,7 +90,6 @@ public:
     EPDiskStatus GetStatus() const;
     bool IsNewStatusGood() const;
     EMaintenanceStatus::E GetMaintenanceStatus() const;
-    void ResetMaintenanceStatus(EMaintenanceStatus::E status);
 
     bool IsChangingAllowed() const;
     void AllowChanging();
@@ -126,10 +124,8 @@ struct TPDiskInfo
 
     EPDiskStatus ActualStatus = EPDiskStatus::ACTIVE;
     EPDiskStatus PrevStatus = EPDiskStatus::UNKNOWN;
-    // what BSC has as far as Sentinel knows: the status reported by BSC upon config update, or the request of CMS
-    // acknowledged by BSC after that
-    EMaintenanceStatus::E BscMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
-    EMaintenanceStatus::E PrevBscMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
+    EMaintenanceStatus::E ActualMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
+    EMaintenanceStatus::E PrevMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
     TInstant LastStatusChange;
     bool StatusChangeFailed = false;
     // means that this pdisk status change last time was the reason of whole request failure
@@ -152,10 +148,6 @@ struct TPDiskInfo
     void ClearTouched() { Touched = false; }
 
     void AddState(EPDiskState state, bool isNodeLocked);
-
-    // takes the maintenance status BSC reports upon config update, so that the one changed in BSC by someone else is
-    // not mistaken for the one CMS has requested
-    void SyncMaintenanceStatus(EMaintenanceStatus::E bscStatus);
 
 private:
     bool Touched;

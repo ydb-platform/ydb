@@ -28,6 +28,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     i64 freeSpace = DqSolomonDefaultFreeSpace,
     bool enableStreamingQueriesCounters = false);
 

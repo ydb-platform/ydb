@@ -53,6 +53,7 @@ void InitAsyncOutput(
             &actor.GetAsyncOutputCallbacks(),
             counters,
             CreateStructuredTokenCredentialsFactory(),
+            std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {}),
             freeSpace);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);

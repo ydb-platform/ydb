@@ -4,6 +4,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/local_user_token.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/rediscovery.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/docapi/traits.h>
@@ -1596,6 +1597,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 if (IsDB(entry)) {
                     access |= NACLib::EAccessRights::GenericManage;
                 }
+                allowACLBypass = IsTriggerRediscovery(modifyScheme.GetAlterUserAttributes()) && entry.DomainDescription &&
+                    entry.Self && CanTriggerRediscovery(AppData(), &*UserToken, entry.Self->Info.GetOwner());
             }
 
             if (allowACLBypass || access == NACLib::EAccessRights::NoAccess || !entry.SecurityObject) {

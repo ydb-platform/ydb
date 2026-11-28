@@ -17,6 +17,9 @@ namespace NYdb::inline Dev {
 struct TListEndpointsResult {
     Ydb::Discovery::ListEndpointsResult Result;
     TPlainStatus DiscoveryStatus;
+    bool RetryDiscovery = false;
+    NThreading::TFuture<bool> NextPoll = {};
+    std::weak_ptr<TDbDriverState> State = {};
 };
 
 using TAsyncListEndpointsResult = NThreading::TFuture<TListEndpointsResult>;

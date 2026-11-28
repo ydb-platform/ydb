@@ -81,6 +81,12 @@ public:
     //! default: EDiscoveryMode::Sync
     TDriverConfig& SetDiscoveryMode(EDiscoveryMode discoveryMode);
 
+    //! Use long polling when the discovery server supports it. Disabled by default.
+    TDriverConfig& SetDiscoveryLongPolling(bool enabled);
+
+    //! gRPC deadline for each long-poll discovery request. Default: 45 seconds.
+    TDriverConfig& SetDiscoveryLongPollTimeout(TDuration timeout);
+
     //! Max number of requests in queue waiting for discovery if "Async" mode chosen
     //! default: 100
     TDriverConfig& SetMaxQueuedRequests(size_t sz);

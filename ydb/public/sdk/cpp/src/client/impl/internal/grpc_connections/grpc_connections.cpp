@@ -309,6 +309,8 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , DefaultCredentialsProviderFactory_(params->GetCredentialsProviderFactory())
     , StateTracker_(this)
     , DefaultDiscoveryMode_(params->GetDiscoveryMode())
+    , DiscoveryLongPolling_(params->GetDiscoveryLongPolling())
+    , DiscoveryLongPollTimeout_(params->GetDiscoveryLongPollTimeout())
     , MaxQueuedRequests_(params->GetMaxQueuedRequests())
     , MaxQueuedResponses_(params->GetMaxQueuedResponses())
     , DrainOnDtors_(params->GetDrinOnDtors())
@@ -554,6 +556,9 @@ void TGRpcConnectionsImpl::SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConf
 TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr dbState) {
     Ydb::Discovery::ListEndpointsRequest request;
     request.set_database(TStringType{dbState->Database});
+    request.set_snapshot_hash(dbState->DiscoverySnapshotHash.data(), dbState->DiscoverySnapshotHash.size());
+    const bool polling = !request.snapshot_hash().empty();
+    const auto started = std::chrono::steady_clock::now();
 
     auto promise = NThreading::NewPromise<TListEndpointsResult>();
 
@@ -568,7 +573,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
         };
 
     TRpcRequestSettings rpcSettings;
-    rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
+    rpcSettings.Deadline = TDeadline::AfterDuration(polling ? TDeadline::SafeDurationCast(DiscoveryLongPollTimeout_) : GET_ENDPOINTS_TIMEOUT);
     rpcSettings.IncludeObservabilityInBuildInfo = true;
 
     RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
@@ -582,15 +587,39 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
     std::weak_ptr<TDbDriverState> weakState = dbState;
 
     auto driverScope = DriverScope_;
-    return promise.GetFuture().Apply([this, weakState, driverScope = std::move(driverScope)](NThreading::TFuture<TListEndpointsResult> future){
+    return promise.GetFuture().Apply([this, weakState, driverScope = std::move(driverScope), started, polling](NThreading::TFuture<TListEndpointsResult> future){
         auto strong = weakState.lock();
         auto result = future.ExtractValue();
+        if (!strong) {
+            return NThreading::MakeFuture(std::move(result));
+        }
         return driverScope->RunGuarded(
             [&] {
-                if (strong && result.DiscoveryStatus.IsTransportError()) {
+                if (result.DiscoveryStatus.IsTransportError() &&
+                    !(polling && result.DiscoveryStatus.Status == EStatus::CLIENT_DEADLINE_EXCEEDED)) {
                     strong->StatCollector.IncDiscoveryFailDueTransportError();
                 }
-                return NThreading::MakeFuture<TListEndpointsResult>(MutateDiscovery(std::move(result), strong.get()));
+                result = MutateDiscovery(std::move(result), strong.get());
+                if (!DiscoveryLongPolling_) {
+                    return NThreading::MakeFuture(std::move(result));
+                }
+                const bool expired = polling && result.DiscoveryStatus.Status == EStatus::CLIENT_DEADLINE_EXCEEDED;
+                const bool reset = polling && result.DiscoveryStatus.Status == EStatus::ABORTED;
+                if (!expired) {
+                    if (strong->LongPolling && strong->DiscoveryMode == EDiscoveryMode::Sync) {
+                        std::unique_lock lock(strong->LastDiscoveryStatusRWLock);
+                        strong->LastDiscoveryStatus = result.DiscoveryStatus;
+                    }
+                    strong->DiscoverySnapshotHash = result.DiscoveryStatus.Ok() ? std::string(result.Result.snapshot_hash()) : std::string{};
+                }
+                const bool repeat = expired || reset || !strong->DiscoverySnapshotHash.empty();
+                result.RetryDiscovery = strong->LongPolling.exchange(repeat) && !repeat && !result.DiscoveryStatus.Ok();
+                if (repeat) {
+                    const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started);
+                    result.NextPoll = ScheduleFuture(polling ? TDuration::MilliSeconds(100) - TDuration(elapsed) : TDuration::Zero());
+                    result.State = strong;
+                }
+                return NThreading::MakeFuture(std::move(result));
             },
             [&] { return NThreading::MakeFuture<TListEndpointsResult>(std::move(result)); });
     });

@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package Ydb.DatabaseManagement.V1;
+option java_package = "com.yandex.ydb.database_management.v1";
+
+import "ydb/public/api/protos/draft/ydb_database_management.proto";
+
+service DatabaseManagementService {
+    // Publish a rediscovery event for x-ydb-database. Discovery nodes abort pending ListEndpoints long polls when they observe it.
+    // Clients repeat ListEndpoints at their discovery address without a snapshot hash.
+    rpc TriggerRediscovery(TriggerRediscoveryRequest) returns (TriggerRediscoveryResponse);
+}

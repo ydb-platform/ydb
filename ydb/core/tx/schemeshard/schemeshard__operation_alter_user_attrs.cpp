@@ -2,6 +2,8 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/rediscovery.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
@@ -78,7 +80,23 @@ public:
         }
 
         TUserAttributes::TPtr alterData = path.Base()->UserAttrs->CreateNextVersion();
-        if (!alterData->ApplyPatch(EUserAttributesOp::AlterUserAttrs, userAttrsPatch, errStr) ||
+        const bool rediscovery = IsTriggerRediscovery(userAttrsPatch);
+        if (rediscovery) {
+            if (!AppData()->FeatureFlags.GetEnableDiscoveryLongPolling()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Discovery long polling is disabled");
+                return result;
+            }
+            if (!path.Base()->IsDomainRoot() || (path.Base()->IsRoot() && !context.SS->IsDomainSchemeShard)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "The target must be a database at its owning SchemeShard");
+                return result;
+            }
+            if (!CanTriggerRediscovery(AppData(), context.UserToken.Get(), path.Base()->Owner)) {
+                result->SetError(NKikimrScheme::StatusAccessDenied, "Database administrator required");
+                return result;
+            }
+            alterData->Set(RediscoveryAttribute, ToString(alterData->AlterVersion));
+        }
+        if ((!rediscovery && !alterData->ApplyPatch(EUserAttributesOp::AlterUserAttrs, userAttrsPatch, errStr)) ||
             !alterData->CheckLimits(errStr))
         {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);

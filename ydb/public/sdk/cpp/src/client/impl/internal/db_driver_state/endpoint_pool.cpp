@@ -1,5 +1,6 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "endpoint_pool.h"
+#include "state.h"
 
 namespace NYdb::inline Dev {
 
@@ -114,13 +115,33 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
             }
             LastUpdateTime_ = TInstant::Now().MicroSeconds();
             removed = Elector_.SetNewState(std::move(records));
+        } else if (result.NextPoll.Initialized() && result.DiscoveryStatus.Status == EStatus::ABORTED) {
+            removed = Elector_.SetNewState({});
         }
-        NThreading::TPromise<TEndpointUpdateResult> promise;
-        {
-            std::lock_guard guard(Mutex_);
-            DiscoveryPromise_.Swap(promise);
+        if (result.NextPoll.Initialized() && result.DiscoveryStatus.Status == EStatus::CLIENT_DEADLINE_EXCEEDED) {
+            result.DiscoveryStatus = {};
+        } else if (result.RetryDiscovery) {
+            LastUpdateTime_ = 0;
         }
-        promise.SetValue({std::move(removed), result.DiscoveryStatus});
+        auto finish = [this, update = TEndpointUpdateResult{std::move(removed), std::move(result.DiscoveryStatus)}]() mutable {
+            NThreading::TPromise<TEndpointUpdateResult> promise;
+            {
+                std::lock_guard guard(Mutex_);
+                DiscoveryPromise_.Swap(promise);
+            }
+            promise.SetValue(std::move(update));
+        };
+        if (result.NextPoll.Initialized()) {
+            result.NextPoll.Subscribe([state = result.State.lock(), weak = result.State, finish = std::move(finish)](const auto& ready) mutable {
+                finish();
+                state.reset();
+                if (auto next = weak.lock(); ready.GetValue() && next && next->LongPolling) {
+                    next->EndpointPool.UpdateAsync();
+                }
+            });
+        } else {
+            finish();
+        }
     };
 
     Provider_().Subscribe(handler);

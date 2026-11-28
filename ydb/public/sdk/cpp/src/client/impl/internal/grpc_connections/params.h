@@ -32,6 +32,8 @@ public:
     virtual std::string GetDatabase() const = 0;
     virtual std::shared_ptr<ICredentialsProviderFactory> GetCredentialsProviderFactory() const = 0;
     virtual EDiscoveryMode GetDiscoveryMode() const = 0;
+    virtual bool GetDiscoveryLongPolling() const = 0;
+    virtual TDuration GetDiscoveryLongPollTimeout() const = 0;
     virtual size_t GetMaxQueuedRequests() const = 0;
     virtual NYdbGrpc::TTcpKeepAliveSettings GetTcpKeepAliveSettings() const = 0;
     virtual bool GetTcpNoDelay() const = 0;

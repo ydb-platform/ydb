@@ -915,6 +915,8 @@ private:
     std::shared_ptr<ICredentialsProviderFactory> DefaultCredentialsProviderFactory_;
     TDbDriverStateTracker StateTracker_;
     const EDiscoveryMode DefaultDiscoveryMode_;
+    const bool DiscoveryLongPolling_;
+    const TDuration DiscoveryLongPollTimeout_;
     const std::int64_t MaxQueuedRequests_;
     const std::int64_t MaxQueuedResponses_;
     const bool DrainOnDtors_;

@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     ydb_clickhouse_internal.cpp
+    ydb_database_management.cpp
     ydb_debug.cpp
     ydb_dummy.cpp
     ydb_export.cpp
@@ -23,6 +24,7 @@ PEERDIR(
     ydb/core/grpc_services/base
     ydb/core/grpc_services/counters
     ydb/core/grpc_streaming
+    ydb/core/protos/schemeshard
     # UDF RPC implementations declared in core/grpc_services/service_udf.h.
     ydb/core/udf_api
     ydb/library/actors/core

@@ -142,6 +142,39 @@ Y_UNIT_TEST_SUITE(Discovery) {
         check(true, true);
     }
 
+    Y_UNIT_TEST(RepeatedBoardUpdate) {
+        const TActorId owner(1, 42);
+        TCachedMessageData data("", "", {});
+        UNIT_ASSERT(data.UpdateEntries({{owner, {"endpoint", false}}}));
+        UNIT_ASSERT(!data.UpdateEntries({{owner, {"endpoint", false}}}));
+        UNIT_ASSERT(data.UpdateEntries({{owner, {"", true}}}));
+        UNIT_ASSERT(!data.UpdateEntries({{owner, {"", true}}}));
+    }
+
+    Y_UNIT_TEST(SnapshotHashUsesVisibleEndpoints) {
+        const TActorId first(1, 42), second(2, 42);
+        const auto node = MakeHolder<TEvInterconnect::TEvNodeInfo>(1);
+        NKikimrStateStorage::TEndpointBoardEntry a, b;
+        a.SetAddress("a");
+        a.AddServices("read");
+        a.AddServices("write");
+        b.SetAddress("b");
+        b.AddServices("read");
+        auto snapshot = [&](bool swap, const TSet<TString>& services = {}) {
+            return TCachedMessageData({{first, {(swap ? b : a).SerializeAsString(), false}},
+                                       {second, {(swap ? a : b).SerializeAsString(), false}}},
+                node, nullptr, {}, services, TEvStateStorage::TEvBoardInfo::EStatus::Ok, true);
+        };
+        const auto initial = snapshot(false);
+        a.MutableServices()->SwapElements(0, 1);
+        UNIT_ASSERT_VALUES_EQUAL(initial.SnapshotHash, snapshot(true).SnapshotHash);
+        const auto filtered = snapshot(false, {"write"});
+        b.SetPort(2345);
+        UNIT_ASSERT_UNEQUAL(initial.SnapshotHash, snapshot(false).SnapshotHash);
+        UNIT_ASSERT_VALUES_EQUAL(filtered.SnapshotHash, snapshot(false, {"write"}).SnapshotHash);
+        UNIT_ASSERT_VALUES_EQUAL(initial.SnapshotHashSsl, snapshot(false).SnapshotHashSsl);
+    }
+
     Y_UNIT_TEST(DelayedNameserviceResponse) {
         TKikimrRunner kikimr(TKikimrSettings{});
 

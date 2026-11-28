@@ -3651,6 +3651,10 @@ message TStatisticsConfig {
     // shards time to report their statistics. Not required for correctness,
     // but avoids sending incomplete stats on the very first cycle.
     optional uint32 BaseStatsSendInitialDelaySeconds = 13 [default = 30];
+
+    // One shared limit per StatisticsAggregator for explicit and background ANALYZE.
+    // The scheduler treats zero as one.
+    optional uint32 AnalyzeMaxTablesInFlight = 15 [default = 1];
 };
 
 message TSystemTabletBackupConfig {

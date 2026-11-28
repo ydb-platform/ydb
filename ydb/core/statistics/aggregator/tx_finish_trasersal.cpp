@@ -7,118 +7,69 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
-    TString OperationId;
-    TPathId PathId;
-    TActorId ReplyToActorId;
-    NKikimrStat::TEvAnalyzeResponse::EStatus Status;
+    const TPathId PathId;
+    const ui64 Attempt;
+    const NKikimrStat::TEvAnalyzeResponse::EStatus Status;
     NYql::TIssues Issues;
+    TTraversalReply Reply;
 
-    TTxFinishTraversal(
-            TSelf* self,
-            NKikimrStat::TEvAnalyzeResponse::EStatus status,
-            NYql::TIssues issues = NYql::TIssues())
+    TTxFinishTraversal(TSelf* self, const TTraversal& traversal,
+            NKikimrStat::TEvAnalyzeResponse::EStatus status, NYql::TIssues issues)
         : TTxBase(self)
-        , OperationId(self->ForceTraversalOperationId)
-        , PathId(self->TraversalPathId)
+        , PathId(traversal.PathId)
+        , Attempt(traversal.Attempt)
         , Status(status)
         , Issues(std::move(issues))
-    {
-        auto forceTraversal = Self->CurrentForceTraversalOperation();
-        if (forceTraversal) {
-            ReplyToActorId = forceTraversal->ReplyToActorId;
-        }
-    }
+    {}
 
     TTxType GetTxType() const override { return TXTYPE_FINISH_TRAVERSAL; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         YDB_LOG_DEBUG("TTxFinishTraversal::Execute",
-            {"tabletId", Self->TabletID()});
+            {"tabletId", Self->TabletID()},
+            {"pathId", PathId},
+            {"attempt", Attempt});
 
-        NIceDb::TNiceDb db(txc.DB);
-        // Map TEvAnalyzeResponse status to the persisted terminal state:
-        //   SUCCESS   -> nullopt  (natural completion path: mark only the current table done;
-        //                           if all tables are done the op flips to STATE_DONE)
-        //   CANCELLED -> STATE_CANCELLED (user cancel)
-        //   ERROR     -> STATE_FAILED    (terminal failure: scan error, deadline, etc.)
-        std::optional<Ydb::Table::AnalyzeState::State> forceTerminalState;
-        switch (Status) {
-            case NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS:
-                break;
-            case NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED:
-                forceTerminalState = Ydb::Table::AnalyzeState::STATE_CANCELLED;
-                break;
-            default:
-                forceTerminalState = Ydb::Table::AnalyzeState::STATE_FAILED;
-                break;
+        auto it = Self->ActiveTraversals.find(PathId);
+        if (it != Self->ActiveTraversals.end() && it->second.Attempt == Attempt) {
+            NIceDb::TNiceDb db(txc.DB);
+            Reply = Self->FinishTraversal(db, it->second, Status, Issues);
         }
-        Self->FinishTraversal(db, Status, forceTerminalState, Issues);
-
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("TTxFinishTraversal::Complete traversal for path",
+        YDB_LOG_DEBUG("TTxFinishTraversal::Complete",
             {"tabletId", Self->TabletID()},
-            {"lastTraversalWasForce", Self->LastTraversalWasForceString()},
-            {"pathId", PathId});
+            {"pathId", PathId},
+            {"attempt", Attempt});
 
-        // Advance queued work even when no reply is sent.
-        if (Self->EnableColumnStatistics) {
-            ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleForceTraversal());
-        }
-
-        if (!ReplyToActorId) {
-            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. No ActorId to send reply",
-                {"tabletId", Self->TabletID()});
-            return;
-        }
-
-        // Check whether the operation still has pending (non-terminal) tables.
-        // If the operation is now terminal (or was deleted), send the response.
-        auto forceTraversal = Self->ForceTraversalOperation(OperationId);
-        const bool isTerminal = !forceTraversal || IsTerminalAnalyzeState(forceTraversal->State);
-
-        const bool hasPendingTables = !isTerminal &&
-            std::any_of(forceTraversal->Tables.begin(), forceTraversal->Tables.end(),
-                [](const TForceTraversalTable& t) {
-                    return t.Status != TForceTraversalTable::EStatus::TraversalFinished;
-                });
-
-        if (hasPendingTables) {
-            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. There are pending operations.",
-                {"tabletId", Self->TabletID()},
-                {"operationId", OperationId.Quote()},
-                {"actorId", ReplyToActorId});
-        } else {
+        if (Reply.Recipient) {
             YDB_LOG_DEBUG("TTxFinishTraversal::Complete. Send TEvAnalyzeResponse.",
                 {"tabletId", Self->TabletID()},
-                {"operationId", OperationId.Quote()},
-                {"actorId", ReplyToActorId});
+                {"operationId", Reply.OperationId.Quote()},
+                {"actorId", Reply.Recipient});
             auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
-            response->Record.SetOperationId(OperationId);
+            response->Record.SetOperationId(Reply.OperationId);
             response->Record.SetStatus(Status);
             for (const auto& issue : Issues) {
                 NYql::IssueToMessage(issue, response->Record.AddIssues());
             }
-            ctx.Send(ReplyToActorId, response.release());
-            // Clear ReplyToActorId to prevent double-reply on subsequent traversal ticks
-            if (forceTraversal) {
-                forceTraversal->ReplyToActorId = TActorId{};
-            }
+            ctx.Send(Reply.Recipient, response.release());
+        }
+        if (Self->EnableColumnStatistics) {
+            ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleForceTraversal());
         }
     }
 };
 
-void TStatisticsAggregator::DispatchFinishTraversalTx(
-        NKikimrStat::TEvAnalyzeResponse::EStatus status,
-        NYql::TIssues issues) {
-    if (FinishingTraversal || (!TraversalPathId && !ForceTraversalOperationId)) {
+void TStatisticsAggregator::DispatchFinishTraversalTx(TTraversal& traversal,
+        NKikimrStat::TEvAnalyzeResponse::EStatus status, NYql::TIssues issues) {
+    if (traversal.Finishing) {
         return;
     }
-    FinishingTraversal = true;
-    Execute(
-        new TTxFinishTraversal(this, status, std::move(issues)),
+    traversal.Finishing = true;
+    Execute(new TTxFinishTraversal(this, traversal, status, std::move(issues)),
         TActivationContext::AsActorContext());
 }
 

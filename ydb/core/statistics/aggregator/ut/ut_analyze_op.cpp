@@ -64,6 +64,55 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetNextPageToken(), "");
     }
 
+    Y_UNIT_TEST(RejectDuplicateTablePaths) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto table = CreateEmptyTable(env, "Database", "T", false);
+        const auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeAnalyzeRequest({table.PathId, table.PathId}, "repeated", "/Root/Database");
+        runtime.SendToPipe(table.SaTabletId, sender, request.release());
+        const auto reply = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(TestListAnalyzeOps(runtime, table.SaTabletId, "/Root/Database").EntriesSize(), 0);
+    }
+
+    Y_UNIT_TEST_TWIN(MultiTableFailureStopsSiblings, ColumnShard) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeMaxTablesInFlight(3);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto a = CreateEmptyTable(env, "Database", "A", ColumnShard);
+        const auto b = CreateEmptyTable(env, "Database", "B", ColumnShard);
+        const auto c = CreateEmptyTable(env, "Database", "C", ColumnShard);
+        WaitForSchemeShardStatsUpdate(runtime, a.PathId.OwnerId, true);
+        const auto group = runtime.AllocateEdgeActor();
+        const auto other = runtime.AllocateEdgeActor();
+
+        using TResult = TEvStatistics::TEvAnalyzeActorResult;
+        TBlockEvents<TResult> results(runtime, [](const auto& ev) { return ev->Get()->Final; });
+        runtime.SendToPipe(a.SaTabletId, group,
+            MakeAnalyzeRequest({a.PathId, b.PathId}, "group", "/Root/Database").release());
+        runtime.WaitFor("both tables in the group", [&] { return results.size() == 2; }, TDuration::Seconds(30));
+        runtime.SendToPipe(a.SaTabletId, other,
+            MakeAnalyzeRequest({c.PathId}, "other", "/Root/Database").release());
+        runtime.WaitFor("independent table", [&] { return results.size() == 3; }, TDuration::Seconds(30));
+
+        results.front()->Get()->Status = TResult::EStatus::InternalError;
+        results.front()->Get()->Issues.AddIssue(NYql::TIssue("injected scan failure"));
+        results.Unblock(1);
+        auto failure = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(group);
+        UNIT_ASSERT_VALUES_EQUAL(failure->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+        results.Stop().Unblock();
+        auto success = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(other);
+        UNIT_ASSERT_VALUES_EQUAL(success->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetAnalyzeOp(runtime, a.SaTabletId, "/Root/Database", "group").GetAnalyzeOperation().GetState(),
+            Ydb::Table::AnalyzeState::STATE_FAILED);
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(group, TDuration::Seconds(1)));
+    }
+
     Y_UNIT_TEST_TWIN(ListAfterAnalyze, ColumnShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
@@ -337,24 +386,27 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
 
-        bool statsSeen = false;
-        auto stripBytesSize = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>(
+        bool reportZeroBytes = false;
+        auto overrideBytesSize = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>(
             [&](auto& ev) {
                 NKikimrStat::TSchemeShardStats statRecord;
                 if (!statRecord.ParseFromString(ev->Get()->Record.GetStats())) {
                     return;
                 }
                 for (auto& entry : *statRecord.MutableEntries()) {
-                    entry.ClearBytesSize();
+                    if (reportZeroBytes) {
+                        entry.SetBytesSize(0);
+                    } else {
+                        entry.ClearBytesSize();
+                    }
                 }
                 TString stats;
                 UNIT_ASSERT(statRecord.SerializeToString(&stats));
                 ev->Get()->Record.SetStats(stats);
-                statsSeen = true;
             });
 
         const auto tableInfo = PrepareFourShardTable(env, ColumnShard);
-        runtime.WaitFor("SchemeShard stats without BytesSize", [&]{ return statsSeen; });
+        WaitForSchemeShardStatsUpdate(runtime, tableInfo.PathId.OwnerId, /*requireFull=*/true);
 
         ui32 hiveDistributionRequests = 0;
         auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>(
@@ -364,6 +416,13 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
 
         UNIT_ASSERT_GT(hiveDistributionRequests, 0);
         ValidateStatistics(runtime, tableInfo.PathId);
+
+        // A later report with an explicit zero must replace the cached unknown size.
+        reportZeroBytes = true;
+        WaitForSchemeShardStatsUpdate(runtime, tableInfo.PathId.OwnerId, /*requireFull=*/true);
+        hiveDistributionRequests = 0;
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, "opZeroSize", "/Root/Database");
+        UNIT_ASSERT_VALUES_EQUAL(hiveDistributionRequests, 0);
     }
 
     Y_UNIT_TEST_TWIN(PerShardOrRangeScanWhenThresholdDisabled, ColumnShard) {
@@ -444,12 +503,9 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         //     1. Forget on the IN_PROGRESS op  -> PRECONDITION_FAILED.
         //     2. Forget on the ENQUEUED op     -> PRECONDITION_FAILED.
         //     3. Cancel the ENQUEUED op        -> SUCCESS, immediately STATE_CANCELLED
-        //        (TxAnalyzeOpCancel::Execute: not active -> marks finished inline).
         //        The active op must remain IN_PROGRESS.
-        //     4. Cancel the IN_PROGRESS op     -> SUCCESS synchronously; the state
-        //        flip is deferred via DispatchFinishTraversalTx which marks the op
-        //        STATE_CANCELLED and poisons the SA-internal AnalyzeActor via
-        //        ResetTraversalState. Verified by polling Get until STATE_CANCELLED.
+        //     4. Cancel the IN_PROGRESS op and deliver its delayed result. Its
+        //        terminal state must remain STATE_CANCELLED.
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
@@ -473,8 +529,7 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         runtime.WaitFor("active AnalyzeActor running",
             [&]{ return !blockResult.empty(); });
 
-        // Submit op2 — TxScheduleTraversal is a no-op because TraversalPathId is
-        // already set for op1, so op2 sits in ForceTraversals as STATE_ENQUEUED.
+        // The active traversal owns this path, so op2 stays queued.
         {
             auto req = MakeAnalyzeRequest({analyzedTable}, queuedOpId, "/Root/Database");
             req->Record.MutableTables(0)->SetPath(tableInfo.Path);
@@ -534,31 +589,12 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
             Ydb::Table::AnalyzeState::STATE_IN_PROGRESS,
             "active op must remain IN_PROGRESS after a queued sibling is cancelled");
 
-        // (4) Cancel active op: SUCCESS synchronously, but the state flip is
-        // deferred via DispatchFinishTraversalTx. Unblock the analyze result so
-        // the poisoned AnalyzeActor can finish tearing down, then poll until
-        // STATE_CANCELLED is observed. DONE must never be observed.
-        TestCancelAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId,
-            Ydb::StatusIds::SUCCESS);
-        blockResult.Unblock();
-        blockResult.Stop();
-
-        bool foundCancelled = false;
-        for (int i = 0; i < 60 && !foundCancelled; ++i) {
-            const auto state =
-                TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId)
-                    .GetAnalyzeOperation().GetState();
-            UNIT_ASSERT_VALUES_UNEQUAL_C(
-                state, Ydb::Table::AnalyzeState::STATE_DONE,
-                "cancelled active op must not transition to DONE");
-            if (state == Ydb::Table::AnalyzeState::STATE_CANCELLED) {
-                foundCancelled = true;
-                break;
-            }
-            runtime.SimulateSleep(TDuration::MilliSeconds(100));
-        }
-        UNIT_ASSERT_C(foundCancelled,
-            "cancelled active op did not transition to STATE_CANCELLED");
+        // Cancellation commits before its response. A delayed result must not undo it.
+        TestCancelAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId, Ydb::StatusIds::SUCCESS);
+        blockResult.Stop().Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId).GetAnalyzeOperation().GetState(),
+            Ydb::Table::AnalyzeState::STATE_CANCELLED);
     }
 
     Y_UNIT_TEST(ListAnalyzeNoStatisticsAggregator) {

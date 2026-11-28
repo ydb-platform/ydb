@@ -1,10 +1,6 @@
 #include "aggregator_impl.h"
 
-#include <ydb/core/statistics/aggregator/analyze_actor.h>
-
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/feature_flags.h>
-
+#include <util/generic/algorithm.h>
 #include <util/string/vector.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
@@ -12,13 +8,148 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxInit : public TTxBase {
+    std::vector<TTraversalReply> ExpiredOperations;
+
     explicit TTxInit(TSelf* self)
         : TTxBase(self)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_INIT; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    void LoadLegacyTraversal(TTraversal& legacy) {
+        // The old manual scheduler persisted the operation id and table status,
+        // but did not always persist the active path and start time.
+        if (legacy.OperationId) {
+            auto* operation = Self->ForceTraversalOperation(legacy.OperationId);
+            if (!operation || IsTerminalAnalyzeState(operation->State)) {
+                return;
+            }
+            auto table = FindIf(operation->Tables, [](const auto& candidate) {
+                return candidate.Status == TForceTraversalTable::EStatus::AnalyzeStarted;
+            });
+            if (table == operation->Tables.end()) {
+                return;
+            }
+            legacy.PathId = table->PathId;
+            legacy.Database = operation->DatabaseName;
+            if (!legacy.StartTime) {
+                legacy.StartTime = operation->CreatedAt;
+            }
+        }
+        if (legacy.PathId) {
+            // A legacy binary may have claimed the path again during a rollback.
+            YDB_LOG_DEBUG("Loaded legacy traversal",
+                {"tabletId", Self->TabletID()},
+                {"operationId", legacy.OperationId.Quote()},
+                {"pathId", legacy.PathId},
+                {"database", legacy.Database},
+                {"startTime", legacy.StartTime});
+            Self->ActiveTraversals.insert_or_assign(legacy.PathId, std::move(legacy));
+        }
+    }
+
+    bool RecoverTraversals(NIceDb::TNiceDb& db, TTraversal& legacy, bool legacyParamsPresent, TInstant now) {
+        using TTable = Schema::ActiveTraversals;
+        auto rows = db.Table<TTable>().Range().Select();
+        if (!rows.IsReady()) {
+            return false;
+        }
+        Self->ActiveTraversals.clear();
+        TVector<TPathId> obsolete;
+        while (!rows.EndOfSet()) {
+            TTraversal traversal;
+            traversal.PathId = TPathId(rows.GetValue<TTable::OwnerId>(), rows.GetValue<TTable::LocalPathId>());
+            traversal.OperationId = rows.GetValue<TTable::OperationId>();
+            traversal.Database = rows.GetValue<TTable::DatabaseName>();
+            traversal.StartTime = TInstant::MicroSeconds(rows.GetValue<TTable::StartTime>());
+
+            // An older binary ignores this table. It may have completed this
+            // operation or refreshed the background baseline before re-upgrade.
+            bool resume;
+            if (traversal.OperationId) {
+                const auto* operation = Self->ForceTraversalOperation(traversal.OperationId);
+                const auto* table = Self->ForceTraversalTable(traversal.OperationId, traversal.PathId);
+                resume = operation && !IsTerminalAnalyzeState(operation->State) && table
+                    && operation->DatabaseName == traversal.Database
+                    && table->Status != TForceTraversalTable::EStatus::TraversalFinished
+                    && operation->CreatedAt <= traversal.StartTime;
+            } else {
+                const auto it = Self->ScheduleTraversals.find(traversal.PathId);
+                // A missing schedule entry can mean the table was dropped during the scan.
+                // Navigate again so a confirmed drop still cleans up its stored statistics.
+                resume = it == Self->ScheduleTraversals.end() || it->second.LastUpdateTime < traversal.StartTime;
+            }
+            if (resume) {
+                Self->ActiveTraversals.emplace(traversal.PathId, std::move(traversal));
+            } else {
+                obsolete.push_back(traversal.PathId);
+            }
+            if (!rows.Next()) {
+                return false;
+            }
+        }
+
+        for (const auto& pathId : obsolete) {
+            Self->DeletePersistedTraversal(db, pathId);
+        }
+        if (legacyParamsPresent) {
+            LoadLegacyTraversal(legacy);
+            for (auto id : {Schema::SysParam_TraversalTableDatabase, Schema::SysParam_TraversalTableOwnerId,
+                     Schema::SysParam_TraversalTableLocalPathId, Schema::SysParam_TraversalStartTime,
+                     Schema::SysParam_ForceTraversalOperationId}) {
+                db.Table<Schema::SysParams>().Key(id).Delete();
+            }
+        }
+        Self->ExpireAnalyzeOperations(db, now, ExpiredOperations);
+        // Keyed reservations are the sole start marker. Legacy AnalyzeStarted
+        // rows with no matching reservation must become schedulable as well.
+        for (auto& operation : Self->ForceTraversals) {
+            if (IsTerminalAnalyzeState(operation.State)) {
+                continue;
+            }
+            for (auto& table : operation.Tables) {
+                if (table.Status == TForceTraversalTable::EStatus::AnalyzeStarted) {
+                    Self->UpdateForceTraversalTableStatus(
+                        TForceTraversalTable::EStatus::None, operation.OperationId, table, db);
+                }
+            }
+        }
+        TVector<TTraversal*> candidates;
+        for (auto& [_, traversal] : Self->ActiveTraversals) {
+            candidates.push_back(&traversal);
+        }
+        SortBy(candidates, [](const TTraversal* traversal) {
+            return std::make_tuple(traversal->OperationId.empty(), traversal->StartTime, traversal->PathId);
+        });
+        // A restart may also change the configured table limit. Excess manual
+        // work is durably queued; background entries stay eligible in the heap.
+        const size_t limit = Self->EnableColumnStatistics
+            ? std::max<ui32>(1, Self->StatisticsConfig.GetAnalyzeMaxTablesInFlight()) : 0;
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            auto& traversal = *candidates[i];
+            if (i >= limit || (traversal.OperationId.empty() && !Self->StatisticsConfig.GetEnableBackgroundColumnStatsCollection())) {
+                const auto pathId = traversal.PathId;
+                if (traversal.OperationId.empty() && !Self->ScheduleTraversals.contains(pathId)) {
+                    // There is no scheduled table to retry this path when capacity or collection returns.
+                    Self->PendingBackgroundChecks.insert(pathId);
+                    Self->PersistTraversal(db, traversal);
+                } else {
+                    Self->DeletePersistedTraversal(db, pathId);
+                }
+                Self->ActiveTraversals.erase(pathId);
+                continue;
+            }
+            if (traversal.OperationId) {
+                auto* table = Self->ForceTraversalTable(traversal.OperationId, traversal.PathId);
+                table->Status = TForceTraversalTable::EStatus::AnalyzeStarted;
+            }
+            traversal.Attempt = Self->AllocateTraversalAttempt();
+            Self->PersistTraversal(db, traversal);
+        }
+        return true;
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG("TTxInit::Execute",
             {"tabletId", Self->TabletID()});
 
@@ -30,17 +161,21 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             auto scheduleTraversalRowset = db.Table<Schema::ScheduleTraversals>().Range().Select();
             auto forceTraversalOperationsRowset = db.Table<Schema::ForceTraversalOperations>().Range().Select();
             auto forceTraversalTablesRowset = db.Table<Schema::ForceTraversalTables>().Range().Select();
+            auto activeTraversals = db.Table<Schema::ActiveTraversals>().Range().Select();
 
             if (!sysParamsRowset.IsReady() ||
                 !baseStatisticsRowset.IsReady() ||
                 !scheduleTraversalRowset.IsReady() ||
                 !forceTraversalOperationsRowset.IsReady() ||
-                !forceTraversalTablesRowset.IsReady())
+                !forceTraversalTablesRowset.IsReady() ||
+                !activeTraversals.IsReady())
             {
                 return false;
             }
         }
 
+        TTraversal legacy;
+        bool legacyParamsPresent = false;
         // SysParams
         {
             auto rowset = db.Table<Schema::SysParams>().Range().Select();
@@ -60,36 +195,24 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                             {"database", Self->Database});
                         break;
                     case Schema::SysParam_TraversalTableDatabase:
-                        Self->TraversalDatabase = value;
-                        YDB_LOG_DEBUG("Loaded traversal table database",
-                            {"tabletId", Self->TabletID()},
-                            {"database", Self->TraversalDatabase});
+                        legacyParamsPresent = true;
+                        legacy.Database = value;
                         break;
                     case Schema::SysParam_TraversalTableOwnerId:
-                        Self->TraversalPathId.OwnerId = FromString<ui64>(value);
-                        YDB_LOG_DEBUG("Loaded traversal table owner",
-                            {"tabletId", Self->TabletID()},
-                            {"id", Self->TraversalPathId.OwnerId});
+                        legacyParamsPresent = true;
+                        legacy.PathId.OwnerId = FromString<ui64>(value);
                         break;
                     case Schema::SysParam_TraversalTableLocalPathId:
-                        Self->TraversalPathId.LocalPathId = FromString<ui64>(value);
-                        YDB_LOG_DEBUG("Loaded traversal table local path",
-                            {"tabletId", Self->TabletID()},
-                            {"id", Self->TraversalPathId.LocalPathId});
+                        legacyParamsPresent = true;
+                        legacy.PathId.LocalPathId = FromString<ui64>(value);
                         break;
-                    case Schema::SysParam_TraversalStartTime: {
-                        auto us = FromString<ui64>(value);
-                        Self->TraversalStartTime = TInstant::MicroSeconds(us);
-                        YDB_LOG_DEBUG("Loaded traversal start time",
-                            {"tabletId", Self->TabletID()},
-                            {"time", us});
+                    case Schema::SysParam_TraversalStartTime:
+                        legacyParamsPresent = true;
+                        legacy.StartTime = TInstant::MicroSeconds(FromString<ui64>(value));
                         break;
-                    }
                     case Schema::SysParam_ForceTraversalOperationId:
-                        Self->ForceTraversalOperationId = value;
-                        YDB_LOG_DEBUG("Loaded force traversal operation id",
-                            {"tabletId", Self->TabletID()},
-                            {"id", value});
+                        legacyParamsPresent = true;
+                        legacy.OperationId = value;
                         break;
                     case 2:  // deprecated SysParam_TraversalStartKey
                     case 11: // deprecated SysParam_TraversalIsColumnTable
@@ -212,7 +335,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     .Tables = {},
                     .Types = types,
                     .ReplyToActorId = replyToActorId,
-                    .RequestingActorReattached = false,
                     .CreatedAt = TInstant::FromValue(createdAt),
                     .State = state,
                     .EndTime = TInstant::FromValue(endTime),
@@ -224,6 +346,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
             }
 
+            Self->ForceTraversals.sort([](const auto& left, const auto& right) {
+                return std::tie(left.CreatedAt, left.OperationId) < std::tie(right.CreatedAt, right.OperationId);
+            });
             Self->RecalcForceTraversalsInflightSizeCounter();
 
             YDB_LOG_DEBUG("Loaded ForceTraversalOperations",
@@ -278,7 +403,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 {"tablesCount", size});
         }
 
-        return true;
+        return RecoverTraversals(db, legacy, legacyParamsPresent, ctx.Now());
     }
 
     void Complete(const TActorContext& ctx) override {
@@ -286,19 +411,15 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             {"tabletId", Self->TabletID()});
 
         Self->SignalTabletActive(ctx);
-
-        Self->EnableStatistics = AppData(ctx)->FeatureFlags.GetEnableStatistics();
-        Self->EnableColumnStatistics = AppData(ctx)->FeatureFlags.GetEnableColumnStatistics();
-        Self->EnableBackgroundAnalyzeChangeRatio = AppData(ctx)->FeatureFlags.GetEnableBackgroundAnalyzeChangeRatio();
-        Self->EnableAnalyzeSampling = AppData(ctx)->FeatureFlags.GetEnableAnalyzeSampling();
+        Self->ReplyToExpiredAnalyzeOperations(ctx, ExpiredOperations);
         Self->SubscribeForConfigChanges(ctx);
 
         Self->Schedule(Self->GetPropagateInterval(), new TEvPrivate::TEvPropagate());
         Self->Schedule(Self->AnalyzeCountersReportPeriod, new TEvPrivate::TEvReportAnalyzeCounters());
+        Self->ScheduleAnalyzeDeadlineCheck();
 
         if (Self->EnableColumnStatistics) {
             Self->StartTraversalScheduler();
-            Self->Schedule(Self->AnalyzeDeadlinePeriod, new TEvPrivate::TEvAnalyzeDeadline());
         } else {
             YDB_LOG_WARN("TTxInit::Complete. EnableColumnStatistics=false",
                 {"tabletId", Self->TabletID()});
@@ -308,15 +429,16 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             Self->InitializeStatisticsTable();
         }
 
-        if (Self->TraversalPathId && !Self->AnalyzeActorId) {
+        Self->RebuildBaseStatisticsCounters();
+        for (auto& [_, traversal] : Self->ActiveTraversals) {
             YDB_LOG_DEBUG("TTxInit::Complete. Resume traversal with TAnalyzeActor.",
                 {"tabletId", Self->TabletID()},
-                {"traversalPathId", Self->TraversalPathId});
-            Self->StartAnalyzeActor(ctx, Self->ForceTraversalOperationId,
-                Self->TraversalDatabase, Self->TraversalPathId);
+                {"operationId", traversal.OperationId.Quote()},
+                {"traversalPathId", traversal.PathId});
+            Self->StartTraversal(ctx, traversal);
         }
+        Self->RefreshScanUserDependencies();
 
-        Self->RebuildBaseStatisticsCounters();
         Self->Become(&TThis::StateWork);
     }
 };

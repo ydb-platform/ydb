@@ -47,25 +47,7 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
             UpdatedStats = std::make_shared<TString>(stats);
             UpdatedTotals = CalculateBaseStatisticsTotals(statRecord);
         } else if (existingStats.Latest) {
-            NKikimrStat::TSchemeShardStats oldStatRecord;
-            Y_PROTOBUF_SUPPRESS_NODISCARD oldStatRecord.ParseFromString(*existingStats.Latest);
-
-            struct TOldStats {
-                ui64 RowCount = 0;
-                ui64 RowUpdates = 0;
-                ui64 RowDeletes = 0;
-                ui64 BytesSize = 0;
-            };
-            THashMap<TPathId, TOldStats> oldStatsMap;
-
-            for (const auto& entry : oldStatRecord.GetEntries()) {
-                auto& oldEntry = oldStatsMap[TPathId::FromProto(entry.GetPathId())];
-                oldEntry.RowCount = entry.GetRowCount();
-                oldEntry.RowUpdates = entry.GetRowUpdates();
-                oldEntry.RowDeletes = entry.GetRowDeletes();
-                oldEntry.BytesSize = entry.GetBytesSize();
-            }
-
+            const auto& oldTables = existingStats.GetTables();
             NKikimrStat::TSchemeShardStats newStatRecord;
             for (const auto& entry : statRecord.GetEntries()) {
                 auto* newEntry = newStatRecord.AddEntries();
@@ -77,19 +59,16 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
                     newEntry->SetRowCount(entry.GetRowCount());
                     newEntry->SetRowUpdates(entry.GetRowUpdates());
                     newEntry->SetRowDeletes(entry.GetRowDeletes());
-                    newEntry->SetBytesSize(entry.GetBytesSize());
+                    if (entry.HasBytesSize()) {
+                        newEntry->SetBytesSize(entry.GetBytesSize());
+                    }
                 } else {
-                    auto oldIter = oldStatsMap.find(TPathId::FromProto(entry.GetPathId()));
-                    if (oldIter != oldStatsMap.end()) {
-                        newEntry->SetRowCount(oldIter->second.RowCount);
-                        newEntry->SetRowUpdates(oldIter->second.RowUpdates);
-                        newEntry->SetRowDeletes(oldIter->second.RowDeletes);
-                        newEntry->SetBytesSize(oldIter->second.BytesSize);
-                    } else {
-                        newEntry->SetRowCount(0);
-                        newEntry->SetRowUpdates(0);
-                        newEntry->SetRowDeletes(0);
-                        newEntry->SetBytesSize(0);
+                    const auto old = oldTables.Value(TPathId::FromProto(entry.GetPathId()), TTableBaseStats{});
+                    newEntry->SetRowCount(old.Counters.RowCount);
+                    newEntry->SetRowUpdates(old.Counters.RowUpdates);
+                    newEntry->SetRowDeletes(old.Counters.RowDeletes);
+                    if (old.BytesSize) {
+                        newEntry->SetBytesSize(*old.BytesSize);
                     }
                 }
             }
@@ -103,6 +82,7 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
             db.Table<Schema::BaseStatistics>().Key(schemeShardId).Update(
                 NIceDb::TUpdate<Schema::BaseStatistics::Stats>(*UpdatedStats));
             existingStats.Latest = UpdatedStats;
+            existingStats.ParsedTables.reset();
         }
 
         if (!Self->EnableColumnStatistics) {
@@ -172,7 +152,7 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
             Self->ReportBaseStatisticsCounters();
         }
 
-        Self->InvalidateCachedChangeCounters();
+        Self->AnalyzeCountersDirty = true;
     }
 };
 

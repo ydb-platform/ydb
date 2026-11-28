@@ -95,6 +95,17 @@ struct TAggregatorSchema : NIceDb::Schema {
         >;
     };
 
+    struct ActiveTraversals : Table<8> {
+        struct OwnerId     : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct OperationId : Column<3, NScheme::NTypeIds::String> {};
+        struct DatabaseName : Column<4, NScheme::NTypeIds::String> {};
+        struct StartTime   : Column<5, NScheme::NTypeIds::Timestamp> {};
+
+        using TKey = TableKey<OwnerId, LocalPathId>;
+        using TColumns = TableColumns<OwnerId, LocalPathId, OperationId, DatabaseName, StartTime>;
+    };
+
     using TTables = SchemaTables<
         SysParams,
         BaseStatistics,
@@ -102,7 +113,8 @@ struct TAggregatorSchema : NIceDb::Schema {
         ScheduleTraversals,
 //      ForceTraversals,
         ForceTraversalOperations,
-        ForceTraversalTables
+        ForceTraversalTables,
+        ActiveTraversals
     >;
 
     using TSettings = SchemaSettings<

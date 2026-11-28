@@ -7,6 +7,8 @@ SRCS(
     aggregator_impl.cpp
     analyze_actor.h
     analyze_actor.cpp
+    analyze_scan_budget.h
+    analyze_scan_budget.cpp
     column_statistic_eval.h
     column_statistic_eval.cpp
     key_range_predicate.h

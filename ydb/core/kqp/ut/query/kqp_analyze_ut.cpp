@@ -2,6 +2,7 @@
 #include <ydb/core/base/request_types.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/statistics/aggregator/analyze_actor.h>
+#include <ydb/core/statistics/aggregator/analyze_scan_budget.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/kqp/common/events/events.h>
@@ -63,7 +64,8 @@ Y_UNIT_TEST_TWIN(AnalyzeScansWithNewRboWithoutFallback, PerShard) {
     config.ColumnTableWholeTableScanMaxBytes = PerShard ? 0 : (1ULL << 30);
     config.TableBytesSize = 1; // The fixture fits in the whole-table threshold.
     const auto edge = runtime.AllocateEdgeActor(1);
-    runtime.Register(new TAnalyzeActor(edge, "newRbo", "/Root/Database", table.PathId, {}, config), 1);
+    const auto budget = runtime.Register(CreateAnalyzeScanBudget(100, 1), 1);
+    runtime.Register(new TAnalyzeActor(edge, "newRbo", "/Root/Database", table.PathId, {}, config, budget), 1);
     bool haveSummary = false;
     bool haveSketch = false;
     bool haveHistogram = false;
@@ -252,6 +254,38 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
         {.Tag = 2, .Probes = {{{"Hello,world!", 1500}}}},
     });
     CheckEqHeightHistogram(runtime, pathId, {1}, 1500, 1);
+}
+
+Y_UNIT_TEST_TWIN(ConcurrentAnalyzeStatements, ColumnStore) {
+    TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+        settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeMaxTablesInFlight(2);
+    });
+    auto& runtime = *env.GetServer().GetRuntime();
+    CreateDatabase(env, "Database");
+    const auto first = CreateEmptyTable(env, "Database", "First", ColumnStore);
+    const auto second = CreateEmptyTable(env, "Database", "Second", ColumnStore);
+    WaitForSchemeShardStatsUpdate(runtime, first.PathId.OwnerId, true);
+    TTableClient client(env.GetDriver());
+    auto firstSession = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
+    auto secondSession = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
+
+    TActorId heldActor;
+    TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> holdFirst(runtime, [&](const auto& ev) {
+        if (!heldActor) {
+            heldActor = ev->Sender;
+        }
+        return ev->Sender == heldActor;
+    });
+    auto firstResult = firstSession.ExecuteSchemeQuery(TStringBuilder() << "ANALYZE `" << first.Path << "`");
+    runtime.WaitFor("first statistics result", [&] { return !holdFirst.empty(); });
+    auto secondResult = env.RunInThreadPool([&] {
+        return secondSession.ExecuteSchemeQuery(TStringBuilder() << "ANALYZE `" << second.Path << "`").GetValueSync();
+    });
+    UNIT_ASSERT_C(secondResult.IsSuccess(), secondResult.GetIssues().ToString());
+    UNIT_ASSERT(!firstResult.HasValue());
+    holdFirst.Stop().Unblock();
+    auto result = runtime.WaitFuture(firstResult);
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
 Y_UNIT_TEST_TWIN(AnalyzeServerlessTable, ColumnStore) {

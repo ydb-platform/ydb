@@ -52,22 +52,37 @@ TVector<ui64> SelectAnalyzeSample(TVector<ui64> tablets, double rate, ui64 seed)
 
 class TAnalyzeActor::TScanActor : public TQueryBase {
 public:
+    struct TScanQuery {
+        std::shared_ptr<const TSelectBuilder> Select;
+        TString Table;
+        std::optional<ui64> TabletId;
+        TString Where;
+        TString Declares;
+        double SampleRate;
+        ui64 SamplingSeed;
+    };
+
     TScanActor(
         TActorId parent,
-        TString Database,
-        TString query,
-        size_t columnCount,
+        ui64 scanId,
+        TString database,
+        TScanQuery scan,
         std::optional<NYdb::TParamsBuilder> params)
-        : TQueryBase(NKikimrServices::STATISTICS, {}, std::move(Database))
+        : TQueryBase(NKikimrServices::STATISTICS, {}, std::move(database))
         , Parent(parent)
-        , Query(std::move(query))
-        , ColumnCount(columnCount)
+        , ScanId(scanId)
+        , Scan(std::move(scan))
         , Params(std::move(params))
     {
         RequestType = TString(NRequestTypes::Analyze);
     }
 
     void OnRunQuery() override {
+        if (CancelledBeforeSession) {
+            Finish(Ydb::StatusIds::ABORTED, "Query aborted");
+            return;
+        }
+        Query = Scan.Select->Build(Scan.Table, Scan.TabletId, Scan.Where, Scan.Declares, Scan.SampleRate, Scan.SamplingSeed);
         RunStreamQuery(Query, Params ? &*Params : nullptr);
     }
 
@@ -82,20 +97,21 @@ public:
         }
         NYdb::TResultSetParser result(std::move(ResultSets.front()));
         Y_ENSURE(result.TryNextRow());
-        if (result.ColumnsCount() != ColumnCount) {
+        const size_t columnCount = Scan.Select->ColumnCount();
+        if (result.ColumnsCount() != columnCount) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR,
                 TStringBuilder() << "unexpected query result: expected "
-                << ColumnCount << " columns, got " << result.ColumnsCount());
+                << columnCount << " columns, got " << result.ColumnsCount());
             return;
         }
 
         TVector<NYdb::TValue> resultColumns;
-        resultColumns.reserve(ColumnCount);
-        for (size_t i = 0; i < ColumnCount; ++i) {
+        resultColumns.reserve(columnCount);
+        for (size_t i = 0; i < columnCount; ++i) {
             resultColumns.push_back(result.GetValue(i));
         }
         // Streamed aggregates are provisional until the query's final status.
-        Send(Parent, new TEvPrivate::TEvAnalyzeScanResult(std::move(resultColumns)));
+        Send(Parent, new TEvPrivate::TEvAnalyzeScanResult(std::move(resultColumns)), 0, ScanId);
         Finish();
     }
 
@@ -108,9 +124,10 @@ public:
             {"selfId", SelfId()},
             {"status", status},
             {"issues", issues.ToOneLineString()},
+            {"table", Scan.Table},
             {"query", Query});
 
-        Send(Parent, new TEvPrivate::TEvAnalyzeScanResult(status, std::move(issues)));
+        Send(Parent, new TEvPrivate::TEvAnalyzeScanResult(status, std::move(issues)), 0, ScanId);
     }
 
 private:
@@ -125,13 +142,28 @@ private:
     void Handle(TEvents::TEvPoison::TPtr&) {
         YDB_LOG_DEBUG("Got TEvPoison",
             {"selfId", SelfId()});
+        if (Finished) {
+            return;
+        }
+        if (!SessionId) {
+            // Let the pending CreateSession reply arrive so Finish can close that session.
+            CancelledBeforeSession = true;
+            return;
+        }
         Finish(Ydb::StatusIds::ABORTED, "Query aborted");
+    }
+
+    void PassAway() final {
+        Send(Owner, new TEvAnalyzeScanBudget::TEvStopped());
+        TQueryBase::PassAway();
     }
 
 private:
     TActorId Parent;
+    ui64 ScanId;
+    bool CancelledBeforeSession = false;
+    TScanQuery Scan;
     TString Query;
-    size_t ColumnCount;
     std::optional<NYdb::TParamsBuilder> Params;
 };
 
@@ -685,7 +717,7 @@ void TAnalyzeActor::TryScheduleHiveRetry(const TStringBuf& issue) {
 }
 
 void TAnalyzeActor::StartColumnStatEvalTasks() {
-    Y_ENSURE(ScanActorsInFlight.empty());
+    Y_ENSURE(OutstandingScans.empty());
     Y_ENSURE(NodeId2State.empty());
     Y_ENSURE(InProgressTasks.empty());
     Y_ENSURE(!PendingTasks.empty());
@@ -703,13 +735,13 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
         }
     }
 
-    SelectBuilder.emplace(/*isIntermediateAggregation=*/IsPartitionedScan());
+    auto builder = std::make_shared<TSelectBuilder>(/*isIntermediateAggregation=*/IsPartitionedScan());
     size_t totalSize = 0;
 
     // Batches may see different data or sampling layouts, even with the same seed.
     // Count alongside each batch so its statistics describe the rows it actually read.
     RowCount = 0;
-    CountSeq = SelectBuilder->AddBuiltinAggregation({}, "count");
+    CountSeq = builder->AddBuiltinAggregation({}, "count");
 
     while (!PendingTasks.empty()) {
         auto& task = PendingTasks.front();
@@ -725,37 +757,53 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
 
         totalSize += resultSize;
         if (task.SimpleStatEval) {
-            task.SimpleStatEval->AddAggregations(Columns.at(task.ColumnIdx).Name, *SelectBuilder);
+            task.SimpleStatEval->AddAggregations(Columns.at(task.ColumnIdx).Name, *builder);
         } else if (task.Stage2StatEval) {
-            task.Stage2StatEval->AddAggregations(Columns.at(task.ColumnIdx).Name, *SelectBuilder);
+            task.Stage2StatEval->AddAggregations(Columns.at(task.ColumnIdx).Name, *builder);
         } else {
-            task.MultiStatEval->AddAggregations(*SelectBuilder);
+            task.MultiStatEval->AddAggregations(*builder);
         }
         InProgressTasks.push_back(std::move(task));
         PendingTasks.pop();
     }
 
-    if (!DispatchSomeScanActors()) {
+    // Queued scans share this batch's immutable projection until they are admitted.
+    SelectBuilder = std::move(builder);
+    if (!SubmissionLimits) {
+        Send(ScanBudget, new TEvAnalyzeScanBudget::TEvOpen(!OperationId.empty()));
         return;
+    }
+    DispatchSomeScanActors();
+}
+
+void TAnalyzeActor::Handle(TEvAnalyzeScanBudget::TEvConfigure::TPtr& ev) {
+    SubmissionLimits = ev->Get()->Limits;
+    if (IsPartitionedScan() || OutstandingScans.empty()) {
+        DispatchSomeScanActors();
     }
 }
 
 bool TAnalyzeActor::DispatchSomeScanActors() {
-    auto dispatchActor = [&](ui32 nodeId, std::optional<ui64> tabletId, TStringBuf where,
-            TStringBuf declares, std::optional<NYdb::TParamsBuilder> params)
+    auto dispatchActor = [&](ui32 nodeId, std::optional<ui64> tabletId, TString where,
+            TString declares, std::optional<NYdb::TParamsBuilder> params)
     {
-        auto actor = std::make_unique<TScanActor>(
-            SelfId(), DatabaseName,
-            SelectBuilder->Build(TableName, tabletId, where, declares, IsColumnTable ? 1.0 : Config.SampleRate, SamplingSeed),
-            SelectBuilder->ColumnCount(),
-            std::move(params));
-        ScanActorsInFlight[Register(actor.release(), TMailboxType::HTSwap, AppData()->BatchPoolId)] = TScanActorInfo{
-            .TabletNodeId = nodeId,
+        const ui64 scanId = ++NextScanId;
+        TScanActor::TScanQuery scan{
+            .Select = SelectBuilder,
+            .Table = TableName,
+            .TabletId = tabletId,
+            .Where = std::move(where),
+            .Declares = std::move(declares),
+            .SampleRate = IsColumnTable ? 1.0 : Config.SampleRate,
+            .SamplingSeed = SamplingSeed,
         };
+        auto actor = std::make_unique<TScanActor>(SelfId(), scanId, DatabaseName, std::move(scan), std::move(params));
+        OutstandingScans.emplace(scanId, nodeId);
+        Send(ScanBudget, new TEvAnalyzeScanBudget::TEvSubmit(nodeId, std::move(actor)));
     };
 
     if (!IsPartitionedScan()) {
-        Y_ENSURE(ScanActorsInFlight.empty());
+        Y_ENSURE(OutstandingScans.empty());
         YDB_LOG_DEBUG("Dispatching scan actor for the whole table",
             {"selfId", SelfId()});
         dispatchActor(0, std::nullopt, {}, {}, {});
@@ -768,7 +816,7 @@ bool TAnalyzeActor::DispatchSomeScanActors() {
 
     auto isSchedulable = [&](const TNodeState& node) {
         return !node.PendingScans.empty()
-            && node.TabletsInFlight < Config.MaxPerNodeScanActorsInFlight;
+            && node.TabletsInFlight < SubmissionLimits->PerNode;
     };
 
     auto nodeCmp = [](TNodeState* left, TNodeState* right) {
@@ -784,7 +832,7 @@ bool TAnalyzeActor::DispatchSomeScanActors() {
     }
 
     while (!schedulableQueue.empty()
-            && ScanActorsInFlight.size() < Config.MaxTotalScanActorsInFlight) {
+            && OutstandingScans.size() < SubmissionLimits->Total) {
         auto* node = schedulableQueue.top();
         schedulableQueue.pop();
         Y_ENSURE(!node->PendingScans.empty());
@@ -815,7 +863,7 @@ bool TAnalyzeActor::DispatchSomeScanActors() {
             {"tabletId", work.TabletId},
             {"nodeId", node->Id},
             {"scanMode", static_cast<int>(ScanMode)});
-        dispatchActor(node->Id, scanTabletId, where, declares, std::move(params));
+        dispatchActor(node->Id, scanTabletId, std::move(where), std::move(declares), std::move(params));
         ++node->TabletsInFlight;
 
         if (isSchedulable(*node)) {
@@ -826,10 +874,12 @@ bool TAnalyzeActor::DispatchSomeScanActors() {
 }
 
 void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
-    auto actorIt = ScanActorsInFlight.find(ev->Sender);
-    Y_ENSURE(actorIt != ScanActorsInFlight.end());
-    const ui32 tabletNodeId = actorIt->second.TabletNodeId;
-    ScanActorsInFlight.erase(actorIt);
+    auto scan = OutstandingScans.find(ev->Cookie);
+    if (scan == OutstandingScans.end()) {
+        return;
+    }
+    const ui32 tabletNodeId = scan->second;
+    OutstandingScans.erase(scan);
 
     ++ScansCompletedTotal;
     const ui32 shardsTotal = IsPartitionedScan() ? PartitionedScanCount() : 1;
@@ -866,7 +916,7 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     NYdb::TValueParser count(result.AggColumns.at(CountSeq));
     RowCount += count.GetUint64();
 
-    if (!ScanActorsInFlight.empty()) {
+    if (!OutstandingScans.empty()) {
         // More scan results coming for the current column tasks batch, merge the current one
         // and wait for more.
         for (const auto& task : InProgressTasks) {
@@ -1042,9 +1092,7 @@ void TAnalyzeActor::PassAway() {
         {"selfId", SelfId()},
         {"operationId", OperationId.Quote()});
 
-    for (const auto& [id, info] : ScanActorsInFlight){
-        Send(id, new TEvents::TEvPoison());
-    }
+    Send(ScanBudget, new TEvAnalyzeScanBudget::TEvClose());
 
     Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
 

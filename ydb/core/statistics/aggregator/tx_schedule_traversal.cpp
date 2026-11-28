@@ -1,6 +1,9 @@
 #include "aggregator_impl.h"
+#include "analyze_scan_budget.h"
 
 #include <ydb/core/tx/datashard/datashard.h>
+
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
@@ -8,6 +11,7 @@ namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
     const bool ForceTraversal;
+    std::vector<std::pair<TPathId, ui64>> Starts;
 
     TTxScheduleTraversal(TSelf* self, bool forceTraversal)
         : TTxBase(self)
@@ -26,33 +30,28 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
 
         Self->RecalcForceTraversalInflightMaxTimeCounter(ctx.Now());
 
-        if (Self->TraversalPathId) {
-            YDB_LOG_TRACE("TTxScheduleTraversal::Execute. Traverse is in progress.",
-                {"tabletId", Self->TabletID()},
-                {"pathId", Self->TraversalPathId});
-            return true;
-        }
-
         YDB_LOG_TRACE("TTxScheduleTraversal::Execute",
             {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
-
-        // First try to dispatch a table analyze operation.
-        Self->ScheduleNextAnalyze(db, ctx);
-
-        // Avoid immediate retries of failed background scans.
-        if (!ForceTraversal
-                && !Self->TraversalPathId
-                && Self->StatisticsTablePathId
-                && !Self->ScheduleTraversals.empty()
-                && Self->StatisticsConfig.GetEnableBackgroundColumnStatsCollection()) {
-            Self->ScheduleNextBackgroundTraversal(db, ctx);
-        }
+        // Only periodic ticks admit background work, so failed background scans
+        // cannot immediately retry themselves through the completion wakeup.
+        Self->ScheduleTraversalsForScan(db, ctx, !ForceTraversal, Starts);
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext& ctx) override {
+        bool startedBackground = false;
+        for (const auto& [path, attempt] : Starts) {
+            auto it = Self->ActiveTraversals.find(path);
+            if (it != Self->ActiveTraversals.end() && it->second.Attempt == attempt && !it->second.Finishing) {
+                Self->StartTraversal(ctx, it->second);
+                startedBackground = startedBackground || it->second.OperationId.empty();
+            }
+        }
+        if (ForceTraversal || startedBackground) {
+            Self->RefreshScanUserDependencies();
+        }
         YDB_LOG_TRACE("TTxScheduleTraversal::Complete",
             {"tabletId", Self->TabletID()});
 
@@ -66,6 +65,33 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
         }
     }
 };
+
+void TStatisticsAggregator::RefreshScanUserDependencies() {
+    if (std::none_of(ActiveTraversals.begin(), ActiveTraversals.end(), [](const auto& item) {
+        return item.second.OperationId.empty() && item.second.AnalyzeActorId;
+    })) {
+        HasScanUserDependencies = false;
+        return;
+    }
+
+    THashSet<TActorId> owners;
+    for (const auto& operation : ForceTraversals) {
+        if (IsTerminalAnalyzeState(operation.State)) {
+            continue;
+        }
+        for (const auto& table : operation.Tables) {
+            auto it = ActiveTraversals.find(table.PathId);
+            if (table.Status == TForceTraversalTable::EStatus::None && it != ActiveTraversals.end() &&
+                    it->second.OperationId.empty() && it->second.AnalyzeActorId) {
+                owners.insert(it->second.AnalyzeActorId);
+            }
+        }
+    }
+    if (HasScanUserDependencies || !owners.empty()) {
+        HasScanUserDependencies = !owners.empty();
+        Send(ScanBudgetActorId, new TEvAnalyzeScanBudget::TEvSetUserDependencies(std::move(owners)));
+    }
+}
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvScheduleTraversal::TPtr&) {
     Execute(new TTxScheduleTraversal(this, /*forceTraversal=*/false), TActivationContext::AsActorContext());

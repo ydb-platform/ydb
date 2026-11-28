@@ -6,7 +6,9 @@ namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeOpCancel : public TTxBase {
     TEvStatistics::TEvAnalyzeOpCancelRequest::TPtr Request;
-    bool IsActive = false;
+    TActorId AnalyzeRequester;
+    bool Found = false;
+    bool Cancelled = false;
 
     TTxAnalyzeOpCancel(TSelf* self, TEvStatistics::TEvAnalyzeOpCancelRequest::TPtr ev)
         : TTxBase(self)
@@ -27,30 +29,26 @@ struct TStatisticsAggregator::TTxAnalyzeOpCancel : public TTxBase {
 
         auto* op = Self->ForceTraversalOperation(operationId);
         if (!op || op->DatabaseName != dbName) {
-            return true; // NOT_FOUND handled in Complete
+            return true;
         }
 
+        Found = true;
         if (IsTerminalAnalyzeState(op->State)) {
             return true; // idempotent
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        IsActive = (Self->ForceTraversalOperationId == operationId);
-
-        if (!IsActive) {
-            // Queued op: mark cancelled immediately
-            Self->MarkForceTraversalOperationFinished(operationId,
-                Ydb::Table::AnalyzeState::STATE_CANCELLED,
-                ctx.Now(), db);
-        }
-        // Active op: handled via DispatchFinishTraversalTx in Complete
+        AnalyzeRequester = op->ReplyToActorId;
+        Self->DiscardOperationTraversals(operationId, db);
+        Self->MarkForceTraversalOperationFinished(operationId,
+            Ydb::Table::AnalyzeState::STATE_CANCELLED, ctx.Now(), db);
+        Cancelled = true;
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
         const TString& operationId = record.GetOperationId();
-        const TString& dbName = record.GetDatabaseName();
 
         YDB_LOG_NOTICE("[AnalyzeOp] TTxAnalyzeOpCancel::Complete",
             {"tabletId", Self->TabletID()},
@@ -59,8 +57,7 @@ struct TStatisticsAggregator::TTxAnalyzeOpCancel : public TTxBase {
         auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpCancelResponse>();
         auto& rec = response->Record;
 
-        auto* op = Self->ForceTraversalOperation(operationId);
-        if (!op || op->DatabaseName != dbName) {
+        if (!Found) {
             rec.SetStatus(Ydb::StatusIds::NOT_FOUND);
             auto& issue = *rec.AddIssues();
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
@@ -72,8 +69,14 @@ struct TStatisticsAggregator::TTxAnalyzeOpCancel : public TTxBase {
         rec.SetStatus(Ydb::StatusIds::SUCCESS);
         ctx.Send(Request->Sender, response.Release(), 0, Request->Cookie);
 
-        if (IsActive && Self->ForceTraversalOperationId == operationId) {
-            Self->DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED);
+        if (AnalyzeRequester) {
+            auto result = MakeHolder<TEvStatistics::TEvAnalyzeResponse>();
+            result->Record.SetOperationId(operationId);
+            result->Record.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED);
+            ctx.Send(AnalyzeRequester, result.Release());
+        }
+        if (Cancelled) {
+            ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleForceTraversal());
         }
     }
 };

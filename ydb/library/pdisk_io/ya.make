@@ -43,6 +43,7 @@ PEERDIR(
 SRCS(
     aio.cpp
     aio.h
+    aio_completion.h
     aio_map.cpp
     buffers.cpp
     buffers.h

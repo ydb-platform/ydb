@@ -43,6 +43,9 @@ void IterateMut(NJson::TJsonValue& json, const TStringBuf& path, std::function<v
 
 ui64 GetConfigHash(const TString& config);
 
+// Suppress the entire document when it contains S3 credentials, including copies under YAML anchors.
+TString ConfigTextForDiagnostics(const TString& config);
+
 // Default Nkikimr::NConfig::TOpaqueConfigParser implementation template.
 // Parses YAML string into template-parameter specified proto message.
 // Silently ignores unknown fields if allowUnknownFields=true.

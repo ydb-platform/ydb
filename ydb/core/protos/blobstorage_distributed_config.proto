@@ -32,10 +32,10 @@ message TStorageConfig { // contents of storage metadata
     repeated TNodeIdentifier AllNodes = 5; // set of all known nodes
     string ClusterUUID = 6; // cluster GUID as provided in nameservice config
     string SelfAssemblyUUID = 7; // self-assembly UUID generated when config is first created
-    optional bytes ConfigComposite = 12; // compressed stored storage config YAML (if stored)
+    optional bytes ConfigComposite = 12 [(Ydb.sensitive) = true, debug_redact = true]; // compressed stored storage config YAML (if stored)
     NKikimrConfig.TSelfManagementConfig SelfManagementConfig = 13;
     TStorageConfig PrevConfig = 100; // previous version of StorageConfig (if any)
-    optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
+    optional bytes CompressedStorageYaml = 14 [(Ydb.sensitive) = true, debug_redact = true]; // compressed storage YAML config (if dual-config is enabled)
     optional uint64 ExpectedStorageYamlVersion = 15;
     NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones
     NKikimrBridge.TClusterStateDetails ClusterStateDetails = 17; // history of unsynced state changes
@@ -314,12 +314,12 @@ message TEvNodeConfigInvokeOnRoot {
     }
 
     message TReplaceStorageConfig {
-        optional string YAML = 1;
-        optional string StorageYAML = 3;
+        optional string YAML = 1 [(Ydb.sensitive) = true, debug_redact = true];
+        optional string StorageYAML = 3 [(Ydb.sensitive) = true, debug_redact = true];
         optional bool SwitchDedicatedStorageSection = 4;
         bool DedicatedStorageSectionConfigMode = 5;
         bool SkipConsoleValidation = 2;
-        optional bytes UserToken = 6 [(Ydb.sensitive) = true];
+        optional bytes UserToken = 6 [(Ydb.sensitive) = true, debug_redact = true];
         optional string PeerName = 7;
         bool DryRun = 8;
         bool AllowUnknownFields = 9;
@@ -473,8 +473,8 @@ message TEvNodeConfigInvokeOnRootResult {
     }
 
     message TFetchStorageConfig {
-        optional string YAML = 1;
-        optional string StorageYAML = 2;
+        optional string YAML = 1 [(Ydb.sensitive) = true, debug_redact = true];
+        optional string StorageYAML = 2 [(Ydb.sensitive) = true, debug_redact = true];
         bool Transient = 3;
     }
 

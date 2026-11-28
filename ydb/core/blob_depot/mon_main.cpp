@@ -496,18 +496,8 @@ namespace NKikimr::NBlobDepot {
 
                                 BD_MON_TABLE_ROW("Bucket", s3Settings.GetBucket());
 
-                                                                // Helper function to mask sensitive data
-                                auto maskSensitive = [](const TString& value) -> TString {
-                                    if (value.empty()) {
-                                        return value;
-                                    }
-                                    if (value.size() <= 12) {
-                                        return TString(4, '*');
-                                    }
-                                    return value.substr(0, 2) + "****" + value.substr(value.size() - 2);
-                                };
-                                BD_MON_TABLE_ROW("AccessKey", maskSensitive(s3Settings.GetAccessKey()));
-                                BD_MON_TABLE_ROW("SecretKey", maskSensitive(s3Settings.GetSecretKey()));
+                                BD_MON_TABLE_ROW("AccessKey", s3Settings.GetAccessKey().empty() ? "" : "[redacted]");
+                                BD_MON_TABLE_ROW("SecretKey", s3Settings.GetSecretKey().empty() ? "" : "[redacted]");
 
                                 BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, Region, id_formatter);
                                 BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, StorageClass, Ydb::Export::ExportToS3Settings::StorageClass_Name);

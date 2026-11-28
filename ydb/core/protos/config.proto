@@ -3846,15 +3846,15 @@ message TAppConfig {
     optional TUdfStoreConfig UdfStoreConfig = 95;
 
     repeated TNamedConfig NamedConfigs = 100;
-    optional string ClusterYamlConfig = 101;
+    optional string ClusterYamlConfig = 101 [(Ydb.sensitive) = true, debug_redact = true];
 
     optional TConfigVersion Version = 102;
     repeated TLabel Labels = 103;
 
     optional string ConfigDirPath = 104;
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
-    optional string StartupConfigYaml = 107;
-    optional string StartupStorageYaml = 108;
+    optional string StartupConfigYaml = 107 [(Ydb.sensitive) = true, debug_redact = true];
+    optional string StartupStorageYaml = 108 [(Ydb.sensitive) = true, debug_redact = true];
     optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
     optional TGeneralCacheConfig PortionsMetadataCache = 110;
     optional TGeneralCacheConfig ColumnDataCache = 111;

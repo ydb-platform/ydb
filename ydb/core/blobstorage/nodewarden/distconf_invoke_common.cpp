@@ -1,6 +1,7 @@
 #include "distconf_invoke.h"
 #include "distconf_quorum.h"
 
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/util/address_classifier.h>
@@ -559,8 +560,8 @@ namespace NKikimr::NStorage {
                     AUDIT_PART("status", "SUCCESS")
                     AUDIT_PART("reason", TString(), false)
                     AUDIT_PART("operation", "REPLACE CONFIG")
-                    AUDIT_PART("old_config", oldConfig)
-                    AUDIT_PART("new_config", newConfig)
+                    AUDIT_PART("old_config", NYaml::ConfigTextForDiagnostics(oldConfig))
+                    AUDIT_PART("new_config", NYaml::ConfigTextForDiagnostics(newConfig))
                 );
             }
         }

@@ -1,5 +1,6 @@
 #include "bsc_audit.h"
 
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/util/address_classifier.h>
 
@@ -27,8 +28,8 @@ void AuditLogCommitConfigTransaction(
         AUDIT_PART("status", success ? "SUCCESS" : "ERROR")
         AUDIT_PART("reason", reason, !reason.empty())
         AUDIT_PART("operation", "REPLACE CONFIG")
-        AUDIT_PART("old_config", oldConfig)
-        AUDIT_PART("new_config", newConfig)
+        AUDIT_PART("old_config", NYaml::ConfigTextForDiagnostics(oldConfig))
+        AUDIT_PART("new_config", NYaml::ConfigTextForDiagnostics(newConfig))
     );
 }
 

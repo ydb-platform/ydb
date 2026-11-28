@@ -757,6 +757,8 @@ namespace {
                 sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
             settingsBuilder.SetFromConfig(sessionCtx.Config());
 
+            // CREATE metadata can outlive ctx in asynchronous gateway callbacks.
+            // Keep the validation lambda local; persist only its text and dependencies.
             auto lambda = CompileGeneratedExpr(generatedQuery, columnName, ctx, settingsBuilder, typeCtx.Modules);
             if (!lambda) {
                 return IGraphTransformer::TStatus::Error;
@@ -823,8 +825,6 @@ namespace {
                     lambda = ctx.NewLambda(lambda->Pos(), lambda->HeadPtr(), std::move(converted));
                 }
             }
-
-            columnMeta.DefaultExpression->Expr = lambda;
         }
 
         return IGraphTransformer::TStatus::Ok;

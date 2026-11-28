@@ -1,11 +1,17 @@
 #include "yql_kikimr_provider_impl.h"
+#include "yql_kikimr_provider.h"
 #include "yql_kikimr_settings.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/sql/v1/translation/context.h>
@@ -66,6 +72,66 @@ void Find(const TAstNode* node, const std::function<bool(const TAstNode*)>& pred
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KikimrProvider) {
+    Y_UNIT_TEST_TWIN(CreateGeneratedColumnMetadataOutlivesContext, Stored) {
+        for (bool newRbo : {false, true}) {
+            auto registry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
+            auto config = MakeIntrusive<TKikimrConfiguration>();
+            config->SetEnableNewRBO(newRbo);
+            config->SetEnableIndexStreamWrite(true);
+            config->FeatureFlags.SetEnableGeneratedStored(true);
+            config->FeatureFlags.SetEnableGeneratedVirtual(true);
+
+            // CREATE's asynchronous gateway callback can retain both of these
+            // after publishing completion and allowing the compiler to tear down.
+            TKikimrTableMetadataPtr metadata;
+            TIntrusivePtr<TKikimrSessionContext> session;
+            {
+                TExprContext ctx;
+                auto types = MakeIntrusive<TTypeAnnotationContext>();
+                session = MakeIntrusive<TKikimrSessionContext>(registry.Get(), config,
+                    CreateDefaultTimeProvider(), CreateDeterministicRandomProvider(1), nullptr);
+                session->Query().Type = EKikimrQueryType::Query;
+                auto& table = session->Tables().GetOrAddTable("kikimr", "/Root", "/Root/Generated");
+                table.Metadata = MakeIntrusive<TKikimrTableMetadata>("kikimr", "/Root/Generated");
+                table.Metadata->DoesExist = false;
+
+                const TPositionHandle pos;
+                const auto atom = [&](TStringBuf value) { return ctx.NewAtom(pos, value); };
+                const auto list = [&](TExprNode::TListType items = {}) { return ctx.NewList(pos, std::move(items)); };
+                auto type = ctx.NewCallable(pos, "OptionalType", {ctx.NewCallable(pos, "DataType", {atom("Int32")})});
+                type->SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Int32))));
+                auto generated = list({atom("generated"), list({atom("expression"), atom("k + 1"), atom(Stored ? "stored" : "virtual")})});
+                auto columns = list({
+                    list({atom("k"), type}),
+                    list({atom("g"), type, list({atom("constraints"), list({generated})})})});
+                auto world = ctx.NewWorld(pos);
+                world->SetTypeAnn(ctx.MakeType<TWorldExprType>());
+                auto create = ctx.NewCallable(pos, "KiCreateTable!", {
+                    world, ctx.NewCallable(pos, "DataSink", {atom("kikimr"), atom("kikimr")}),
+                    atom("/Root/Generated"), columns, list({atom("k")}),
+                    list(), list(), list(), list(), list(), list(),
+                    atom("table"), atom("false"), atom("0"), atom("0"), list()});
+
+                auto transformer = CreateKiSinkTypeAnnotationTransformer(nullptr, session, *types);
+                TExprNode::TPtr output;
+                UNIT_ASSERT_VALUES_EQUAL_C(transformer->Transform(create, output, ctx), IGraphTransformer::TStatus::Ok,
+                    ctx.IssueManager.GetIssues().ToString());
+                metadata = session->Tables().GetTable("kikimr", "/Root/Generated").Metadata;
+            }
+
+            // Metadata remains useful without keeping any validation AST alive.
+            const auto& generated = metadata->Columns.at("g").DefaultExpression;
+            UNIT_ASSERT(generated);
+            UNIT_ASSERT_VALUES_EQUAL(generated->ExprText, "k + 1");
+            UNIT_ASSERT_VALUES_EQUAL(generated->Stored, Stored);
+            UNIT_ASSERT_VALUES_EQUAL(generated->Dependencies.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(generated->Dependencies.front(), "k");
+            UNIT_ASSERT(!generated->Expr);
+            session.Reset();
+            metadata.Reset();
+        }
+    }
+
     Y_UNIT_TEST(LegacySyntaxVersionIsNormalized) {
         NYql::NProto::TTranslationSettings serializedSettings;
         serializedSettings.SetSyntaxVersion(0);

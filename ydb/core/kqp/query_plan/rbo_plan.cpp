@@ -302,7 +302,7 @@ void RemoveOperatorMetadata(NJson::TJsonValue& planNode) {
 
 } // anonymous namespace
 
-TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
+TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan, const NJson::TJsonValue& queryStats) {
     NJson::TJsonValue queryPlan;
     NJson::TJsonValue meta;
 
@@ -310,6 +310,8 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
     meta["type"] = "query";
 
     queryPlan["meta"] = meta;
+    queryPlan["tables"] = txPlan.Has("tables")
+        ? txPlan["tables"] : NJson::TJsonValue(NJson::JSON_ARRAY);
 
     // Correlation metadata is internal to ANALYZE, not part of the published plan.
     RemoveOperatorMetadata(txPlan["SimplifiedPlan"]);
@@ -326,6 +328,9 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
     queryNode["Plans"] = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
     queryNode["Plans"] = txPlan.GetMapSafe().at("Plans");
 
+    if (queryStats.IsDefined()) {
+        queryNode["Stats"] = queryStats;
+    }
     queryPlan["Plan"] = queryNode;
 
     NJsonWriter::TBuf writer;
@@ -334,11 +339,7 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
 }
 
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId) {
-    Y_UNUSED(queryStats);
-    Y_UNUSED(poolId);
-
     YQL_CLOG(TRACE, CoreDq) << "Serialize analyze plan";
-
 
     // Commit-only transactions may have no plan. Each other transaction has
     // the same query plan, with statistics for its own stages filled in.
@@ -387,7 +388,7 @@ TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKq
     applyStats(applyStats, txPlanJson);
 
     AddStatsToSimplifiedPlan(txPlanJson);
-    return SerializeRBOExplainPlan(txPlanJson);
+    return SerializeRBOExplainPlan(txPlanJson, BuildQueryStats(queryStats, poolId));
 }
 
 } // namespace NKikimr::NKqp

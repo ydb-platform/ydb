@@ -4,6 +4,7 @@
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {
@@ -44,6 +45,32 @@ const TString LegacyTxPlan = R"({
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpQueryPlanSerialization) {
+    Y_UNIT_TEST(RboExplainAndAnalyzePreserveTableSummary) {
+        auto txPlan = MakeRboPlan("stage");
+        const auto tables = ParsePlan(R"json([
+            {"name":"/Root/T", "reads":[{"type":"Scan", "scan_by":["key (1, +inf)"],
+                "columns":["key", "value"], "limit":"5", "reverse":true}],
+                "writes":[{"type":"MultiUpsert", "columns":["key", "value"]}]},
+            {"name":"/Root/T/index/indexImplTable", "writes":[{"type":"MultiUpsert"}]}
+        ])json");
+        txPlan["tables"] = tables;
+        UNIT_ASSERT_VALUES_EQUAL(ParsePlan(SerializeRBOExplainPlan(txPlan))["tables"], tables);
+
+        NKqpProto::TKqpStatsQuery queryStats;
+        const TString tx = NJson::WriteJson(txPlan, false);
+        // Each transaction carries the same whole-query summary; do not duplicate it.
+        UNIT_ASSERT_VALUES_EQUAL(ParsePlan(SerializeRBOAnalyzePlan({tx, tx}, queryStats))["tables"], tables);
+    }
+
+    Y_UNIT_TEST(RboPlansIncludeEmptyTableSummary) {
+        auto txPlan = MakeRboPlan("stage");
+        const NJson::TJsonValue tables(NJson::JSON_ARRAY);
+        UNIT_ASSERT_VALUES_EQUAL(ParsePlan(SerializeRBOExplainPlan(txPlan))["tables"], tables);
+        txPlan["tables"] = tables;
+        NKqpProto::TKqpStatsQuery queryStats;
+        UNIT_ASSERT_VALUES_EQUAL(ParsePlan(SerializeRBOAnalyzePlan({NJson::WriteJson(txPlan, false)}, queryStats))["tables"], tables);
+    }
+
     Y_UNIT_TEST(RboAnalyzePopulatesEverySharedJoinOccurrence) {
         const TString txPlan = R"({
             "SimplifiedPlan": {
@@ -143,6 +170,43 @@ Y_UNIT_TEST_SUITE(KqpQueryPlanSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(queryStats["Compilation"]["DurationUs"].GetIntegerRobust(), 90);
     }
 
+    Y_UNIT_TEST(RboAnalyzeQueryStatsMatchLegacy) {
+        for (const bool compiled : {false, true}) {
+            for (const TString& pool : {TString(), TString("pool")}) {
+                NKqpProto::TKqpStatsQuery stats;
+                stats.SetWorkerCpuTimeUs(123);
+                stats.SetDurationUs(456);
+                stats.SetQueuedTimeUs(78);
+                if (compiled) {
+                    stats.MutableCompilation()->SetFromCache(true);
+                    stats.MutableCompilation()->SetDurationUs(90);
+                    stats.MutableCompilation()->SetCpuTimeUs(45);
+                }
+                const auto legacy = ParsePlan(SerializeAnalyzePlan(stats, pool));
+                stats.AddExecutions()->AddTxPlansWithStats(NJson::WriteJson(MakeRboPlan("stage"), false));
+                const auto rbo = ParsePlan(SerializeAnalyzePlan(stats, pool));
+                UNIT_ASSERT_VALUES_EQUAL(rbo["Plan"]["Stats"], legacy["Plan"]["Stats"]);
+                const auto& queryStats = rbo["Plan"]["Stats"];
+                UNIT_ASSERT_VALUES_EQUAL(queryStats.Has("Compilation"), compiled);
+                UNIT_ASSERT_VALUES_EQUAL(queryStats.Has("ResourcePoolId"), !pool.empty());
+                UNIT_ASSERT_VALUES_EQUAL(queryStats.Has("QueuedTimeUs"), !pool.empty());
+                if (compiled) {
+                    UNIT_ASSERT_VALUES_EQUAL(queryStats["Compilation"]["CpuTimeUs"].GetIntegerSafe(), 45);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(RboExplainIncludesOnlyAvailableQueryStats) {
+        const auto txPlan = MakeRboPlan("stage");
+        UNIT_ASSERT(!ParsePlan(SerializeRBOExplainPlan(txPlan))["Plan"].Has("Stats"));
+        NJson::TJsonValue queryStats;
+        queryStats["ResourcePoolId"] = "pool";
+        const auto plan = ParsePlan(SerializeRBOExplainPlan(txPlan, queryStats));
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Stats"], queryStats);
+        UNIT_ASSERT(!plan["Plan"]["Plans"][0].Has("Stats"));
+    }
+
     Y_UNIT_TEST(RboAnalyzeIncludesOperatorStats) {
         NKqpProto::TKqpStatsQuery stats;
         stats.AddExecutions()->AddTxPlansWithStats(R"({
@@ -162,7 +226,15 @@ Y_UNIT_TEST_SUITE(KqpQueryPlanSerialization) {
             }]
         })");
 
-        const auto plan = ParsePlan(SerializeAnalyzePlan(stats));
+        stats.SetWorkerCpuTimeUs(123);
+        stats.SetDurationUs(456);
+        stats.SetQueuedTimeUs(78);
+        const auto plan = ParsePlan(SerializeAnalyzePlan(stats, "pool"));
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Stats"]["ProcessCpuTimeUs"].GetIntegerSafe(), 123);
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Stats"]["TotalDurationUs"].GetIntegerSafe(), 456);
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Stats"]["ResourcePoolId"].GetStringSafe(), "pool");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Stats"]["CpuTimeUs"]["Max"].GetIntegerSafe(), 2000);
         const auto& op = plan["SimplifiedPlan"]["Operators"][0];
         UNIT_ASSERT_VALUES_EQUAL(op["A-Rows"].GetDoubleSafe(), 3.0);
         UNIT_ASSERT_VALUES_EQUAL(op["A-Size"].GetDoubleSafe(), 120.0);

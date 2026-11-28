@@ -149,28 +149,24 @@ public:
             const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
             NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) override {
 
-        Y_UNUSED(query);
-        Y_UNUSED(peepHoleOptimizedQuery);
-        Y_UNUSED(pureTxResults);
-        Y_UNUSED(database);
-        Y_UNUSED(cluster);
-        Y_UNUSED(tablesData);
-        Y_UNUSED(config);
-        Y_UNUSED(typeCtx);
-        Y_UNUSED(optCtx);
-
         // RBO's plan covers the whole query. Attach it to every physical
         // transaction so statistics are available before the final one runs.
         if (TransformCtx->PlanJson.has_value()) {
             YQL_CLOG(TRACE, CoreDq) << "Set query plan";
-            const auto& plan = TransformCtx->PlanJson.value();
+            auto plan = TransformCtx->PlanJson.value();
+            plan["tables"] = PhyQueryGetTableSummary(queryProto, query, peepHoleOptimizedQuery,
+                std::move(pureTxResults), ctx, database, cluster, tablesData, config, typeCtx, optCtx);
             NJsonWriter::TBuf txWriter;
             txWriter.WriteJsonValue(&plan, true, PREC_NDIGITS, 17);
             for (auto& txProto : *queryProto.MutableTransactions()) {
                 txProto.SetPlan(txWriter.Str());
             }
 
-            queryProto.SetQueryPlan(SerializeRBOExplainPlan(plan));
+            NJson::TJsonValue queryStats;
+            if (optCtx && optCtx->UserRequestContext && optCtx->UserRequestContext->PoolId) {
+                queryStats["ResourcePoolId"] = optCtx->UserRequestContext->PoolId;
+            }
+            queryProto.SetQueryPlan(SerializeRBOExplainPlan(plan, queryStats));
         }
         queryProto.SetQueryAst(KqpExprToPrettyString(*input, ctx));
     }

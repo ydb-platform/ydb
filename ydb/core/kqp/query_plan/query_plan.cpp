@@ -1342,29 +1342,27 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const 
         }
     }
 
+    const auto stats = BuildQueryStats(queryStats, poolId);
     NJsonWriter::TBuf writer;
-    writer.BeginObject();
+    writer.WriteJsonValue(&stats, false, PREC_NDIGITS, 17);
+    return SerializeTxPlans(txPlans, "", writer.Str());
+}
 
+NJson::TJsonValue BuildQueryStats(const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId) {
+    NJson::TJsonValue stats(NJson::JSON_MAP);
     if (queryStats.HasCompilation()) {
         const auto& compilation = queryStats.GetCompilation();
-
-        writer.WriteKey("Compilation");
-        writer.BeginObject();
-        writer.WriteKey("FromCache").WriteBool(compilation.GetFromCache());
-        writer.WriteKey("DurationUs").WriteLongLong(compilation.GetDurationUs());
-        writer.WriteKey("CpuTimeUs").WriteLongLong(compilation.GetCpuTimeUs());
-        writer.EndObject();
+        stats["Compilation"]["FromCache"] = compilation.GetFromCache();
+        stats["Compilation"]["DurationUs"] = i64(compilation.GetDurationUs());
+        stats["Compilation"]["CpuTimeUs"] = i64(compilation.GetCpuTimeUs());
     }
-
-    writer.WriteKey("ProcessCpuTimeUs").WriteLongLong(queryStats.GetWorkerCpuTimeUs());
-    writer.WriteKey("TotalDurationUs").WriteLongLong(queryStats.GetDurationUs());
+    stats["ProcessCpuTimeUs"] = i64(queryStats.GetWorkerCpuTimeUs());
+    stats["TotalDurationUs"] = i64(queryStats.GetDurationUs());
     if (poolId) {
-        writer.WriteKey("QueuedTimeUs").WriteLongLong(queryStats.GetQueuedTimeUs());
-        writer.WriteKey("ResourcePoolId").WriteString(poolId);
+        stats["QueuedTimeUs"] = i64(queryStats.GetQueuedTimeUs());
+        stats["ResourcePoolId"] = poolId;
     }
-    writer.EndObject();
-
-    return SerializeTxPlans(txPlans, "", writer.Str());
+    return stats;
 }
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {

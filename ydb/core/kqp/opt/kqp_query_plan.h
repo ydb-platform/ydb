@@ -70,4 +70,11 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes:
     const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TIntrusivePtr<NYql::TKikimrConfiguration> config,
     NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx);
 
+// Collect the legacy table-summary schema without replacing transaction plans.
+NJson::TJsonValue PhyQueryGetTableSummary(const NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query,
+    const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
+    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& database,
+    const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TIntrusivePtr<NYql::TKikimrConfiguration> config,
+    NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx);
+
 } // namespace NKikimr::NKqp

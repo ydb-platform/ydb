@@ -301,6 +301,48 @@ public:
         }
     }
 
+    void CollectTables() {
+        // Only inspect physical IO. Rendering other operators would impose legacy
+        // program-shape assumptions (for example, WideSort over ExpandMap) on RBO.
+        for (const auto& stage : Tx.Stages()) {
+            const auto stageBase = stage.Cast<TDqStageBase>();
+            TQueryPlanNode stageNode;
+            stageNode.StageProto = FindStageProtoByGuid(TxProto, NDq::TDqStageSettings::Parse(stage).Id);
+            YQL_ENSURE(stageNode.StageProto);
+            for (const auto& input : stageBase.Inputs()) {
+                if (auto source = input.Maybe<TDqSource>()) {
+                    if (auto settings = source.Cast().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
+                        Visit(settings.Cast(), stageNode);
+                    } else if (auto settings = source.Cast().Settings().Maybe<TKqpReadTableFullTextIndexSourceSettings>()) {
+                        Visit(settings.Cast(), stageNode);
+                    }
+                } else if (input.Maybe<TKqpCnStreamLookup>() || input.Maybe<TKqpCnVectorSearch>()) {
+                    FillConnectionPlanNode(input.Cast<TDqConnection>(), stageNode);
+                }
+            }
+            VisitExpr(stageBase.Program().Body().Ptr(), [this, &stageNode](const TExprNode::TPtr& node) {
+                if (auto read = TMaybeNode<TKqlReadTableBase>(node)) {
+                    Visit(TString(read.Cast().Table().Path()), read.Cast().Range(), read.Cast(), stageNode);
+                } else if (auto read = TMaybeNode<TKqlReadTableRangesBase>(node)) {
+                    Visit(read.Cast(), stageNode);
+                } else if (auto lookup = TMaybeNode<TKqlLookupTableBase>(node)) {
+                    Visit(lookup.Cast(), stageNode);
+                }
+                return true;
+            });
+            if (auto outputs = stageBase.Outputs()) {
+                TQueryPlanNode sinkNode;
+                for (const auto& output : outputs.Cast()) {
+                    if (auto sink = output.Maybe<TDqSink>()) {
+                        VisitTableSink(sink.Cast(), stageBase, sinkNode, stageNode);
+                    } else if (auto transform = output.Maybe<TDqTransform>()) {
+                        VisitTableSink(transform.Cast(), stageBase, sinkNode, stageNode);
+                    }
+                }
+            }
+        }
+    }
+
     void WriteToJson(NJsonWriter::TBuf& writer) const {
         if (!QueryPlanNodes.empty()) {
             auto phasePlanNode = QueryPlanNodes.begin();
@@ -2561,20 +2603,13 @@ NJson::TJsonValue MakeOptimizerStats(const TIntrusivePtr<NOpt::TKqpOptimizeConte
     return optimizerStats;
 }
 
-} // anonymous namespace
-
-// TODO(sk): check prepared statements params in read ranges
-// TODO(sk): check params from correlated subqueries // lookup join
-void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQuery& query,
-    const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
-    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& database,
-    const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
-    TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
+// Both optimizers use the physical accesses collected by TxPlanSerializer. This
+// includes index tables and resolved precompute bindings, which are not available
+// from the logical RBO plan alone.
+template <typename TConsumer>
+void VisitPhysicalTxPlans(TSerializerCtx& serializerCtx, const NKqpProto::TKqpPhyQuery& queryProto,
+    const TKqpPhysicalQuery& query, const TKqpPhysicalQuery& peepHoleOptimizedQuery, TConsumer&& consume)
 {
-
-    YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: PhyQuerySetTxPlans";
-    TSerializerCtx serializerCtx(ctx, database, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
-
     /* bindingName -> stage */
     auto collectBindings = [&serializerCtx, &query] (auto id, const auto& phase) {
         for (const auto& param: phase.ParamBindings()) {
@@ -2598,23 +2633,6 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
         collectBindings(id++, tx);
     }
 
-    auto setPlan = [&serializerCtx](auto txId, const auto& tx, auto& txProto) {
-        // Unsafe truncate runs in a separate executer and has no DQ execution plan.
-        if (GetTableTruncateSettings(tx)) {
-            return;
-        }
-
-        NJsonWriter::TBuf txWriter;
-        txWriter.SetIndentSpaces(2);
-        TxPlanSerializer txPlanSerializer(serializerCtx, txId, tx, txProto);
-        if (serializerCtx.PureTxResults.at(txId).empty()) {
-            txPlanSerializer.Serialize();
-            txPlanSerializer.WriteToJson(txWriter);
-            txProto.SetPlan(txWriter.Str());
-        }
-    };
-
-    id = 0;
     for (ui32 txId = 0; txId < query.Transactions().Size(); ++txId) {
         if (txId < peepHoleOptimizedQuery.Transactions().Size()) {
             VisitExpr(peepHoleOptimizedQuery.Transactions().Item(txId).Ref(),
@@ -2627,9 +2645,38 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
                 }
             );
         }
-        setPlan(id++, query.Transactions().Item(txId), (*queryProto.MutableTransactions())[txId]);
+        const auto tx = query.Transactions().Item(txId);
+        // Unsafe truncate has no DQ plan; literal transactions have no table accesses.
+        if (!GetTableTruncateSettings(tx) && serializerCtx.PureTxResults.at(txId).empty()) {
+            TxPlanSerializer serializer(serializerCtx, txId, tx, queryProto.GetTransactions(txId));
+            consume(txId, serializer);
+        }
         serializerCtx.OptimizedStages.clear();
     }
+}
+
+} // anonymous namespace
+
+// TODO(sk): check prepared statements params in read ranges
+// TODO(sk): check params from correlated subqueries // lookup join
+void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQuery& query,
+    const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
+    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& database,
+    const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
+    TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
+{
+
+    YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: PhyQuerySetTxPlans";
+    TSerializerCtx serializerCtx(ctx, database, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
+
+    VisitPhysicalTxPlans(serializerCtx, queryProto, query, peepHoleOptimizedQuery,
+        [&queryProto](ui32 txId, TxPlanSerializer& serializer) {
+            serializer.Serialize();
+            NJsonWriter::TBuf writer;
+            writer.SetIndentSpaces(2);
+            serializer.WriteToJson(writer);
+            queryProto.MutableTransactions(txId)->SetPlan(writer.Str());
+        });
 
     TVector<const TString> txPlans;
     txPlans.reserve(queryProto.GetTransactions().size());
@@ -2652,6 +2699,23 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     WriteCommonTablesInfo(writer, serializerCtx.Tables);
 
     queryProto.SetQueryPlan(SerializeTxPlans(txPlans, writer.Str(), queryStats, optCtx ? MakeOptimizerStats(optCtx) : NJson::TJsonValue()));
+}
+
+NJson::TJsonValue PhyQueryGetTableSummary(const NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQuery& query,
+    const TKqpPhysicalQuery& peepHoleOptimizedQuery,
+    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& database,
+    const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
+    TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
+{
+    TSerializerCtx serializerCtx(ctx, database, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
+    VisitPhysicalTxPlans(serializerCtx, queryProto, query, peepHoleOptimizedQuery,
+        [](ui32, TxPlanSerializer& serializer) { serializer.CollectTables(); });
+
+    NJsonWriter::TBuf writer;
+    WriteCommonTablesInfo(writer, serializerCtx.Tables);
+    NJson::TJsonValue tables;
+    NJson::ReadJsonTree(writer.Str(), &tables, true);
+    return tables;
 }
 
 } // namespace NKikimr::NKqp

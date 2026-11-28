@@ -275,6 +275,50 @@ using namespace NYqlTests;
 
 Y_UNIT_TEST_SUITE(KqpRboYql) {
 
+    Y_UNIT_TEST(ExplainTableSummaryMatchesLegacy) {
+        const TVector<TString> queries = {
+            "SELECT 1;",
+            "SELECT a, b FROM `/Root/row_table`;",
+            "SELECT a, b FROM `/Root/column_table`;",
+            "SELECT a, b FROM `/Root/row_table` WHERE a > 5 ORDER BY a DESC LIMIT 3;",
+            "SELECT a, b FROM `/Root/row_table` WHERE a = 5;",
+            "SELECT a, b FROM `/Root/row_table` VIEW by_b WHERE b = 5;",
+            "UPSERT INTO `/Root/column_table` (a, b) VALUES (1, 2);",
+        };
+        TVector<NJson::TJsonValue> legacyTables;
+        for (const bool newRbo : {false, true}) {
+            auto appConfig = CreateExplainPlanTestAppConfig();
+            appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+            TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+            auto schemeSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto result = schemeSession.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/row_table` (
+                    a Int64 NOT NULL, b Int64, PRIMARY KEY (a), INDEX by_b GLOBAL ON (b)
+                );
+                CREATE TABLE `/Root/column_table` (
+                    a Int64 NOT NULL, b Int64, PRIMARY KEY (a)
+                ) WITH (STORE = column);
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto session = CreateQuerySession(kikimr);
+            for (size_t i = 0; i < queries.size(); ++i) {
+                NJson::TJsonValue plan;
+                UNIT_ASSERT(NJson::ReadJsonTree(ExecuteExplain(session, queries[i]), &plan, true));
+                UNIT_ASSERT_C(plan.Has("tables"), queries[i]);
+                const auto& tables = plan["tables"];
+                UNIT_ASSERT_VALUES_EQUAL_C(tables.GetArraySafe().empty(), i == 0, queries[i]);
+                if (newRbo) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(tables, legacyTables[i], queries[i]);
+                    NJson::TJsonValue analyze;
+                    UNIT_ASSERT(NJson::ReadJsonTree(ExecuteExplainAnalyze(session, queries[i]), &analyze, true));
+                    UNIT_ASSERT_VALUES_EQUAL_C(analyze["tables"], tables, queries[i]);
+                } else {
+                    legacyTables.push_back(tables);
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST_TWIN(ExplainPlanRenderers, NewRbo) {
         using NYdb::NConsoleClient::EDataFormat;
         using NYdb::NConsoleClient::TQueryPlanPrinter;

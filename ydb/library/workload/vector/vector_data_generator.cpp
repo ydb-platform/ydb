@@ -349,10 +349,8 @@ public:
             if (!SeekDone) {
                 SeekDone = true;
                 if (StateProcessor) {
-                    const auto& state = StateProcessor->GetState();
-                    const auto it = state.find(StateSource);
-                    if (it != state.end()) {
-                        const size_t toSkip = Min<size_t>(it->second.Position, RowCount);
+                    if (const auto position = StateProcessor->GetPosition(StateSource)) {
+                        const size_t toSkip = Min<size_t>(*position, RowCount);
                         DoneRows = toSkip;
                         if (toSkip > 0) {
                             Cout << "Resuming generator from row " << toSkip << " / " << RowCount << Endl;

@@ -110,8 +110,8 @@ TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(co
         }
     }
     if (!!Owner.StateProcessor) {
-        if (const auto* state = MapFindPtr(Owner.StateProcessor->GetState(), GetName())) {
-            Generated = state->Position;
+        if (const auto position = Owner.StateProcessor->GetPosition(TString(GetName()))) {
+            Generated = *position;
             FirstPortion = MakeIntrusive<TDataPortion>(
                 GetFullTableName(tdefs[TableNum].name),
                 TDataPortion::TSkip(),

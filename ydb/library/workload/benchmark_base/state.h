@@ -1,12 +1,13 @@
 #pragma once
 
 #include <ydb/library/workload/abstract/workload_query_generator.h>
-#include <ydb/library/accessor/accessor.h>
 #include <util/generic/deque.h>
 #include <util/generic/map.h>
 #include <util/folder/path.h>
 #include <util/system/tls.h>
 #include <util/system/spinlock.h>
+
+#include <optional>
 
 namespace NYdbWorkload {
 
@@ -20,7 +21,8 @@ public:
 public:
     TGeneratorStateProcessor(const TFsPath& path, bool clear);
     void FinishPortion(const TString& source, ui64 from, ui64 size);
-    YDB_READONLY_DEF(TState, State);
+    TState GetState() const;
+    std::optional<ui64> GetPosition(const TString& source) const;
 
 private:
     using TSourcePortion = std::pair<ui64, ui64>;
@@ -40,7 +42,8 @@ private:
     TFsPath Path;
     TFsPath TmpPath;
     TMap<TString, TSourceStateImpl> StateImpl;
-    TAdaptiveLock Lock;
+    TState State;
+    mutable TAdaptiveLock Lock;
 };
 
 class TDataPortionWithState: public IBulkDataGenerator::TDataPortion {

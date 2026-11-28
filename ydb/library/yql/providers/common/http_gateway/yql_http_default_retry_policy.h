@@ -22,6 +22,12 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptio
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(
     TDuration maxTime, size_t maxRetries = std::numeric_limits<size_t>::max());   // Zero means default maxTime
 
-IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy();
+enum class ERewindRetry {
+    Disabled,
+    Enabled,
+};
+
+// Enable only for operations that can replay their saved body after a lost response.
+IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy(ERewindRetry rewindRetry = ERewindRetry::Disabled);
 
 }   // namespace NYql

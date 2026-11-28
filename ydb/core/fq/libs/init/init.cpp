@@ -202,7 +202,11 @@ void Init(const NFq::NConfig::TConfig& protoConfig, ui32 nodeId, const TActorReg
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"), protoConfig.GetGateways().GetS3().GetAllowLocalFiles());
-        s3ActorsFactory->RegisterS3WriteActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy);
+        s3ActorsFactory->RegisterS3WriteActorFactory(*asyncIoFactory, credentialsFactory, httpGateway,
+            {
+                .Default = s3HttpRetryPolicy,
+                .DataUpload = NYql::GetFqHTTPRetryPolicy(NYql::ERewindRetry::Enabled),
+            });
 
         RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, connectorClient);
         RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway,

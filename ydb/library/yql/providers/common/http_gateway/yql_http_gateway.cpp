@@ -399,17 +399,24 @@ public:
 
 private:
     void Fail(CURLcode result, const TIssue& error) final {
+        Fail(result, error, 0);
+    }
+
+    void Fail(CURLcode result, const TIssue& error, long httpResponseCode) {
         TIssues issues{ error };
         const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
-            Callbacks.top()(IHTTPGateway::TResult(result, issues));
+            IHTTPGateway::TResult response(result, issues);
+            response.Content.HttpResponseCode = httpResponseCode;
+            Callbacks.top()(std::move(response));
             Callbacks.pop();
         }
     }
 
     void Done(CURLcode result, long httpResponseCode) final {
         if (CURLE_OK != result) {
-            return Fail(result, TIssue(TStringBuilder{} << curl_easy_strerror(result) << ". Detailed: " << GetDetailedErrorText()));
+            return Fail(
+                result, TIssue(TStringBuilder{} << curl_easy_strerror(result) << ". Detailed: " << GetDetailedErrorText()), httpResponseCode);
         }
 
         const std::unique_lock lock(SyncCallbacks);
@@ -861,8 +868,10 @@ private:
                 easy = std::move(it->second);
                 TString codeLabel;
                 TString codeValue;
+                // A curl error can still carry an HTTP response, e.g. 417 with
+                // CURLE_SEND_FAIL_REWIND. Both retry layers need that status.
+                curl_easy_getinfo(easy->GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
                 if (CURLE_OK == result) {
-                    curl_easy_getinfo(easy->GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
                     codeLabel = "code";
                     codeValue = ToString(httpResponseCode);
                 } else {

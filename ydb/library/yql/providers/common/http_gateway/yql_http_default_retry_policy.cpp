@@ -7,10 +7,16 @@ namespace {
 constexpr TDuration DEFAULT_MAX_TIME = TDuration::Minutes(5);
 constexpr TDuration DNS_ERROR_MAX_TIME = TDuration::Seconds(10);
 
-std::unordered_set<CURLcode> FqRetriedCurlCodes() {
-    return { CURLE_COULDNT_CONNECT, CURLE_WEIRD_SERVER_REPLY, CURLE_WRITE_ERROR, CURLE_READ_ERROR, CURLE_OPERATION_TIMEDOUT,
-        CURLE_SSL_CONNECT_ERROR, CURLE_BAD_DOWNLOAD_RESUME, CURLE_SEND_ERROR, CURLE_RECV_ERROR, CURLE_PARTIAL_FILE,
+std::unordered_set<CURLcode> FqRetriedCurlCodes(ERewindRetry rewindRetry) {
+    std::unordered_set<CURLcode> codes = { CURLE_COULDNT_CONNECT, CURLE_WEIRD_SERVER_REPLY, CURLE_WRITE_ERROR, CURLE_READ_ERROR,
+        CURLE_OPERATION_TIMEDOUT, CURLE_SSL_CONNECT_ERROR, CURLE_BAD_DOWNLOAD_RESUME, CURLE_SEND_ERROR, CURLE_RECV_ERROR, CURLE_PARTIAL_FILE,
         CURLE_NO_CONNECTION_AVAILABLE, CURLE_GOT_NOTHING, CURLE_COULDNT_RESOLVE_HOST };
+    if (rewindRetry == ERewindRetry::Enabled) {
+        // A connection failure during upload can surface as CURLE_SEND_FAIL_REWIND.
+        // The gateway recreates the input from its saved body when retrying.
+        codes.insert(CURLE_SEND_FAIL_REWIND);
+    }
+    return codes;
 }
 
 }   // namespace
@@ -69,6 +75,12 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptio
     auto maxRetries = options.MaxRetries;
     return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
         [options = std::move(options)](CURLcode curlCode, long httpCode) {
+            // Recreating the handle loses curl's HTTP negotiation state (e.g.
+            // disabling Expect after 417). Only replay a rewind failure when
+            // no HTTP response was received.
+            if (curlCode == CURLE_SEND_FAIL_REWIND && httpCode != 0) {
+                return ERetryErrorClass::NoRetry;
+            }
             if (curlCode == CURLE_OK) {
                 // pass
             } else if (options.RetriedCurlCodes.contains(curlCode)) {
@@ -106,9 +118,9 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, si
     });
 }
 
-IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy() {
+IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy(ERewindRetry rewindRetry) {
     return std::make_shared<TFqRetryPolicy>(GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{
-        .RetriedCurlCodes = FqRetriedCurlCodes(),
+        .RetriedCurlCodes = FqRetriedCurlCodes(rewindRetry),
     }));
 }
 

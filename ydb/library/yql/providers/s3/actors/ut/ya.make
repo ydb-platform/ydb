@@ -5,10 +5,15 @@ UNITTEST_FOR(ydb/library/yql/providers/s3/actors)
 SRCS(
     yql_arrow_push_down_ut.cpp
     yql_s3_actor_stats_ut.cpp
+    yql_s3_applicator_actor_ut.cpp
 )
 
 PEERDIR(
+    ydb/core/fq/libs/events
+    ydb/library/actors/testlib
+    ydb/library/yql/providers/s3/proto
     yql/essentials/minikql
+    yql/essentials/providers/common/structured_token
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
 )
@@ -20,6 +25,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
         yql_s3_read_actor_ut.cpp
         yql_s3_read_actor_retry_ut.cpp
         yql_s3_source_queue_ut.cpp
+        yql_s3_write_actor_ut.cpp
     )
 
     PEERDIR(

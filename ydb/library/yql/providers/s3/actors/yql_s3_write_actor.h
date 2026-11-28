@@ -9,10 +9,12 @@
 
 namespace NYql::NDq {
 
+struct TS3WriteRetryPolicies;
+
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, IRandomProvider*, IHTTPGateway::TPtr gateway, NS3::TSink&& params,
     ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, const TString& prefix, const THashMap<TString, TString>& secureParams,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy);
+    const TS3WriteRetryPolicies& retryPolicies);
 
 }   // namespace NYql::NDq

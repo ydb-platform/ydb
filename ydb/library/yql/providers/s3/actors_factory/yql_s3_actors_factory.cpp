@@ -22,11 +22,11 @@ public:
     }
 
     void RegisterS3WriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-        IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy) override {
+        IHTTPGateway::TPtr gateway, const TS3WriteRetryPolicies& retryPolicies) override {
         Y_UNUSED(factory);
         Y_UNUSED(credentialsFactory);
         Y_UNUSED(gateway);
-        Y_UNUSED(retryPolicy);
+        Y_UNUSED(retryPolicies);
     }
 
     void RegisterS3ReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,

@@ -17,6 +17,13 @@ class TS3GatewayConfig;
 
 namespace NDq {
 
+struct TS3WriteRetryPolicies {
+    // Used for multipart initiation, completion and abort. Completion must not retry rewind failures.
+    IHTTPGateway::TRetryPolicy::TPtr Default;
+    // Used for PutObject and UploadPart, whose saved body can be replayed.
+    IHTTPGateway::TRetryPolicy::TPtr DataUpload;
+};
+
 struct TS3ReadActorFactoryConfig {
     ui64 RowsInBatch = 1000;
     ui64 MaxInflight = 20;
@@ -38,7 +45,7 @@ public:
         IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const NYql::NDqProto::TExternalEffect& externalEffect) = 0;
 
     virtual void RegisterS3WriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-        IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy) = 0;
+        IHTTPGateway::TPtr gateway, const TS3WriteRetryPolicies& retryPolicies) = 0;
 
     virtual void RegisterS3ReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy, const TS3ReadActorFactoryConfig& cfg = {},

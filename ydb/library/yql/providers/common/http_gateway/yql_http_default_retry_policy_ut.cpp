@@ -101,6 +101,41 @@ Y_UNIT_TEST_SUITE(THttpDefaultRetryPolicyTest) {
         UNIT_ASSERT(!state->GetNextRetryDelay(CURLE_OK, 404).Defined());
     }
 
+    Y_UNIT_TEST(RewindFailureWithHttpResponseIsNotRetried) {
+        for (long httpCode : { 100, 200, 301, 401, 403, 404, 417, 500, 503 }) {
+            auto state = GetFqHTTPRetryPolicy(ERewindRetry::Enabled)->CreateRetryState();
+            UNIT_ASSERT_C(!state->GetNextRetryDelay(CURLE_SEND_FAIL_REWIND, httpCode).Defined(), httpCode);
+        }
+    }
+
+    Y_UNIT_TEST(FqPolicyDoesNotRetryRewindByDefault) {
+        for (long httpCode : { 0, 200, 404, 417, 503 }) {
+            auto state = GetFqHTTPRetryPolicy()->CreateRetryState();
+            UNIT_ASSERT_C(!state->GetNextRetryDelay(CURLE_SEND_FAIL_REWIND, httpCode).Defined(), httpCode);
+        }
+    }
+
+    Y_UNIT_TEST(FqPolicyRetriesRewindOnlyWhenEnabled) {
+        for (auto rewindRetry : { ERewindRetry::Disabled, ERewindRetry::Enabled }) {
+            auto state = GetFqHTTPRetryPolicy(rewindRetry)->CreateRetryState();
+            UNIT_ASSERT_VALUES_EQUAL(state->GetNextRetryDelay(CURLE_SEND_FAIL_REWIND, 0).Defined(), rewindRetry == ERewindRetry::Enabled);
+            const auto delay = state->GetNextRetryDelay(CURLE_OK, 503);
+            UNIT_ASSERT(delay.Defined());
+            UNIT_ASSERT_GE(*delay, TDuration::MilliSeconds(100));
+            UNIT_ASSERT(state->GetNextRetryDelay(CURLE_RECV_ERROR, 0).Defined());
+        }
+    }
+
+    Y_UNIT_TEST(RewindRetriesShareConfiguredBudget) {
+        auto state = GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{
+                                                   .MaxRetries = 1,
+                                                   .RetriedCurlCodes = { CURLE_SEND_FAIL_REWIND },
+                                               })
+                         ->CreateRetryState();
+        UNIT_ASSERT(state->GetNextRetryDelay(CURLE_SEND_FAIL_REWIND, 0).Defined());
+        UNIT_ASSERT(!state->GetNextRetryDelay(CURLE_OK, 503).Defined());
+    }
+
     Y_UNIT_TEST(FqPolicySharesRetryBudgetBetweenDnsAndOtherErrors) {
         // Dns errors are not retried on their own schedule, they consume the shared budget
         auto state = GetFqHTTPRetryPolicy()->CreateRetryState();

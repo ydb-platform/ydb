@@ -256,6 +256,8 @@ public:
         , CredentialsFactory(credentialsFactory)
         , ExternalEffect(externalEffect)
         , ActorSystem(NActors::TActivationContext::ActorSystem())
+        // Use the same restriction in the gateway and the applicator: replaying
+        // CompleteMultipartUpload can turn an aborted upload into a successful 404.
         , RetryPolicy(NYql::GetFqHTTPRetryPolicy())
         , RetryCount(GLOBAL_RETRY_LIMIT)
     {

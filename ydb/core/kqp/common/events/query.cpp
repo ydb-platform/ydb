@@ -1,4 +1,6 @@
 #include "query.h"
+
+#include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/core/actorsystem.h>
 
 namespace NKikimr::NKqp::NPrivateEvents {
@@ -14,4 +16,12 @@ void TEvQueryRequest::SetClientLostAction(TActorId actorId, NActors::TActorSyste
     }
 }
 
-} // namespace NKikimr::NKqp
+TEvQueryResponse::TEvQueryResponse() = default;
+
+TEvQueryResponse::TEvQueryResponse(TIntrusivePtr<NActors::TProtoArenaHolder> arena)
+    : TEventPBBase(arena ? std::move(arena) : MakeIntrusive<NActors::TProtoArenaHolder>())
+{}
+
+TEvQueryResponse::~TEvQueryResponse() = default;
+
+} // namespace NKikimr::NKqp::NPrivateEvents

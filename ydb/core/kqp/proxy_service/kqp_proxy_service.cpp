@@ -767,6 +767,16 @@ public:
         const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
+        auto* proxyRequest = PendingRequests.FindPtr(requestId);
+        AFL_ENSURE(proxyRequest);
+        auto& span = proxyRequest->Span;
+        span = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::TopLevel,
+            std::move(ev->TraceId), "Query Proxy", NWilson::EFlags::AUTO_END);
+        span.Attribute("ydb.actor.type", TString("TKqpProxyService"));
+        AddQueryTraceAttributes(span, queryType, queryAction,
+            database ? database : ev->Get()->GetDatabaseId(), ev->Get()->GetQuery());
+        span.Attribute("db.operation.name", FallbackQueryTraceName(queryType, queryAction));
+        ev->TraceId = span.GetTraceId();
         // Hold external client queries until warmup finishes; warmup's own traffic (PREPARE compilations, internal calls, the Metadata-system-user sysview fetch) must pass or it self-deadlocks.
         if (!WarmupGateOpen && !ev->Get()->GetIsWarmupCompilation() && !ev->Get()->IsInternalCall()) {
             const auto& userToken = ev->Get()->GetUserToken();
@@ -877,6 +887,13 @@ public:
             {"targetId", targetId});
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
+        span.Attribute("ydb.target_node_id", static_cast<i64>(targetId.NodeId()));
+        span.Attribute("ydb.forwarded", targetId.NodeId() != SelfId().NodeId());
+        if (targetId.NodeId() != SelfId().NodeId()) {
+            proxyRequest->RedirectSpan = MakeQueryRedirectTraceSpan(
+                span, SelfId().NodeId(), targetId.NodeId());
+        }
+        proxyRequest->QueryDispatched = true;
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 
@@ -1039,7 +1056,7 @@ public:
             }
         }
 
-        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
+        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
         YDB_LOG_DEBUG("Sent request to target",
             {"requestId", requestId},
             {"targetId", targetId},
@@ -1063,6 +1080,10 @@ public:
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
+        if constexpr (std::is_same_v<TEvent, TEvKqp::TEvQueryResponse::TPtr>) {
+            EndProxyQueryTraceSpan(proxyRequest->Span, ev->Get()->Record);
+            EndQueryTraceSpan(proxyRequest->RedirectSpan, ev->Get()->Record.GetYdbStatus());
+        }
         Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
         if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
@@ -1570,6 +1591,9 @@ private:
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
         response->Record.SetYdbStatus(ydbStatus);
 
+        if (request->Span && !request->QueryDispatched) {
+            response->Record.SetRejectionStage(NKikimrKqp::TEvQueryResponse::REJECTION_STAGE_PROXY);
+        }
         NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());
         return Send(SelfId(), response.release(), 0, requestId);
     }

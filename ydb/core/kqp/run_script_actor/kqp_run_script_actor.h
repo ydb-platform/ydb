@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>
@@ -30,6 +31,7 @@ class TKqpCounters;
 struct TKqpRunScriptActorSettings {
     TString Database;
     TString ExecutionId;
+    NWilson::TTraceId TraceId;
     i64 LeaseGeneration = 0;
     TDuration LeaseDuration;
     TDuration ResultsTtl;

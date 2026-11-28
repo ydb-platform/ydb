@@ -8,6 +8,7 @@
 #include <util/generic/utility.h>
 #include <util/generic/strbuf.h>
 #include <util/string/printf.h>
+#include <cmath>
 
 #include <cmath>
 

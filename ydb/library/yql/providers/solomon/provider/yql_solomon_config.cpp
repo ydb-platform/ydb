@@ -1,5 +1,7 @@
 #include "yql_solomon_config.h"
 
+#include <ydb/library/yql/providers/solomon/common/constants.h>
+
 namespace NYql {
 
 using namespace NCommon;
@@ -27,6 +29,8 @@ TSolomonConfiguration::TSolomonConfiguration()
     REGISTER_SETTING(*this, PoisonTimeoutSec);
     REGISTER_SETTING(*this, RoundRobinStageTimeoutMs);
     REGISTER_SETTING(*this, LabelsListingLimit);
+    REGISTER_SETTING(*this, WriteMaxRequestsInflight).Lower(1);
+    REGISTER_SETTING(*this, WriteMaxPointsPerRequest).Lower(1).Upper(NSo::NConstants::MaxWritePointsPerRequest);
 }
 
 TSolomonSettings::TConstPtr TSolomonConfiguration::Snapshot() const {

@@ -1,6 +1,7 @@
 #include "yql_solomon_provider_impl.h"
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/solomon/common/constants.h>
 #include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
@@ -137,7 +138,7 @@ private:
         return TStatus::Ok;
     }
 
-    static TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
+    TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
         if (!EnsureArgsCount(input.Ref(), 4U, ctx)) {
             return TStatus::Error;
         }
@@ -172,7 +173,7 @@ private:
         return TStatus::Ok;
     }
 
-    static bool ValidateWriteTypeAnnotation(TPositionHandle position, const TTypeAnnotationNode* inputItemType, TExprContext& ctx) {
+    bool ValidateWriteTypeAnnotation(TPositionHandle position, const TTypeAnnotationNode* inputItemType, TExprContext& ctx) {
         if (!EnsureStructType(position, *inputItemType, ctx)) {
             return false;
         }
@@ -235,8 +236,17 @@ private:
             return false;
         }
 
-        if (sensorMembers > SolomonMaxSensorsCount) {
-            ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Max sensors count is " << SolomonMaxSensorsCount << " but " << sensorMembers << " were provided"));
+        if (sensorMembers > NSo::NConstants::MaxSensorsPerRow) {
+            ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Max sensors count is " << NSo::NConstants::MaxSensorsPerRow << " but " << sensorMembers << " were provided"));
+            return false;
+        }
+
+        const ui64 maxPointsPerRequest =
+            State_->Configuration->WriteMaxPointsPerRequest.Get().GetOrElse(NSo::NConstants::DefaultWriteMaxPointsPerRequest);
+        if (sensorMembers > maxPointsPerRequest) {
+            ctx.AddError(TIssue(ctx.GetPosition(position),
+                TStringBuilder() << "solomon.WriteMaxPointsPerRequest must be at least the number of sensors in a row (" << sensorMembers
+                                 << "), got " << maxPointsPerRequest));
             return false;
         }
 

@@ -39,6 +39,7 @@ PEERDIR(
     ydb/core/security/certificate_check/test_utils
     ydb/core/wrappers/ut_helpers
     ydb/public/api/client/yc_public/iam
+    ydb/public/lib/ydb_cli/dump
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers

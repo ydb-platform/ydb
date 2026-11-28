@@ -8,6 +8,7 @@
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
@@ -448,8 +449,30 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
 TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
     LOG_I("Restore " << fsPath.Quote() << " to " << dbPath.Quote());
 
-    // Find first existing path on the way from the dbPath to the root of the cluster.
-    TPathSplitUnix dbPathSplit(dbPath);
+    if (dbPath.empty()) {
+        return Result<TRestoreResult>(dbPath, EStatus::BAD_REQUEST, "Restore destination must not be empty");
+    }
+
+    // Restore queries and directory listings must use the same absolute paths.
+    TString dbRestorePath = dbPath;
+    if (!dbRestorePath.StartsWith('/')) {
+        TString databasePath(DriverConfig.GetDatabase());
+        if (!databasePath.StartsWith('/')) {
+            if (auto result = FindClusterRootPath(); !result.IsSuccess()) {
+                return result;
+            }
+            databasePath = Join('/', ClusterRootPath, databasePath);
+        }
+        dbRestorePath = Join('/', databasePath, dbRestorePath);
+    }
+
+    dbRestorePath = NormalizePath(dbRestorePath);
+
+    // Find first existing path on the way from the dbRestorePath to the root of the cluster.
+    TPathSplitUnix dbPathSplit(dbRestorePath);
+    if (dbPathSplit.empty()) {
+        return Result<TRestoreResult>(dbPath, EStatus::BAD_REQUEST, "Restore destination must name a database or directory");
+    }
 
     while (true) {
         auto result = DescribePath(SchemeClient, dbPathSplit.Reconstruct());
@@ -489,9 +512,9 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     // restore
     auto restoreResult = Result<TRestoreResult>();
     if (settings.Replace_) {
-        restoreResult = DropAndRestore(fsPath, dbPath, settings);
+        restoreResult = DropAndRestore(fsPath, dbRestorePath, settings);
     } else {
-        restoreResult = RestoreFolder(fsPath, dbPath, settings);
+        restoreResult = RestoreFolder(fsPath, dbRestorePath, settings);
     }
     if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
         restoreResult = result;
@@ -784,6 +807,13 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
         }
     }
 
+    if (!dbPath.empty() && !dbPath.StartsWith('/')) {
+        if (auto result = FindClusterRootPath(); !result.IsSuccess()) {
+            return result;
+        }
+        dbPath = NormalizePath(Join('/', ClusterRootPath, dbPath));
+    }
+
     LOG_I("Restore database from " << fsPath.Quote() << " to " << dbPath.Quote());
 
     if (auto result = CreateDatabase(CmsClient, dbPath, TCreateDatabaseSettings(dbDesc)); !result.IsSuccess()) {
@@ -823,14 +853,15 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
     }
 
     if (settings.WithContent_) {
-        ExistingEntries.emplace(dbPath, ESchemeEntryType::SubDomain);
+        TRestoreClient dbRestoreClient(dbDriver, Log);
+        dbRestoreClient.ExistingEntries.emplace(dbPath, ESchemeEntryType::SubDomain);
         TRestoreSettings restoreSettings;
         restoreSettings.ReplaceSysACL(true);
-        auto restoreResult = RestoreFolder(fsPath, dbPath, restoreSettings);
-        if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
+        auto restoreResult = dbRestoreClient.RestoreFolder(fsPath, dbPath, restoreSettings);
+        if (auto result = dbRestoreClient.DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
             restoreResult = result;
         }
-        if (auto result = RestorePendingConsumers(); !result.IsSuccess()) {
+        if (auto result = dbRestoreClient.RestorePendingConsumers(); !result.IsSuccess()) {
             restoreResult = result;
         }
         return restoreResult;

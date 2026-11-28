@@ -113,7 +113,7 @@ public:
     };
 
     grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) {
-        CheckClientMetadata(context, "x-ydb-database", TEST_DATABASE);
+        CheckClientMetadata(context, "x-ydb-database", ExpectedDatabase);
         if (Token) {
             CheckClientMetadata(context, "x-ydb-auth-ticket", Token);
         } else {
@@ -139,7 +139,7 @@ public:
         }
         auto* operation = response->mutable_operation();
         operation->set_ready(true);
-        operation->set_status(Ydb::StatusIds::SUCCESS);
+        operation->set_status(ListDirectoryStatus);
         operation->mutable_result()->PackFrom(res);
         return grpc::Status();
     }
@@ -186,6 +186,7 @@ public:
 
     void ClearExpectations() {
         ExpectedClientCert = Token = {};
+        ExpectedDatabase = TEST_DATABASE;
         Directories.clear();
     }
 
@@ -193,6 +194,8 @@ public:
         ExpectedClientCert = cert;
     }
 
+    Ydb::StatusIds::StatusCode ListDirectoryStatus = Ydb::StatusIds::SUCCESS;
+    TString ExpectedDatabase = TEST_DATABASE;
     TString Token;
     TString ExpectedClientCert;
     THashMap<TString, TDirectory> Directories;

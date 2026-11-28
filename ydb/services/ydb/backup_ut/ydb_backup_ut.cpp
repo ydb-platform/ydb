@@ -2760,7 +2760,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     // TO DO: test index impl table split boundaries restoration from a backup
 
     Y_UNIT_TEST(RestoreViewQueryText) {
-        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableRelativePaths(true);
+        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server(config);
         // note: tenant is needed to work around the issue of "/Root" having a dir scheme entry type when described on restore
         CreateDatabase(*server.Tenants_, "/Root/tenant", "ssd");
         auto driver = TDriver(TDriverConfig()
@@ -2783,6 +2785,33 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup, "/Root/tenant", "/Root/tenant"),
             CreateRestoreLambda(driver, pathToBackup, "/Root/tenant")
         );
+
+        auto relativeConfig = driver.GetConfig();
+        relativeConfig.SetDatabase("tenant");
+        auto relativeDriver = TDriver(relativeConfig);
+        CreateRestoreLambda(relativeDriver, pathToBackup, "restoration/point")();
+        CompareResults(
+            ExecuteQuery(session, "SELECT * FROM `/Root/tenant/view`;"),
+            ExecuteQuery(session, "SELECT * FROM `/Root/tenant/restoration/point/view`;")
+        );
+        CreateRestoreLambda(relativeDriver, pathToBackup, "/Root/tenant")();
+
+        NDump::TClient backupClient(relativeDriver);
+        UNIT_ASSERT_VALUES_EQUAL(backupClient.Restore(pathToBackup, "").GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(backupClient.Restore(pathToBackup, "/").GetStatus(), EStatus::BAD_REQUEST);
+
+        for (const TString database : {"/Root/tenant", "tenant"}) {
+            TTempDir rootBackup;
+            NBackup::BackupFolder(driver, database, "/", rootBackup.Path(), {}, true, false);
+            UNIT_ASSERT((TFsPath(rootBackup.Path()) / "view" / NDump::NFiles::CreateView().FileName).Exists());
+            for (const TString path : {"/", "/Root"}) {
+                const auto rejectedBackup = TFsPath(rootBackup.Path()) / "outside";
+                const auto result = backupClient.Dump(path, rejectedBackup,
+                    NDump::TDumpSettings().Database(database).SchemaOnly(true).SavePartialResult(true));
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
+                UNIT_ASSERT(!rejectedBackup.Exists());
+            }
+        }
     }
 
     Y_UNIT_TEST(RestoreViewWithNamedExpressions) {
@@ -2847,7 +2876,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST(RestoreViewToDifferentDatabase) {
-        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableRelativePaths(true);
+        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server(config);
 
         constexpr const char* alice = "/Root/tenants/alice";
         constexpr const char* bob = "/Root/tenants/bob";
@@ -2875,8 +2906,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        const TString view = JoinFsPaths(alice, "view");
-        const TString table = JoinFsPaths(alice, "a", "b", "c", "table");
+        const TString view = JoinFsPaths(alice, "src", "view");
+        const TString table = JoinFsPaths(alice, "src", "a", "b", "c", "table");
         const TString restoredView = JoinFsPaths(bob, "view");
 
         TestViewReferenceTableIsPreserved(
@@ -2885,7 +2916,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             restoredView.c_str(),
             aliceSession,
             bobSession,
-            CreateBackupLambda(aliceDriver, pathToBackup, alice, alice),
+            CreateBackupLambda(aliceDriver, pathToBackup, "src", ""),
             CreateRestoreLambda(bobDriver, pathToBackup, bob),
             false
         );

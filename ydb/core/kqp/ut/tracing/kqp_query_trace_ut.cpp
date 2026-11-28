@@ -164,6 +164,27 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         return sessionId;
     }
 
+    Y_UNIT_TEST(DistributedWriteHasDatashardPipeline) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
+        auto* uploader = RegisterUploader(runtime);
+        for (ui8 level : {0, 11, 12}) {
+            ClearUploader(*uploader);
+            ExecSQL(runtime, sender,
+                "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 10u), (4000000000u, 20u);", level);
+            const auto* pipeline = FindSpan(*uploader, "Datashard pipeline");
+            UNIT_ASSERT_VALUES_EQUAL(bool(pipeline), level >= 12);
+            if (pipeline) {
+                UNIT_ASSERT(FindAttribute(*pipeline, "ydb.tx_id"));
+                bool selected = false;
+                for (const auto& event : pipeline->events()) {
+                    selected |= event.name() == "operation selected";
+                }
+                UNIT_ASSERT(selected);
+            }
+        }
+    }
+
     Y_UNIT_TEST(CommonTreeIncludesKqpAndDatashard) {
         auto [runtime, server, sender] = CreateServer();
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
@@ -212,6 +233,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT(!std::ranges::empty(StageSpans(*uploader)));
         UNIT_ASSERT(FindAttribute(*FindSpan(*uploader, "Task: "), "ydb.task_id"));
         UNIT_ASSERT(!FindSpan(*uploader, "Session.query.QUERY_ACTION_EXECUTE"));
+
     }
 
     Y_UNIT_TEST(CommonLevelsAndDisabledTracing) {

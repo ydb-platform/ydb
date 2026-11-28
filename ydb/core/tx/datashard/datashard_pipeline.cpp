@@ -266,7 +266,9 @@ bool TPipeline::IsReadyOp(TOperation::TPtr op)
     }
 
     auto &unit = GetExecutionUnit(op->GetCurrentUnit());
-    return unit.IsReadyToExecute(op);
+    const bool ready = unit.IsReadyToExecute(op);
+    op->TracePipelineEvent(ready ? "unit ready" : "unit blocked");
+    return ready;
 }
 
 TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
@@ -292,6 +294,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
             TOperation::TPtr res = NextActiveOp;
             if (!dryRun)
                 NextActiveOp = nullptr;
+            res->TracePipelineEvent(dryRun ? "ready probe" : "operation selected", nullptr, dryRun);
             return res;
         } else {
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Cached ready operation is not ready anymore",
@@ -317,6 +320,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
                 {"currentUnit", op->GetCurrentUnit()});
             if (dryRun)
                 NextActiveOp = op;
+            op->TracePipelineEvent(dryRun ? "ready probe" : "operation selected", nullptr, dryRun);
             return op;
         }
 
@@ -346,6 +350,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
                 {"tabletId", Self->TabletID()});
             if (dryRun)
                 NextActiveOp = op;
+            op->TracePipelineEvent(dryRun ? "ready probe" : "operation selected", nullptr, dryRun);
             return op;
         }
 
@@ -385,6 +390,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
                 {"operation", *op});
             if (dryRun)
                 NextActiveOp = op;
+            op->TracePipelineEvent(dryRun ? "ready probe" : "operation selected", nullptr, dryRun);
             return op;
         }
 
@@ -413,6 +419,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
                 {"tabletId", Self->TabletID()});
             if (dryRun)
                 NextActiveOp = op;
+            op->TracePipelineEvent(dryRun ? "ready probe" : "operation selected", nullptr, dryRun);
             return op;
         }
 
@@ -496,6 +503,7 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
                    << "] already on shard");
     }
 
+    op->TracePipelineEvent("operation activated");
     auto inserted = ActiveOps.emplace(op->GetStepOrder(), op);
     Y_ENSURE(inserted.second,
                " cannot activate " << op->GetKind() << " operation " << *op << " at "
@@ -510,6 +518,7 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
 
 void TPipeline::RemoveActiveOp(TOperation::TPtr op)
 {
+    op->TracePipelineEvent("operation deactivated");
     UnblockNormalDependencies(op);
     UnblockSpecialDependencies(op);
 
@@ -538,6 +547,7 @@ void TPipeline::UnblockNormalDependencies(const TOperation::TPtr &op)
     // N.B. we only need to walk Dependents since operations only
     // wait for their Dependencies, never for their Depenents
     for (auto &dep : op->GetDependents()) {
+        dep->TracePipelineEvent("normal dependency released", op.Get());
         if (dep->GetDependencies().size() == 1) {
             Y_ENSURE(op == *dep->GetDependencies().begin());
             if (dep->GetSpecialDependencies().empty()) {
@@ -558,6 +568,7 @@ void TPipeline::UnblockNormalDependencies(const TOperation::TPtr &op)
 void TPipeline::UnblockSpecialDependencies(const TOperation::TPtr &op)
 {
     for (auto &dep : op->GetSpecialDependents()) {
+        dep->TracePipelineEvent("special dependency released", op.Get());
         if (dep->GetSpecialDependencies().size() == 1) {
             Y_ENSURE(op == *dep->GetSpecialDependencies().begin());
             if (dep->GetDependencies().empty()) {
@@ -1112,6 +1123,7 @@ void TPipeline::PlanTxImpl(ui64 step, ui64 txId, TTransactionContext &txc, const
 
     NIceDb::TNiceDb db(txc.DB);
     Self->TransQueue.PlanTx(op, step, db);
+    op->TracePipelineEvent("plan applied");
 
     // Execute WaitForPlan unit here to correctly compute operation
     // profile. Otherwise profile might count time spent in plan
@@ -1151,6 +1163,7 @@ void TPipeline::SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId) {
 }
 
 void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx) {
+    op->TracePipelineEvent("transaction execution complete");
     NIceDb::TNiceDb db(txc.DB);
     using Schema = TDataShard::Schema;
 

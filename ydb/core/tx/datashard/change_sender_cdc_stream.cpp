@@ -31,7 +31,10 @@ namespace NKikimr::NDataShard {
 using namespace NPQ;
 using ESenderType = TEvChangeExchange::ESenderType;
 
-static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(const TUserTable::TCdcStream& stream, ui64 shardId) {
+static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(
+        const TUserTable::TCdcStream& stream,
+        ui64 shardId)
+{
     return THolder<IChangeRecordSerializer>(CreateChangeRecordSerializer({
         .StreamFormat = stream.Format,
         .StreamMode = stream.Mode,

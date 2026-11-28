@@ -5,6 +5,10 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
 
+#include <ydb/core/tx/datashard/change_record_cdc_serializer.h>
+
+#include <contrib/libs/zstd/include/zstd.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
@@ -312,11 +316,16 @@ public:
                     "ZSTD compression is supported only for JSON changefeed formats");
                 return result;
             }
-            if (newStreamDesc.HasCompressionLevel()
-                    && (newStreamDesc.GetCompressionLevel() < 1 || newStreamDesc.GetCompressionLevel() > 22)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "ZSTD compression level must be in range [1, 22]");
-                return result;
+            if (newStreamDesc.HasCompressionLevel()) {
+                const i32 level = newStreamDesc.GetCompressionLevel();
+                // -1 is the fast CDC default and must round-trip. Other explicit levels stay in [1, ZSTD_maxCLevel()].
+                const int maxLevel = ZSTD_maxCLevel();
+                if (level != NDataShard::DefaultCdcZstdCompressionLevel && (level < 1 || level > maxLevel)) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                        << "ZSTD compression level must be " << NDataShard::DefaultCdcZstdCompressionLevel
+                        << " or in range [1, " << maxLevel << "]");
+                    return result;
+                }
             }
             break;
         default:

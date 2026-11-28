@@ -2,9 +2,12 @@
 #include "change_record.h"
 #include "type_serialization.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/change_exchange/visitor.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/io_formats/json/json.h>
 #include <ydb/core/protos/change_exchange.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -21,9 +24,13 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/streams/zstd/zstd.h>
+
+#include <contrib/libs/zstd/include/zstd.h>
 
 #include <util/charset/utf8.h>
+#include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
+#include <util/generic/ylimits.h>
 #include <util/stream/str.h>
 #include <util/string/printf.h>
 
@@ -31,7 +38,42 @@
 
 namespace NKikimr::NDataShard {
 
-constexpr int DEFAULT_ZSTD_COMPRESSION_LEVEL = 3;
+namespace {
+
+struct TCdcThreadZstdContext {
+    struct TFreeZstdContext {
+        static void Destroy(ZSTD_CCtx* context) noexcept {
+            ZSTD_freeCCtx(context);
+        }
+    };
+
+    ZSTD_CCtx* Get() {
+        if (!Context) {
+            Context.Reset(ZSTD_createCCtx());
+            Y_ENSURE(Context, "Cannot allocate zstd compression context");
+        }
+        return Context.Get();
+    }
+
+    size_t Compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int level) {
+        const size_t written = ZSTD_compressCCtx(Get(), dst, dstCapacity, src, srcSize, level);
+        Y_ENSURE(!ZSTD_isError(written), "zstd compress failed: " << ZSTD_getErrorName(written));
+        return written;
+    }
+
+    THolder<ZSTD_CCtx, TFreeZstdContext> Context;
+};
+
+// One context per OS thread. A mailbox can move between executor workers, so
+// this address must not be stored on a serializer. ZSTD_compressCCtx starts a
+// new frame and resets parameters on every call. The context is created on the
+// first payload that is actually compressed on this thread.
+TCdcThreadZstdContext& ThreadZstdContext() {
+    static thread_local TCdcThreadZstdContext context;
+    return context;
+}
+
+} // namespace
 
 class TBaseSerializer: public IChangeRecordSerializer {
     static NKikimrPQClient::TDataChunk MakeDataChunk() {
@@ -75,23 +117,92 @@ public:
     {}
 
     void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {
+        PendingUncompressedSize.Clear();
         cmd.SetSeqNo(record.GetSeqNo());
         cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
         switch (record.GetKind()) {
         case TChangeRecord::EKind::CdcDataChange:
-            return SerializeDataChange(cmd, record);
+            SerializeDataChange(cmd, record);
+            break;
         case TChangeRecord::EKind::CdcSchemaChange:
-            return SerializeSchemaChange(cmd, record);
+            SerializeSchemaChange(cmd, record);
+            break;
         case TChangeRecord::EKind::CdcHeartbeat:
-            return SerializeHeartbeat(cmd, record);
+            SerializeHeartbeat(cmd, record);
+            break;
         case TChangeRecord::EKind::AsyncIndex:
         case TChangeRecord::EKind::IncrementalRestore:
             Y_ENSURE(false, "Unexpected");
         }
+        // Only an actually compressed payload has a meaningful pre-compression size.
+        // Raw, short, and heartbeat records leave the field unset.
+        if (PendingUncompressedSize.Defined()) {
+            cmd.SetUncompressedSize(static_cast<i32>(*PendingUncompressedSize));
+        }
     }
 
 protected:
+    // Creating a zstd context repeats CPU feature detection, which dominates
+    // short CDC rows. Every serializer on this OS thread reuses one context.
+    void SetCompressedPayload(NKikimrPQClient::TDataChunk& data, TString payload) const {
+        switch (Opts.Compression) {
+        case NKikimrSchemeOp::ECdcStreamCompressionNone:
+            data.SetData(std::move(payload));
+            return;
+        case NKikimrSchemeOp::ECdcStreamCompressionZstd: {
+            if (payload.size() < MinPayloadBytes()) {
+                data.SetData(std::move(payload));
+                return;
+            }
+            const size_t bound = ZSTD_compressBound(payload.size());
+            Y_ENSURE(!ZSTD_isError(bound), "zstd compress bound failed: " << ZSTD_getErrorName(bound));
+            TString compressed = TString::Uninitialized(bound);
+            const size_t written = ThreadZstdContext().Compress(
+                compressed.begin(), compressed.size(),
+                payload.data(), payload.size(),
+                ResolvedCompressionLevel());
+            if (written >= payload.size()) {
+                data.SetData(std::move(payload));
+                return;
+            }
+            if (payload.size() <= static_cast<size_t>(Max<i32>())) {
+                PendingUncompressedSize = static_cast<ui32>(payload.size());
+            }
+            compressed.resize(written);
+            data.SetCodec(NPersQueueCommon::ZSTD);
+            data.SetData(std::move(compressed));
+            return;
+        }
+        default:
+            Y_ENSURE(false, "Unsupported changefeed compression");
+        }
+    }
+
     const TChangeRecordSerializerOpts Opts;
+
+private:
+    int ResolvedCompressionLevel() const {
+        return Opts.CompressionLevel ? Opts.CompressionLevel : DefaultCdcZstdCompressionLevel;
+    }
+
+    ui64 MinPayloadBytes() const {
+        if (!HasAppData()) {
+            return DefaultCdcZstdMinPayloadBytes;
+        }
+        const auto* appData = AppData();
+        if (appData->Icb) {
+            // Zero keeps the startup DataShardConfig value. Console updates this
+            // immediate control without recreating the sender.
+            if (const auto control = appData->Icb->DataShardControls.CdcZstdMinPayloadBytes.AtomicLoad()) {
+                if (const auto overrideBytes = control->Get(); overrideBytes > 0) {
+                    return static_cast<ui64>(overrideBytes);
+                }
+            }
+        }
+        return appData->DataShardConfig.GetCdcZstdMinPayloadBytes();
+    }
+
+    mutable TMaybe<ui32> PendingUncompressedSize;
 
 }; // TBaseSerializer
 
@@ -331,23 +442,7 @@ protected:
     }
 
     void SetJsonData(NKikimrPQClient::TDataChunk& data, TString json) const {
-        switch (Opts.Compression) {
-        case NKikimrSchemeOp::ECdcStreamCompressionNone:
-            data.SetData(std::move(json));
-            break;
-        case NKikimrSchemeOp::ECdcStreamCompressionZstd: {
-            TString compressed;
-            TStringOutput output(compressed);
-            TZstdCompress compressor(&output, Opts.CompressionLevel ? Opts.CompressionLevel : DEFAULT_ZSTD_COMPRESSION_LEVEL);
-            compressor.Write(json.data(), json.size());
-            compressor.Finish();
-            data.SetCodec(NPersQueueCommon::ZSTD);
-            data.SetData(std::move(compressed));
-            break;
-        }
-        default:
-            Y_ENSURE(false, "Unsupported changefeed compression");
-        }
+        SetCompressedPayload(data, std::move(json));
     }
 
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {

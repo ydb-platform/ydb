@@ -7,6 +7,9 @@
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/datashard/change_record_cdc_serializer.h>
+
+#include <contrib/libs/zstd/include/zstd.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -281,11 +284,16 @@ public:
                     "ZSTD compression is supported only for JSON changefeed formats");
                 return result;
             }
-            if (streamDesc.HasCompressionLevel()
-                    && (streamDesc.GetCompressionLevel() < 1 || streamDesc.GetCompressionLevel() > 22)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "ZSTD compression level must be in range [1, 22]");
-                return result;
+            if (streamDesc.HasCompressionLevel()) {
+                const i32 level = streamDesc.GetCompressionLevel();
+                // -1 is the fast CDC default and must round-trip. Other explicit levels stay in [1, ZSTD_maxCLevel()].
+                const int maxLevel = ZSTD_maxCLevel();
+                if (level != NDataShard::DefaultCdcZstdCompressionLevel && (level < 1 || level > maxLevel)) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                        << "ZSTD compression level must be " << NDataShard::DefaultCdcZstdCompressionLevel
+                        << " or in range [1, " << maxLevel << "]");
+                    return result;
+                }
             }
             break;
         default:

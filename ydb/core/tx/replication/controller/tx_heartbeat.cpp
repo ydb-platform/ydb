@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "global_write_txs_repository.h"
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -44,9 +45,7 @@ bool TController::HasFreshHeartbeatQuorum(const TSchemaBarrier& barrier) const {
 }
 
 bool TController::HasPendingTargetFlushTxId(const TSchemaBarrier& barrier) const {
-    return AnyOf(AssignedTxIds, [&barrier](const auto& assigned) {
-        return ::Find(barrier.TargetFlushTxIds, assigned.second) != barrier.TargetFlushTxIds.end();
-    });
+    return GlobalWriteTxs.HasUncommittedWriteTxs(barrier.TargetFlushTxIds);
 }
 
 bool TController::BlocksGlobalCommit(const TSchemaBarrier& barrier) const {
@@ -179,21 +178,22 @@ public:
             return true; // global consistency is temporarily degraded
         }
 
-        if (Self->AssignedTxIds.empty()) {
+        const auto nextWriteTx = Self->GlobalWriteTxs.FindNextWriteTxToCommit();
+        if (!nextWriteTx) {
             return true; // nothing to commit
         }
 
         Y_ABORT_UNLESS(!Self->WorkersByHeartbeat.empty());
-        if (Self->WorkersByHeartbeat.begin()->first < Self->AssignedTxIds.begin()->first) {
+        if (Self->WorkersByHeartbeat.begin()->first < nextWriteTx->Version) {
             return true; // version has not been changed
         }
 
-        if (!Self->CanCommitIndexBuilds(Self->AssignedTxIds.begin()->first)) {
+        if (!Self->CanCommitIndexBuilds(nextWriteTx->Version)) {
             return true;
         }
 
-        Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
-        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+        Self->CommittingTxId = nextWriteTx->WriteTxId;
+        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(nextWriteTx->Version));
 
         return true;
     }
@@ -268,9 +268,10 @@ public:
             return true;
         }
 
-        auto it = Self->AssignedTxIds.begin();
-        Y_ABORT_UNLESS(it != Self->AssignedTxIds.end());
-        Y_ABORT_UNLESS(it->second == Self->CommittingTxId);
+        const auto committingWriteTx = Self->GlobalWriteTxs.FindNextWriteTxToCommit();
+        Y_ABORT_UNLESS(committingWriteTx);
+        Y_ABORT_UNLESS(committingWriteTx->WriteTxId == Self->CommittingTxId);
+        const auto writeTxEnd = committingWriteTx->Version;
 
         const auto& record = Status->Get()->Record;
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
@@ -281,7 +282,7 @@ public:
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
 
             if (!Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-                CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+                CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(writeTxEnd));
             } else {
                 Self->CommittingTxId = 0;
             }
@@ -292,19 +293,20 @@ public:
 
         for (auto& [key, build] : Self->IndexBuilds) {
             const bool joining = build.GetPhase() == NKikimrReplication::TIndexBuildState::JOINING;
-            if (joining && it->first >= TRowVersion::FromProto(build.GetJoinVersion())) {
+            if (joining && writeTxEnd >= TRowVersion::FromProto(build.GetJoinVersion())) {
                 build.SetPhase(NKikimrReplication::TIndexBuildState::MAKING_READY);
                 Self->SaveIndexBuild(db, key, build);
             }
         }
         auto& frontier = Self->CommittedVersions[replication->GetId()];
-        frontier = Max(frontier, it->first);
+        frontier = Max(frontier, writeTxEnd);
         db.Table<Schema::Replications>().Key(replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::CommittedStep>(frontier.Step),
             NIceDb::TUpdate<Schema::Replications::CommittedTxId>(frontier.TxId)
         );
-        db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Delete();
-        it = Self->AssignedTxIds.erase(it);
+        Self->GlobalWriteTxs.RemoveCommittedWriteTx(Self->CommittingTxId);
+        TGlobalWriteTxsRepository::SaveChanges(db, Self->GlobalWriteTxs);
+        const auto nextWriteTx = Self->GlobalWriteTxs.FindNextWriteTxToCommit();
         Self->CommittingTxId = 0;
         if (Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
             return true;
@@ -312,7 +314,7 @@ public:
 
         Self->AdvanceVerifyingSchemaBarriers(db);
 
-        if (it == Self->AssignedTxIds.end() || Self->WorkersByHeartbeat.empty()
+        if (!nextWriteTx || Self->WorkersByHeartbeat.empty()
             || Self->CountHeartbeatParticipants() != Self->WorkersWithHeartbeat.size())
         {
             return true;
@@ -324,16 +326,16 @@ public:
             return true;
         }
 
-        if (Self->WorkersByHeartbeat.begin()->first < it->first) {
+        if (Self->WorkersByHeartbeat.begin()->first < nextWriteTx->Version) {
             return true;
         }
 
-        if (!Self->CanCommitIndexBuilds(Self->AssignedTxIds.begin()->first)) {
+        if (!Self->CanCommitIndexBuilds(nextWriteTx->Version)) {
             return true;
         }
 
-        Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
-        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+        Self->CommittingTxId = nextWriteTx->WriteTxId;
+        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(nextWriteTx->Version));
 
         return true;
     }
@@ -342,7 +344,7 @@ public:
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
-        Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
+        Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->GlobalWriteTxs.CountOpenWriteTxs();
 
         if (CommitProposal && !Self->ReplicationsWithSourceOffsetMismatch.empty()) {
             Self->CommittingTxId = 0;

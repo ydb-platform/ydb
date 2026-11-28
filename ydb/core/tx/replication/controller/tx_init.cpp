@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "global_write_txs_repository.h"
 #include "target_table.h"
 #include "target_topic.h"
 #include "target_transfer.h"
@@ -206,26 +207,12 @@ class TController::TTxInit: public TTxBase {
     }
 
     bool LoadTxIds(NIceDb::TNiceDb& db) {
-        auto rowset = db.Table<Schema::TxIds>().Select();
-        if (!rowset.IsReady()) {
+        auto versionToWriteTxId = TGlobalWriteTxsRepository::Load(db);
+        if (!versionToWriteTxId) {
             return false;
         }
 
-        while (!rowset.EndOfSet()) {
-            const auto txId = rowset.GetValue<Schema::TxIds::WriteTxId>();
-            const auto version = TRowVersion(
-                rowset.GetValue<Schema::TxIds::VersionStep>(),
-                rowset.GetValue<Schema::TxIds::VersionTxId>()
-            );
-
-            auto res = Self->AssignedTxIds.emplace(version, txId);
-            Y_VERIFY_S(res.second, "Duplicate version: " << version);
-
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-
+        Self->GlobalWriteTxs.RestoreWriteTxs(std::move(*versionToWriteTxId));
         return true;
     }
 

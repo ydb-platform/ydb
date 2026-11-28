@@ -230,13 +230,13 @@ public:
         }
         if (replication->GetConfig().GetConsistencySettings().HasGlobal() && Self->GetSingle() == replication) {
             auto* transactions = Result->Record.MutableTransactions();
-            // CommittingTxId is already included in AssignedTxIds. Entries are
+            // CommittingTxId is already included in GlobalWriteTxs. Entries are
             // removed by TTxCommitChanges and restored from Schema::TxIds on restart.
-            for (const auto& [version, txId] : Self->AssignedTxIds) {
+            for (const auto& openWriteTx : Self->GlobalWriteTxs.GetOpenWriteTxs()) {
                 auto* item = transactions->add_assigned();
-                item->mutable_upper_bound_barrier()->set_plan_step(version.Step);
-                item->mutable_upper_bound_barrier()->set_tx_id(version.TxId);
-                item->set_write_tx_id(txId);
+                item->mutable_upper_bound_barrier()->set_plan_step(openWriteTx.Version.Step);
+                item->mutable_upper_bound_barrier()->set_tx_id(openWriteTx.Version.TxId);
+                item->set_write_tx_id(openWriteTx.WriteTxId);
             }
             for (const auto& [version, _] : Self->PendingTxId) {
                 auto* item = transactions->add_pending();

@@ -1,6 +1,5 @@
 #include "controller_impl.h"
-
-#include <variant>
+#include "global_write_txs_repository.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -10,35 +9,29 @@ class TController::TTxAssignTxId: public TTxBase {
     THashMap<ui32, THolder<TEvService::TEvTxIdResult>> Result;
     bool TxIdsExhausted = false;
 
-    struct TTxId {
-        ui64 Value;
+    TVector<TRowVersion> GetPendingVersions() const {
+        TVector<TRowVersion> versions;
+        versions.reserve(Self->PendingTxId.size());
+        for (const auto& [version, _] : Self->PendingTxId) {
+            versions.push_back(version);
+        }
+        return versions;
+    }
 
-        TTxId() = default;
-        TTxId(ui64 value)
-            : Value(value)
-        {}
-    };
-
-    enum class EError {
-        TooManyOpenTxIds,
-        TxIdsExhausted,
-    };
-
-    using TAssignResult = std::variant<TTxId, EError>;
-
-    template <typename TAssignFunc>
-    TAssignResult Process(TAssignFunc assignFunc) {
-        TAssignResult result;
-
-        for (auto it = Self->PendingTxId.begin(); it != Self->PendingTxId.end();) {
-            result = assignFunc(it->first);
-            ui64 txId = 0;
-
-            if (const auto* x = std::get_if<TTxId>(&result)) {
-                txId = x->Value;
-            } else {
-                return result;
+    TVector<TRowVersion> GetIndexBuildJoinVersions() const {
+        TVector<TRowVersion> versions;
+        for (const auto& [_, build] : Self->IndexBuilds) {
+            if (build.HasJoinVersion()) {
+                versions.push_back(TRowVersion::FromProto(build.GetJoinVersion()));
             }
+        }
+        return versions;
+    }
+
+    void Reply(const TMap<TRowVersion, ui64>& pendingVersionToWriteTxId) {
+        for (const auto& [version, writeTxId] : pendingVersionToWriteTxId) {
+            const auto it = Self->PendingTxId.find(version);
+            Y_ABORT_UNLESS(it != Self->PendingTxId.end());
 
             for (const auto nodeId : it->second) {
                 auto& ev = Result[nodeId];
@@ -47,14 +40,12 @@ class TController::TTxAssignTxId: public TTxBase {
                 }
 
                 auto& item = *ev->Record.AddVersionTxIds();
-                it->first.ToProto(item.MutableVersion());
-                item.SetTxId(txId);
+                version.ToProto(item.MutableVersion());
+                item.SetTxId(writeTxId);
             }
 
-            Self->PendingTxId.erase(it++);
+            Self->PendingTxId.erase(it);
         }
-
-        return result;
     }
 
 public:
@@ -71,8 +62,8 @@ public:
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Execute",
             {"pending", Self->PendingTxId.size()},
-            {"assigned", Self->AssignedTxIds.size()},
-            {"allocated", Self->AllocatedTxIds.size()});
+            {"assigned", Self->GlobalWriteTxs.CountOpenWriteTxs()},
+            {"allocated", Self->GlobalWriteTxs.CountFreeWriteTxIds()});
 
         const auto replication = Self->GetSingle();
         if (replication && Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
@@ -81,86 +72,18 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        const auto assignment = Self->GlobalWriteTxs.AssignWriteTxs(
+            GetPendingVersions(), GetIndexBuildJoinVersions(), !Self->IndexBuilds.empty());
+        TGlobalWriteTxsRepository::SaveChanges(db, Self->GlobalWriteTxs);
+        Reply(assignment.PendingVersionToWriteTxId);
 
-        auto result = Process([&](const TRowVersion& version) -> TAssignResult {
-            auto it = Self->IndexBuilds.empty()
-                ? Self->AssignedTxIds.find(version) : Self->AssignedTxIds.lower_bound(version);
-            if (it != Self->AssignedTxIds.end()) {
-                return it->second;
-            }
-
-            if (Self->AssignedTxIds.size() >= MaxOpenTxIds) {
-                Self->TabletCounters->Cumulative()[COUNTER_TOO_MANY_OPEN_TX_IDS] += 1;
-                return EError::TooManyOpenTxIds;
-            }
-
-            if (Self->AllocatedTxIds.empty()) {
-                Self->TabletCounters->Cumulative()[COUNTER_TX_IDS_EXHAUSTED] += 1;
-                return EError::TxIdsExhausted;
-            }
-
-            const ui64 txId = Self->AllocatedTxIds.front();
-            Self->AllocatedTxIds.pop_front();
-
-            db.Table<Schema::TxIds>().Key(version.Step, version.TxId).Update(
-                NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-            );
-            it = Self->AssignedTxIds.emplace(version, txId).first;
-
-            return txId;
-        });
-
-        if (const auto* x = std::get_if<EError>(&result); x && *x == EError::TxIdsExhausted) {
-            TxIdsExhausted = true;
-            return true;
+        if (assignment.OpenWriteTxLimitReached) {
+            Self->TabletCounters->Cumulative()[COUNTER_TOO_MANY_OPEN_TX_IDS] += 1;
         }
-
-        if (auto it = Self->PendingTxId.rbegin(); it != Self->PendingTxId.rend()
-                && Self->AssignedTxIds.rbegin()->first < it->first) {
-            Y_ABORT_UNLESS(std::holds_alternative<EError>(result));
-            Y_ABORT_UNLESS(std::get<EError>(result) == EError::TooManyOpenTxIds);
-
-            const auto previousEnd = Self->AssignedTxIds.rbegin()->first;
-            bool crossesJoin = false;
-            for (const auto& [_, build] : Self->IndexBuilds) {
-                if (build.HasJoinVersion()) {
-                    const auto join = TRowVersion::FromProto(build.GetJoinVersion());
-                    crossesJoin |= previousEnd <= join && join < it->first;
-                }
-            }
-            if (crossesJoin) {
-                // C is a fixed boundary. At the open-transaction limit a
-                // separate suffix is necessary instead of extending across C.
-                if (Self->AllocatedTxIds.empty()) {
-                    TxIdsExhausted = true;
-                    return true;
-                }
-
-                const auto txId = Self->AllocatedTxIds.front();
-                Self->AllocatedTxIds.pop_front();
-                Self->AssignedTxIds.emplace(it->first, txId);
-                db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Update(
-                    NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-                );
-            } else {
-                auto nh = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
-                db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Delete();
-
-                nh.key() = it->first;
-                db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Update(
-                    NIceDb::TUpdate<Schema::TxIds::WriteTxId>(nh.mapped())
-                );
-                Self->AssignedTxIds.insert(std::move(nh));
-            }
+        if (assignment.FreeWriteTxIdsExhausted) {
+            Self->TabletCounters->Cumulative()[COUNTER_TX_IDS_EXHAUSTED] += 1;
         }
-
-        result = Process([&](const TRowVersion& version) -> TAssignResult {
-            auto it = Self->AssignedTxIds.lower_bound(version);
-            Y_ABORT_UNLESS(it != Self->AssignedTxIds.end());
-            return it->second;
-        });
-
-        Y_ABORT_UNLESS(std::holds_alternative<TTxId>(result));
+        TxIdsExhausted = !Self->PendingTxId.empty();
         return true;
     }
 
@@ -168,13 +91,13 @@ public:
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete",
             {"pending", Self->PendingTxId.size()},
-            {"assigned", Self->AssignedTxIds.size()},
-            {"allocated", Self->AllocatedTxIds.size()},
+            {"assigned", Self->GlobalWriteTxs.CountOpenWriteTxs()},
+            {"allocated", Self->GlobalWriteTxs.CountFreeWriteTxIds()},
             {"exhausted", TxIdsExhausted});
 
         Self->TabletCounters->Simple()[COUNTER_PENDING_VERSIONS] = Self->PendingTxId.size();
-        Self->TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = Self->AllocatedTxIds.size();
-        Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
+        Self->TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = Self->GlobalWriteTxs.CountFreeWriteTxIds();
+        Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->GlobalWriteTxs.CountOpenWriteTxs();
 
         if (Self->ReplicationsWithSourceOffsetMismatch.empty()) {
             for (auto& [nodeId, ev] : Result) {
@@ -198,7 +121,7 @@ void TController::AllocateTxIds(const TActorContext& ctx) {
     if (replication && ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
         return;
     }
-    if (AllocateTxIdInFlight || AllocatedTxIds.size() >= MinAllocatedTxIds) {
+    if (AllocateTxIdInFlight || GlobalWriteTxs.CountFreeWriteTxIds() >= MinAllocatedTxIds) {
         return;
     }
 
@@ -217,10 +140,10 @@ void TController::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, cons
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
 
-    std::copy(ev->Get()->TxIds.begin(), ev->Get()->TxIds.end(), std::back_inserter(AllocatedTxIds));
+    GlobalWriteTxs.AddFreeWriteTxIds(ev->Get()->TxIds);
     AllocateTxIdInFlight = false;
 
-    TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = AllocatedTxIds.size();
+    TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = GlobalWriteTxs.CountFreeWriteTxIds();
     RunTxAssignTxId(ctx);
     RunTxIndexBuild(ctx);
 }

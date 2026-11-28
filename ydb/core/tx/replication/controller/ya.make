@@ -36,6 +36,8 @@ SRCS(
     dst_creator.cpp
     dst_remover.cpp
     event_util.cpp
+    global_write_txs.cpp
+    global_write_txs_repository.cpp
     lag_provider.cpp
     logging.cpp
     monitoring.cpp

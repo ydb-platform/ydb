@@ -13,6 +13,7 @@ PEERDIR(
 
 SRCS(
     assign_tx_id_ut.cpp
+    global_write_txs_ut.cpp
     transactions_ut.cpp
 )
 

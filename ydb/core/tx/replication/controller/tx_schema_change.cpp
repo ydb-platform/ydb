@@ -598,16 +598,16 @@ class TController::TTxSchemaChangeReport: public TTxBase {
                 {"workers", barrier.ExpectedWorkers.size()});
             auto replication = Self->Find(key.first);
             NKikimrReplicationController::TSchemaBarrierFlushTxIds flushTxIds;
-            const bool pendingWrites = replication && IsGlobalConsistency(*replication) && !Self->AssignedTxIds.empty();
+            const bool pendingWrites = replication && IsGlobalConsistency(*replication) && Self->GlobalWriteTxs.HasOpenWriteTxs();
             if (pendingWrites && !barrier.Schema.HasIndexes()) {
                 // Commit the old-schema writes to this destination before its
                 // DDL. Keep the IDs globally assigned so the next ordinary
                 // commit remains an idempotent all-target operation.
                 barrier.Phase = ESchemaBarrierPhase::FlushingTarget;
-                barrier.TargetFlushTxIds.reserve(Self->AssignedTxIds.size());
-                for (const auto& [_, writeTxId] : Self->AssignedTxIds) {
-                    barrier.TargetFlushTxIds.push_back(writeTxId);
-                    flushTxIds.AddWriteTxIds(writeTxId);
+                barrier.TargetFlushTxIds.reserve(Self->GlobalWriteTxs.CountOpenWriteTxs());
+                for (const auto& openWriteTx : Self->GlobalWriteTxs.GetOpenWriteTxs()) {
+                    barrier.TargetFlushTxIds.push_back(openWriteTx.WriteTxId);
+                    flushTxIds.AddWriteTxIds(openWriteTx.WriteTxId);
                 }
                 StartTargetFlush = !Self->CommittingTxId;
             } else {
@@ -823,7 +823,7 @@ void TController::StartSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, co
     const bool global = IsGlobalConsistency(*replication);
     const TSchemaChangeDstAlterSettings settings{
         .TxId = it->second.DstAlterTxId,
-        .RequireTargetFlush = global && !AssignedTxIds.empty() && it->second.TargetFlushTxIds.empty(),
+        .RequireTargetFlush = global && GlobalWriteTxs.HasOpenWriteTxs() && it->second.TargetFlushTxIds.empty(),
         .GlobalConsistency = global,
     };
     const auto actorId = ctx.Register(CreateSchemaChangeDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
@@ -1020,20 +1020,20 @@ public:
             auto& barrier = it->second;
             // The last global commit can complete while the alterer describes
             // the destination. Persist an alter restart if no writes remain.
-            barrier.Phase = Self->AssignedTxIds.empty()
-                ? ESchemaBarrierPhase::Altering : ESchemaBarrierPhase::FlushingTarget;
+            barrier.Phase = Self->GlobalWriteTxs.HasOpenWriteTxs()
+                ? ESchemaBarrierPhase::FlushingTarget : ESchemaBarrierPhase::Altering;
             barrier.TargetFlushTxIds.clear();
             barrier.NextTargetFlushTxId = 0;
             NKikimrReplicationController::TSchemaBarrierFlushTxIds flushTxIds;
-            for (const auto& [_, writeTxId] : Self->AssignedTxIds) {
-                barrier.TargetFlushTxIds.push_back(writeTxId);
-                flushTxIds.AddWriteTxIds(writeTxId);
+            for (const auto& openWriteTx : Self->GlobalWriteTxs.GetOpenWriteTxs()) {
+                barrier.TargetFlushTxIds.push_back(openWriteTx.WriteTxId);
+                flushTxIds.AddWriteTxIds(openWriteTx.WriteTxId);
             }
             db.Table<Schema::Targets>().Key(key.first, key.second).Update(
                 NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(static_cast<ui8>(barrier.Phase)),
                 NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(flushTxIds.SerializeAsString())
             );
-            StartTargetFlush = !Self->AssignedTxIds.empty();
+            StartTargetFlush = Self->GlobalWriteTxs.HasOpenWriteTxs();
             RestartAlter = !StartTargetFlush;
             return true;
         }

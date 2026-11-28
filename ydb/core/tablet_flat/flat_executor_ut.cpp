@@ -5,6 +5,7 @@
 #include "util_fmt_abort.h"
 #include "shared_cache_counters.h"
 #include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
@@ -7238,6 +7239,60 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         int failedAttempts = 0;
         DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+    }
+
+    Y_UNIT_TEST(TestSticky_BTreeIndexV2WithoutInMemoryCapacity) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        SetupEnvironment(env, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // Drop the compacted pages so the sticky walk has to read each level from storage.
+        SetSharedCacheSize(env, 0);
+        auto policy = MakeIntrusive<TCompactionPolicy>();
+        policy->MinBTreeIndexNodeSize = 128;
+        policy->MinBTreeIndexNodeKeys = 2;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+        env.SendSync(rows.MakeRows(200, 950, 200));
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        WakeupSharedCache(env);
+
+        auto config = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        config->Record.MutableConfig()->MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(0.0);
+        TWaitForFirstEvent<NConsole::TEvConsole::TEvConfigNotificationRequest> configUpdate(*env);
+        env->Send(MakeSharedPageCacheId(), TActorId{}, config.Release());
+        configUpdate.Wait();
+        SetSharedCacheSize(env, 8_MB);
+
+        // A cold root must be handed to its owner before the walk can discover child locations.
+        TWaitForFirstEvent<NSharedCache::TEvStickyCollectionPages> firstHandoff(*env, [](const auto& ev) {
+            const auto& locations = ev->Get()->Locations;
+            UNIT_ASSERT_VALUES_EQUAL(locations.size(), 1);
+            UNIT_ASSERT(locations.front().Type == NTable::NPage::EPage::BTreeIndexV2);
+            return true;
+        });
+        THashSet<NTable::NPage::TPageOffset> indexPages;
+        bool hasDataPage = false;
+        TWaitForFirstEvent<NSharedCache::TEvResult> stickyPages(*env, [&](const auto& ev) {
+            if (ev->Cookie != ui64(NSharedCache::ERequestTypeCookie::StickyPages)) {
+                return false;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
+            for (const auto& page : ev->Get()->Pages) {
+                if (page.Page.GetType() == NTable::NPage::EPage::BTreeIndexV2) {
+                    indexPages.insert(page.Offset);
+                } else if (page.Page.GetType() == NTable::NPage::EPage::DataPage) {
+                    hasDataPage = true;
+                }
+            }
+            return indexPages.size() > 1 && hasDataPage;
+        });
+
+        env.SendSync(new NFake::TEvExecute{ new TTxMakeFamilyStickyInMemory(0) });
+        firstHandoff.Wait(TDuration::Seconds(5));
+        stickyPages.Wait(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(GetSharedPageCounters(env)->ActiveInMemoryBytes->Val(), 0);
     }
 
     Y_UNIT_TEST(TestSticky_BTreeIndexV2WarmCache) {

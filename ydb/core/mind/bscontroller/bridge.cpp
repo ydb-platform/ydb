@@ -1372,8 +1372,6 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             continue;
         }
 
-        // a finished syncer not assigned to this node is a repeated report, e.g. after the node re-registers
-        const bool assigned = syncerState.NodeIds.contains(nodeId);
         if (const auto it = syncerState.NodeIds.find(nodeId); it != syncerState.NodeIds.end() &&
                 ((it->second.Mode != ESyncerMode::Sync) != syncer.GetReconcile() ||
                     (syncer.HasAssignmentId() && syncer.GetAssignmentId() != it->second.AssignmentId))) {
@@ -1382,7 +1380,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
         }
 
         // see if we can drop this syncer in favor of already running one
-        if (!assigned) {
+        if (!syncerState.NodeIds.contains(nodeId)) {
             bool dropNewSyncer = false;
             for (auto it = syncerState.NodeIds.begin(); it != syncerState.NodeIds.end(); ) {
                 auto& [existingNodeId, item] = *it;
@@ -1554,7 +1552,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
                 Y_DEBUG_ABORT_UNLESS(pile);
                 if (pile) {
                     stage = pile->GetStage();
-                    if (const auto *bridgePile = BridgeInfo ? BridgeInfo->FindPile(pileId) : nullptr; bridgePile && assigned) {
+                    if (const auto *bridgePile = BridgeInfo ? BridgeInfo->FindPile(pileId) : nullptr) {
                         BridgeSyncCounters->IncErrors({bridgePile->Name, pool});
                     }
                 }

@@ -29,4 +29,7 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+# Keep one chunk per current test without creating empty chunks.
+SPLIT_FACTOR(6)
+
 END()

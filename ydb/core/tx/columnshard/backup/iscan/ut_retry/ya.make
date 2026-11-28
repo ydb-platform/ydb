@@ -18,4 +18,7 @@ SRCS(
     s3_retry_ut.cpp
 )
 
+# Keep one chunk per current test without creating empty chunks.
+SPLIT_FACTOR(4)
+
 END()

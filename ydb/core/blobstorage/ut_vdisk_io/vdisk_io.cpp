@@ -61,8 +61,10 @@ Y_UNIT_TEST_SUITE(VDiskIOTest) {
             ui64 chunkWrite = 0;
 
             TTestActorRuntimeBase* r = env->GetRuntime();
+            const TActorId pdiskActorId = r->GetLocalServiceId(env->GetPDiskServiceId());
             auto holder = r->AddObserver([&](auto&& ev) {
-                if (ev->Recipient == env->GetPDiskServiceId()) {
+                const TActorId recipient = ev->GetRecipientRewrite();
+                if (recipient == env->GetPDiskServiceId() || recipient == pdiskActorId) {
                     if (ev->Type == NPDisk::TEvLog::EventType) {
                         ++logWrite;
                     } else if (ev->Type == NPDisk::TEvChunkWrite::EventType) {

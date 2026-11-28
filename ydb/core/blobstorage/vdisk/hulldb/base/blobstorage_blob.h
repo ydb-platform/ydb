@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_matrix.h>
 #include <ydb/core/base/blobstorage_grouptype.h>
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr {
 
@@ -71,6 +72,13 @@ namespace NKikimr {
 
     public:
         static const size_t MaxHeaderSize = sizeof(ui64);
+
+        // A blob of at most this size is created as a single chunk: copying the data is cheaper than making a rope of
+        // the header and the parts.
+        static constexpr size_t MaxContiguousBlobSize = 512;
+
+        // The same limit for the data that is copied anyway.
+        static constexpr size_t MaxContiguousCopiedBlobSize = 16 << 10;
 
         TDiskBlob() = default;
 
@@ -266,15 +274,21 @@ namespace NKikimr {
             Y_ABORT_UNLESS(parts.CountBits() == std::distance(first, last));
             Y_ABORT_UNLESS(first != last);
 
+            size_t partsSize = 0;
+            for (TPartIt it = first; it != last; ++it) {
+                partsSize += it->GetSize();
+            }
+            if (partsSize && partsSize + GetBlobHeaderSize(blobHeaderMode) <= MaxContiguousBlobSize) {
+                return CreateContiguous(first, last, partsSize, parts, fullDataSize, arena, blobHeaderMode, checksum);
+            }
+
             TRope rope;
 
             switch (blobHeaderMode) {
                 case EBlobHeaderMode::OLD_HEADER: {
                     // fill in header
                     char header[HeaderSize];
-                    Y_ABORT_UNLESS(fullDataSize <= Max<ui32>());
-                    *reinterpret_cast<ui32*>(header) = fullDataSize;
-                    *reinterpret_cast<ui8*>(header + sizeof(ui32)) = parts.Raw8();
+                    FillInHeader(header, parts, fullDataSize);
                     rope.Insert(rope.End(), arena.CreateRope(header, HeaderSize));
                     break;
                 }
@@ -311,6 +325,15 @@ namespace NKikimr {
             return CreateFromDistinctParts(&data, &data + 1, parts, fullDataSize, arena, blobHeaderMode, checksum);
         }
 
+        // creates the blob as a single chunk regardless of its size; the size has to be much less than a chunk of the arena
+        static inline TRope CreateContiguous(ui64 fullDataSize, ui8 partId, ui8 total, TRope&& data, TRopeArena& arena,
+                EBlobHeaderMode blobHeaderMode, std::optional<ui64> checksum) {
+            Y_ABORT_UNLESS(partId > 0 && partId <= total && total <= TErasureType::MaxTotalParts);
+            const size_t partsSize = data.GetSize();
+            return CreateContiguous(&data, &data + 1, partsSize, NMatrix::TVectorType::MakeOneHot(partId - 1, total),
+                fullDataSize, arena, blobHeaderMode, checksum);
+        }
+
         // static function for calculating size of a blob being created ('Create' function creates blob of this size)
         static inline ui32 CalculateBlobSize(TBlobStorageGroupType gtype, const TLogoBlobID& fullId, NMatrix::TVectorType parts,
                 EBlobHeaderMode blobHeaderMode) {
@@ -326,6 +349,38 @@ namespace NKikimr {
 
     private:
         friend class TDiskBlobMerger;
+
+        static void FillInHeader(char *header, NMatrix::TVectorType parts, ui64 fullDataSize) {
+            Y_ABORT_UNLESS(fullDataSize <= Max<ui32>());
+            WriteUnaligned<ui32>(header, fullDataSize);
+            WriteUnaligned<ui8>(header + sizeof(ui32), parts.Raw8());
+        }
+
+        template<typename TPartIt>
+        static TRope CreateContiguous(TPartIt first, TPartIt last, size_t partsSize, NMatrix::TVectorType parts,
+                ui64 fullDataSize, TRopeArena& arena, EBlobHeaderMode blobHeaderMode, std::optional<ui64> checksum) {
+            TRcBuf blob = arena.AllocateContiguous(partsSize + GetBlobHeaderSize(blobHeaderMode));
+            char *ptr = blob.UnsafeGetDataMut();
+
+            if (blobHeaderMode == EBlobHeaderMode::OLD_HEADER) {
+                FillInHeader(ptr, parts, fullDataSize);
+                ptr += HeaderSize;
+            }
+
+            for (; first != last; ++first) {
+                const TRope part = std::move(*first);
+                part.Begin().ExtractPlainDataAndAdvance(ptr, part.GetSize());
+                ptr += part.GetSize();
+            }
+
+            TRope rope(std::move(blob));
+
+            if (blobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER) {
+                WriteUnaligned<ui64>(ptr, checksum ? *checksum : CalculateChecksum(rope, partsSize));
+            }
+
+            return rope;
+        }
 
         // used by blob merger
         void MergePart(const TDiskBlob& source, TPartIterator iter) {

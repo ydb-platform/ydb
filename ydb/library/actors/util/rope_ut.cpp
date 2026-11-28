@@ -474,6 +474,52 @@ Y_UNIT_TEST_SUITE(TRope) {
         }
     }
 
+    Y_UNIT_TEST(Arena) {
+        constexpr size_t chunkSize = 1000;
+        size_t numChunks = 0;
+        TRopeArena arena([&] {
+            ++numChunks;
+            return TRopeAlignedBuffer::Allocate(chunkSize);
+        });
+
+        std::vector<std::pair<TRope, TString>> items;
+        for (size_t i = 0; i < 1000; ++i) {
+            const size_t len = 1 + RandomNumber<size_t>(99);
+            TString data = TString::Uninitialized(len);
+            memset(data.Detach(), 'a' + i % 26, len);
+            if (i % 2) {
+                items.emplace_back(arena.CreateRope(data.data(), len), data);
+            } else {
+                TRcBuf buffer = arena.AllocateContiguous(len);
+                UNIT_ASSERT_VALUES_EQUAL(buffer.size(), len);
+                memcpy(buffer.UnsafeGetDataMut(), data.data(), len);
+                items.emplace_back(TRope(std::move(buffer)), data);
+                UNIT_ASSERT(items.back().first.IsContiguous());
+            }
+        }
+        items.emplace_back(arena.CreateRope(Text.data(), Text.size()), Text); // may be bigger than a chunk
+        for (const auto& [rope, data] : items) {
+            UNIT_ASSERT_VALUES_EQUAL(rope.GetSize(), data.size());
+            UNIT_ASSERT_VALUES_EQUAL(rope.ConvertToString(), data);
+        }
+        UNIT_ASSERT(numChunks > 1);
+    }
+
+    Y_UNIT_TEST(IsSpaceWasted) {
+        TRcBuf big = TRcBuf::Uninitialized(10000);
+        memset(big.GetDataMut(), 'x', big.size());
+        const TRope slice(TRcBuf(TRcBuf::Piece, big.data() + 100, 1000, big));
+        const TRope whole(big);
+        UNIT_ASSERT(slice.IsSpaceWasted(128));
+        UNIT_ASSERT(!whole.IsSpaceWasted(128));
+        TRope mixed = slice;
+        mixed.Insert(mixed.End(), TRope(whole));
+        UNIT_ASSERT(!mixed.IsSpaceWasted(128));
+        TRope slices = slice;
+        slices.Insert(slices.End(), TRope(slice));
+        UNIT_ASSERT(slices.IsSpaceWasted(128));
+    }
+
     Y_UNIT_TEST(RopeZeroCopyInputBasic) {
         TRope rope = CreateRope(Text, 3);
         TRopeZeroCopyInput input(rope.Begin());

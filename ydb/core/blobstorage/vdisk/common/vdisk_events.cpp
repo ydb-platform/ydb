@@ -29,11 +29,39 @@ namespace NKikimr {
             const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
             const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes,
             ui64 incarnationGuid, const TString& errorReason)
+        : TEvVPutResult(status, logoBlobId, vdisk, cookie, oosStatus, now, recByteSize, record, skeletonFrontIDPtr,
+                counterPtr, histoPtr, bufferSizeBytes, incarnationGuid, errorReason, false)
+    {}
+
+    std::unique_ptr<TEvBlobStorage::TEvVPutResult> TEvBlobStorage::TEvVPutResult::CreateOkConsumingRequest(
+            const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const ui64 *cookie, TOutOfSpaceStatus oosStatus,
+            const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVPut &request,
+            const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
+            const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes, ui64 incarnationGuid) {
+        return std::unique_ptr<TEvVPutResult>(new TEvVPutResult(NKikimrProto::OK, logoBlobId, vdisk, cookie, oosStatus,
+                now, recByteSize, &request, skeletonFrontIDPtr, counterPtr, histoPtr, bufferSizeBytes, incarnationGuid,
+                TString(), true));
+    }
+
+    TEvBlobStorage::TEvVPutResult::TEvVPutResult(const NKikimrProto::EReplyStatus status,
+            const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const ui64 *cookie, TOutOfSpaceStatus oosStatus,
+            const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVPut *record,
+            const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
+            const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes,
+            ui64 incarnationGuid, const TString& errorReason, bool consumeRequest)
         : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG,
-                recByteSize, record, skeletonFrontIDPtr)
+                recByteSize, record, skeletonFrontIDPtr, consumeRequest)
     {
         IncrementSize(bufferSizeBytes);
         Record.SetStatus(status);
+        if (consumeRequest) {
+            if (record->HasBlobID()) {
+                Record.set_allocated_blobid(record->release_blobid());
+            }
+            if (record->HasVDiskID()) {
+                Record.set_allocated_vdiskid(record->release_vdiskid());
+            }
+        }
         LogoBlobIDFromLogoBlobID(logoBlobId, Record.MutableBlobID());
         VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
         if (cookie) {
@@ -42,7 +70,11 @@ namespace NKikimr {
         Record.SetStatusFlags(oosStatus.Flags);
         Record.SetApproximateFreeSpaceShare(oosStatus.ApproximateFreeSpaceShare);
         if (record && record->HasTimestamps()) {
-            Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
+            if (consumeRequest) {
+                Record.set_allocated_timestamps(record->release_timestamps());
+            } else {
+                Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
+            }
         }
         if (status == NKikimrProto::OK) {
             Record.SetIncarnationGuid(incarnationGuid);

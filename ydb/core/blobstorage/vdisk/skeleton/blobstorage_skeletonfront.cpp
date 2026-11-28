@@ -1434,8 +1434,10 @@ namespace NKikimr {
 
             TExtQueueClass &extQueue = GetExtQueue(extQueueId);
             NBackpressure::TQueueClientId clientId(msgQoS);
-            std::unique_ptr<IEventHandle> event = extQueue.Enqueue(ctx, std::unique_ptr<IEventHandle>(
-                ev->Forward(SkeletonId).Release()), msgId, cost, *this, clientId);
+            // the same handle goes on to Skeleton
+            ev->Rewrite(ev->Type, SkeletonId);
+            std::unique_ptr<IEventHandle> event = extQueue.Enqueue(ctx, std::unique_ptr<IEventHandle>(ev.Release()),
+                msgId, cost, *this, clientId);
             if (event) {
                 std::shared_ptr<TVDiskSkeletonTrace> trace;
 #if VDISK_SKELETON_TRACE

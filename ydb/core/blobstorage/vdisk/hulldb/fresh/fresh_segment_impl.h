@@ -201,11 +201,23 @@ namespace NKikimr {
             const TKeyLogoBlob &key, ui8 partId, const TIngress &ingress, TRope buffer,
             std::optional<ui64> checksum) {
         TMemRecLogoBlob memRec(ingress);
-        buffer = TRope::CopySpaceOptimized(std::move(buffer), 128, *Arena);
+        const EBlobHeaderMode blobHeaderMode = HullCtx->VCfg->BlobHeaderMode;
         const ui64 fullDataSize = key.LogoBlobID().BlobSize();
+        const ui8 totalPartCount = HullCtx->VCtx->Top->GType.TotalPartCount();
         const size_t delta = buffer.size();
-        TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(),
-            std::move(buffer), *Arena, HullCtx->VCfg->BlobHeaderMode, checksum);
+        const size_t newBlobSize = delta + TDiskBlob::GetBlobHeaderSize(blobHeaderMode);
+        constexpr size_t worstRatioPer1k = 128;
+        TRope blob;
+        if (newBlobSize <= TDiskBlob::MaxContiguousBlobSize ||
+                (newBlobSize <= TDiskBlob::MaxContiguousCopiedBlobSize && buffer.IsSpaceWasted(worstRatioPer1k))) {
+            // the data is copied together with the header
+            blob = TDiskBlob::CreateContiguous(fullDataSize, partId, totalPartCount, std::move(buffer), *Arena,
+                blobHeaderMode, checksum);
+        } else {
+            buffer = TRope::CopySpaceOptimized(std::move(buffer), worstRatioPer1k, *Arena);
+            blob = TDiskBlob::Create(fullDataSize, partId, totalPartCount, std::move(buffer), *Arena, blobHeaderMode,
+                checksum);
+        }
         FreshDataMemConsumer.Add(delta);
         const ui32 blobSize = blob.GetSize();
 

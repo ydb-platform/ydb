@@ -557,11 +557,16 @@ public:
     void InitiateReadSysLog(const TActorId &pDiskActor); // Called by actor
     void ProcessReadLogResult(const TEvReadLogResult &evReadLogResult, const TActorId &pDiskActor);
 
-    NKikimrProto::EReplyStatus ValidateRequest(TLogWrite *logWrite, TStringStream& outErrorReason);
+    NKikimrProto::EReplyStatus ValidateRequest(const TLogWrite *logWrite) const;
+    // Describe why ValidateRequest has refused the request
+    void PrintValidationError(const TLogWrite *logWrite, IOutputStream& outErrorReason) const;
     void PrepareLogError(TLogWrite *logWrite, TStringStream& errorReason, NKikimrProto::EReplyStatus status);
     template<typename T>
     bool PreprocessRequestImpl(T *req); // const;
-    NKikimrProto::EReplyStatus CheckOwnerAndRound(TRequestBase* req, TStringStream& err);
+    NKikimrProto::EReplyStatus CheckOwnerAndRound(const TRequestBase* req) const;
+    // Describe why CheckOwnerAndRound has refused the request
+    void PrintOwnerAndRoundError(const TRequestBase* req, IOutputStream& err) const;
+    NKikimrProto::EReplyStatus CheckOwnerAndRound(const TRequestBase* req, IOutputStream& err) const;
     bool PreprocessRequest(TRequestBase *request);
     void PushRequestToScheduler(TRequestBase *request);
     void AddJobToScheduler(TRequestBase *request, NSchLab::EJobKind jobKind);

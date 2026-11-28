@@ -193,7 +193,8 @@ namespace NKikimr {
             void Handle(TEvSyncLogPut::TPtr &ev, const TActorContext &ctx) {
                 ++SlCtx->IFaceMonGroup.SyncPutMsgs();
                 YDB_LOG_DEBUG_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogPut): recs# %s", ev->Get()->GetRecs().ToString().data()));
-                ctx.Send(ev->Forward(KeeperId));
+                ev->Rewrite(ev->Type, KeeperId);
+                ctx.Send(ev.Release());
             }
 
             void Handle(TEvSyncLogPutSst::TPtr& ev, const TActorContext& ctx) {

@@ -152,6 +152,13 @@ bool PumpUntil(TTestActorRuntime& runtime, TPredicate&& predicate, ui32 iteratio
     return ok;
 }
 
+// Whether the event goes to the actor now: an event an actor passes on keeps its original Recipient, and the runtime
+// replaces a service id with the actor registered under it.
+bool IsSentTo(TTestActorRuntime& runtime, const TAutoPtr<IEventHandle>& ev, const TActorId& actorId) {
+    const TActorId recipient = ev->GetRecipientRewrite();
+    return recipient == actorId || recipient == runtime.GetLocalServiceId(actorId, NodeIndex);
+}
+
 bool WaitVDiskReady(TTestActorRuntime& runtime, const TActorId& vdiskActorId, const TVDiskID& vdiskId,
         const TActorId& edge) {
     return PumpUntil(runtime, [&] {
@@ -827,20 +834,20 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvSyncLogPut:
                     if (!syncLogId) {
-                        syncLogId = ev->Recipient;
-                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
-                        syncLogKeeperId = ev->Recipient;
+                        syncLogId = ev->GetRecipientRewrite();
+                    } else if (!syncLogKeeperId && ev->GetRecipientRewrite() != syncLogId) {
+                        syncLogKeeperId = ev->GetRecipientRewrite();
                     }
                     break;
 
                 case TEvBlobStorage::EvLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         observePDiskLog(*ev->Get<NPDisk::TEvLog>());
                     }
                     break;
 
                 case TEvBlobStorage::EvMultiLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
                             observePDiskLog(*item.Event);
                         }
@@ -856,7 +863,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 }
 
                 case TEvBlobStorage::EvSyncLogCommitDone:
-                    if (ev->Recipient == syncLogKeeperId) {
+                    if (ev->GetRecipientRewrite() == syncLogKeeperId) {
                         ++syncLogCommitDoneEvents;
                     }
                     break;
@@ -1127,20 +1134,20 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvSyncLogPut:
                     if (!syncLogId) {
-                        syncLogId = ev->Recipient;
-                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
-                        syncLogKeeperId = ev->Recipient;
+                        syncLogId = ev->GetRecipientRewrite();
+                    } else if (!syncLogKeeperId && ev->GetRecipientRewrite() != syncLogId) {
+                        syncLogKeeperId = ev->GetRecipientRewrite();
                     }
                     break;
 
                 case TEvBlobStorage::EvLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         observePDiskLog(*ev->Get<NPDisk::TEvLog>());
                     }
                     break;
 
                 case TEvBlobStorage::EvMultiLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
                             observePDiskLog(*item.Event);
                         }
@@ -1156,7 +1163,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 }
 
                 case TEvBlobStorage::EvSyncLogCommitDone:
-                    if (ev->Recipient == syncLogKeeperId) {
+                    if (ev->GetRecipientRewrite() == syncLogKeeperId) {
                         ++syncLogCommitDoneEvents;
                         const auto *msg = ev->Get<NSyncLog::TEvSyncLogCommitDone>();
                         for (const auto& append : msg->Delta.AllAppends) {
@@ -1522,11 +1529,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvSyncLogPut:
                     if (!syncLogId) {
-                        syncLogId = ev->Recipient;
-                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
-                        syncLogKeeperId = ev->Recipient;
+                        syncLogId = ev->GetRecipientRewrite();
+                    } else if (!syncLogKeeperId && ev->GetRecipientRewrite() != syncLogId) {
+                        syncLogKeeperId = ev->GetRecipientRewrite();
                     }
-                    if (holdNextPut && ev->Recipient == syncLogId) {
+                    if (holdNextPut && ev->GetRecipientRewrite() == syncLogId) {
                         const auto& recs = ev->Get<NSyncLog::TEvSyncLogPut>()->GetRecs();
                         heldLsn = reinterpret_cast<const NSyncLog::TRecordHdr*>(recs.GetData())->Lsn;
                         holdNextPut = false;
@@ -1535,13 +1542,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     break;
 
                 case TEvBlobStorage::EvLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         observePDiskLog(*ev->Get<NPDisk::TEvLog>());
                     }
                     break;
 
                 case TEvBlobStorage::EvMultiLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
                             observePDiskLog(*item.Event);
                         }
@@ -1549,7 +1556,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     break;
 
                 case TEvBlobStorage::EvSyncLogCommitDone:
-                    if (ev->Recipient == syncLogKeeperId) {
+                    if (ev->GetRecipientRewrite() == syncLogKeeperId) {
                         if (holdCommitDone) {
                             holdCommitDone = false;
                             holdKeeper = true;
@@ -1562,14 +1569,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
                 case TEvBlobStorage::EvChunkWrite:
                     // the committer writes SyncLog pages before its entry point
-                    if (ev->Recipient == storage.PDiskServiceId
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)
                             && ev->Get<NPDisk::TEvChunkWrite>()->PriorityClass == NPriWrite::SyncLog) {
                         keeperCommitStarted = true;
                     }
                     break;
 
                 case TEvBlobStorage::EvCutLog:
-                    if (syncLogKeeperId && ev->Recipient == syncLogKeeperId) {
+                    if (syncLogKeeperId && ev->GetRecipientRewrite() == syncLogKeeperId) {
                         keeperCutFreeUpToLsn = Max(keeperCutFreeUpToLsn, ev->Get<NPDisk::TEvCutLog>()->FreeUpToLsn);
                     }
                     break;
@@ -1582,15 +1589,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     break;
                 }
             }
-            if (holdPDisk && ev->Recipient == storage.PDiskServiceId) {
+            if (holdPDisk && IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                 heldForPDisk.push_back(ev);
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (holdKeeper && ev->Recipient == syncLogKeeperId) {
+            if (holdKeeper && ev->GetRecipientRewrite() == syncLogKeeperId) {
                 heldForKeeper.push_back(ev);
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (holdSyncLog && ev->Recipient == syncLogId) {
+            if (holdSyncLog && ev->GetRecipientRewrite() == syncLogId) {
                 heldForSyncLog.push_back(ev);
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -1748,11 +1755,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvSyncLogPut:
                     if (!syncLogId) {
-                        syncLogId = ev->Recipient;
-                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
-                        syncLogKeeperId = ev->Recipient;
+                        syncLogId = ev->GetRecipientRewrite();
+                    } else if (!syncLogKeeperId && ev->GetRecipientRewrite() != syncLogId) {
+                        syncLogKeeperId = ev->GetRecipientRewrite();
                     }
-                    if (holdNextPut && ev->Recipient == syncLogId) {
+                    if (holdNextPut && ev->GetRecipientRewrite() == syncLogId) {
                         const auto& recs = ev->Get<NSyncLog::TEvSyncLogPut>()->GetRecs();
                         heldLsn = reinterpret_cast<const NSyncLog::TRecordHdr*>(recs.GetData())->Lsn;
                         holdNextPut = false;
@@ -1761,13 +1768,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     break;
 
                 case TEvBlobStorage::EvLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         observePDiskLog(*ev->Get<NPDisk::TEvLog>());
                     }
                     break;
 
                 case TEvBlobStorage::EvMultiLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
                             observePDiskLog(*item.Event);
                         }
@@ -1775,7 +1782,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     break;
 
                 case TEvBlobStorage::EvSyncLogCommitDone:
-                    if (ev->Recipient == syncLogKeeperId) {
+                    if (ev->GetRecipientRewrite() == syncLogKeeperId) {
                         if (holdCommitDone) {
                             holdCommitDone = false;
                             holdKeeper = true;
@@ -1788,7 +1795,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
                 case TEvBlobStorage::EvChunkWrite:
                     // the committer writes SyncLog pages before its entry point
-                    if (ev->Recipient == storage.PDiskServiceId
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)
                             && ev->Get<NPDisk::TEvChunkWrite>()->PriorityClass == NPriWrite::SyncLog) {
                         keeperCommitStarted = true;
                     }
@@ -1799,7 +1806,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     break;
 
                 case TEvBlobStorage::EvCutLog:
-                    if (syncLogKeeperId && ev->Recipient == syncLogKeeperId) {
+                    if (syncLogKeeperId && ev->GetRecipientRewrite() == syncLogKeeperId) {
                         keeperCutFreeUpToLsn = Max(keeperCutFreeUpToLsn, ev->Get<NPDisk::TEvCutLog>()->FreeUpToLsn);
                     }
                     break;
@@ -1812,15 +1819,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     break;
                 }
             }
-            if (holdPDisk && ev->Recipient == storage.PDiskServiceId) {
+            if (holdPDisk && IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                 heldForPDisk.push_back(ev);
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (holdKeeper && ev->Recipient == syncLogKeeperId) {
+            if (holdKeeper && ev->GetRecipientRewrite() == syncLogKeeperId) {
                 heldForKeeper.push_back(ev);
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (holdSyncLog && ev->Recipient == syncLogId) {
+            if (holdSyncLog && ev->GetRecipientRewrite() == syncLogId) {
                 heldForSyncLog.push_back(ev);
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -2042,20 +2049,20 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvSyncLogPut:
                     if (!syncLogId) {
-                        syncLogId = ev->Recipient;
-                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
-                        syncLogKeeperId = ev->Recipient;
+                        syncLogId = ev->GetRecipientRewrite();
+                    } else if (!syncLogKeeperId && ev->GetRecipientRewrite() != syncLogId) {
+                        syncLogKeeperId = ev->GetRecipientRewrite();
                     }
                     break;
 
                 case TEvBlobStorage::EvLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         observePDiskLog(*ev->Get<NPDisk::TEvLog>());
                     }
                     break;
 
                 case TEvBlobStorage::EvMultiLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
                             observePDiskLog(*item.Event);
                         }
@@ -2071,13 +2078,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 }
 
                 case TEvBlobStorage::EvSyncLogCommitDone:
-                    if (ev->Recipient == syncLogKeeperId) {
+                    if (ev->GetRecipientRewrite() == syncLogKeeperId) {
                         ++syncLogCommitDoneEvents;
                     }
                     break;
 
                 case TEvBlobStorage::EvPhantomFlagStorageFinishBuilder:
-                    if (ev->Recipient == syncLogKeeperId) {
+                    if (ev->GetRecipientRewrite() == syncLogKeeperId) {
                         phantomFlagBuilderFinished = true;
                     }
                     break;
@@ -2391,20 +2398,20 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvSyncLogPut:
                     if (!syncLogId) {
-                        syncLogId = ev->Recipient;
-                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
-                        syncLogKeeperId = ev->Recipient;
+                        syncLogId = ev->GetRecipientRewrite();
+                    } else if (!syncLogKeeperId && ev->GetRecipientRewrite() != syncLogId) {
+                        syncLogKeeperId = ev->GetRecipientRewrite();
                     }
                     break;
 
                 case TEvBlobStorage::EvLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         observePDiskLog(*ev->Get<NPDisk::TEvLog>());
                     }
                     break;
 
                 case TEvBlobStorage::EvMultiLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
                             observePDiskLog(*item.Event);
                         }
@@ -2694,21 +2701,21 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 case TEvBlobStorage::EvSyncLogPut:
                     if (gotOwner) {
                         if (!syncLogId) {
-                            syncLogId = ev->Recipient;
-                        } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
-                            syncLogKeeperId = ev->Recipient;
+                            syncLogId = ev->GetRecipientRewrite();
+                        } else if (!syncLogKeeperId && ev->GetRecipientRewrite() != syncLogId) {
+                            syncLogKeeperId = ev->GetRecipientRewrite();
                         }
                     }
                     break;
 
                 case TEvBlobStorage::EvLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         observePDiskLog(*ev->Get<NPDisk::TEvLog>());
                     }
                     break;
 
                 case TEvBlobStorage::EvMultiLog:
-                    if (ev->Recipient == storage.PDiskServiceId) {
+                    if (IsSentTo(runtime, ev, storage.PDiskServiceId)) {
                         for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
                             observePDiskLog(*item.Event);
                         }
@@ -2728,7 +2735,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 }
 
                 case TEvBlobStorage::EvSyncLogCommitDone:
-                    if (ev->Recipient == syncLogKeeperId) {
+                    if (ev->GetRecipientRewrite() == syncLogKeeperId) {
                         ++syncLogCommitDoneEvents;
                     }
                     break;
@@ -2775,7 +2782,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 reorderRaceFreeChunks = false;
             }
 
-            if (ev->Recipient != storage.PDiskServiceId || ev->GetTypeRewrite() != TEvBlobStorage::EvLog) {
+            if (!IsSentTo(runtime, ev, storage.PDiskServiceId) || ev->GetTypeRewrite() != TEvBlobStorage::EvLog) {
                 return false;
             }
 

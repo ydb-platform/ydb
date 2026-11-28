@@ -35,6 +35,7 @@ struct THugeAdmissionEnv {
     TActorId Skeleton;
     TActorId HugeKeeper;
     ui32 NextStep = 1;
+    std::unordered_map<TActorId, TLogoBlobID> SentPuts; // by the edge actor waiting for the result
     ui32 HugeWrites = 0;
     ui32 FreshReserves = 0;
     std::vector<TColor::E> HugeReserveBounds;
@@ -58,9 +59,10 @@ struct THugeAdmissionEnv {
                 case TEvBlobStorage::EvCutLog:
                     return false;
                 case TEvBlobStorage::EvVPut:
-                    // the skeleton front forwards the put to the skeleton, which reserves Fresh chunks
-                    if (ev->Recipient != Info->GetActorId(0)) {
-                        Skeleton = ev->Recipient;
+                    // the skeleton front passes the put on to the skeleton, which reserves Fresh chunks
+                    if (IActor *actor = Env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                            TypeName(*actor).EndsWith("::TSkeleton")) {
+                        Skeleton = ev->GetRecipientRewrite();
                     }
                     break;
                 case TEvBlobStorage::EvHullWriteHugeBlob: {
@@ -128,6 +130,7 @@ struct THugeAdmissionEnv {
         const TActorId edge = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         const TString data(size, fill);
         const TLogoBlobID id(1000, 1, NextStep++, 0, data.size(), 0, 1);
+        SentPuts.emplace(edge, id);
         Env.Runtime->Send(new IEventHandle(Queue, edge, new TEvBlobStorage::TEvVPut(id, TRope(data),
             Info->GetVDiskId(0), unavoidable, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog,
             false, TWriteSource::Unknown, kind)), 1);
@@ -138,7 +141,12 @@ struct THugeAdmissionEnv {
         auto result = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge, true,
             Env.Runtime->GetClock() + TDuration::Minutes(1));
         UNIT_ASSERT_C(result, "huge put did not finish");
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), status);
+        const NKikimrBlobStorage::TEvVPutResult& record = result->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), status);
+        // the result is created before the data is written, whatever status it gets in the end
+        UNIT_ASSERT_VALUES_EQUAL(LogoBlobIDFromLogoBlobID(record.GetBlobID()), SentPuts.at(edge));
+        UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(record.GetVDiskID()), Info->GetVDiskId(0));
+        UNIT_ASSERT(record.HasMsgQoS());
         return result->Get()->WrittenLocation;
     }
 
@@ -306,6 +314,7 @@ Y_UNIT_TEST_SUITE(VDiskHugeSpaceAdmission) {
                 env.Info->GetVDiskId(0), true, nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob,
                 false, TWriteSource::DefragRewrite);
             rewrite->RewriteBlob = true;
+            env.SentPuts.emplace(edge, id);
             env.Env.Runtime->Send(new IEventHandle(env.Skeleton, edge, rewrite.release()), 1);
             const TDiskPart rewritten = env.ExpectPut(edge, NKikimrProto::OK);
             UNIT_ASSERT(rewritten.ChunkIdx);

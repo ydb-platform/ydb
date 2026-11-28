@@ -392,9 +392,9 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvSyncLogPut:
                     if (!syncLogId) {
-                        syncLogId = ev->Recipient;
-                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
-                        syncLogKeeperId = ev->Recipient;
+                        syncLogId = ev->GetRecipientRewrite();
+                    } else if (!syncLogKeeperId && ev->GetRecipientRewrite() != syncLogId) {
+                        syncLogKeeperId = ev->GetRecipientRewrite();
                     }
                     break;
 

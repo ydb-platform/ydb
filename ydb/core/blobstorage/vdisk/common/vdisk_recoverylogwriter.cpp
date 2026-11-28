@@ -126,7 +126,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             *LsmLogBytesWritten += msgSize;
             // update generic counters
             Counters.Update(signature, msgSize);
-            std::unique_ptr<IEventHandle> converted(ev->Forward(YardID).Release());
+            ev->Rewrite(ev->Type, YardID);
+            std::unique_ptr<IEventHandle> converted(ev.Release());
 
             if (lsnSegmentStart == CurSentLsn + 1) {
                 // rewrite and send message;
@@ -160,7 +161,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 Counters.Update(signature, msgSize);
                 LWTRACK(VDiskRecoveryLogWriterVPutIsSent, log->Orbit, Owner, lsn);
             }
-            std::unique_ptr<IEventHandle> converted(ev->Forward(YardID).Release());
+            ev->Rewrite(ev->Type, YardID);
+            std::unique_ptr<IEventHandle> converted(ev.Release());
 
             if (lsnSegmentStart == CurSentLsn + 1) {
                 // rewrite and send message;

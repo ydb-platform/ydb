@@ -841,8 +841,11 @@ Y_UNIT_TEST_SUITE(Donor) {
             const auto& slotId = donor.GetVSlotId();
             const auto& donorActorId = MakeBlobStorageVDiskID(slotId.GetNodeId(), slotId.GetPDiskId(), slotId.GetVSlotId());
 
+            // skeleton front passes the same event on to the skeleton, count it once
+            IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite());
             if (blobId == vdiskLogoBlobId &&
                     ev->Recipient == donorActorId &&
+                    (!actor || !TypeName(*actor).EndsWith("::TSkeleton")) &&
                     msg->Record.GetHandleClass() == handleClass) {
                 UNIT_ASSERT(!requestExist);
                 requestExist = true;

@@ -3866,10 +3866,8 @@ bool TPDisk::Initialize() {
 //                                    FastOperation
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-NKikimrProto::EReplyStatus TPDisk::ValidateRequest(TLogWrite *logWrite, TStringStream& outErr) {
+NKikimrProto::EReplyStatus TPDisk::ValidateRequest(const TLogWrite *logWrite) const {
     if (logWrite->Signature.HasCommitRecord() && logWrite->CommitRecord.FirstLsnToKeep > logWrite->Lsn) {
-        outErr << " invalid commit record, CommitRecord.FirstLsnToKeep# " << logWrite->CommitRecord.FirstLsnToKeep
-            << " > Lsn# " << logWrite->Lsn << " Marker# BPD73";
         return NKikimrProto::ERROR;
     }
     if (logWrite->Result && logWrite->Result->Status != NKikimrProto::OK) {
@@ -3877,6 +3875,13 @@ NKikimrProto::EReplyStatus TPDisk::ValidateRequest(TLogWrite *logWrite, TStringS
     }
 
     return NKikimrProto::OK;
+}
+
+void TPDisk::PrintValidationError(const TLogWrite *logWrite, IOutputStream& outErr) const {
+    if (logWrite->Signature.HasCommitRecord() && logWrite->CommitRecord.FirstLsnToKeep > logWrite->Lsn) {
+        outErr << " invalid commit record, CommitRecord.FirstLsnToKeep# " << logWrite->CommitRecord.FirstLsnToKeep
+            << " > Lsn# " << logWrite->Lsn << " Marker# BPD73";
+    }
 }
 
 void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrProto::EReplyStatus status) {
@@ -3897,27 +3902,46 @@ void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrPro
     logWrite->Result->Results.push_back(NPDisk::TEvLogResult::TRecord(logWrite->Lsn, logWrite->Cookie));
 }
 
-NKikimrProto::EReplyStatus TPDisk::CheckOwnerAndRound(TRequestBase* req, TStringStream& err) {
+NKikimrProto::EReplyStatus TPDisk::CheckOwnerAndRound(const TRequestBase* req) const {
     const auto& ownerData = OwnerData[req->Owner];
 
     if (!IsOwnerUser(req->Owner)) {
         if (req->Owner == OwnerUnallocated && req->OwnerRound == 0) {
             return NKikimrProto::OK;
         }
-        err << "  ownerId# " << req->Owner << " < Begin# " << (ui32)OwnerBeginUser
-            << " or >= End# " << (ui32)OwnerEndUser << " Marker# BPD72";
         return NKikimrProto::ERROR;
     } else if (ownerData.VDiskId == TVDiskID::InvalidId) {
-        err << " request from unregistered ownerId# " << req->Owner;
         return NKikimrProto::INVALID_OWNER;
     } else if (ownerData.OwnerRound != req->OwnerRound) {
-        err << " ownerId# " << req->Owner
-            << " invalid OwnerRound, got# " << req->OwnerRound
-            << " expected# " << ownerData.OwnerRound;
         return NKikimrProto::INVALID_ROUND;
     }
 
     return NKikimrProto::OK;
+}
+
+void TPDisk::PrintOwnerAndRoundError(const TRequestBase* req, IOutputStream& err) const {
+    const TOwnerData& ownerData = OwnerData[req->Owner];
+
+    if (!IsOwnerUser(req->Owner)) {
+        if (req->Owner != OwnerUnallocated || req->OwnerRound != 0) {
+            err << "  ownerId# " << req->Owner << " < Begin# " << (ui32)OwnerBeginUser
+                << " or >= End# " << (ui32)OwnerEndUser << " Marker# BPD72";
+        }
+    } else if (ownerData.VDiskId == TVDiskID::InvalidId) {
+        err << " request from unregistered ownerId# " << req->Owner;
+    } else if (ownerData.OwnerRound != req->OwnerRound) {
+        err << " ownerId# " << req->Owner
+            << " invalid OwnerRound, got# " << req->OwnerRound
+            << " expected# " << ownerData.OwnerRound;
+    }
+}
+
+NKikimrProto::EReplyStatus TPDisk::CheckOwnerAndRound(const TRequestBase* req, IOutputStream& err) const {
+    const NKikimrProto::EReplyStatus status = CheckOwnerAndRound(req);
+    if (status != NKikimrProto::OK) {
+        PrintOwnerAndRoundError(req, err);
+    }
+    return status;
 }
 
 // Checks request validity, responds to and deletes non-valid requests
@@ -3925,11 +3949,22 @@ NKikimrProto::EReplyStatus TPDisk::CheckOwnerAndRound(TRequestBase* req, TString
 // Must be called under StateMutex
 // Returns is request valid and should be processed further
 bool TPDisk::PreprocessRequest(TRequestBase *request) {
-    TStringStream err;
-    err << PCtx->PDiskLogPrefix;
-
     // Advisory check, further code may ignore results
-    NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(request, err);
+    const NKikimrProto::EReplyStatus ownerStatus = CheckOwnerAndRound(request);
+    NKikimrProto::EReplyStatus errStatus = ownerStatus;
+
+    // Most requests are valid and never need the text, so the stream is created only when there is something to report
+    std::optional<TStringStream> errStream;
+    auto err = [&]() -> TStringStream& {
+        if (!errStream) {
+            errStream.emplace();
+            *errStream << PCtx->PDiskLogPrefix;
+            if (ownerStatus != NKikimrProto::OK) {
+                PrintOwnerAndRoundError(request, *errStream);
+            }
+        }
+        return *errStream;
+    };
 
     YDB_LOG_P_LOG(PRI_DEBUG, "PreprocessRequest",
         {"marker", "BPD01"},
@@ -3952,16 +3987,16 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             TLogRead &evLog = *static_cast<TLogRead*>(request);
             TOwnerData &ownerData = OwnerData[evLog.Owner];
             if (ownerData.HasReadTheWholeLog) {
-                err << "Can't read log for ownerId# " << evLog.Owner
+                err() << "Can't read log for ownerId# " << evLog.Owner
                     << " ownerRound# " << evLog.OwnerRound << ", owner has already read the log!";
                 errStatus = NKikimrProto::ERROR; // -> NOT OK
             }
 
             if (errStatus != NKikimrProto::OK) {
-                YDB_LOG_P_LOG(PRI_ERROR, err.Str(),
+                YDB_LOG_P_LOG(PRI_ERROR, err().Str(),
                     {"marker", "BPD01"});
                 auto result = MakeHolder<NPDisk::TEvReadLogResult>(errStatus, evLog.Position, evLog.Position, true,
-                        GetStatusFlags(evLog.Owner, evLog.OwnerGroupType), err.Str(), evLog.Owner);
+                        GetStatusFlags(evLog.Owner, evLog.OwnerGroupType), err().Str(), evLog.Owner);
                 PCtx->ActorSystem->Send(evLog.Sender, result.Release());
                 Mon.LogRead.CountResponse();
                 delete request;
@@ -3985,36 +4020,36 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             *Mon.QueueBytes -= read->Size;
 
             if (errStatus != NKikimrProto::OK) {
-                err << "ReqId# " << read->ReqId.Id;
-                SendChunkReadError(read, err, errStatus);
+                err() << "ReqId# " << read->ReqId.Id;
+                SendChunkReadError(read, err(), errStatus);
                 return false;
             }
             if (read->ChunkIdx >= ChunkState.size()) {
-                err << "chunkIdx is too large (total# " << ChunkState.size() << ")";
-                SendChunkReadError(read, err, NKikimrProto::ERROR);
+                err() << "chunkIdx is too large (total# " << ChunkState.size() << ")";
+                SendChunkReadError(read, err(), NKikimrProto::ERROR);
                 return false;
             }
             TChunkState &state = ChunkState[read->ChunkIdx];
             if (!IsOwnerUser(state.OwnerId)) {
-                err << "chunk owned by the system";
-                SendChunkReadError(read, err, NKikimrProto::ERROR);
+                err() << "chunk owned by the system";
+                SendChunkReadError(read, err(), NKikimrProto::ERROR);
                 return false;
             }
             if (state.OwnerId != read->Owner) {
-                err << "chunk's real ownerId# " << state.OwnerId;
-                SendChunkReadError(read, err, NKikimrProto::ERROR);
+                err() << "chunk's real ownerId# " << state.OwnerId;
+                SendChunkReadError(read, err(), NKikimrProto::ERROR);
                 return false;
             }
             if (!readableAndWritable(state)) {
-                err << "chunk has unexpected CommitState# " << state.CommitState;
-                SendChunkReadError(read, err, NKikimrProto::ERROR);
+                err() << "chunk has unexpected CommitState# " << state.CommitState;
+                SendChunkReadError(read, err(), NKikimrProto::ERROR);
                 return false;
             }
             ui64 offset = 0;
             if (!ParseSectorOffset(Format, PCtx->ActorSystem, PCtx->PDiskId, read->Offset, read->Size,
                         read->FirstSector, read->LastSector, offset, PCtx->PDiskLogPrefix)) {
-                err << "invalid size# " << read->Size << " and offset# " << read->Offset;
-                SendChunkReadError(read, err, NKikimrProto::ERROR);
+                err() << "invalid size# " << read->Size << " and offset# " << read->Offset;
+                SendChunkReadError(read, err(), NKikimrProto::ERROR);
                 return false;
             }
             TOwnerData &ownerData = OwnerData[request->Owner];
@@ -4061,36 +4096,36 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             const ui32 size = ev.PartsPtr ? ev.PartsPtr->ByteSize() : 0;
             *Mon.QueueBytes -= size;
             if (errStatus != NKikimrProto::OK) {
-                SendChunkWriteError(ev, err.Str(), errStatus);
+                SendChunkWriteError(ev, err().Str(), errStatus);
                 delete request;
                 return false;
             }
             if (!ev.PartsPtr) {
-                err << Sprintf("Can't write chunkIdx# %" PRIu32 " with null PartsPtr for ownerId# %"
+                err() << Sprintf("Can't write chunkIdx# %" PRIu32 " with null PartsPtr for ownerId# %"
                         PRIu32, (ui32)ev.ChunkIdx, (ui32)ev.Owner);
-                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                SendChunkWriteError(ev, err().Str(), NKikimrProto::ERROR);
                 delete request;
                 return false;
             }
             if (ev.Offset % Format.GetAppendBlockSize() != 0) {
-                err << Sprintf("Can't write chunkIdx# %" PRIu32 " with not aligned offset# %" PRIu32 " ownerId# %"
+                err() << Sprintf("Can't write chunkIdx# %" PRIu32 " with not aligned offset# %" PRIu32 " ownerId# %"
                         PRIu32, ev.ChunkIdx, ev.Offset, (ui32)ev.Owner);
-                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                SendChunkWriteError(ev, err().Str(), NKikimrProto::ERROR);
                 delete request;
                 return false;
             }
             if (ev.ChunkIdx > ChunkState.size()) {
-                err << Sprintf("Can't write chunk: chunkIdx# %" PRIu32
+                err() << Sprintf("Can't write chunk: chunkIdx# %" PRIu32
                         " is too large (total# %" PRIu32 ") ownerId# %" PRIu32,
                         (ui32)ev.ChunkIdx, (ui32)ChunkState.size(), (ui32)ev.Owner);
-                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                SendChunkWriteError(ev, err().Str(), NKikimrProto::ERROR);
                 delete request;
                 return false;
             }
             if (ev.ChunkIdx == 0 && ev.PreformattedSectors) {
-                err << "Can't write preformatted sectors to a chunk allocated by the write: its nonce is unknown"
+                err() << "Can't write preformatted sectors to a chunk allocated by the write: its nonce is unknown"
                     << " ownerId# " << (ui32)ev.Owner;
-                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                SendChunkWriteError(ev, err().Str(), NKikimrProto::ERROR);
                 delete request;
                 return false;
             }
@@ -4101,8 +4136,8 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 TVector<TChunkIdx> chunks = AllocateChunkForOwner(request, 1, allocError, false,
                     NKikimrBlobStorage::TPDiskSpaceColor::BLACK, nullptr, EAllocationPurpose::System);
                  if (chunks.empty()) {
-                     err << allocError;
-                     SendChunkWriteError(ev, err.Str(), NKikimrProto::OUT_OF_SPACE);
+                     err() << allocError;
+                     SendChunkWriteError(ev, err().Str(), NKikimrProto::OUT_OF_SPACE);
                      delete request;
                      return false;
                  } else {
@@ -4112,26 +4147,26 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             }
             TChunkState &state = ChunkState[ev.ChunkIdx];
             if (state.OwnerId != ev.Owner) {
-                err << "Can't write chunkIdx# " << ev.ChunkIdx
+                err() << "Can't write chunkIdx# " << ev.ChunkIdx
                     << " chunk is owner by another owner."
                     << " chunk's owner# " << state.OwnerId
                     << " request's owner# " << ev.Owner;
-                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                SendChunkWriteError(ev, err().Str(), NKikimrProto::ERROR);
                 delete request;
                 return false;
             }
             if (!IsOwnerUser(state.OwnerId)) {
-                err << "Can't write chunkIdx# " << ev.ChunkIdx
+                err() << "Can't write chunkIdx# " << ev.ChunkIdx
                     << " destination chunk is owned by the system! ownerId# " << ev.Owner;
-                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                SendChunkWriteError(ev, err().Str(), NKikimrProto::ERROR);
                 delete request;
                 return false;
             }
             if (!readableAndWritable(state)) {
-                err << "Can't write chunkIdx# " << ev.ChunkIdx
+                err() << "Can't write chunkIdx# " << ev.ChunkIdx
                     << " destination chunk has CommitState# " << state.CommitState
                     << " ownerId# " << ev.Owner;
-                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                SendChunkWriteError(ev, err().Str(), NKikimrProto::ERROR);
                 delete request;
                 return false;
             }
@@ -4160,10 +4195,10 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                     problem = "first sector nonce does not match the chunk";
                 }
                 if (problem) {
-                    err << "Can't write preformatted sectors to chunkIdx# " << ev.ChunkIdx
+                    err() << "Can't write preformatted sectors to chunkIdx# " << ev.ChunkIdx
                         << ": " << problem << " offset# " << ev.Offset << " size# " << part.second
                         << " firstSectorNonce# " << ev.FirstSectorNonce << " ownerId# " << (ui32)ev.Owner;
-                    SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                    SendChunkWriteError(ev, err().Str(), NKikimrProto::ERROR);
                     delete request;
                     return false;
                 }
@@ -4200,7 +4235,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             auto& ev = *static_cast<TChunkReadRaw*>(request);
 
             auto errorPrefix = [&] {
-                return std::ref(err
+                return std::ref(err()
                     << "Can't raw-read Owner# " << (int)ev.Owner
                     << " ChunkIdx# " << ev.ChunkIdx
                     << " Offset# " << ev.Offset
@@ -4240,7 +4275,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 return false;
             }
 
-            PCtx->ActorSystem->Send(ev.Sender, new TEvChunkReadRawResult(NKikimrProto::ERROR, err.Str()), ev.Cookie);
+            PCtx->ActorSystem->Send(ev.Sender, new TEvChunkReadRawResult(NKikimrProto::ERROR, err().Str()), ev.Cookie);
             delete request;
             return false;
         }
@@ -4248,7 +4283,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             auto& ev = *static_cast<TChunkWriteRaw*>(request);
 
             auto errorPrefix = [&] {
-                return std::ref(err
+                return std::ref(err()
                     << "Can't raw-write Owner# " << (int)ev.Owner
                     << " ChunkIdx# " << ev.ChunkIdx
                     << " Offset# " << ev.Offset
@@ -4298,7 +4333,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 return false;
             }
 
-            PCtx->ActorSystem->Send(ev.Sender, new TEvChunkWriteRawResult(NKikimrProto::ERROR, err.Str()), ev.Cookie);
+            PCtx->ActorSystem->Send(ev.Sender, new TEvChunkWriteRawResult(NKikimrProto::ERROR, err().Str()), ev.Cookie);
             delete request;
             return false;
         }
@@ -4320,11 +4355,14 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             });
 
             if (errStatus == NKikimrProto::OK) {
-                errStatus = ValidateRequest(log, err);
+                errStatus = ValidateRequest(log);
+                if (errStatus != NKikimrProto::OK) {
+                    PrintValidationError(log, err());
+                }
             }
             if (errStatus != NKikimrProto::OK) {
                 log->SetOwnerGroupType(true);
-                PrepareLogError(log, err, errStatus);
+                PrepareLogError(log, err(), errStatus);
                 break; // Reply even for invalid TLogWrite should be sent from completion thread, so allow request to pass further
             }
 
@@ -4347,10 +4385,10 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         {
             TCheckSpace &ev = *static_cast<TCheckSpace*>(request);
             if (errStatus != NKikimrProto::OK) {
-                YDB_LOG_P_LOG(PRI_ERROR, err.Str(),
+                YDB_LOG_P_LOG(PRI_ERROR, err().Str(),
                     {"marker", "BPD01"});
                 THolder<NPDisk::TEvCheckSpaceResult> result(new NPDisk::TEvCheckSpaceResult(errStatus,
-                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), 0, 0, 0, 0, 0u, 0, err.Str()));
+                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), 0, 0, 0, 0, 0u, 0, err().Str()));
                 PCtx->ActorSystem->Send(ev.Sender, result.Release());
                 Mon.CheckSpace.CountResponse();
                 delete request;
@@ -4364,7 +4402,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             THarakiri &ev = *static_cast<THarakiri*>(request);
             if (errStatus != NKikimrProto::OK) {
                 THolder<NPDisk::TEvHarakiriResult> result(new NPDisk::TEvHarakiriResult(errStatus,
-                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), err.Str()));
+                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), err().Str()));
                 PCtx->ActorSystem->Send(ev.Sender, result.Release());
                 Mon.Harakiri.CountResponse();
                 delete request;
@@ -4377,11 +4415,11 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         {
             TSlay &ev = *static_cast<TSlay*>(request);
             if (ev.VDiskId == TVDiskID::InvalidId) {
-                YDB_LOG_P_LOG(PRI_ERROR, err.Str(),
+                YDB_LOG_P_LOG(PRI_ERROR, err().Str(),
                     {"marker", "BPD01"});
                 THolder<NPDisk::TEvSlayResult> result(new NPDisk::TEvSlayResult(NKikimrProto::ERROR,
                             GetStatusFlags(ev.Owner, ev.OwnerGroupType),
-                            ev.VDiskId, ev.SlayOwnerRound, ev.PDiskId, ev.VSlotId, err.Str()));
+                            ev.VDiskId, ev.SlayOwnerRound, ev.PDiskId, ev.VSlotId, err().Str()));
                 PCtx->ActorSystem->Send(ev.Sender, result.Release());
                 Mon.YardSlay.CountResponse();
                 delete request;
@@ -4394,10 +4432,10 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             TChunkReserve &ev = *static_cast<TChunkReserve*>(request);
 
             if (errStatus != NKikimrProto::OK) {
-                YDB_LOG_P_LOG(PRI_ERROR, err.Str(),
+                YDB_LOG_P_LOG(PRI_ERROR, err().Str(),
                     {"marker", "BPD01"});
                 THolder<NPDisk::TEvChunkReserveResult> result(new NPDisk::TEvChunkReserveResult(errStatus,
-                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), err.Str()));
+                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), err().Str()));
                 PCtx->ActorSystem->Send(ev.Sender, result.Release(), 0, ev.Cookie);
                 Mon.ChunkReserve.CountResponse();
                 delete request;
@@ -4421,10 +4459,10 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 delete request;
                 return false; // OK
             }
-            err << " Can't process yard control Action " << (ui32)ev.Action;
-            YDB_LOG_P_LOG(PRI_ERROR, err.Str(),
+            err() << " Can't process yard control Action " << (ui32)ev.Action;
+            YDB_LOG_P_LOG(PRI_ERROR, err().Str(),
                 {"marker", "BPD01"});
-            PCtx->ActorSystem->Send(ev.Sender, new NPDisk::TEvYardControlResult(NKikimrProto::ERROR, ev.Cookie, err.Str()));
+            PCtx->ActorSystem->Send(ev.Sender, new NPDisk::TEvYardControlResult(NKikimrProto::ERROR, ev.Cookie, err().Str()));
             Mon.YardControl.CountResponse();
             delete request;
             return false;

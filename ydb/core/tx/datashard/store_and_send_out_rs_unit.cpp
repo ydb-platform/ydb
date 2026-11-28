@@ -63,6 +63,8 @@ EExecutionStatus TStoreAndSendOutRSUnit::Execute(TOperation::TPtr op,
             ui64 lockId = pr.first;
             auto lock = DataShard.SysLocksTable().GetRawLock(lockId, TRowVersion::Min());
             if (lock && lock->IsPersistent()) {
+                // Trackers have no logical lock to validate or cache.
+                AFL_ENSURE(!lock->IsTrackingOnly())("lockId", lockId);
                 TDataShardLocksDb locksDb(DataShard, txc);
                 lock->SetFrozen(&locksDb);
             }

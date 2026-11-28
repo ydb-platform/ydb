@@ -69,6 +69,13 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     Operations.reserve(record.operations().size());
     for (const auto& recordOperation : record.operations()) {
+        const auto& tableId = recordOperation.GetTableId();
+        if (tableId.GetOwnerId() != self->GetPathOwnerId()) {
+            ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
+            ErrStr = TStringBuilder() << "Table '" << tableId.GetOwnerId() << ":" << tableId.GetTableId()
+                << "' doesn't exist at shard " << TabletId;
+            return;
+        }
         TValidatedWriteTxOperation validatedOperation;
 
         auto [errCode, errStr] = validatedOperation.ParseOperation(ev, recordOperation, self->TableInfos, TabletId, KeyValidator, traceId);
@@ -288,11 +295,10 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         WriteSeqNum.WriteSeqNum = recordOperation.GetWriteSeqNum().GetWriteSeqNum();
     }
 
-    OriginalShard = recordOperation.GetOriginalShard();
-    if (OriginalShard && !recordOperation.HasWriteSeqNum()) {
+    Ancestors.assign(recordOperation.GetAncestors().begin(), recordOperation.GetAncestors().end());
+    if (!Ancestors.empty() && !recordOperation.HasWriteSeqNum()) {
         return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder()
-            << "Retrying operation performed on OriginalShard " << OriginalShard
-            << " requires WriteSeqNum"};
+            << "Retrying operation with Ancestors requires WriteSeqNum"};
     }
 
     SetTxKeys(tableInfo, tabletId, keyValidator);
@@ -389,6 +395,7 @@ ui64 TValidatedWriteTxOperation::ComputeTxSize() const {
     ui64 txSize = sizeof(TValidatedWriteTxOperation);
     txSize += Matrix.GetBuffer().size();
     txSize += ColumnIds.size() * sizeof(ui32);
+    txSize += Ancestors.size() * sizeof(ui64);
     return txSize;
 }
 
@@ -596,8 +603,11 @@ void TWriteOperation::DbStoreLocksAccessLog(NTable::TDatabase& txcDb)
     using TLocksVector = TVector<TSysTables::TLocksTable::TPersistentLock>;
     TLocksVector vec;
     vec.reserve(LocksAccessLog().Locks.size());
-    for (auto& pr : LocksAccessLog().Locks)
-        vec.emplace_back(pr.second);
+    for (const auto& [lockId, lock] : LocksAccessLog().Locks) {
+        // Raw artifacts represent current-shard /sys/locks reads only.
+        Y_ENSURE(lock.CreatedOn == lock.DataShard);
+        vec.emplace_back(lock);
+    }
 
     // Historically C++ column type was TVector<TLock>
     const char* vecDataStart = reinterpret_cast<const char*>(vec.data());
@@ -910,4 +920,3 @@ Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TWriteOperation, stream, tx) {
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

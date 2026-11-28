@@ -52,7 +52,7 @@ struct TKqpBufferLockSettings {
 
     // Remember the partitioning metadata (borders/version) of every shard that
     // received a lock request and register it on the lock echo. The only consumer
-    // of that metadata is the split/merge handling (MoveShardTo), enabled only
+    // of that metadata is the split/merge handling, enabled only
     // under the WriteSeqNum protocol, so it is collected only then.
     bool CollectShardMetas = false;
 

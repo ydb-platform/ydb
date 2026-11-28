@@ -116,7 +116,7 @@ public:
         , Counters(counters)
         , CollectShardMetas(
             // The only consumer of the registered partitioning metadata is the
-            // split/merge handling (MoveShardTo), enabled only under the WriteSeqNum
+            // split/merge handling, enabled only under the WriteSeqNum
             // protocol (pessimistic ReadCommitted locks only): reuse the same
             // feature flag as the write actor's AttachWriteSeqNum.
             LockMode && *LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
@@ -579,7 +579,7 @@ private:
         auto info = LockInfo.GetExtraData();
         for (const auto& [shardId, meta] : ShardMetas) {
             if (meta.IsKnown()) {
-                FillShardPartitioningInfo(*info.AddShardPartitioningInfo(), shardId, meta);
+                FillShardPartitioningInfo(*info.AddShardPartitioningInfo(), shardId, meta, StreamLookupWorker->GetTableId().SchemaVersion);
             }
         }
         google::protobuf::Any result;
@@ -1026,8 +1026,8 @@ private:
         // Optimistic locks ride inside EvRead requests and their shards are registered
         // by the executer without metas, so repartitioning during an optimistic tx is
         // not verified (not currently supported).
-        // The only consumer of the registered metadata is the split/merge handling
-        // (MoveShardTo), enabled only under the WriteSeqNum protocol, so it is
+        // The only consumer of the registered metadata is the split/merge handling,
+        // enabled only under the WriteSeqNum protocol, so it is
         // collected only then.
         // During a re-resolve Partitioning is reset until the scheme cache replies: a
         // scheduled lock retry may fire here and compute a version-less (unknown) meta
@@ -1035,7 +1035,7 @@ private:
         // Keep the first (correct) one — same pattern as the buffer lock actor.
         if (CollectShardMetas && !ShardMetas.contains(shardId)) {
             ShardMetas.emplace(shardId, MakeShardMeta(
-                StreamLookupWorker->GetTableId(), Partitioning, shardId,
+                StreamLookupWorker->GetTableId().PathId, Partitioning, shardId,
                 StreamLookupWorker->GetKeyColumnTypes().size()));
         }
 

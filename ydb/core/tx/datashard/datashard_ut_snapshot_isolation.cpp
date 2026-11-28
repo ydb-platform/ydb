@@ -1424,7 +1424,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
             "{ items { int32_value: 11 } items { int32_value: 1102 } }");
     }
 
-    Y_UNIT_TEST(WriteDuplicateWithoutLocks) {
+    Y_UNIT_TEST(WriteDuplicateWithoutRowsEchoesLock) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1472,11 +1472,18 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
         });
         blockWriteResToShard0.Stop();
 
-        // Retry deletion, it should not return locks.
+        // Retry deletion: even a no-op consumes a WSN and echoes its write lock.
         UNIT_ASSERT_VALUES_EQUAL(
             tx.Write(tableId, shards.at(0), TOperation::Delete(2)),
             "OK");
-        UNIT_ASSERT_VALUES_EQUAL(tx.Locks.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tx.Locks.size(), 1u);
+        const auto& lock = tx.Locks.front();
+        UNIT_ASSERT(lock.GetHasWrites());
+        UNIT_ASSERT_VALUES_EQUAL(lock.GetDataShard(), shards.at(0));
+        UNIT_ASSERT_VALUES_EQUAL(lock.GetCreatedOn(), shards.at(0));
+        UNIT_ASSERT_VALUES_EQUAL(lock.WriteSeqNumsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lock.GetWriteSeqNums(0).GetWriterIndex(), 123u);
+        UNIT_ASSERT_VALUES_EQUAL(lock.GetWriteSeqNums(0).GetWriteSeqNum(), 1u);
 
         // Check that we are able to commit the tx.
         UNIT_ASSERT_VALUES_EQUAL(

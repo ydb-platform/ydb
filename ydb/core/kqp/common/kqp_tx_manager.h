@@ -13,6 +13,8 @@
 namespace NKikimr {
 namespace NKqp {
 
+class TShardPartitionIndex;
+
 struct TTableInfo {
     bool IsOlap = false;
     THashSet<TStringBuf> Pathes;
@@ -22,10 +24,11 @@ struct TTableInfo {
 // which key range the shard covered at the moment it was first registered in
 // the transaction. Borders always come from a scheme-cache-resolved partitioning
 // whose version is recorded alongside.
+// A writer supplies PathId before its first resolved range. Plain reads may omit it.
 // Borders default-constructed (undefined From/To) means "unknown" — e.g. for
 // shards that never were a part of any resolved partitioning in this process.
 struct TShardMeta {
-    TTableId TableId;
+    TPathId PathId;
     TOwnedTableRange Borders;
     ui64 PartitioningVersion = 0;
 
@@ -61,30 +64,23 @@ public:
 
     using TActionFlags = ui8;
 
-    virtual void AddShard(ui64 shardId, bool isOlap, const TString& path, const TShardMeta& meta = {}) = 0;
+    virtual void AddShard(ui64 shardId, bool isOlap, const TString& path, const TPathId& pathId = {}, const TShardMeta& meta = {}) = 0;
     virtual void AddAction(ui64 shardId, ui8 action) = 0;
     virtual void AddAction(ui64 shardId, ui8 action, ui64 querySpanId) = 0;
     virtual void AddTopic(ui64 topicId, const TString& path) = 0;
     virtual void AddTopicsToShards() = 0;
     virtual bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock, ui64 querySpanId = 0, ui64 deferredVictimQuerySpanId = 0) = 0;
 
-    // A split/merge removed shard `fromShardId` (its tablet is gone): move its participant
-    // state to the shards that now cover its key range. Locks keep DataShard == `fromShardId`
-    // (ancestor locks of the targets, validated by ValidateLocks(allowAncestorLocks)).
-    // Targets must exactly cover the removed shard's range (computed by the caller
-    // from the partitionings) — a wrong target does not hold the transferred lock
-    // and would break the commit.
-    // The move is verified when both the removed shard and a target carry filled
-    // partitioning metadata: the target's partitioning version must be strictly
-    // newer and its borders must intersect the removed shard's range (YDB_LOG_ENSURE,
-    // fail closed). The border comparison uses the moved table's key schema stored
-    // by SetTableMeta (the table metadata must be stored); shards without filled
-    // metadata (e.g. a fresh EnsureShards-only target) are safely skipped.
-    // Returns false when a transferred lock merged inconsistently with a lock already
-    // stored on a target (a WriteSeqNum regression: the shard's uncommitted write chain
-    // collapsed underneath the stored lock). The lock is marked invalidated and the
-    // locks issue is recorded; the caller must abort the transaction.
-    virtual bool MoveShardTo(ui64 fromShardId, const TVector<ui64>& toShardIds) = 0;
+    // Latest partitioning observed by a participant or writer for this table.
+    virtual ui64 GetTablePartitioningVersion(const TPathId& pathId) const = 0;
+
+    // After every ReadCommittedRW writer resolve, move retired participants' roles
+    // to their physical successors and place each logical lock on its full creation
+    // range. This includes lock-only shards and late echoes on unchanged partitions.
+    // Inconsistent lock copies return false before placement. Retired shards with
+    // roles must have a registered range and precede the resolved partitioning when both versions are known.
+    virtual bool UpdateTableParticipants(const TPathId& pathId, const TShardPartitionIndex& index,
+        const TVector<NScheme::TTypeInfo>& keyTypes) = 0;
 
     virtual void BreakLock(ui64 shardId) = 0;
     virtual TVector<NKikimrDataEvents::TLock> GetLocks() const = 0;
@@ -115,7 +111,7 @@ public:
     // Metadata of a table participating in the transaction: the partitioning the
     // table was resolved with when it first joined the transaction (the "initial"
     // partitioning — it does not track later split/merges) and the table's key
-    // schema, used to compare shard key borders (e.g. in MoveShardTo).
+    // schema for interpreting its borders.
     struct TTableMeta {
         TPartitioning::TCPtr InitialPartitioning;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -166,6 +162,7 @@ public:
     virtual TVector<ui64> GetShardBreakerQuerySpanIds(ui64 shardId) const = 0;
 
     virtual const THashSet<ui64>& GetShards() const = 0;
+    virtual THashSet<ui64> GetParticipatingShards() const = 0;
     virtual ui64 GetShardsCount() const = 0;
 
     virtual bool NeedCommit() const = 0;

@@ -103,6 +103,10 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(
         ui64 ourCounter = 0;
         bool writeSeqNumMismatch = false;
         if (lockProto.GetDataShard() == selfShardId) {
+            AFL_ENSURE(!lockProto.HasCreatedOn() || lockProto.GetCreatedOn() == selfShardId)
+                ("lockId", lockProto.GetLockId())
+                ("shardId", selfShardId)
+                ("createdOn", lockProto.GetCreatedOn());
             auto lockKey = MakeLockKey(lockProto, selfShardId);
             auto lock = sysLocks.GetLock(lockKey);
             ourGeneration = lock.Generation;
@@ -153,7 +157,7 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(
                  continue;
              }
 
-            auto it = lockInfo->GetAncestorLocks().find(lockProto.GetDataShard());
+            auto it = lockInfo->GetAncestorLocks().find(TLockKey{lockProto.GetDataShard(), lockProto.GetCreatedOn()});
             if (it == lockInfo->GetAncestorLocks().end()) {
                 YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (ancestor lock not found)",
                     {"lockId", lockProto.GetLockId()},
@@ -719,4 +723,3 @@ void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& 
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

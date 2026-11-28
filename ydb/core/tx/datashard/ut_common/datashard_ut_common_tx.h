@@ -129,6 +129,14 @@ public:
     template<class... TOps>
     std::unique_ptr<NEvents::TDataEvents::TEvWrite> CreateWrite(
             const TTableId& tableId, ui64 origShardId, ui64 destShardId, TOps&&... ops) {
+        return CreateWrite(tableId,
+            origShardId == destShardId ? TVector<ui64>{} : TVector<ui64>{origShardId},
+            destShardId, std::forward<TOps>(ops)...);
+    }
+
+    template<class... TOps>
+    std::unique_ptr<NEvents::TDataEvents::TEvWrite> CreateWrite(
+            const TTableId& tableId, const TVector<ui64>& ancestors, ui64 destShardId, TOps&&... ops) {
         auto req = std::make_unique<NEvents::TDataEvents::TEvWrite>(
             0, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         req->Record.SetLockTxId(LockTxId);
@@ -142,13 +150,14 @@ public:
         (..., ops.ApplyTo(tableId, req.get()));
 
         if (WriterIndex) {
-            ui64 seqNum = Shard2SeqNum[origShardId] + 1;
+            const ui64 owner = ancestors.empty() ? destShardId : ancestors.front();
+            ui64 seqNum = Shard2SeqNum[owner] + 1;
             for (auto& op : *req->Record.MutableOperations()) {
                 op.MutableWriteSeqNum()->SetWriterIndex(*WriterIndex);
                 op.MutableWriteSeqNum()->SetWriteSeqNum(seqNum);
                 ++seqNum;
-                if (destShardId != origShardId) {
-                    op.SetOriginalShard(origShardId);
+                for (const ui64 ancestor : ancestors) {
+                    op.AddAncestors(ancestor);
                 }
             }
         }

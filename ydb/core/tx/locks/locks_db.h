@@ -10,8 +10,12 @@ template<class TShard, class TSchemaDescription>
 class TShardLocksDb : public NKikimr::NDataShard::ILocksDb {
 public:
     TShardLocksDb(TShard& self, NTabletFlatExecutor::TTransactionContext& txc)
+        : TShardLocksDb(self, txc.DB)
+    { }
+
+    TShardLocksDb(TShard& self, NTable::TDatabase& db)
         : Self(self)
-        , DB(txc.DB)
+        , DB(db)
     { }
 
     bool HasChanges() const override {
@@ -126,6 +130,9 @@ public:
                         state.WriterIndex = rowset.template GetValue<typename Schema::LockWriteSeqNums::WriterIndex>();
                         state.WriteSeqNum = rowset.template GetValue<typename Schema::LockWriteSeqNums::WriteSeqNum>();
                         state.SerializedResult = rowset.template GetValueOrDefault<typename Schema::LockWriteSeqNums::WriteResult>();
+                        if (rowset.template HaveValue<typename Schema::LockWriteSeqNums::GcWriteSeqNum>()) {
+                            state.GcWriteSeqNum = rowset.template GetValue<typename Schema::LockWriteSeqNums::GcWriteSeqNum>();
+                        }
                         if (state.WriteSeqNum) {
                             lock.WriteSeqNumStates.push_back(std::move(state));
                         }
@@ -137,25 +144,39 @@ public:
             }
         }
 
+        THashMap<std::tuple<ui64, ui64, ui64>, size_t> ancestorOffsets;
         // Load ancestor shard locks (DataShard only)
         if constexpr (requires { typename Schema::AncestorShardsLocks; }) {
-            if (db.HaveTable<typename Schema::AncestorShardsLocks>()) {
-                auto rowset = db.Table<typename Schema::AncestorShardsLocks>().Select();
+            using T = typename Schema::AncestorShardsLocks;
+            if (db.HaveTable<T>()) {
+                std::optional<ui64> lastOrphan;
+                auto rowset = db.Table<T>().Select();
                 if (!rowset.IsReady()) {
                     return false;
                 }
                 while (!rowset.EndOfSet()) {
-                    auto lockId = rowset.template GetValue<typename Schema::AncestorShardsLocks::LockId>();
+                    const auto lockId = rowset.template GetValue<typename T::LockId>();
+                    const auto owner = rowset.template GetValue<typename T::TabletId>();
+                    const auto createdOn = rowset.template GetValue<typename T::CreatedOn>();
+                    const auto key = std::make_tuple(lockId, owner, createdOn);
                     auto it = lockIndex.find(lockId);
                     if (it != lockIndex.end()) {
                         auto& lock = rows[it->second];
-                        NDataShard::TAncestorLock ancestorLock;
-                        ancestorLock.TabletId = rowset.template GetValue<typename Schema::AncestorShardsLocks::TabletId>();
-                        ancestorLock.Generation = rowset.template GetValue<typename Schema::AncestorShardsLocks::Generation>();
-                        ancestorLock.Counter = rowset.template GetValue<typename Schema::AncestorShardsLocks::Counter>();
-                        ancestorLock.CreationTime = TInstant::MicroSeconds(rowset.template GetValue<typename Schema::AncestorShardsLocks::CreateTimestamp>());
-                        ancestorLock.Flags = NDataShard::ELockFlags(rowset.template GetValue<typename Schema::AncestorShardsLocks::Flags>());
-                        lock.AncestorLocks.push_back(std::move(ancestorLock));
+                        NDataShard::TAncestorLock ancestor;
+                        ancestor.TabletId = owner;
+                        ancestor.CreatedOn = createdOn;
+                        ancestor.CreatedOnRange = NDataShard::DeserializeLockCreatedOnRange(
+                            rowset.template GetValueOrDefault<typename T::CreatedOnRange>());
+                        ancestor.Generation = rowset.template GetValue<typename T::Generation>();
+                        ancestor.Counter = rowset.template GetValue<typename T::Counter>();
+                        ancestor.CreationTime = TInstant::MicroSeconds(rowset.template GetValue<typename T::CreateTimestamp>());
+                        ancestor.Flags = NDataShard::ELockFlags(rowset.template GetValue<typename T::Flags>());
+                        ancestorOffsets.emplace(key, lock.AncestorLocks.size());
+                        lock.AncestorLocks.push_back(std::move(ancestor));
+                    } else if (lastOrphan != lockId) {
+                        // Rows are ordered by LockId. One task covers every ancestor of an orphan.
+                        ScheduleAncestorGc({lockId, std::nullopt});
+                        lastOrphan = lockId;
                     }
                     if (!rowset.Next()) {
                         return false;
@@ -166,32 +187,74 @@ public:
 
         // Load ancestor shard write seq nums (DataShard only)
         if constexpr (requires { typename Schema::AncestorLockWriteSeqNums; }) {
-            if (db.HaveTable<typename Schema::AncestorLockWriteSeqNums>()) {
-                auto rowset = db.Table<typename Schema::AncestorLockWriteSeqNums>().Select();
+            using T = typename Schema::AncestorLockWriteSeqNums;
+            if (db.HaveTable<T>()) {
+                auto rowset = db.Table<T>().Select();
                 if (!rowset.IsReady()) {
                     return false;
                 }
                 while (!rowset.EndOfSet()) {
-                    auto lockId = rowset.template GetValue<typename Schema::AncestorLockWriteSeqNums::LockId>();
-                    auto it = lockIndex.find(lockId);
-                    if (it != lockIndex.end()) {
-                        auto& lock = rows[it->second];
-                        const ui64 tabletId = rowset.template GetValue<typename Schema::AncestorLockWriteSeqNums::TabletId>();
-                        auto ancestorIt = std::find_if(
-                            lock.AncestorLocks.begin(), lock.AncestorLocks.end(),
-                            [tabletId](const auto& al) { return al.TabletId == tabletId; });
-                        if (ancestorIt != lock.AncestorLocks.end()) {
-                            NDataShard::TWriteSeqNumState state;
-                            state.WriterIndex = rowset.template GetValue<typename Schema::AncestorLockWriteSeqNums::WriterIndex>();
-                            state.WriteSeqNum = rowset.template GetValue<typename Schema::AncestorLockWriteSeqNums::WriteSeqNum>();
-                            state.SerializedResult = rowset.template GetValueOrDefault<typename Schema::AncestorLockWriteSeqNums::WriteResult>();
-                            if (state.WriteSeqNum) {
-                                ancestorIt->WriteSeqNumStates[state.WriterIndex] = state;
-                            }
+                    const auto lockId = rowset.template GetValue<typename T::LockId>();
+                    const auto key = std::make_tuple(lockId, rowset.template GetValue<typename T::TabletId>(),
+                        rowset.template GetValue<typename T::CreatedOn>());
+                    // A deleted parent can leave writer rows until its full GC task runs.
+                    if (const size_t* offset = ancestorOffsets.FindPtr(key)) {
+                        auto& lock = rows[lockIndex.at(lockId)];
+                        NDataShard::TWriteSeqNumState state;
+                        state.WriterIndex = rowset.template GetValue<typename T::WriterIndex>();
+                        state.WriteSeqNum = rowset.template GetValue<typename T::WriteSeqNum>();
+                        state.SerializedResult = rowset.template GetValueOrDefault<typename T::WriteResult>();
+                        if (rowset.template HaveValue<typename T::GcWriteSeqNum>()) {
+                            state.GcWriteSeqNum = rowset.template GetValue<typename T::GcWriteSeqNum>();
+                        }
+                        if (state.WriteSeqNum) {
+                            lock.AncestorLocks[*offset].WriteSeqNumStates[state.WriterIndex] = std::move(state);
                         }
                     }
                     if (!rowset.Next()) {
                         return false;
+                    }
+                }
+            }
+        }
+
+        if constexpr (requires { typename Schema::AncestorLockBranches; }) {
+            using T = typename Schema::AncestorLockBranches;
+            if (db.HaveTable<T>()) {
+                // A local bound and its writer metadata suffice to recover a
+                // task without reading any of the closed branches.
+                for (auto& lock : rows) {
+                    if (lock.Counter == Max<ui64>()) {
+                        continue;
+                    }
+                    THashSet<ui64> closedWriters;
+                    for (const auto& current : lock.WriteSeqNumStates) {
+                        if (current.GcWriteSeqNum) {
+                            closedWriters.insert(current.WriterIndex);
+                        }
+                    }
+                    for (auto& ancestor : lock.AncestorLocks) {
+                        for (auto& [writer, state] : ancestor.WriteSeqNumStates) {
+                            if (closedWriters.contains(writer)) {
+                                ScheduleAncestorGc({lock.LockId, std::tuple{ancestor.TabletId, ancestor.CreatedOn, writer}});
+                                continue;
+                            }
+                            auto branches = db.Table<T>().Prefix(lock.LockId, ancestor.TabletId, ancestor.CreatedOn, writer)
+                                .template Select<typename T::ShardsPath, typename T::WriteSeqNum, typename T::WriteResult>();
+                            if (!branches.IsReady()) {
+                                return false;
+                            }
+                            while (!branches.EndOfSet()) {
+                                auto& branch = state.Branches.emplace_back();
+                                branch.ShardsPath = NDataShard::DeserializeLockShardsPath(branches.template GetValue<typename T::ShardsPath>());
+                                branch.WriteSeqNum = branches.template GetValue<typename T::WriteSeqNum>();
+                                branch.SerializedResult = branches.template GetValueOrDefault<typename T::WriteResult>();
+                                Y_ENSURE(branch.ShardsPath.front() == ancestor.TabletId && branch.WriteSeqNum <= state.WriteSeqNum);
+                                if (!branches.Next()) {
+                                    return false;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -228,16 +291,22 @@ public:
         HasChanges_ = true;
     }
 
-    void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) override {
+    void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult, std::optional<ui64> gcWriteSeqNum = std::nullopt) override {
         using Schema = TSchemaDescription;
         if constexpr (requires { typename Schema::LockWriteSeqNums; }) {
             NIceDb::TNiceDb db(DB);
-            db.Table<typename Schema::LockWriteSeqNums>().Key(lockId, writerIndex).Update(
-                NIceDb::TUpdate<typename Schema::LockWriteSeqNums::WriteSeqNum>(writeSeqNum),
-                NIceDb::TUpdate<typename Schema::LockWriteSeqNums::WriteResult>(serializedResult));
+            using T = typename Schema::LockWriteSeqNums;
+            auto row = db.Table<T>().Key(lockId, writerIndex);
+            const NIceDb::TUpdate<typename T::WriteSeqNum> wsn(writeSeqNum);
+            const NIceDb::TUpdate<typename T::WriteResult> result(serializedResult);
+            if (gcWriteSeqNum) {
+                row.Update(wsn, result, NIceDb::TUpdate<typename T::GcWriteSeqNum>(*gcWriteSeqNum));
+            } else {
+                row.Update(wsn, result, NIceDb::TNull<typename T::GcWriteSeqNum>());
+            }
             HasChanges_ = true;
         } else {
-            Y_UNUSED(lockId, writerIndex, writeSeqNum, serializedResult);
+            Y_UNUSED(lockId, writerIndex, writeSeqNum, serializedResult, gcWriteSeqNum);
             Y_ABORT("WriteSeqNum is not supported");
         }
     }
@@ -258,49 +327,59 @@ public:
         using Schema = TSchemaDescription;
         if constexpr (requires { typename Schema::AncestorShardsLocks; }) {
             NIceDb::TNiceDb db(DB);
-            db.Table<typename Schema::AncestorShardsLocks>().Key(lockId, lock.TabletId).Update(
+            db.Table<typename Schema::AncestorShardsLocks>().Key(lockId, lock.TabletId, lock.CreatedOn).Update(
                 NIceDb::TUpdate<typename Schema::AncestorShardsLocks::Generation>(lock.Generation),
                 NIceDb::TUpdate<typename Schema::AncestorShardsLocks::Counter>(lock.Counter),
                 NIceDb::TUpdate<typename Schema::AncestorShardsLocks::CreateTimestamp>(lock.CreationTime.MicroSeconds()),
-                NIceDb::TUpdate<typename Schema::AncestorShardsLocks::Flags>(ui64(lock.Flags)));
+                NIceDb::TUpdate<typename Schema::AncestorShardsLocks::Flags>(ui64(lock.Flags)),
+                NIceDb::TUpdate<typename Schema::AncestorShardsLocks::CreatedOnRange>(NDataShard::SerializeLockCreatedOnRange(lock.CreatedOnRange)));
             HasChanges_ = true;
         } else {
             Y_ENSURE(false, "AncestorShardsLocks is not supported");
         }
     }
 
-    void PersistRemoveAncestorLock(ui64 lockId, ui64 tabletId) override {
-        using Schema = TSchemaDescription;
-        if constexpr (requires { typename Schema::AncestorShardsLocks; }) {
-            NIceDb::TNiceDb db(DB);
-            db.Table<typename Schema::AncestorShardsLocks>().Key(lockId, tabletId).Delete();
-            HasChanges_ = true;
-        } else {
-            Y_ENSURE(false, "AncestorShardsLocks is not supported");
-        }
-    }
-
-    void PersistAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) override {
+    void PersistAncestorLockWriteSeqNum(ui64 lockId, NDataShard::TLockKey key, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult, std::optional<ui64> gcWriteSeqNum = std::nullopt) override {
         using Schema = TSchemaDescription;
         if constexpr (requires { typename Schema::AncestorLockWriteSeqNums; }) {
             NIceDb::TNiceDb db(DB);
-            db.Table<typename Schema::AncestorLockWriteSeqNums>().Key(lockId, tabletId, writerIndex).Update(
+            db.Table<typename Schema::AncestorLockWriteSeqNums>().Key(lockId, key.Owner, key.CreatedOn, writerIndex).Update(
                 NIceDb::TUpdate<typename Schema::AncestorLockWriteSeqNums::WriteSeqNum>(writeSeqNum),
                 NIceDb::TUpdate<typename Schema::AncestorLockWriteSeqNums::WriteResult>(serializedResult));
+            if (gcWriteSeqNum) {
+                db.Table<typename Schema::AncestorLockWriteSeqNums>().Key(lockId, key.Owner, key.CreatedOn, writerIndex).Update(
+                    NIceDb::TUpdate<typename Schema::AncestorLockWriteSeqNums::GcWriteSeqNum>(*gcWriteSeqNum));
+            } else {
+                db.Table<typename Schema::AncestorLockWriteSeqNums>().Key(lockId, key.Owner, key.CreatedOn, writerIndex).Update(
+                    NIceDb::TNull<typename Schema::AncestorLockWriteSeqNums::GcWriteSeqNum>());
+            }
             HasChanges_ = true;
         } else {
             Y_ENSURE(false, "AncestorLockWriteSeqNums is not supported");
         }
     }
 
-    void PersistRemoveAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex) override {
+    void PersistAncestorLockBranch(ui64 lockId, NDataShard::TLockKey key, ui64 writerIndex,
+        const NDataShard::TWriteSeqNumBranch& branch) override
+    {
         using Schema = TSchemaDescription;
-        if constexpr (requires { typename Schema::AncestorLockWriteSeqNums; }) {
+        if constexpr (requires { typename Schema::AncestorLockBranches; }) {
             NIceDb::TNiceDb db(DB);
-            db.Table<typename Schema::AncestorLockWriteSeqNums>().Key(lockId, tabletId, writerIndex).Delete();
+            db.Table<typename Schema::AncestorLockBranches>().Key(lockId, key.Owner, key.CreatedOn,
+                writerIndex, NDataShard::SerializeLockShardsPath(branch.ShardsPath)).Update(
+                    NIceDb::TUpdate<typename Schema::AncestorLockBranches::WriteSeqNum>(branch.WriteSeqNum),
+                    NIceDb::TUpdate<typename Schema::AncestorLockBranches::WriteResult>(branch.SerializedResult));
             HasChanges_ = true;
         } else {
-            Y_ENSURE(false, "AncestorLockWriteSeqNums is not supported");
+            Y_ABORT("AncestorLockBranches is not supported");
+        }
+    }
+
+    void ScheduleAncestorGc(TAncestorGcTask task) override {
+        if constexpr (requires { typename TSchemaDescription::AncestorLockBranches; }) {
+            DB.OnCommit([shard = &Self, task] { shard->ScheduleAncestorGc(task); });
+        } else {
+            Y_ABORT("AncestorLockBranches is not supported");
         }
     }
 
@@ -364,6 +443,13 @@ public:
     // Schedules callback when changes are confirmed to be persistent
     void OnPersistent(std::function<void()> callback) override {
         DB.OnPersistent(std::move(callback));
+    }
+
+    void OnRollback(std::function<void()> callback) override {
+        // Execute must see the activated lock for WSN and lock echo generation;
+        // deferring just its flag until commit would expose inconsistent state.
+        // Localdb rollback cannot undo the in-memory registrations by itself.
+        DB.OnRollback(std::move(callback));
     }
 
 protected:

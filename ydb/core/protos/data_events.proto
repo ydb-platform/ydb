@@ -12,6 +12,11 @@ message TWriteSeqNum {
     optional uint64 WriteSeqNum = 2;
 }
 
+// Result of a successfully applied WSN branch.
+message TWriteSeqNumResult {
+    optional NKikimrQueryStats.TTxStats TxStats = 1;
+}
+
 message TLock {
     optional fixed64 LockId = 1;
     optional fixed64 DataShard = 2;
@@ -21,6 +26,7 @@ message TLock {
     optional uint64 PathId = 6;
     optional bool HasWrites = 7;
     repeated TWriteSeqNum WriteSeqNums = 8;
+    optional fixed64 CreatedOn = 9; // shard that created this logical lock
 }
 
 message TKqpLocks {
@@ -122,9 +128,10 @@ message TEvWrite {
         optional bool IsBulk = 8;
         optional uint64 QuerySpanId = 9;
         optional TWriteSeqNum WriteSeqNum = 10;
-        // If this operation is retried on a different shard after a split/merge, this field contains
-        // the original shard id.
-        optional fixed64 OriginalShard = 11;
+        reserved 11;
+        reserved "OriginalShard";
+        // Previous routing destinations, excluding the current shard, in routing order.
+        repeated uint64 Ancestors = 12 [packed = true];
     }
 
     // Transaction operations

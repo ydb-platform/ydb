@@ -4584,12 +4584,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             "{ items { int32_value: 13 } items { int32_value: 1004 } }");
     }
 
-    Y_UNIT_TEST(UncommittedUpdateLockMissingRow) {
+    Y_UNIT_TEST_TWIN(UncommittedUpdateLockMissingRow, WithWriteSeqNum) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false);
 
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(WithWriteSeqNum);
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
@@ -4658,9 +4659,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(writeLocks.size(), 1u);
         {
             const auto& lock = writeLocks.back();
-            UNIT_ASSERT_C(
-                !lock.GetHasWrites() && lock.GetCounter() < 1000000,
-                "Unexpected lock: " << lock.DebugString());
+            // A no-op with WSN keeps a write lock for deduplication, even though
+            // the missing row produced no uncommitted data for this transaction.
+            UNIT_ASSERT_VALUES_EQUAL_C(lock.GetHasWrites(), WithWriteSeqNum, lock.DebugString());
+            UNIT_ASSERT_LT(lock.GetCounter(), 1000000u);
+            UNIT_ASSERT_VALUES_EQUAL(lock.WriteSeqNumsSize(), WithWriteSeqNum ? 1 : 0);
+            runtime.SendToPipe(lock.GetDataShard(), sender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto open = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            UNIT_ASSERT(!open->Get()->OpenTxs.contains(lock.GetLockId()));
         }
 
         // Upsert a value which conflicts with the update above
@@ -4897,12 +4903,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST(UncommittedUpdateLockUncommittedNewRow) {
+    Y_UNIT_TEST_TWIN(UncommittedUpdateLockUncommittedNewRow, WithWriteSeqNum) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false);
 
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(WithWriteSeqNum);
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
@@ -4998,9 +5005,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(writeLocks.size(), 1u);
         {
             const auto& lock = writeLocks.back();
-            UNIT_ASSERT_C(
-                !lock.GetHasWrites() && lock.GetCounter() < 1000000,
-                "Unexpected lock: " << lock.DebugString());
+            // A no-op with WSN keeps a write lock for deduplication, even though
+            // the missing row produced no uncommitted data for this transaction.
+            UNIT_ASSERT_VALUES_EQUAL_C(lock.GetHasWrites(), WithWriteSeqNum, lock.DebugString());
+            UNIT_ASSERT_LT(lock.GetCounter(), 1000000u);
+            UNIT_ASSERT_VALUES_EQUAL(lock.WriteSeqNumsSize(), WithWriteSeqNum ? 1 : 0);
+            runtime.SendToPipe(lock.GetDataShard(), sender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto open = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            UNIT_ASSERT(!open->Get()->OpenTxs.contains(lock.GetLockId()));
         }
 
         // Now we commit tx2, which makes it impossible to commit tx1
@@ -5406,6 +5418,198 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(getTxCompleteLagCounter(), 0u);
     }
 
+    Y_UNIT_TEST_TWIN(UncommittedAncestorWriteRequiresLocksTransfer, TransferEnabled) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        settings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
+        settings.AppConfig->MutableFeatureFlags()->SetEnableDataShardLocksTransferOnSplit(TransferEnabled);
+        auto [runtime, server, sender] = TestCreateServer(settings);
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards.at(0);
+        const ui64 owner = shard + 100;
+
+        for (bool empty : {false, true}) {
+            const ui64 lockId = 1234567890001 + ui64(empty);
+            NLongTxService::TLockHandle handle(lockId, runtime.GetActorSystem(0));
+            auto makeRequest = [&](bool ancestor) {
+                auto req = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+                req->SetLockId(lockId, runtime.GetNodeId(0));
+                TVector<TCell> cells;
+                if (!empty) {
+                    cells = {TCell::Make(ui32(1)), TCell::Make(ui32(11))};
+                }
+                TSerializedCellMatrix matrix(cells, empty ? 0 : 1, 2);
+                const auto payload = NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*req)
+                    .AddDataToPayload(matrix.ReleaseBuffer());
+                auto& op = req->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                    tableId, {1, 2}, payload, NKikimrDataEvents::FORMAT_CELLVEC);
+                op.MutableWriteSeqNum()->SetWriterIndex(0);
+                op.MutableWriteSeqNum()->SetWriteSeqNum(1);
+                if (ancestor) {
+                    op.AddAncestors(owner);
+                }
+                return req;
+            };
+
+            NKikimrDataEvents::TEvWriteResult result;
+            if (TransferEnabled) {
+                result = Write(runtime, sender, shard, makeRequest(true),
+                    NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            } else {
+                const auto rejected = Write(runtime, sender, shard, makeRequest(true),
+                    NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+                UNIT_ASSERT_VALUES_EQUAL(rejected.TxLocksSize(), 0);
+                UNIT_ASSERT(rejected.GetIssues(0).message().Contains("EnableDataShardLocksTransferOnSplit"));
+                // Rejection must not consume WSN=1 or disable ordinary current writes.
+                result = Write(runtime, sender, shard, makeRequest(false),
+                    NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.TxLocksSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks(0).GetDataShard(), TransferEnabled ? owner : shard);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks(0).GetCreatedOn(), shard);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks(0)).GetWriteSeqNum(), 1);
+            CommitLock(runtime, sender, shard, result.GetTxLocks(0));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "key = 1, value = 11\n");
+    }
+
+    Y_UNIT_TEST_TWIN(UncommittedWriteRejectsWrongTableOwner, Empty) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        settings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
+        auto [runtime, server, sender] = TestCreateServer(settings);
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards.at(0);
+        const ui64 lockId = 1234567890001;
+        NLongTxService::TLockHandle handle(lockId, runtime.GetActorSystem(0));
+        const TTableId wrongTableId(tableId.PathId.OwnerId + 1, tableId.PathId.LocalPathId, tableId.SchemaVersion);
+        auto makeRequest = [&](const TTableId& target, ui64 wsn) {
+            auto req = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            req->SetLockId(lockId, runtime.GetNodeId(0));
+            TVector<TCell> cells;
+            if (!Empty) {
+                cells = {TCell::Make(ui32(1)), TCell::Make(ui32(wsn * 11))};
+            }
+            TSerializedCellMatrix matrix(cells, Empty ? 0 : 1, 2);
+            const auto payload = NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*req)
+                .AddDataToPayload(matrix.ReleaseBuffer());
+            auto& op = req->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                target, {1, 2}, payload, NKikimrDataEvents::FORMAT_CELLVEC);
+            op.MutableWriteSeqNum()->SetWriterIndex(0);
+            op.MutableWriteSeqNum()->SetWriteSeqNum(wsn);
+            return req;
+        };
+
+        NKikimrDataEvents::TEvWriteResult result;
+        for (ui64 wsn : {1, 2}) {
+            const auto rejected = Write(runtime, sender, shard, makeRequest(wrongTableId, wsn),
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(rejected.TxLocksSize(), 0);
+            result = Write(runtime, sender, shard, makeRequest(tableId, wsn),
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL(result.TxLocksSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks(0)).GetWriteSeqNum(), wsn);
+        }
+        CommitLock(runtime, sender, shard, result.GetTxLocks(0));
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), Empty ? "" : "key = 1, value = 22\n");
+    }
+
+    Y_UNIT_TEST(UncommittedAncestorBranchesAreAtomicAndSurviveRestart) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        settings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
+        settings.AppConfig->MutableFeatureFlags()->SetEnableDataShardLocksTransferOnSplit(true);
+        auto [runtime, server, sender] = TestCreateServer(settings);
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards.at(0);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 0);");
+        const ui64 lockId = 1234567890001;
+        NLongTxService::TLockHandle handle(lockId, runtime.GetActorSystem(0));
+        const ui64 owner = shard + 100;
+        const ui64 left = shard + 101;
+        const ui64 right = shard + 102;
+        using TOperation = NKikimrDataEvents::TEvWrite::TOperation;
+        struct TBranchOp {
+            ui64 Wsn;
+            ui64 Delta;
+            TVector<ui64> Ancestors;
+            TOperation::EOperationType Type = TOperation::OPERATION_INCREMENT;
+        };
+        auto send = [&](const TVector<TBranchOp>& ops,
+                NKikimrDataEvents::TEvWriteResult::EStatus expected = NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+            auto req = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            req->SetLockId(lockId, runtime.GetNodeId(0));
+            for (const auto& op : ops) {
+                TVector<TCell> cells{TCell::Make(ui32(1)), TCell::Make(ui32(op.Delta))};
+                TSerializedCellMatrix matrix(cells, 1, 2);
+                auto payload = NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*req)
+                    .AddDataToPayload(matrix.ReleaseBuffer());
+                auto& proto = req->AddOperation(op.Type, tableId, {1, 2}, payload, NKikimrDataEvents::FORMAT_CELLVEC);
+                proto.MutableWriteSeqNum()->SetWriterIndex(7);
+                proto.MutableWriteSeqNum()->SetWriteSeqNum(op.Wsn);
+                for (ui64 ancestor : op.Ancestors) {
+                    proto.AddAncestors(ancestor);
+                }
+            }
+            return Write(runtime, sender, shard, std::move(req), expected);
+        };
+
+        // Failure during execution rolls back the increment and the new logical lock.
+        send({{1, 1, {owner, left}}, {1, 10, {owner, right}, TOperation::OPERATION_INSERT}},
+            NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
+        auto result = send({{1, 1, {owner, left}}, {1, 10, {owner, right}}});
+        UNIT_ASSERT_VALUES_EQUAL(result.TxLocksSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks(0).GetDataShard(), owner);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks(0).GetCreatedOn(), shard);
+        UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks(0)).GetWriteSeqNum(), 1);
+
+        result = send({{1, 1, {owner, left}}, {1, 10, {owner, right}}});
+        UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks(0)).GetWriteSeqNum(), 1);
+        // Only the fresh branch advances; its sibling's older position stays a duplicate.
+        result = send({{2, 100, {owner, left}}, {1, 10, {owner, right}}});
+        UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks(0)).GetWriteSeqNum(), 2);
+
+        // Failure of the final classification must not consume the earlier position.
+        send({{3, 1000, {owner, left}}, {3, 1000, {owner, right}}},
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        result = send({{3, 1, {owner, left}}});
+        UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks(0)).GetWriteSeqNum(), 3);
+        result = send({{1, 1, {owner, left}}});
+        UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks(0)).GetWriteSeqNum(), 3);
+
+        RebootTablet(runtime, shard, sender);
+        result = send({{3, 1, {owner, left}}, {1, 10, {owner, right}}});
+        UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks(0)).GetWriteSeqNum(), 3);
+        const auto ancestorLock = result.GetTxLocks(0);
+        // A mixed batch starts the current chain but can still be replayed in full.
+        send({{3, 999, {owner, left}}, {1, 1, {}}, {2, 1, {}}});
+        send({{3, 999, {owner, left}}, {1, 1, {}}, {2, 1, {}}});
+        // Failing after staging a pure current request must leave the paths intact.
+        send({{3, 1, {}}, {4, 1, {}, TOperation::OPERATION_INSERT}},
+            NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
+        send({{3, 999, {owner, left}}});
+        // Even a duplicate-only current batch establishes a bound. Its result
+        // survives reboot, as does the ancestor aggregate used by commit.
+        const auto beforeReboot = send({{2, 999, {}}});
+        UNIT_ASSERT(beforeReboot.GetTxStats().TableAccessStatsSize());
+        const auto rowsUpdated = beforeReboot.GetTxStats().GetTableAccessStats(0).GetUpdateRow().GetRows();
+        UNIT_ASSERT_GT(rowsUpdated, 0u);
+        RebootTablet(runtime, shard, sender);
+        send({{3, 999, {owner, left}}}, NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+        send({{1, 999, {}}}, NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+        result = send({{2, 999, {}}});
+        UNIT_ASSERT(result.GetTxStats().TableAccessStatsSize());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().GetTableAccessStats(0).GetUpdateRow().GetRows(), rowsUpdated);
+        CommitLock(runtime, sender, shard, ancestorLock);
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "key = 1, value = 114\n");
+    }
+
     Y_UNIT_TEST(UncommittedWriteSeqNumChain) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -5663,11 +5867,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         {
-            // An older write's result is not remembered, so its duplicate is an error
-            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1,
-                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("already applied"), result.GetIssues(0).message());
-            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("writer is at 2"), result.GetIssues(0).message());
+            // The second flush began at WSN 2, so the first flush is obsolete.
+            UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1,
+                NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
         }
 
         CommitLock(runtime, sender, shard, lock);
@@ -5729,14 +5931,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         {
-            // A stale single-operation write (seq num 1 < current 2) is still an error
+            // Older positions are duplicates, without replaying their data.
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns,
                 lockTxId, lockNodeId, 1, 11, 0, 1,
-                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("already applied"),
-                result.GetIssues(0).message());
-            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("writer is at 2"),
-                result.GetIssues(0).message());
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks(0)).GetWriteSeqNum(), 2);
         }
 
         {
@@ -5745,7 +5944,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns,
                 lockTxId, lockNodeId, 0, ops,
                 NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("ascending and contiguous"),
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("must continue the writer chain"),
                 result.GetIssues(0).message());
         }
 
@@ -5756,7 +5955,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns,
                 lockTxId, lockNodeId, 0, ops,
                 NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("ascending"),
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("must continue the writer chain"),
                 result.GetIssues(0).message());
         }
 
@@ -5833,7 +6032,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto result = updateMissingRow(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             const auto& lock = result.GetTxLocks().at(0);
-            UNIT_ASSERT(!lock.GetHasWrites());
+            // Consuming a WSN binds a write lock even when UPDATE finds no row.
+            UNIT_ASSERT(lock.GetHasWrites());
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().TableAccessStatsSize(), 1u);
             access = result.GetTxStats().GetTableAccessStats(0);
@@ -5843,7 +6043,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto result = updateMissingRow(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
-            UNIT_ASSERT(!echoed.GetHasWrites());
+            UNIT_ASSERT(echoed.GetHasWrites());
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetSchemeShard(), tableId.PathId.OwnerId);
             UNIT_ASSERT_VALUES_EQUAL(echoed.GetPathId(), tableId.PathId.LocalPathId);
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriteSeqNum(), 1u);
@@ -6327,6 +6527,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui64 lockTxId = 1234567890001;
         const ui64 lockNodeId = runtime.GetNodeId(0);
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+
+        // Ancestors require an explicit position in the writer's chain.
+        {
+            auto req = MakeWriteRequestOneKeyValue(std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, columns, 1, 11);
+            req->SetLockId(lockTxId, lockNodeId);
+            req->Record.MutableOperations(0)->AddAncestors(shard + 1);
+            req->Record.MutableOperations(0)->AddAncestors(shard + 2);
+            Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        }
 
         // WriteSeqNum without LockTxId
         {

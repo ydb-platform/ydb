@@ -321,8 +321,8 @@ private:
             }
 
             for (const auto& partition : entry.KeyDescription->GetPartitions()) {
+                TxManager->AddShard(partition.ShardId, /* isOlap */ false, table.Path, table.TableId.PathId);
                 ShardTables[partition.ShardId].push_back(table.TableId);
-                TxManager->AddShard(partition.ShardId, /* isOlap */ false, table.Path);
             }
         }
 

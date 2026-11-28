@@ -26,7 +26,7 @@ TOwnedTableRange GetShardKeyRange(const TPartitioning& partitioning, size_t inde
 // shard missing from `partitioning` or a shard without representable key range
 // (e.g. column tables); the version is still recorded when `partitioning` is set.
 TShardMeta MakeShardMeta(
-    const TTableId& tableId,
+    const TPathId& pathId,
     const TPartitioning::TCPtr& partitioning,
     ui64 shardId,
     size_t keyColumnsCount);
@@ -57,15 +57,15 @@ private:
 // Borders/version of `shardId` in the partitioning held by `index`: the same
 // semantics as the partitioning overload, with an O(1) shard lookup.
 TShardMeta MakeShardMeta(
-    const TTableId& tableId,
+    const TPathId& pathId,
     const TShardPartitionIndex& index,
     ui64 shardId,
     size_t keyColumnsCount);
 
 // Proto wire format of TShardMeta for TEvKqpInputActorResultInfo.
-void FillShardPartitioningInfo(NKikimrTxDataShard::TShardPartitioningInfo& proto, ui64 shardId, const TShardMeta& meta);
+void FillShardPartitioningInfo(NKikimrTxDataShard::TShardPartitioningInfo& proto, ui64 shardId, const TShardMeta& meta, ui64 schemaVersion);
 
-// Inverse of FillShardPartitioningInfo: the table id (with schema version) comes
+// The table path for the registered shard comes
 // from the proto itself — the table the sending actor resolved the partitioning
 // against, which is not necessarily the producing stage's table meta.
 TShardMeta ToShardMeta(const NKikimrTxDataShard::TShardPartitioningInfo& proto);

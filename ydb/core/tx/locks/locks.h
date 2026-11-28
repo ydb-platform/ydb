@@ -11,6 +11,7 @@
 
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/containers/absl/flat_hash_set.h>
+#include <util/digest/multi.h>
 #include <util/generic/list.h>
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
@@ -30,11 +31,39 @@ struct TLockWriteSeqNum {
     ui64 WriteSeqNum = 0;
 };
 
-// Last uncommitted write for one WriterIndex.
+// A logical lock within one physical LockTxId (and table).
+struct TLockKey {
+    ui64 Owner = 0;
+    ui64 CreatedOn = 0;
+
+    bool operator==(const TLockKey&) const = default;
+};
+
+struct TLockKeyHash {
+    size_t operator()(const TLockKey& key) const {
+        return MultiHash(key.Owner, key.CreatedOn);
+    }
+};
+
+TString SerializeLockShardsPath(TConstArrayRef<ui64> path);
+TVector<ui64> DeserializeLockShardsPath(const TString& data);
+TString SerializeLockCreatedOnRange(const std::optional<TSerializedTableRange>& range);
+std::optional<TSerializedTableRange> DeserializeLockCreatedOnRange(const TString& data);
+
+struct TWriteSeqNumBranch {
+    TVector<ui64> ShardsPath;
+    ui64 WriteSeqNum = 0;
+    TString SerializedResult; // serialized NKikimrDataEvents::TWriteSeqNumResult
+};
+
+// Aggregate maximum for one WriterIndex, retained independently of branch GC.
+// The current chain also keeps its latest result here.
 struct TWriteSeqNumState {
     ui64 WriterIndex = 0;
     ui64 WriteSeqNum = 0;
-    TString SerializedResult; // last TEvWriteResult; empty if none
+    TString SerializedResult; // latest current-chain result; empty if none
+    std::optional<ui64> GcWriteSeqNum;
+    TVector<TWriteSeqNumBranch> Branches;
 };
 
 // ELockFlags type safe enum
@@ -46,6 +75,7 @@ enum class ELockFlags : ui64 {
     Persistent = 4,
     Removed = 8,
     Pessimistic = 16,
+    TrackingOnly = 32, // In-memory tracker for a transaction whose borrowed deltas are outside this shard.
     PersistentMask = Frozen,
 };
 
@@ -61,12 +91,23 @@ inline bool operator!(ELockFlags c) { return ELockFlagsRaw(c) == 0; }
 // Info about an ancestor shard that originally held a persistent lock whose uncommitted
 // writes were transferred to this shard during split/merge.
 struct TAncestorLock {
+    static constexpr size_t MaxPerShard = 10'000;
+    static constexpr size_t MaxPaths = 32;
     ui64 TabletId = 0;      // ancestor shard
+    ui64 CreatedOn = 0;
+
+    TLockKey GetKey() const { return {TabletId, CreatedOn}; }
+
     ui32 Generation = 0;
     ui64 Counter = 0;
     TInstant CreationTime;
     ELockFlags Flags = ELockFlags::None;
     THashMap<ui64, TWriteSeqNumState> WriteSeqNumStates; // WriterIndex -> state
+    std::optional<TSerializedTableRange> CreatedOnRange; // Null means CreatedOn=self.
+
+    // Merge copies without folding sibling paths into their aggregate maximum.
+    // A mismatch leaves this copy unchanged.
+    bool Merge(const TAncestorLock& other, TString* error = nullptr);
 };
 
 class ILocksDb {
@@ -105,25 +146,37 @@ public:
     };
 
     virtual bool HasChanges() const = 0;
+    virtual bool HasPendingAncestorGc(ui64) const { return false; }
 
     virtual bool Load(TVector<TLockRow>& rows) = 0;
 
-    // Returns true when a new lock may be added with the given lockId
+    // Check whether a new lock may be added with the given lockId.
     // Sometimes new lock cannot be added, e.g. when it had uncommitted changes
     // in the past, and adding anything with the same lockId would conflict
     // with previous decisions.
     virtual bool MayAddLock(ui64 lockId) = 0;
 
+    // A tracked transaction may reference borrowed data outside our slices, but
+    // existing commit/abort decisions still prohibit acquiring a logical lock.
+    virtual bool MayActivateLock(ui64 lockId) { return MayAddLock(lockId); }
+
     // Persist adding/removing a lock info
     virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
-    virtual void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) = 0;
+    virtual void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult, std::optional<ui64> gcWriteSeqNum = std::nullopt) = 0;
     virtual void PersistRemoveLockWriteSeqNum(ui64 lockId, ui64 writerIndex) = 0;
     virtual void PersistAddAncestorLock(ui64 lockId, const TAncestorLock& lock) = 0;
-    virtual void PersistRemoveAncestorLock(ui64 lockId, ui64 tabletId) = 0;
-    virtual void PersistAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) = 0;
-    virtual void PersistRemoveAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex) = 0;
+    virtual void PersistAncestorLockWriteSeqNum(ui64 lockId, TLockKey key, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult, std::optional<ui64> gcWriteSeqNum = std::nullopt) = 0;
+    virtual void PersistAncestorLockBranch(ui64 lockId, TLockKey key, ui64 writerIndex, const TWriteSeqNumBranch& branch) = 0;
+    struct TAncestorGcTask {
+        ui64 LockId;
+        // A writer task removes branches only. A removed parent has one task for all its rows.
+        std::optional<std::tuple<ui64, ui64, ui64>> Writer; // Owner, CreatedOn, WriterIndex
+        auto operator<=>(const TAncestorGcTask&) const = default;
+    };
+    // Defer ancestor row deletion to bounded batches to limit redo in the caller's transaction.
+    virtual void ScheduleAncestorGc(TAncestorGcTask task) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
 
     // Persist adding/removing info on locked ranges
@@ -141,6 +194,8 @@ public:
 
     // Schedules callback when changes are confirmed to be persistent
     virtual void OnPersistent(std::function<void()> callback) = 0;
+    // Undoes in-memory state when the database transaction is rolled back.
+    virtual void OnRollback(std::function<void()> callback) = 0;
 };
 
 class TLocksDataShard {
@@ -358,6 +413,8 @@ public:
         return !(
             IsPersistent() ||
             IsPessimistic() ||
+            // A tracker must survive checks that add no logical lock state.
+            IsTrackingOnly() ||
             !ReadTables.empty() ||
             !WriteTables.empty() ||
             IsBroken());
@@ -397,6 +454,8 @@ public:
     bool IsShardLock() const { return !!(Flags & ELockFlags::WholeShard); }
     bool IsWriteLock() const { return !WriteTables.empty(); }
     bool IsPersistent() const { return !!(Flags & ELockFlags::Persistent); }
+    bool IsTrackingOnly() const { return !!(Flags & ELockFlags::TrackingOnly); }
+    void SetTrackingOnly(bool value);
     bool IsRemoved() const { return !!(Flags & ELockFlags::Removed); }
     bool HasUnpersistedRanges() const { return UnpersistedRanges; }
     //ui64 MemorySize() const { return 1; } // TODO
@@ -515,16 +574,22 @@ public:
         return it != WriteSeqNumStates.end() ? &it->second : nullptr;
     }
     const THashMap<ui64, TWriteSeqNumState>& GetWriteSeqNumStates() const { return WriteSeqNumStates; }
+    bool SetWriteSeqNumWithGc(ui64 writerIndex, std::optional<ui64> freshWriteSeqNum, ui64 bound, ILocksDb& db);
     void SetWriteSeqNumResult(ui64 writerIndex, TString serializedResult, ILocksDb* db = nullptr);
 
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
-    const THashMap<ui64, TAncestorLock>& GetAncestorLocks() const { return AncestorLocks; }
+    const THashMap<TLockKey, TAncestorLock, TLockKeyHash>& GetAncestorLocks() const { return AncestorLocks; }
     void AddAncestorLock(TAncestorLock lock);
+    void PersistAncestorLock(TAncestorLock lock, ILocksDb& db);
+    const TAncestorLock* FindAncestorLock(TLockKey key) const {
+        auto it = AncestorLocks.find(key);
+        return it != AncestorLocks.end() ? &it->second : nullptr;
+    }
 
-    const TWriteSeqNumState* FindAncestorWriteSeqNumState(ui64 dataShard, ui64 writerIndex) const;
-    bool SetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
-    void SetAncestorWriteSeqNumResult(ui64 dataShard, ui64 writerIndex, TString serializedResult, ILocksDb* db);
+    void SetAncestorBranch(TLockKey key, ui64 writerIndex, const TWriteSeqNumBranch& branch, ILocksDb* db);
+    void SetAncestorBranchResult(TLockKey key, ui64 writerIndex, const TVector<ui64>& path,
+        ui64 writeSeqNum, const TString& serializedResult, ILocksDb* db);
 
 private:
     void MakeShardLock();
@@ -572,7 +637,7 @@ private:
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
     THashMap<ui64, TWriteSeqNumState> WriteSeqNumStates;
-    THashMap<ui64, TAncestorLock> AncestorLocks;  // TabletId -> TAncestorLock
+    THashMap<TLockKey, TAncestorLock, TLockKeyHash> AncestorLocks;
 
 public:
     TAsyncEvent OnBrokenEvent;
@@ -830,6 +895,7 @@ using TRuntimeLockHolder = TTableLocks::TRuntimeLockHolder;
 /// Owns and manages locks
 class TLockLocker {
     friend class TSysLocks;
+    friend class TLockInfo;
 
 public:
     /// Prevent unlimited locks count growth
@@ -872,6 +938,7 @@ public:
 
     ui64 LocksCount() const { return Locks.size(); }
     ui64 BrokenLocksCount() const { return BrokenLocksCount_; }
+    ui64 TrackingOnlyLocksCount() const { return TrackingOnlyLocksCount_; }
 
     void BreakLocks(TIntrusiveList<TLockInfo, TLockInfoBreakListTag>& locks, const TRowVersion& at);
     void ForceBreakLock(ui64 lockId);
@@ -949,6 +1016,8 @@ public:
             pr.second->Clear();
         }
         Locks.clear();
+        AncestorCount = 0;
+        TrackingOnlyLocksCount_ = 0;
         ShardLocks.clear();
         BrokenLocks.Clear();
         CleanupPending.clear();
@@ -980,6 +1049,8 @@ private:
     TIntrusiveList<TLockInfo, TLockInfoBrokenPersistentListTag> BrokenPersistentLocks;
     TIntrusiveList<TLockInfo, TLockInfoBrokenListTag> BrokenLocks;
     size_t BrokenLocksCount_ = 0;
+    size_t TrackingOnlyLocksCount_ = 0;
+    size_t AncestorCount = 0;
     // A queue of locks that need their ranges to be cleaned up
     TVector<ui64> CleanupPending;
     TPriorityQueue<TVersionedLockId> CleanupCandidates;
@@ -1021,14 +1092,53 @@ struct TLocksUpdate {
 
     struct TWriteSeqNumUpdate {
         const ui64 WriterIndex;
-        // These uncommitted write position in the writer chains; ApplyLocks persists them on the lock.
-        TMaybe<ui64> SetWriteSeqNum;
-        // Same for operations that touched ancestor shards;
-        THashMap<ui64, ui64> SetAncestorWriteSeqNums;
+        enum class EStatus { Fresh, Duplicate, BadRequest, LocksBroken, WrongShardState, AncestorLimit };
+        struct TResult {
+            EStatus Status;
+            TString Error;
+            TString SerializedResult;
+        };
+        struct TBranchUpdate {
+            TLockKey Key;
+            TWriteSeqNumBranch Branch;
+        };
 
-        explicit TWriteSeqNumUpdate(ui64 writerIndex)
+        // Echoes include duplicates; only fresh operations produce branch updates.
+        THashMap<TLockKey, THashSet<TPathId>, TLockKeyHash> EchoLocks;
+        // Pending updates for both current and ancestor chains.
+        TVector<TBranchUpdate> Branches;
+        THashSet<TLockKey, TLockKeyHash> NewLocks;
+        std::optional<ui64> GcWriteSeqNum;
+        // ApplyLocks sets this only after publishing all prepared branch updates.
+        bool Applied = false;
+
+        // Validate and classify one operation, staging changes until ApplyLocks.
+        TResult StageOperation(const TLockInfo* lock, ui64 currentShard, TConstArrayRef<ui64> ancestors,
+            ui64 writeSeqNum, const TPathId& table);
+
+        explicit TWriteSeqNumUpdate(ui64 writerIndex, size_t availableAncestors = TAncestorLock::MaxPerShard)
             : WriterIndex(writerIndex)
+            , AvailableAncestors(availableAncestors)
         {}
+
+    private:
+        struct TSelectedLock {
+            TLockKey Key;
+            const TWriteSeqNumState* Original = nullptr;
+        };
+
+        // Select the first logical lock along the path, or stage its creation at WSN=1.
+        std::optional<TResult> SelectLogicalLock(const TLockInfo* lock, TConstArrayRef<ui64> path,
+            ui64 writeSeqNum, TSelectedLock& selected);
+        // Classify against staged history and collect fresh updates and lock echoes.
+        TResult ClassifyWriteSeqNum(const TLockInfo* lock, const TSelectedLock& selected,
+            TVector<ui64> path, ui64 writeSeqNum, const TPathId& table);
+
+        // Staging does not change the shard's quota. NewLocks tracks slots
+        // already claimed by earlier operations in this request.
+        const size_t AvailableAncestors;
+        THashMap<TLockKey, TWriteSeqNumState, TLockKeyHash> StagedStates;
+        bool SeenCurrent = false;
     };
 
     TMaybe<TWriteSeqNumUpdate> WriteSeqNumUpdate;
@@ -1067,7 +1177,8 @@ struct TLocksUpdate {
     ~TLocksUpdate();
 
     bool HasLocks() const {
-        return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks);
+        return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks)
+            || HasSeqNumEchoes();
     }
 
     void AddRangeLock(const TRangeKey& range) {
@@ -1149,12 +1260,18 @@ struct TLocksUpdate {
         BreakOwn = true;
     }
 
+    bool HasSeqNumEchoes() const {
+        if (!WriteSeqNumUpdate) {
+            return false;
+        }
+        return !WriteSeqNumUpdate->EchoLocks.empty();
+    }
+
     bool HasSeqNumUpdates() const {
         if (!WriteSeqNumUpdate) {
             return false;
         }
-        return WriteSeqNumUpdate->SetWriteSeqNum
-            || !WriteSeqNumUpdate->SetAncestorWriteSeqNums.empty();
+        return !WriteSeqNumUpdate->Branches.empty();
     }
 };
 
@@ -1182,6 +1299,9 @@ enum class EEnsureCurrentLock {
 
 /// /sys/locks table logic
 class TSysLocks {
+    // Publish the first logical state together with the database transaction.
+    void ActivateLock(TLockInfo& lock, ILocksDb& db);
+
 public:
     using TLocksTable = TSysTables::TLocksTable;
     using TLock = TLocksTable::TLock;
@@ -1284,6 +1404,7 @@ public:
 
     ui64 LocksCount() const { return Locker.LocksCount(); }
     ui64 BrokenLocksCount() const { return Locker.BrokenLocksCount(); }
+    ui64 TrackingOnlyLocksCount() const { return Locker.TrackingOnlyLocksCount(); }
 
     TLockInfo::TPtr GetRawLock(ui64 lockTxId) const {
         return Locker.GetLock(lockTxId);
@@ -1313,6 +1434,9 @@ public:
     void UpdateCounters(ui64 counter);
 
     bool Load(ILocksDb& db);
+    void Load(TVector<ILocksDb::TLockRow> rows);
+    size_t AvailableAncestorLocks() const;
+    bool RejectAncestorLimit();
 
     /**
      * Restores in-memory lock state migrated from previous generations
@@ -1357,11 +1481,13 @@ public:
         }
     }
 
-    void RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& row, ILocksDb& db);
+    bool RestoreLockFromSplitSrc(ILocksDb::TLockRow&& row, ILocksDb& db, TString* error = nullptr);
     void RestoreConflictFromSplitSrc(ui64 lockId, ui64 conflictId, ILocksDb& db);
 
 private:
     THolder<TLocksDataShard> Self;
+    // Retain a rejected LockId and its owner for ordinary lock cleanup.
+    TLockInfo::TPtr PersistBrokenLock(ui64 lockId, ui32 nodeId, ILocksDb& db);
     TLockLocker Locker;
     TLocksUpdate* Update = nullptr;
     TLocksCache* AccessLog = nullptr;
@@ -1369,7 +1495,7 @@ private:
     ILocksDb* Db = nullptr;
 
     TLock MakeLock(
-        ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,
+        ui64 lockTxId, ui64 shardId, ui64 createdOn, ui32 generation, ui64 counter,
         const TPathId& pathId, bool hasWrites, TLockWriteSeqNum writeSeqNum) const;
     TLock MakeAndLogLock(
         ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,

@@ -175,6 +175,9 @@ private:
                     state.WriterIndex = proto.GetWriterIndex();
                     state.WriteSeqNum = proto.GetWriteSeqNum();
                     state.SerializedResult = proto.GetSerializedResult();
+                    if (proto.HasGcWriteSeqNum()) {
+                        state.GcWriteSeqNum = proto.GetGcWriteSeqNum();
+                    }
                     if (state.WriteSeqNum) {
                         row.WriteSeqNumStates.push_back(std::move(state));
                     }
@@ -662,6 +665,9 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
             auto* proto = protoLockInfo->AddWriteSeqNumStates();
             proto->SetWriterIndex(writerIndex);
             proto->SetWriteSeqNum(state.WriteSeqNum);
+            if (state.GcWriteSeqNum) {
+                proto->SetGcWriteSeqNum(*state.GcWriteSeqNum);
+            }
             if (!state.SerializedResult.empty()) {
                 proto->SetSerializedResult(state.SerializedResult);
             }

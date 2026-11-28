@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(ShardMetaHelpers) {
     Y_UNIT_TEST(MakeShardMetaSingleShard) {
         auto partitioning = MakePartitioning({{7, Max<ui32>()}}, 5);
 
-        auto meta = MakeShardMeta(TTableId(1, 100), partitioning, 7, 1);
+        auto meta = MakeShardMeta(TPathId(1, 100), partitioning, 7, 1);
         UNIT_ASSERT(meta.IsKnown());
         UNIT_ASSERT_VALUES_EQUAL(meta.PartitioningVersion, 5);
         UNIT_ASSERT_VALUES_EQUAL(meta.Borders.From.size(), 1);
@@ -62,20 +62,20 @@ Y_UNIT_TEST_SUITE(ShardMetaHelpers) {
     Y_UNIT_TEST(MakeShardMetaBordersMatchNeighbors) {
         auto partitioning = MakePartitioning({{1, 10}, {2, 20}, {3, Max<ui32>()}}, 3);
 
-        auto first = MakeShardMeta(TTableId(1, 100), partitioning, 1, 1);
+        auto first = MakeShardMeta(TPathId(1, 100), partitioning, 1, 1);
         UNIT_ASSERT_VALUES_EQUAL(first.Borders.From.size(), 1);
         UNIT_ASSERT(first.Borders.From[0].IsNull());
         UNIT_ASSERT(first.Borders.InclusiveFrom);
         UNIT_ASSERT_VALUES_EQUAL(first.Borders.To[0].AsValue<ui32>(), 10);
         UNIT_ASSERT(!first.Borders.InclusiveTo);
 
-        auto middle = MakeShardMeta(TTableId(1, 100), partitioning, 2, 1);
+        auto middle = MakeShardMeta(TPathId(1, 100), partitioning, 2, 1);
         UNIT_ASSERT_VALUES_EQUAL(middle.Borders.From[0].AsValue<ui32>(), 10);
         UNIT_ASSERT(middle.Borders.InclusiveFrom);
         UNIT_ASSERT_VALUES_EQUAL(middle.Borders.To[0].AsValue<ui32>(), 20);
         UNIT_ASSERT(!middle.Borders.InclusiveTo);
 
-        auto last = MakeShardMeta(TTableId(1, 100), partitioning, 3, 1);
+        auto last = MakeShardMeta(TPathId(1, 100), partitioning, 3, 1);
         UNIT_ASSERT_VALUES_EQUAL(last.Borders.From[0].AsValue<ui32>(), 20);
         UNIT_ASSERT(last.Borders.InclusiveFrom);
         UNIT_ASSERT(last.Borders.To.empty());
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(ShardMetaHelpers) {
     Y_UNIT_TEST(MakeShardMetaUnknownShard) {
         auto partitioning = MakePartitioning({{1, 10}, {2, Max<ui32>()}}, 4);
 
-        auto meta = MakeShardMeta(TTableId(1, 100), partitioning, 99, 1);
+        auto meta = MakeShardMeta(TPathId(1, 100), partitioning, 99, 1);
         // The shard is not in the partitioning: the version is still recorded,
         // borders stay unknown.
         UNIT_ASSERT(meta.IsKnown());
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(ShardMetaHelpers) {
     }
 
     Y_UNIT_TEST(MakeShardMetaNullPartitioning) {
-        auto meta = MakeShardMeta(TTableId(1, 100), nullptr, 7, 1);
+        auto meta = MakeShardMeta(TPathId(1, 100), nullptr, 7, 1);
         UNIT_ASSERT(!meta.IsKnown());
         UNIT_ASSERT(meta.Borders.From.empty() && meta.Borders.To.empty());
     }
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(ShardMetaHelpers) {
         partitions.back().Range.ConstructInPlace(); // last partition: empty EndKeyPrefix = unbounded
         auto partitioning = std::make_shared<TPartitioning>(std::move(partitions), 9);
 
-        auto meta = MakeShardMeta(TTableId(1, 100), partitioning, 2, 2);
+        auto meta = MakeShardMeta(TPathId(1, 100), partitioning, 2, 2);
         UNIT_ASSERT(meta.IsKnown());
         UNIT_ASSERT_VALUES_EQUAL(meta.Borders.From.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(meta.Borders.From[0].AsValue<ui32>(), 5);
@@ -116,12 +116,12 @@ Y_UNIT_TEST_SUITE(ShardMetaHelpers) {
 
     Y_UNIT_TEST(ProtoRoundTrip) {
         auto partitioning = MakePartitioning({{1, 10}, {2, Max<ui32>()}}, 6);
-        auto meta = MakeShardMeta(TTableId(1, 100), partitioning, 2, 1);
+        auto meta = MakeShardMeta(TPathId(1, 100), partitioning, 2, 1);
 
         // Borders survive the proto round trip used by the stream lookup actor
         // and the data executer.
         NKikimrTxDataShard::TShardPartitioningInfo proto;
-        FillShardPartitioningInfo(proto, 2, meta);
+        FillShardPartitioningInfo(proto, 2, meta, 0);
         UNIT_ASSERT_VALUES_EQUAL(proto.GetShardId(), 2);
         // The table id (with schema version) is carried in the proto, so the
         // executer restores the exact table the metas were computed against.
@@ -131,37 +131,36 @@ Y_UNIT_TEST_SUITE(ShardMetaHelpers) {
         UNIT_ASSERT_VALUES_EQUAL(proto.GetTableId().GetSchemaVersion(), 0u);
         auto restored = ToShardMeta(proto);
 
-        UNIT_ASSERT(restored.TableId == meta.TableId);
+        UNIT_ASSERT(restored.PathId == meta.PathId);
         UNIT_ASSERT_VALUES_EQUAL(restored.PartitioningVersion, 6);
         UNIT_ASSERT(SameBorders(restored.Borders, meta.Borders));
     }
 
     Y_UNIT_TEST(ProtoRoundTripUnknownBorders) {
         auto partitioning = MakePartitioning({{1, 10}, {2, Max<ui32>()}}, 6);
-        auto unknown = MakeShardMeta(TTableId(1, 100), partitioning, 42, 1);
+        auto unknown = MakeShardMeta(TPathId(1, 100), partitioning, 42, 1);
 
         NKikimrTxDataShard::TShardPartitioningInfo proto;
-        FillShardPartitioningInfo(proto, 42, unknown);
+        FillShardPartitioningInfo(proto, 42, unknown, 0);
         UNIT_ASSERT(!proto.HasBorders());
 
         auto restored = ToShardMeta(proto);
         UNIT_ASSERT(restored.IsKnown());
-        UNIT_ASSERT(restored.TableId == TTableId(1, 100));
+        UNIT_ASSERT(restored.PathId == TPathId(1, 100));
         UNIT_ASSERT(restored.Borders.From.empty() && restored.Borders.To.empty());
     }
 
     Y_UNIT_TEST(ProtoRoundTripSchemaVersion) {
         auto partitioning = MakePartitioning({{1, 10}, {2, Max<ui32>()}}, 6);
         TTableId tableId(TPathId(1, 100), TString(), 77);
-        auto meta = MakeShardMeta(tableId, partitioning, 2, 1);
+        auto meta = MakeShardMeta(tableId.PathId, partitioning, 2, 1);
 
         NKikimrTxDataShard::TShardPartitioningInfo proto;
-        FillShardPartitioningInfo(proto, 2, meta);
+        FillShardPartitioningInfo(proto, 2, meta, tableId.SchemaVersion);
         UNIT_ASSERT_VALUES_EQUAL(proto.GetTableId().GetSchemaVersion(), 77u);
 
         auto restored = ToShardMeta(proto);
-        UNIT_ASSERT(restored.TableId == tableId);
-        UNIT_ASSERT(restored.TableId.SchemaVersion == 77);
+        UNIT_ASSERT(restored.PathId == tableId.PathId);
     }
 
     Y_UNIT_TEST(ShardPartitionIndex) {
@@ -190,14 +189,14 @@ Y_UNIT_TEST_SUITE(ShardMetaHelpers) {
         TShardPartitionIndex index(partitioning);
 
         for (const ui64 shardId : {1ull, 2ull, 3ull, 99ull}) {
-            const auto viaIndex = MakeShardMeta(TTableId(1, 100), index, shardId, 1);
-            const auto raw = MakeShardMeta(TTableId(1, 100), partitioning, shardId, 1);
+            const auto viaIndex = MakeShardMeta(TPathId(1, 100), index, shardId, 1);
+            const auto raw = MakeShardMeta(TPathId(1, 100), partitioning, shardId, 1);
             UNIT_ASSERT_VALUES_EQUAL(viaIndex.IsKnown(), raw.IsKnown());
             UNIT_ASSERT_VALUES_EQUAL(viaIndex.PartitioningVersion, raw.PartitioningVersion);
             UNIT_ASSERT(SameBorders(viaIndex.Borders, raw.Borders));
         }
 
-        const auto empty = MakeShardMeta(TTableId(1, 100), TShardPartitionIndex(), 1, 1);
+        const auto empty = MakeShardMeta(TPathId(1, 100), TShardPartitionIndex(), 1, 1);
         UNIT_ASSERT(!empty.IsKnown());
     }
 

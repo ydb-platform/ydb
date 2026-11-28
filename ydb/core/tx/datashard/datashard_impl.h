@@ -197,6 +197,7 @@ class TDataShard
     class TTxSplitSnapshotComplete;
     class TTxSplitReplicationSourceOffsets;
     class TTxSplitTransferSnapshot;
+    class TTxSplitLastSnapshotReceived;
     class TTxSplitTransferSnapshotAck;
     class TTxSplitPartitioningChanged;
     class TTxStoreTablePath;
@@ -232,6 +233,7 @@ class TDataShard
     class TTxRemoveLock;
     class TTxGetOpenTxs;
     class TTxRemoveLockChangeRecords;
+    class TTxAncestorGc;
     class TTxVolatileTxCommit;
     class TTxVolatileTxAbort;
     class TTxCdcStreamScanRun;
@@ -1220,33 +1222,59 @@ class TDataShard
             struct WriterIndex : Column<2, NScheme::NTypeIds::Uint64> {};
             struct WriteSeqNum : Column<3, NScheme::NTypeIds::Uint64> {};
             struct WriteResult : Column<4, NScheme::NTypeIds::String> {};
+            struct GcWriteSeqNum : Column<5, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<LockId, WriterIndex>;
-            using TColumns = TableColumns<LockId, WriterIndex, WriteSeqNum, WriteResult>;
+            using TColumns = TableColumns<LockId, WriterIndex, WriteSeqNum, WriteResult, GcWriteSeqNum>;
         };
 
+        // Legacy table ids remain reserved and must not be reused.
+        static constexpr ui32 LegacyAncestorShardsLocksTableId = 41;
+        static constexpr ui32 LegacyAncestorLockWriteSeqNumsTableId = 42;
+
         // Ancestor shards that hold the original persistent lock for transferred (split/merge) uncommitted writes.
-        struct AncestorShardsLocks : Table<41> {
+        struct AncestorShardsLocksV2 : Table<44> {
             struct LockId          : Column<1, NScheme::NTypeIds::Uint64> {};
             struct TabletId        : Column<2, NScheme::NTypeIds::Uint64> {};  // ancestor shard
             struct Generation      : Column<3, NScheme::NTypeIds::Uint32> {};
             struct Counter         : Column<4, NScheme::NTypeIds::Uint64> {};
             struct CreateTimestamp : Column<5, NScheme::NTypeIds::Uint64> {};
             struct Flags           : Column<6, NScheme::NTypeIds::Uint64> {};
+            struct CreatedOn : Column<7, NScheme::NTypeIds::Uint64> {};
+            struct CreatedOnRange : Column<8, NScheme::NTypeIds::String> {};
 
-            using TKey = TableKey<LockId, TabletId>;
-            using TColumns = TableColumns<LockId, TabletId, Generation, Counter, CreateTimestamp, Flags>;
+            using TKey = TableKey<LockId, TabletId, CreatedOn>;
+            using TColumns = TableColumns<LockId, TabletId, CreatedOn, Generation, Counter, CreateTimestamp, Flags, CreatedOnRange>;
         };
 
-        struct AncestorLockWriteSeqNums : Table<42> {
+        using AncestorShardsLocks = AncestorShardsLocksV2;
+
+        struct AncestorLockWriteSeqNumsV2 : Table<45> {
             struct LockId      : Column<1, NScheme::NTypeIds::Uint64> {};
             struct TabletId    : Column<2, NScheme::NTypeIds::Uint64> {};
             struct WriterIndex : Column<3, NScheme::NTypeIds::Uint64> {};
             struct WriteSeqNum : Column<4, NScheme::NTypeIds::Uint64> {};
             struct WriteResult : Column<5, NScheme::NTypeIds::String> {};
+            struct CreatedOn : Column<6, NScheme::NTypeIds::Uint64> {};
+            struct GcWriteSeqNum : Column<7, NScheme::NTypeIds::Uint64> {};
 
-            using TKey = TableKey<LockId, TabletId, WriterIndex>;
-            using TColumns = TableColumns<LockId, TabletId, WriterIndex, WriteSeqNum, WriteResult>;
+            using TKey = TableKey<LockId, TabletId, CreatedOn, WriterIndex>;
+            using TColumns = TableColumns<LockId, TabletId, CreatedOn, WriterIndex, WriteSeqNum, WriteResult, GcWriteSeqNum>;
+        };
+
+        using AncestorLockWriteSeqNums = AncestorLockWriteSeqNumsV2;
+
+        struct AncestorLockBranches : Table<43> {
+            struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct Owner : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct CreatedOn : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct WriterIndex : Column<4, NScheme::NTypeIds::Uint64> {};
+            struct ShardsPath : Column<5, NScheme::NTypeIds::String> {};
+            struct WriteSeqNum : Column<6, NScheme::NTypeIds::Uint64> {};
+            struct WriteResult : Column<7, NScheme::NTypeIds::String> {};
+
+            using TKey = TableKey<LockId, Owner, CreatedOn, WriterIndex, ShardsPath>;
+            using TColumns = TableColumns<LockId, Owner, CreatedOn, WriterIndex, ShardsPath, WriteSeqNum, WriteResult>;
         };
 
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
@@ -1258,7 +1286,7 @@ class TDataShard
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
             TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
             LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph, IndexBuildScans,
-            LockWriteSeqNums, AncestorShardsLocks, AncestorLockWriteSeqNums>;
+            LockWriteSeqNums, AncestorShardsLocks, AncestorLockWriteSeqNums, AncestorLockBranches>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1332,6 +1360,7 @@ class TDataShard
 
             Sys_SubDomainTablesMetricsLevel = 48,
             Sys_DatabaseFreeze = 49,
+            Sys_LocksFormatVersion = 50,
 
             // reserved
             SysPipeline_Flags = 1000,
@@ -1677,6 +1706,7 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxSyncSchemeOnFollower();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxStartSplit();
+    NTabletFlatExecutor::ITransaction* CreateTxSplitLastSnapshotReceived(bool readyPersisted = false);
     NTabletFlatExecutor::ITransaction* CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext);
     NTabletFlatExecutor::ITransaction* CreateTxSplitPartitioningChanged(THashMap<TActorId, THashSet<ui64>>&& waiters);
     NTabletFlatExecutor::ITransaction* CreateTxInitiateBorrowedPartsReturn();
@@ -2438,6 +2468,7 @@ public:
     bool LoadLockChangeRecords(NIceDb::TNiceDb& db);
     bool LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records);
     void ScheduleRemoveLockChanges(ui64 lockId);
+    void ScheduleAncestorGc(ILocksDb::TAncestorGcTask task);
     void ScheduleRemoveAbandonedLockChanges();
     void ScheduleRemoveSchemaSnapshot(const TSchemaSnapshotKey& key);
     void ScheduleRemoveAbandonedSchemaSnapshots();
@@ -3641,6 +3672,10 @@ private:
     THashMap<ui64, TUncommittedLockChangeRecords> LockChangeRecords; // ui64 is lock id
     THashMap<ui64, TCommittedLockChangeRecords> CommittedLockChangeRecords; // ui64 is lock id
     TVector<ui64> PendingLockChangeRecordsToRemove;
+    // Tasks to delete ancestor rows, including the task currently being processed.
+    // Keep each task until its last batch commits so a new lock cannot reuse the
+    // same LockId while GC can still delete rows under that ID.
+    TSet<ILocksDb::TAncestorGcTask> PendingAncestorGc;
     TVector<TSchemaSnapshotKey> PendingSchemaSnapshotsToGc;
 
     // in

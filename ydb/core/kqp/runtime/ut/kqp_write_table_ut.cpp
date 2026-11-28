@@ -4,6 +4,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -46,7 +47,8 @@ public:
 
     // Opens the token, writes a single row (a single message round on the shard),
     // closes the token and flushes the batch to the shard.
-    void WriteRound(const ui64 key, const ui64 value, const IShardedWriteController::TWriteToken token) {
+    void WriteRound(const ui64 key, const ui64 value, const IShardedWriteController::TWriteToken token,
+            bool flush = true) {
         TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumns;
         keyColumns.push_back(MakeColumn("key", 1, NScheme::NTypeIds::Uint64));
 
@@ -69,6 +71,9 @@ public:
         batcher->AddCell(TCell::Make(value));
         batcher->AddRow();
         Controller->Write(token, batcher->Flush());
+        if (!flush) {
+            return;
+        }
         Controller->FlushBuffers();
 
         Controller->Close(token);
@@ -80,6 +85,60 @@ protected:
     IShardedWriteControllerPtr Controller;
 };
 
+class TAncestorsControllerFixture : public TShardedWriteControllerFixture {
+public:
+    TAncestorsControllerFixture() {
+        TShardedWriteControllerSettings settings;
+        settings.EnableWriteSeqNum = true;
+        settings.WriterIndex = 7;
+        Controller = CreateShardedWriteController(settings, Alloc);
+        SetPartitions({{TestShardId, std::nullopt}});
+    }
+
+    void SetPartitions(const TVector<std::pair<ui64, std::optional<ui64>>>& ranges) {
+        TVector<TKeyDesc::TPartitionInfo> partitions;
+        for (const auto& [shardId, end] : ranges) {
+            auto& partition = partitions.emplace_back(shardId);
+            partition.Range = TKeyDesc::TPartitionRangeInfo{};
+            if (end) {
+                const TVector<TCell> cells{TCell::Make(*end)};
+                partition.Range->EndKeyPrefix = TSerializedCellVec(cells);
+            }
+        }
+        Controller->OnPartitioningChanged(std::make_shared<TPartitioning>(std::move(partitions)));
+    }
+
+    void Reroute() {
+        Controller->ReRouteShards(Controller->GetDeletedShards());
+    }
+
+    std::unique_ptr<NEvents::TDataEvents::TEvWrite> Capture(ui64 shardId) {
+        auto ev = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        Controller->PrepareMessageMetadata(shardId);
+        Controller->SerializeMessageToPayload(shardId, *ev, false);
+        return ev;
+    }
+
+    static void Check(const NEvents::TDataEvents::TEvWrite& ev, size_t index,
+            const TVector<ui64>& ancestors, ui64 wsn, const TVector<ui64>& keys) {
+        UNIT_ASSERT(index < ev.Record.OperationsSize());
+        const auto& op = ev.Record.GetOperations(index);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetWriteSeqNum().GetWriterIndex(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetWriteSeqNum().GetWriteSeqNum(), wsn);
+        UNIT_ASSERT_VALUES_EQUAL(op.AncestorsSize(), ancestors.size());
+        for (size_t i = 0; i < ancestors.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(op.GetAncestors(i), ancestors[i]);
+        }
+        NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite> reader(ev);
+        TSerializedCellMatrix matrix;
+        UNIT_ASSERT(TSerializedCellMatrix::TryParse(reader.GetDataFromPayload(op.GetPayloadIndex()), matrix));
+        UNIT_ASSERT_VALUES_EQUAL(matrix.GetRowCount(), keys.size());
+        for (size_t i = 0; i < keys.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(matrix.GetCell(i, 0).AsValue<ui64>(), keys[i]);
+        }
+    }
+};
+
 IShardedWriteController::TMessageMetadata MetadataWithCookie(const ui64 cookie) {
     IShardedWriteController::TMessageMetadata metadata;
     metadata.Cookie = cookie;
@@ -89,6 +148,179 @@ IShardedWriteController::TMessageMetadata MetadataWithCookie(const ui64 cookie) 
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpWriteTable) {
+    Y_UNIT_TEST_F(ReroutePreservesOversizedRow, TAncestorsControllerFixture) {
+        const TString value(9 * 1024 * 1024, 'x');
+        for (const bool enableWriteSeqNum : {false, true}) {
+            TShardedWriteControllerSettings settings;
+            settings.EnableWriteSeqNum = enableWriteSeqNum;
+            settings.Inconsistent = !enableWriteSeqNum;
+            settings.WriterIndex = 7;
+            Controller = CreateShardedWriteController(settings, Alloc);
+            SetPartitions({{1, std::nullopt}});
+
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumns{
+                MakeColumn("key", 1, NScheme::NTypeIds::Uint64)};
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> inputColumns{
+                keyColumns.front(), MakeColumn("value", 2, NScheme::NTypeIds::String)};
+            Controller->Open(0, TTableId(1, 2),
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                std::move(keyColumns), std::move(inputColumns), 0, 0, std::nullopt);
+
+            auto batcher = CreateRowsBatcher(2, Alloc);
+            batcher->AddCell(TCell::Make(ui64(10)));
+            batcher->AddCell(TCell(value.data(), value.size()));
+            batcher->AddRow();
+            Controller->Write(0, batcher->Flush());
+            Controller->Close(0);
+            Controller->FlushBuffers();
+
+            auto initial = Capture(1);
+            UNIT_ASSERT_VALUES_EQUAL(initial->Record.OperationsSize(), 1);
+            NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite> initialReader(*initial);
+            const auto originalSize = initialReader.GetDataFromPayload(
+                initial->Record.GetOperations(0).GetPayloadIndex()).size();
+            UNIT_ASSERT(originalSize > 8 * 1024 * 1024);
+
+            SetPartitions({{2, 50}, {3, std::nullopt}});
+            Reroute();
+            auto rerouted = Capture(2);
+            UNIT_ASSERT_VALUES_EQUAL(rerouted->Record.OperationsSize(), 1);
+            NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite> reader(*rerouted);
+            const auto payload = reader.GetDataFromPayload(rerouted->Record.GetOperations(0).GetPayloadIndex());
+            UNIT_ASSERT_VALUES_EQUAL(payload.size(), originalSize);
+            TSerializedCellMatrix matrix;
+            UNIT_ASSERT(TSerializedCellMatrix::TryParse(payload, matrix));
+            UNIT_ASSERT_VALUES_EQUAL(matrix.GetRowCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(matrix.GetCell(0, 0).AsValue<ui64>(), 10);
+            UNIT_ASSERT_C(matrix.GetCell(0, 1).AsBuf() == value, "Reroute changed the oversized value");
+        }
+    }
+
+    Y_UNIT_TEST_F(RetryAndUnsentReroutesPreserveAncestors, TAncestorsControllerFixture) {
+        WriteRound(10, 100, 0);
+        auto initial = Capture(1);
+        Check(*initial, 0, {}, 1, {10});
+        auto retry = Capture(1);
+        Check(*retry, 0, {}, 1, {10});
+
+        SetPartitions({{2, std::nullopt}});
+        Reroute();
+        // Nothing is sent to 2, but it must still appear in the routing history.
+        SetPartitions({{3, std::nullopt}});
+        Reroute();
+        auto rerouted = Capture(3);
+        UNIT_ASSERT_VALUES_EQUAL(rerouted->Record.OperationsSize(), 1);
+        Check(*rerouted, 0, {1, 2}, 1, {10});
+        Check(*Capture(3), 0, {1, 2}, 1, {10});
+
+        Controller->OnMessageAcknowledged(3, Controller->GetMessageMetadata(3)->Cookie);
+        WriteRound(20, 200, 1);
+        // Rerouted WSNs never allocate positions in the destination's current chain.
+        Check(*Capture(3), 0, {}, 1, {20});
+    }
+
+    Y_UNIT_TEST_F(SplitMergeSplitKeepsBranchRangesAndEmptyFragments, TAncestorsControllerFixture) {
+        WriteRound(10, 100, 0);
+        SetPartitions({{2, 50}, {3, std::nullopt}});
+        Reroute();
+        Check(*Capture(2), 0, {1}, 1, {10});
+        Check(*Capture(3), 0, {1}, 1, {});
+
+        SetPartitions({{4, std::nullopt}});
+        Reroute();
+        auto merged = Capture(4);
+        UNIT_ASSERT_VALUES_EQUAL(merged->Record.OperationsSize(), 2);
+        // Source iteration order is unspecified; independent branches stay separate.
+        for (size_t i = 0; i < 2; ++i) {
+            const auto source = merged->Record.GetOperations(i).GetAncestors(1);
+            UNIT_ASSERT(source == 2 || source == 3);
+            Check(*merged, i, {1, source}, 1, source == 2 ? TVector<ui64>{10} : TVector<ui64>{});
+        }
+        UNIT_ASSERT(merged->Record.GetOperations(0).GetAncestors(1)
+            != merged->Record.GetOperations(1).GetAncestors(1));
+
+        SetPartitions({{5, 25}, {6, std::nullopt}});
+        Reroute();
+        auto left = Capture(5);
+        UNIT_ASSERT_VALUES_EQUAL(left->Record.OperationsSize(), 1);
+        Check(*left, 0, {1, 2, 4}, 1, {10});
+        auto right = Capture(6);
+        UNIT_ASSERT_VALUES_EQUAL(right->Record.OperationsSize(), 2);
+        for (size_t i = 0; i < 2; ++i) {
+            const auto source = right->Record.GetOperations(i).GetAncestors(1);
+            Check(*right, i, {1, source, 4}, 1, {});
+        }
+
+        // Touching exclusive boundaries do not expand either branch across 50.
+        SetPartitions({{5, 25}, {7, 50}, {8, std::nullopt}});
+        Reroute();
+        auto middle = Capture(7);
+        UNIT_ASSERT_VALUES_EQUAL(middle->Record.OperationsSize(), 1);
+        Check(*middle, 0, {1, 2, 4, 6}, 1, {});
+        auto upper = Capture(8);
+        UNIT_ASSERT_VALUES_EQUAL(upper->Record.OperationsSize(), 1);
+        Check(*upper, 0, {1, 3, 4, 6}, 1, {});
+    }
+
+    Y_UNIT_TEST_F(ReroutePreservesSourceFifoAcrossOwners, TAncestorsControllerFixture) {
+        WriteRound(10, 100, 0);
+        SetPartitions({{2, std::nullopt}});
+        Reroute();
+        WriteRound(20, 200, 1);
+        WriteRound(30, 300, 2);
+        SetPartitions({{3, std::nullopt}});
+        Reroute();
+        auto ev = Capture(3);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Record.OperationsSize(), 3);
+        Check(*ev, 0, {1, 2}, 1, {10});
+        Check(*ev, 1, {2}, 1, {20});
+        Check(*ev, 2, {2}, 2, {30});
+    }
+
+    Y_UNIT_TEST_F(FirstReroutedRequestIncludesCompleteTail, TAncestorsControllerFixture) {
+        WriteRound(10, 100, 0);
+        Controller->PrepareMessageMetadata(1);
+        Controller->OnMessageSent(1, Controller->AllocateMessageCookie(1));
+        // These batches are queued behind an already prepared/in-flight request.
+        WriteRound(20, 200, 1);
+        WriteRound(30, 300, 2);
+        Controller->Close();
+        SetPartitions({{2, std::nullopt}});
+        Reroute();
+        auto ev = Capture(2);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Record.OperationsSize(), 3);
+        Check(*ev, 0, {1}, 1, {10});
+        Check(*ev, 1, {1}, 2, {20});
+        Check(*ev, 2, {1}, 3, {30});
+        UNIT_ASSERT(Controller->GetMessageMetadata(2)->IsFinal);
+        UNIT_ASSERT(!Controller->HasShard(1));
+    }
+
+    Y_UNIT_TEST_F(IncomingAncestorsPrecedePendingCurrent, TAncestorsControllerFixture) {
+        WriteRound(10, 100, 0);
+        SetPartitions({{2, std::nullopt}});
+        WriteRound(20, 200, 1);
+        auto current = Capture(2);
+        Check(*current, 0, {}, 1, {20});
+        const auto oldMetadata = *Controller->GetMessageMetadata(2);
+        Controller->OnMessageSent(2, oldMetadata.Cookie);
+
+        Reroute();
+        UNIT_ASSERT(IsSupersededWriteResult(oldMetadata.Cookie, Controller->GetMessageMetadata(2)));
+        auto ev = Capture(2);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Record.OperationsSize(), 2);
+        Check(*ev, 0, {1}, 1, {10});
+        Check(*ev, 1, {}, 1, {20});
+    }
+
+    Y_UNIT_TEST_F(PartitioningChangeFlushesUsingSourceRange, TAncestorsControllerFixture) {
+        WriteRound(10, 100, 0, false);
+        SetPartitions({{2, 50}, {3, std::nullopt}});
+        Reroute();
+        Check(*Capture(2), 0, {1}, 1, {10});
+        Check(*Capture(3), 0, {1}, 1, {});
+    }
+
     Y_UNIT_TEST(SupersededWriteResultFilter) {
         // A result echoing the cookie of the shard's last sent message is processed.
         UNIT_ASSERT(!IsSupersededWriteResult(7, MetadataWithCookie(7)));

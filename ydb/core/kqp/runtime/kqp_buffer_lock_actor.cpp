@@ -296,7 +296,7 @@ public:
 
         if (Settings.CollectShardMetas && !ShardMetas.contains(shardId)) {
             YDB_LOG_ENSURE(Partitioning);
-            ShardMetas[shardId] = MakeShardMeta(Settings.TableId, Partitioning, shardId, KeyColumnTypes.size());
+            ShardMetas[shardId] = MakeShardMeta(Settings.TableId.PathId, Partitioning, shardId, KeyColumnTypes.size());
         }
 
         YDB_LOG_ENSURE(LockIdToState.emplace(
@@ -326,7 +326,7 @@ public:
         const auto cookie = requestState.LockCookie;
 
         if (Settings.CollectShardMetas) {
-            Settings.TxManager->AddShard(shardId, false, Settings.TablePath, ShardMetas.at(shardId));
+            Settings.TxManager->AddShard(shardId, false, Settings.TablePath, Settings.TableId.PathId, ShardMetas.at(shardId));
         } else {
             Settings.TxManager->AddShard(shardId, false, Settings.TablePath);
         }

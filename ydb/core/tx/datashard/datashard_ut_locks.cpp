@@ -297,6 +297,58 @@ namespace NTest {
 // TODO: correctness, times
 Y_UNIT_TEST_SUITE(TDataShardLocksTest) {
 
+Y_UNIT_TEST(WriteSeqNumUpdatesAreSkippedWhenOwnLockBreaks) {
+    for (ui32 scenario = 0; scenario < 3; ++scenario) {
+        NTest::TLockTester tester;
+        TLocksUpdate initial;
+        tester.StartTx(100, initial);
+        tester.Select(TVector<ui32>{1});
+        for (const auto& lock : tester.ApplyTxLocks()) {
+            UNIT_ASSERT(!lock.IsError());
+        }
+        UNIT_ASSERT(initial.Lock);
+
+        const bool current = scenario == 0;
+        const bool existingAncestor = scenario == 2;
+        if (existingAncestor) {
+            TAncestorLock ancestor;
+            ancestor.TabletId = 10;
+            ancestor.CreatedOn = 10;
+            ancestor.Counter = 1;
+            auto& state = ancestor.WriteSeqNumStates[7];
+            state.WriterIndex = 7;
+            state.WriteSeqNum = 1;
+            state.Branches.push_back({{10}, 1, "saved"});
+            initial.Lock->AddAncestorLock(std::move(ancestor));
+        }
+
+        TLocksUpdate update;
+        tester.StartTx(100, update);
+        update.Lock = initial.Lock;
+        auto& seqNumUpdate = update.WriteSeqNumUpdate.Emplace(7);
+        const auto result = seqNumUpdate.StageOperation(update.Lock.Get(), NTest::TFakeDataShard::TabletID(),
+            current ? TVector<ui64>{} : TVector<ui64>{10}, existingAncestor ? 2 : 1,
+            TPathId(NTest::ESchemeShardId, NTest::EUserTableId));
+        UNIT_ASSERT(result.Status == TLocksUpdate::TWriteSeqNumUpdate::EStatus::Fresh);
+
+        tester.BreakSetLocks();
+        const auto locks = tester.ApplyTxLocks();
+        UNIT_ASSERT_VALUES_EQUAL(locks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(locks[0].Counter, ui64(TSysLocks::TLock::ErrorAlreadyBroken));
+        UNIT_ASSERT(update.Lock);
+        UNIT_ASSERT(!seqNumUpdate.Applied);
+        UNIT_ASSERT(update.Lock->GetWriteSeqNumStates().empty());
+        if (existingAncestor) {
+            const auto& state = update.Lock->FindAncestorLock({10, 10})->WriteSeqNumStates.at(7);
+            UNIT_ASSERT_VALUES_EQUAL(state.WriteSeqNum, 1);
+            UNIT_ASSERT_VALUES_EQUAL(state.Branches.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(state.Branches[0].SerializedResult, "saved");
+        } else {
+            UNIT_ASSERT(update.Lock->GetAncestorLocks().empty());
+        }
+    }
+}
+
 Y_UNIT_TEST(MvccTestOooTxDoesntBreakPrecedingReadersLocks) {
     NTest::TLockTester tester;
 

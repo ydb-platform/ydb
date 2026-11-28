@@ -78,6 +78,8 @@ public:
         TSourceManager GetSource(const TString& id);
 
         void Cancel();
+        bool HasHeartbeatWrites() const;
+        TString DescribeHeartbeatWrites(size_t maxSourceIds = 128) const;
         bool HasModifications() const;
         void FillRequest(TEvKeyValue::TEvRequest* request);
 

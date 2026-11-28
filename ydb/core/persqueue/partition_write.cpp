@@ -621,6 +621,11 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
+    if (SourceIdBatch && SourceIdBatch->HasHeartbeatWrites()) {
+        PQ_LOG_NOTICE("SOURCE_ID_KV_HEARTBEAT_WRITE_COMMITTED topic '" << TopicName() << "' partition " << Partition
+            << " committed# " << SourceIdBatch->DescribeHeartbeatWrites(64)
+            << " sourceIdStorageAfterCommit# " << SourceIdStorage.DescribeHeartbeatState(0));
+    }
 
     if (SplitMergeEnabled(Config) && !IsSupportive()) {
         SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
@@ -1294,6 +1299,45 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 << " process heartbeat sourceId '" << EscapeC(p.Msg.SourceId) << "'"
                 << " version " << *hbVersion
         );
+
+        const auto& sourceIds = SourceIdStorage.GetInMemorySourceIds();
+        const auto sourceIdIt = sourceIds.find(p.Msg.SourceId);
+        TStringBuilder committedHeartbeat;
+        bool belowCommittedHeartbeat = false;
+        if (sourceIdIt != sourceIds.end() && sourceIdIt->second.LastHeartbeat) {
+            const auto& version = sourceIdIt->second.LastHeartbeat->Version;
+            committedHeartbeat << version;
+            belowCommittedHeartbeat = *hbVersion < version;
+        } else {
+            committedHeartbeat << "none";
+        }
+
+        const auto& byHeartbeat = SourceIdStorage.GetSourceIdsByHeartbeat();
+        TStringBuilder persistedMinHeartbeat;
+        TStringBuilder persistedMaxHeartbeat;
+        bool belowPersistedMinHeartbeat = false;
+        if (!byHeartbeat.empty()) {
+            const auto& minVersion = byHeartbeat.begin()->first;
+            persistedMinHeartbeat << minVersion;
+            persistedMaxHeartbeat << byHeartbeat.rbegin()->first;
+            belowPersistedMinHeartbeat = *hbVersion < minVersion;
+        } else {
+            persistedMinHeartbeat << "none";
+            persistedMaxHeartbeat << "none";
+        }
+
+        if (belowCommittedHeartbeat || belowPersistedMinHeartbeat) {
+            PQ_LOG_NOTICE("HEARTBEAT_BELOW_RESTORED_STATE topic '" << TopicName() << "' partition " << Partition
+                << " sourceId# " << EscapeC(p.Msg.SourceId)
+                << " incomingHeartbeat# " << *hbVersion
+                << " committedSourceIdHeartbeat# " << committedHeartbeat
+                << " persistedMinHeartbeat# " << persistedMinHeartbeat
+                << " persistedMaxHeartbeat# " << persistedMaxHeartbeat
+                << " belowCommittedSourceIdHeartbeat# " << (belowCommittedHeartbeat ? "true" : "false")
+                << " belowPersistedMinHeartbeat# " << (belowPersistedMinHeartbeat ? "true" : "false")
+                << " lastEmittedHeartbeat# " << LastEmittedHeartbeat
+                << " sourceIdStorage# " << SourceIdStorage.DescribeHeartbeatState(0));
+        }
 
         sourceId.Update(THeartbeat{*hbVersion, p.Msg.Data});
 

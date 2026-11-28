@@ -387,6 +387,8 @@ message TPQTabletConfig {
 
     // Source service-consumer id identifying the replication that created this topic.
     optional string ReplicationSourceConsumer = 50;
+    // Present only on a topic backing a changefeed managed by replication.
+    optional bool CdcReplication = 53 [default = false];
 
     optional bool SplitByPartitionKey = 52;
 

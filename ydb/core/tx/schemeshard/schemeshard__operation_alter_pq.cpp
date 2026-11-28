@@ -18,6 +18,8 @@
 
 #include <ydb/services/lib/sharding/sharding.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include <format>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -26,6 +28,7 @@ namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
+using google::protobuf::util::MessageDifferencer;
 
 bool IsTableKeyStrictlyInsidePartition(const TString& key, const TMaybe<TTopicTabletInfo::TKeyRange>& partition,
         const TTopicTabletInfo::TKeySchema& keyTypes)
@@ -172,6 +175,7 @@ public:
             NKikimrPQ::TPQTabletConfig* tabletConfig,
             TTopicInfo::TPtr topic,
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
+            bool managedCdcTopic,
             TString& errStr)
     {
         bool splitMergeEnabled = NPQ::SplitMergeEnabled(*tabletConfig)
@@ -363,6 +367,22 @@ public:
                 // TODO: check validity
                 auto* pathId = alterConfig.MutableOffloadConfig()->MutableIncrementalBackup()->MutableDstPathId();
                 TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
+            }
+
+            if (managedCdcTopic) {
+                const auto& consumer = tabletConfig->GetReplicationSourceConsumer();
+                if (!consumer.empty()) {
+                    if (alterConfig.HasReplicationSourceConsumer() && alterConfig.GetReplicationSourceConsumer() != consumer) {
+                        errStr = "Cannot change the replication source consumer of a managed CDC topic";
+                        return nullptr;
+                    }
+                    alterConfig.SetReplicationSourceConsumer(consumer);
+                }
+
+                alterConfig.SetCdcReplication(true);
+            } else if (alterConfig.GetCdcReplication()) {
+                errStr = "CDC replication settings require a managed changefeed";
+                return nullptr;
             }
 
             if (tabletConfig->HasId()) {
@@ -733,10 +753,74 @@ public:
         NKikimrPQ::TPQTabletConfig tabletConfig = topic->GetTabletConfig();
         NKikimrPQ::TPQTabletConfig newTabletConfig = tabletConfig;
 
-        TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, topic, alter, errStr);
+        const auto streamPath = path.Parent();
+        const bool cdcTopic = streamPath.IsCdcStream();
+        const bool managedCdcTopic = cdcTopic && tabletConfig.GetCdcReplication()
+            && !tabletConfig.GetReplicationSourceConsumer().empty();
+        const bool attachCdcTopic = cdcTopic && !managedCdcTopic
+            && !alter.GetPQTabletConfig().GetReplicationSourceConsumer().empty();
+        TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, topic, alter, managedCdcTopic || attachCdcTopic, errStr);
 
         if (!alterData) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            return result;
+        }
+
+        const auto& oldPartition = tabletConfig.GetPartitionConfig();
+        const auto& newPartition = newTabletConfig.GetPartitionConfig();
+        const bool stopped = !oldPartition.HasMirrorFrom() && !newPartition.HasMirrorFrom();
+        const bool configureManagedMirror = managedCdcTopic && !stopped
+            && (Transaction.HasExpectedReplicationOwnerPathId()
+                || oldPartition.HasMirrorFrom() != newPartition.HasMirrorFrom()
+                || !MessageDifferencer::Equals(oldPartition.GetMirrorFrom(), newPartition.GetMirrorFrom()));
+
+        if (attachCdcTopic || configureManagedMirror) {
+            const auto tablePath = streamPath.Parent();
+            const auto checks = tablePath.Check();
+            checks
+                .NotEmpty()
+                .IsResolved()
+                .IsAtLocalSchemeShard()
+                .NotDeleted()
+                .IsTable()
+                .NotUnderOperation();
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+
+            const auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+            if (attachCdcTopic && !table->GetSplitOpsInFlight().empty()) {
+                result->SetError(NKikimrScheme::StatusMultipleModifications, "Table split or merge is in progress");
+                return result;
+            }
+
+            const auto& config = table->ReplicationConfig();
+            const auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
+            const auto expectedOwner = TPathId::FromProto(Transaction.GetExpectedReplicationOwnerPathId());
+            if (!Transaction.GetInternal() || !expectedOwner.OwnerId || !expectedOwner.LocalPathId
+                || !config.HasOwnerPathId() || TPathId::FromProto(config.GetOwnerPathId()) != expectedOwner
+                || config.GetMode() != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+                || stream->State != NKikimrSchemeOp::ECdcStreamStateDisabled)
+            {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Managed CDC attachment and mirroring require a Disabled stream and the current replica table owner");
+                return result;
+            }
+
+            const bool partitionHeartbeats = stream->ResolvedTimestamps != TDuration::Zero()
+                && stream->HeartbeatMode != NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated;
+            // Attachment keeps the bare producer groups, which cannot contribute to the partition quorum.
+            if (attachCdcTopic && (partitionHeartbeats || stream->SchemaChanges)) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Managed CDC attachment does not support partition heartbeats or schema changes");
+                return result;
+            }
+        }
+
+        if (attachCdcTopic && !stopped) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Managed CDC attachment requires a stopped topic");
             return result;
         }
 

@@ -8,7 +8,10 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/core/persqueue/events
+    ydb/core/persqueue/writer
     ydb/core/protos
+    ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/ydb_convert
     ydb/public/lib/ydb_cli/dump/util

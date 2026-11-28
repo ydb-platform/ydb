@@ -1,5 +1,33 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.36.0 {#2-36-0}
+
+Дата выхода 26 ноября 2026. Для обновления до версии **2.36.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* В [команду `{{ ydb-cli }} export s3`](./reference/ydb-cli/export-import/export-s3.md) добавлен экспорт данных таблиц в формате Apache Parquet с опцией `--file-format parquet`. Для экспорта в Parquet на сервере должен быть включён [флаг `enable_export_in_parquet`](./reference/configuration/feature_flags.md#configuration). Формат несовместим с шифрованием резервных копий средствами {{ ydb-short-name }}.
+* [Команды `{{ ydb-cli }} export s3`](./reference/ydb-cli/export-import/export-s3.md) и [`{{ ydb-cli }} export nfs`](./reference/ydb-cli/export-import/export-nfs.md) теперь пропускают объекты с атрибутом `__omit_backup = "true"`. [Команда `{{ ydb-cli }} tools dump`](./reference/ydb-cli/export-import/tools-dump.md) учитывает этот атрибут для таблиц и потоков изменений.
+* Расширена функциональность [команд `{{ ydb-cli }} admin cluster bridge`](./reference/ydb-cli/commands/bridge/index.md).
+  * Новая команда [`rollback`](./reference/ydb-cli/commands/bridge/rollback.md) запускает откат преобразования обычного кластера в кластер в режиме bridge. Ход отката показывает `list piles`.
+  * В команду [`list`](./reference/ydb-cli/commands/bridge/list.md#views) добавлены представления `piles`, `databases` и `groups` для отслеживания синхронизации.
+  * Новая команда [`set-database-mode`](./reference/ydb-cli/commands/bridge/set-database-mode.md) переключает хранилище базы данных между режимом bridge и обычным режимом.
+  * Новая команда [`provision-pile`](./reference/ydb-cli/commands/bridge/provision-pile.md) подготавливает хранилище для нового pile в работающем кластере.
+  * Новая команда [`destroy-pile`](./reference/ydb-cli/commands/bridge/destroy-pile.md) удаляет хранилище и данные отключённого pile.
+
+### Улучшения
+
+* [Команда `{{ ydb-cli }} scheme rmdir --recursive`](./reference/ydb-cli/commands/dir.md#rmdir) теперь удаляет объекты параллельно. Опция `--in-flight` ограничивает число одновременных удалений.
+* [Команда `{{ ydb-cli }} tools dump`](./reference/ydb-cli/export-import/tools-dump.md) теперь быстрее выгружает колоночные таблицы. На совместимых серверах выгрузка также потребляет меньше памяти.
+* [Команда `{{ ydb-cli }} operation get`](./reference/ydb-cli/operation-get.md) теперь показывает доступные сведения о завершившихся с ошибкой операциях и по-прежнему возвращает ненулевой код завершения.
+* Команды администрирования кластера, допускающие [подключение без базы данных](./reference/ydb-cli/connect.md#connection), теперь отклоняют пути к базам данных внутри домена. Укажите в `--database` корневой домен, например `/Root`, или подключитесь без базы данных.
+
+### Исправления ошибок
+
+* При [экспорте в S3](./reference/ydb-cli/export-import/export-s3.md) потоки изменений асинхронной репликации теперь исключаются из резервной копии. При [импорте из S3](./reference/ydb-cli/export-import/import-s3.md) такие потоки не восстанавливаются.
+* При сохранении данных в файлы с опцией `--file-output-path` команды [импорта для нагрузочных тестов](./reference/ydb-cli/commands/workload/index.md) теперь пропускают завершающие операции в базе данных.
+* Исправлено падение при поиске по документации в [интерактивном AI-режиме](./reference/ydb-cli/interactive-cli-ai.md#usage).
+
 ## Версия 2.35.0 {#2-35-0}
 
 Дата выхода 30 октября 2026. Для обновления до версии **2.35.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).

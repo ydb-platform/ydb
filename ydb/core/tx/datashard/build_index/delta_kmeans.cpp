@@ -54,7 +54,7 @@ using namespace NKMeans;
  * separately in the future - it also requires coordination between PrefixKMeansScans.
  */
 
-class TDeltaKMeansScan: public TActor<TDeltaKMeansScan>, public IActorExceptionHandler, public NTable::TDeltaScan {
+class TDeltaKMeansScan: public NActors::TActorWithExceptionHandler<TActor<TDeltaKMeansScan>>, public NTable::TDeltaScan {
 protected:
     using TBaseScan = NTable::TDeltaScan;
 
@@ -141,7 +141,7 @@ public:
         const TRowVersion& from, const TRowVersion& to,
         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvDeltaKMeansResponse>&& response,
         std::unique_ptr<IClusters>&& clusters)
-        : TActor(&TThis::StateWork)
+        : TActorWithExceptionHandler(&TThis::StateWork)
         , TBaseScan(from, to)
         , TabletId(tabletId)
         , BuildId(request.GetId())

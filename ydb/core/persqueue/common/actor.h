@@ -20,12 +20,11 @@ void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const T& a
 }
 
 template<typename TDerived>
-class TBaseActor : public NActors::TActorBootstrapped<TDerived>
-                 , public NActors::IActorExceptionHandler
+class TBaseActor : public NActors::TActorWithExceptionHandler<NActors::TActorBootstrapped<TDerived>>
                  , virtual public NPrivate::ILogPrefixBase
                  , public TLogPrefix {
 public:
-    using TBase = NActors::TActorBootstrapped<TDerived>;
+    using TBase = NActors::TActorWithExceptionHandler<NActors::TActorBootstrapped<TDerived>>;
     using TThis = TDerived;
 
     TBaseActor(NKikimrServices::EServiceKikimr service)

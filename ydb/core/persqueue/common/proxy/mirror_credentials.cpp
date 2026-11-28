@@ -15,8 +15,7 @@ namespace NKikimr::NPQ {
 namespace {
 
 class TMirrorCredentialsInitializer
-    : public NActors::TActorBootstrapped<TMirrorCredentialsInitializer>
-    , public NActors::IActorExceptionHandler
+    : public NActors::TActorWithExceptionHandler<NActors::TActorBootstrapped<TMirrorCredentialsInitializer>>
 {
     void Reply(NActors::IEventBase* event) {
         Send(Parent, event, 0, Cookie);

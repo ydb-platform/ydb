@@ -17,8 +17,8 @@ namespace NKafka {
 
 using namespace NKikimr;
 
-class TKafkaSaslAuthActor: public NActors::TActorBootstrapped<TKafkaSaslAuthActor>
-                         , public TKafkaExceptionHandler<TKafkaSaslAuthActor> {
+class TKafkaSaslAuthActor: public TKafkaExceptionHandler<TKafkaSaslAuthActor, NActors::TActorBootstrapped<TKafkaSaslAuthActor>>
+{
 
 struct TAuthData {
     TString UserName;

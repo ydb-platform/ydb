@@ -5,7 +5,7 @@
 namespace NSchemeShardUT_Private {
 
 TFakeBSController::TFakeBSController(const NActors::TActorId& tablet, NKikimr::TTabletStorageInfo* info)
-    : TActor(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, nullptr)
 {}
 

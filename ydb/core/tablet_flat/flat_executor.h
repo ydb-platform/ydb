@@ -304,9 +304,8 @@ struct TExecutorCaches {
 };
 
 class TExecutor
-    : public TActor<TExecutor>
+    : public NActors::TActorWithExceptionHandler<TActor<TExecutor>>
     , public NFlatExecutorSetup::IExecutor
-    , public IActorExceptionHandler
     , private NTable::ICompactionBackend
     , private ILoadBlob
 {

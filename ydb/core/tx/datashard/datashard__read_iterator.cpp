@@ -1853,8 +1853,7 @@ void TReadIteratorState::ForwardScanEvent(std::unique_ptr<IEventHandle>&& ev, ui
 }
 
 class TDataShard::TReadScan
-    : public TActor<TReadScan>
-    , public IActorExceptionHandler
+    : public NActors::TActorWithExceptionHandler<TActor<TReadScan>>
     , public NTable::IScan
 {
 public:
@@ -1866,7 +1865,7 @@ public:
     TReadScan(const TActorId& ownerId, ui64 tabletId,
             TShortTableInfo&& tableInfo,
             TReadIteratorState& state)
-        : TActor(&TReadScan::StateWork)
+        : TActorWithExceptionHandler(&TReadScan::StateWork)
         , OwnerId(ownerId)
         , TabletId(tabletId)
         , LocalReadId(state.LocalReadId)

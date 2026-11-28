@@ -160,7 +160,7 @@ TString GetTabletTypeShortName(TTabletTypes::EType type);
 TTabletTypes::EType GetTabletTypeByShortName(const TString& name);
 TString GetTypesHtml(const std::set<TTabletTypes::EType>& typesToShow, const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& tabletLimits);
 
-class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveSharedSettings {
+class THive : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<THive>>, public TTabletExecutedFlat, public THiveSharedSettings {
 public:
     using IActorOps::Register;
 

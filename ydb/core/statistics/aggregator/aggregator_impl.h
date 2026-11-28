@@ -38,7 +38,7 @@ inline bool IsTerminalAnalyzeState(Ydb::Table::AnalyzeState::State state) {
         || state == Ydb::Table::AnalyzeState::STATE_FAILED;
 }
 
-class TStatisticsAggregator : public TActor<TStatisticsAggregator>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TStatisticsAggregator : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TStatisticsAggregator>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::STATISTICS_AGGREGATOR;

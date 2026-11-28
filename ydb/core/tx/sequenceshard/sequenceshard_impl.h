@@ -22,7 +22,7 @@ namespace NKikimr {
 namespace NSequenceShard {
 
     class TSequenceShard
-        : public TActor<TSequenceShard>
+        : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TSequenceShard>>
         , public NTabletFlatExecutor::TTabletExecutedFlat
     {
     private:

@@ -403,7 +403,7 @@ private:
     const bool AllowNotNull;
 };
 
-class TReadTableScan : public TActor<TReadTableScan>, public IActorExceptionHandler, public NTable::IScan {
+class TReadTableScan : public NActors::TActorWithExceptionHandler<TActor<TReadTableScan>>, public NTable::IScan {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_READ_TABLE_SCAN;
@@ -412,7 +412,7 @@ public:
     TReadTableScan(ui64 txId, ui64 shardId, TUserTable::TCPtr tableInfo,
                    const NKikimrTxDataShard::TReadTableTransaction &tx, TActorId sink,
                    TActorId dataShard)
-        : TActor(&TThis::StateWork)
+        : TActorWithExceptionHandler(&TThis::StateWork)
         , Sink(sink)
         , DataShard(dataShard)
         , TxId(txId)

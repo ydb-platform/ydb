@@ -356,7 +356,7 @@ void TTxMediator::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const T
 }
 
 TTxMediator::TTxMediator(TTabletStorageInfo *info, const TActorId &tablet)
-    : TActor(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {}
 

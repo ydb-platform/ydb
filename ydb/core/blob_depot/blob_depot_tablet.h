@@ -25,7 +25,7 @@ namespace NKikimr::NBlobDepot {
     struct TToken {};
 
     class TBlobDepot
-        : public TActor<TBlobDepot>
+        : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TBlobDepot>>
         , public TTabletExecutedFlat
     {
         struct TEvPrivate {

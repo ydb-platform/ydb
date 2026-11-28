@@ -146,7 +146,7 @@ static TActorActivityType DetectOwnerActivityType(NFlatExecutorSetup::ITablet* o
 TExecutor::TExecutor(
         NFlatExecutorSetup::ITablet* owner,
         const TActorId& ownerActorId)
-    : TActor(&TThis::StateInit)
+    : TActorWithExceptionHandler(&TThis::StateInit)
     , Time(TAppData::TimeProvider)
     , Owner(owner)
     , OwnerActorId(ownerActorId)

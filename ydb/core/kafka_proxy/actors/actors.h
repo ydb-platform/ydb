@@ -23,8 +23,14 @@
 
 namespace NKafka {
 
-template <typename TDerived>
-class TKafkaExceptionHandler: public NActors::IActorExceptionHandler {
+template <typename TDerived, typename TBase>
+class TKafkaExceptionHandler: public NActors::TActorWithExceptionHandler<TBase> {
+protected:
+    template <typename... TArgs>
+    explicit TKafkaExceptionHandler(TArgs&&... args)
+        : NActors::TActorWithExceptionHandler<TBase>(std::forward<TArgs>(args)...)
+    {}
+
 public:
     bool OnUnhandledException(const std::exception& exc) override {
         auto* self = static_cast<TDerived*>(this);

@@ -13,12 +13,12 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
     using namespace Tests;
 
     class TPlanTargetTablet
-        : public TActor<TPlanTargetTablet>
+        : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TPlanTargetTablet>>
         , public NTabletFlatExecutor::TTabletExecutedFlat
     {
     public:
         TPlanTargetTablet(const TActorId& tablet, TTabletStorageInfo* info)
-            : TActor(&TThis::StateInit)
+            : TTabletActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
         {}
 

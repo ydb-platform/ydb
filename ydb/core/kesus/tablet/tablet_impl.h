@@ -23,7 +23,7 @@
 namespace NKikimr {
 namespace NKesus {
 
-class TKesusTablet : public TActor<TKesusTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TKesusTablet : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TKesusTablet>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 private:
     using Schema = TKesusSchema;
     using TTxBase = NTabletFlatExecutor::TTransactionBase<TKesusTablet>;

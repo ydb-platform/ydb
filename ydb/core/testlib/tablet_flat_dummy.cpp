@@ -10,7 +10,7 @@ namespace NKikimr {
 
 namespace {
 
-class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TDummyFlatTablet : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TDummyFlatTablet>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 
     struct Schema : NIceDb::Schema {
         struct Snaps : Table<1> {
@@ -109,7 +109,7 @@ public:
     }
 
     TDummyFlatTablet(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     {}
 

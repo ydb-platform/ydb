@@ -13,9 +13,9 @@ namespace NKafka {
 
     using namespace NActors;
 
-    class TKafkaMetricsActor : public NActors::TActorBootstrapped<TKafkaMetricsActor>
-                             , public TKafkaExceptionHandler<TKafkaMetricsActor> {
-        using TBase = NActors::TActorBootstrapped<TKafkaMetricsActor>;
+    class TKafkaMetricsActor : public TKafkaExceptionHandler<TKafkaMetricsActor, NActors::TActorBootstrapped<TKafkaMetricsActor>>
+    {
+        using TBase = TKafkaExceptionHandler<TKafkaMetricsActor, NActors::TActorBootstrapped<TKafkaMetricsActor>>;
     public:
         explicit TKafkaMetricsActor(const TKafkaMetricsSettings& settings)
             : Settings(settings)

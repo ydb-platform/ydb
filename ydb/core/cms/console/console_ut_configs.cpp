@@ -2924,7 +2924,7 @@ config:
 
 namespace {
 
-class TConfigProxy : public TActor<TConfigProxy>, public TTabletExecutedFlat {
+class TConfigProxy : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TConfigProxy>>, public TTabletExecutedFlat {
     void DefaultSignalTabletActive(const TActorContext &) override
     {
         // must be empty
@@ -2954,7 +2954,7 @@ class TConfigProxy : public TActor<TConfigProxy>, public TTabletExecutedFlat {
 
 public:
     TConfigProxy(const TActorId &tablet, TTabletStorageInfo *info, TActorId sink)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
         , Sink(sink)
     {

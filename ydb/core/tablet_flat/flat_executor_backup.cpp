@@ -257,9 +257,9 @@ NJson::TJsonWriterConfig BackupJsonConfig() {
 
 } // anonymous namespace
 
-class TSnapshotWriter : public TActorBootstrapped<TSnapshotWriter>, public IActorExceptionHandler {
+class TSnapshotWriter : public NActors::TActorWithExceptionHandler<TActorBootstrapped<TSnapshotWriter>> {
 public:
-    using TBase = TActorBootstrapped<TSnapshotWriter>;
+    using TBase = NActors::TActorWithExceptionHandler<TActorBootstrapped<TSnapshotWriter>>;
 
     NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
         return YDB_LOG_CREATE_MESSAGE(
@@ -897,7 +897,7 @@ private:
     std::function<void()> BeginCommit;
 };
 
-class TChangelogWriter : public TActorBootstrapped<TChangelogWriter>, public IActorExceptionHandler {
+class TChangelogWriter : public NActors::TActorWithExceptionHandler<TActorBootstrapped<TChangelogWriter>> {
     struct TEvPrivate {
         enum EEv {
             EvIoComplete = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),

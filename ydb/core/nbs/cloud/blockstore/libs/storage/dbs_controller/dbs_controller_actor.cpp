@@ -17,7 +17,7 @@ using namespace NActors;
 TDbsControllerActor::TDbsControllerActor(
     const TActorId& tablet,
     NKikimr::TTabletStorageInfo* info)
-    : TActor(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , TTabletBase<TDbsControllerActor>(
           tablet,
           NKikimr::TTabletStorageInfoPtr(info),

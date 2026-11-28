@@ -64,6 +64,8 @@ namespace NKikimr::NStorage {
 
     using TStorageConfigPtr = std::shared_ptr<const NKikimrBlobStorage::TStorageConfig>;
 
+    void SetStorageConfigParent(NKikimrBlobStorage::TStorageConfig& config, const NKikimrBlobStorage::TStorageConfig& parent);
+
 } // NKikimr::NStorage
 
 template<>
@@ -151,10 +153,10 @@ namespace NKikimr::NStorage {
 
             struct TEvConfigProposed : TEventLocal<TEvConfigProposed, EvConfigProposed> {
                 std::optional<TString> ErrorReason;
-                std::optional<TStorageConfigMeta> ProposedConfig;
+                NKikimrBlobStorage::TStorageConfig ProposedConfig;
 
-                explicit TEvConfigProposed(const NKikimrBlobStorage::TStorageConfig& config)
-                    : ProposedConfig(std::in_place, config)
+                explicit TEvConfigProposed(NKikimrBlobStorage::TStorageConfig&& config)
+                    : ProposedConfig(std::move(config))
                 {}
 
                 explicit TEvConfigProposed(TString errorReason)
@@ -429,6 +431,7 @@ namespace NKikimr::NStorage {
 
         struct TProposition {
             NKikimrBlobStorage::TStorageConfig StorageConfig; // storage config being proposed
+            TStorageConfigPtr Base;
             TActorId ActorId; // actor id waiting for this operation to complete
             bool MindPrev; // mind previous configuration quorum
             ui64 ConfigRecoveryGeneration;
@@ -691,16 +694,20 @@ namespace NKikimr::NStorage {
         void StopRootActivities(const TString& reason);
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev,
+            TStorageConfigPtr propositionBase, TActorId actorId, bool mindPrev,
             bool advancesConflictingGeneration = false, bool recoveryProposition = false);
 
         void CheckForConfigUpdate();
 
-        static std::optional<TString> TransformConfigBeforeCommit(NKikimrBlobStorage::TStorageConfig *config);
+        static std::optional<TString> TransformConfigBeforeCommit(NKikimrBlobStorage::TStorageConfig *config,
+            const NKikimrBlobStorage::TStorageConfig& prev);
         static std::optional<TString> CheckSynchronizedPiles(NKikimrBlobStorage::TStorageConfig *config);
-        static std::optional<TString> UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config);
-        static std::optional<TString> TrimHistoryEntries(NKikimrBlobStorage::TStorageConfig *config);
-        static std::optional<TString> UpdateBridgeGroupStateGenerations(NKikimrBlobStorage::TStorageConfig *config);
+        static std::optional<TString> UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config,
+            const NKikimrBlobStorage::TStorageConfig& prev);
+        static std::optional<TString> TrimHistoryEntries(NKikimrBlobStorage::TStorageConfig *config,
+            const NKikimrBlobStorage::TStorageConfig& prev);
+        static std::optional<TString> UpdateBridgeGroupStateGenerations(NKikimrBlobStorage::TStorageConfig *config,
+            const NKikimrBlobStorage::TStorageConfig& prev);
         static std::optional<TString> ExtractStateStorageConfig(NKikimrBlobStorage::TStorageConfig *config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -768,7 +775,7 @@ namespace NKikimr::NStorage {
             TActorId Sender;
             TActorId SessionId;
             ui64 Cookie;
-            std::optional<TStorageConfigMeta> SelfHealCommitToConfirm = {};
+            TStorageConfigPtr SelfHealCommitToConfirm = {};
             std::optional<TStorageConfigMeta> ObservedNewerCommit = {};
             bool FullCommitConfirmationNeeded = false;
         };

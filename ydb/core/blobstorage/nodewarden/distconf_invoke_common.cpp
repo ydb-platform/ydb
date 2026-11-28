@@ -133,7 +133,7 @@ namespace NKikimr::NStorage {
                     if (!Self->IsCurrentStateStorageSelfHealActor(op.Sender)) {
                         throw TExRace() << "State Storage self-heal was superseded";
                     }
-                    return StartCommitConfirmation(op.SelfHealCommitToConfirm);
+                    return StartCommitConfirmation(op.SelfHealCommitToConfirm.get());
                 }
                 YDB_LOG_DEBUG("ExecuteQuery",
                     {"marker", "NWDC43"},
@@ -468,7 +468,7 @@ namespace NKikimr::NStorage {
                 }
             }
             TStringStream err;
-            if (!HasConfigQuorum(quorumConfig, successfulDisks, TBridgePileId(), *Self->Cfg, false, &err)) {
+            if (!HasConfigQuorum(quorumConfig, successfulDisks, TBridgePileId(), *Self->Cfg, nullptr, &err)) {
                 throw TExNoQuorum() << "No quorum for bridge configuration collection:" << err.Str();
             }
             auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true, false,
@@ -565,16 +565,14 @@ namespace NKikimr::NStorage {
             }
         }
 
-        if (!propositionBase) {
-            propositionBase = Self->StorageConfig.get();
-        }
-
-        if (propositionBase && !propositionBase->GetGeneration() && !fromBootstrap) {
+        TStorageConfigPtr base = propositionBase
+            ? std::make_shared<NKikimrBlobStorage::TStorageConfig>(*propositionBase) : Self->StorageConfig;
+        if (!base->GetGeneration() && !fromBootstrap) {
             throw TExError() << "First distconf config-changing command has to be BootstrapCluster";
         }
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
-        auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
+        auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, std::move(base),
                                       SelfId(), mindPrev, AdvancesConflictingGeneration, RecoveryProposition);
         if (error) {
             YDB_LOG_DEBUG("Config update validation failed",
@@ -601,9 +599,9 @@ namespace NKikimr::NStorage {
             RetrySelfHealConfirmationOrFinish(TResult::RACE, "Configuration was recovered; retry the original operation");
         } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query)) {
             if (op->Command.HasApplyDataCenterStates()) {
-                StartDataCenterReconciliation(*msg.ProposedConfig);
+                StartDataCenterReconciliation(msg.ProposedConfig);
             } else {
-                StartCommitConfirmation(msg.ProposedConfig);
+                StartCommitConfirmation(&msg.ProposedConfig);
             }
         } else {
             FinishConfigChange();
@@ -848,8 +846,7 @@ namespace NKikimr::NStorage {
                                    == TStorageConfigMeta(proposed)
                                 && AddedNodesScatterTasks.contains({nodeId, request.GetScatterCookie()})
                                 && task.PendingNodes.contains(nodeId)
-                                && proposed.HasPrevConfig()
-                                && !std::ranges::any_of(proposed.GetPrevConfig().GetAllNodes(), containsNode)
+                                && !std::ranges::any_of(CurrentProposition->Base->GetAllNodes(), containsNode)
                                 && std::ranges::any_of(proposed.GetAllNodes(), containsNode);
                 }
             }

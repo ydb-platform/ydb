@@ -29,9 +29,10 @@ namespace NKikimr::NStorage {
                 && config.GetPrevConfig().GetSelfManagementConfig().GetEnabled();
         }
 
-        bool IsGenerationOnlySuccessor(const NKikimrBlobStorage::TStorageConfig& config, const TStorageConfigMeta& parent) {
+        bool IsGenerationOnlySuccessor(const NKikimrBlobStorage::TStorageConfig& config,
+                                       const NKikimrBlobStorage::TStorageConfig& parent) {
             if (config.GetGeneration() <= parent.GetGeneration() || !config.HasPrevConfig()
-                    || TStorageConfigMeta(config.GetPrevConfig()) != parent) {
+                    || TStorageConfigMeta(config.GetPrevConfig()) != TStorageConfigMeta(parent)) {
                 return false;
             }
             using TConfig = NKikimrBlobStorage::TStorageConfig;
@@ -40,7 +41,7 @@ namespace NKikimr::NStorage {
                     TConfig::kPrevConfigFieldNumber}) {
                 diff.IgnoreField(TConfig::descriptor()->FindFieldByNumber(field));
             }
-            return diff.Compare(config, config.GetPrevConfig());
+            return diff.Compare(config, parent);
         }
 
         YAML::Node Json2Yaml(const NJson::TJsonValue& json) {
@@ -686,12 +687,12 @@ namespace NKikimr::NStorage {
             /*fromBootstrap=*/ EnablingDistconf);
     }
 
-    void TInvokeRequestHandlerActor::StartCommitConfirmation(const std::optional<TStorageConfigMeta>& expected) {
+    void TInvokeRequestHandlerActor::StartCommitConfirmation(const NKikimrBlobStorage::TStorageConfig *expected) {
         if (!Self->StorageConfig || !Self->StorageConfig->GetGeneration()) {
             throw TExNoQuorum() << "No initialized configuration to confirm committed quorum";
         }
         const TStorageConfigMeta current(*Self->StorageConfig);
-        if (expected && *expected != current) {
+        if (expected && TStorageConfigMeta(*expected) != current) {
             auto& op = std::get<TInvokeExternalOperation>(Query);
             if (!Self->IsCurrentStateStorageSelfHealActor(op.Sender)
                     || (op.ObservedNewerCommit && *op.ObservedNewerCommit != current)
@@ -712,7 +713,7 @@ namespace NKikimr::NStorage {
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         const bool retry = ConfigAwaitingCommit && op && Self->IsCurrentStateStorageSelfHealActor(op->Sender);
         if (retry) {
-            op->SelfHealCommitToConfirm.emplace(*ConfigAwaitingCommit);
+            op->SelfHealCommitToConfirm = ConfigAwaitingCommit;
             InvokeOtherActor(*Self, &TDistributedConfigKeeper::Invoke, TInvokeQuery{std::move(*op)});
         }
         Finish(status, reason, {}, !retry);
@@ -759,7 +760,9 @@ namespace NKikimr::NStorage {
 
             const bool selfHeal = Self->IsCurrentStateStorageSelfHealActor(op.Sender);
             auto& newerCommit = op.ObservedNewerCommit;
-            auto extendsStep = [&](const auto& item) { return IsGenerationOnlySuccessor(item.GetConfig(), expected); };
+            auto extendsStep = [&](const auto& item) {
+                return IsGenerationOnlySuccessor(item.GetConfig(), *ConfigAwaitingCommit);
+            };
             for (const auto& item : committedConfigs) {
                 const auto& config = item.GetConfig();
                 if (config.GetGeneration() <= expected.GetGeneration()) {
@@ -797,7 +800,7 @@ namespace NKikimr::NStorage {
                 }
             }
             const bool committedQuorum = HasConfigQuorum(*ConfigAwaitingCommit, successfulDisks,
-                TBridgePileId(), *Self->Cfg, false);
+                TBridgePileId(), *Self->Cfg);
             const bool checkRecovery = !Self->IsBridged() && op.FullCommitConfirmationNeeded
                 && (committedQuorum || Self->ConfigRecoveryRequired);
             if (checkRecovery || newerCommit || (selfHeal && !metadataOnly && std::ranges::any_of(proposedConfigs, extendsStep))) {
@@ -811,7 +814,8 @@ namespace NKikimr::NStorage {
                         return;
                     }
                     if ((newerCommit && *newerCommit != TStorageConfigMeta(selected))
-                            || (TStorageConfigMeta(selected) != expected && !IsGenerationOnlySuccessor(selected, expected))) {
+                            || (TStorageConfigMeta(selected) != expected
+                                && !IsGenerationOnlySuccessor(selected, *ConfigAwaitingCommit))) {
                         throw TExRace() << "Recovered configuration does not preserve the State Storage self-heal step";
                     }
                 }
@@ -968,7 +972,7 @@ namespace NKikimr::NStorage {
                 return StartProposition(&ProposedStorageConfig);
             }
             AppliedDataCenterStates.emplace(response.GetAppliedDataCenterStates());
-            return StartCommitConfirmation(DataCenterConfigToConfirm);
+            return StartCommitConfirmation();
         }
 
         YDB_LOG_DEBUG("Received TEvControllerConfigResponse",

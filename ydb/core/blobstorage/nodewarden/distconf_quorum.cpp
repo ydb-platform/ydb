@@ -82,7 +82,7 @@ namespace NKikimr::NStorage {
                 disks.emplace_back(nodeId, drive.GetPath(), std::nullopt /*guid*/);
             }
         });
-        return HasConfigQuorum(config, disks, singleBridgePileId, nwConfig, false, out);
+        return HasConfigQuorum(config, disks, singleBridgePileId, nwConfig, nullptr, out);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -306,10 +306,11 @@ namespace NKikimr::NStorage {
     }
 
     bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
-            TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, bool mindPrev, TStringStream *out) {
+            TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, const NKikimrBlobStorage::TStorageConfig *prev,
+            TStringStream *out) {
         return HasDiskQuorum(config, successful, singleBridgePileId, nwConfig, out, "new") &&
             HasStorageQuorum(config, successful, singleBridgePileId, nwConfig, true, out, "new").value_or(true) &&
-            (!mindPrev || !config.HasPrevConfig() || HasStorageQuorum(config.GetPrevConfig(), successful,
+            (!prev || HasStorageQuorum(*prev, successful,
                 singleBridgePileId, nwConfig, false, out, "prev").value_or(true));
     }
 

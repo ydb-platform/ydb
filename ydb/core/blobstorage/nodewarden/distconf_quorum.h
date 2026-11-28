@@ -13,9 +13,9 @@ namespace NKikimr::NStorage {
     bool HasDiskQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
         TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, IOutputStream *out, const char *name);
 
-    // Ensure configuration has quorum in both disk and storage ways for current and previous configuration.
+    // Require disk and storage quorum for the proposal and storage quorum for the supplied previous layout.
     bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
-        TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, bool mindPrev,
+        TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, const NKikimrBlobStorage::TStorageConfig *prev = nullptr,
         TStringStream *out = nullptr);
 
 } // NKikimr::NStorage

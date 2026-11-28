@@ -53,6 +53,14 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
     const auto& columnType = GetType(*column);
     switch (columnType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber:
+        case NScheme::NTypeIds::Date32:
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+            if (!AppDataVerified().FeatureFlags.GetEnableColumnShardExtendedTtlTypes()) {
+                errors.AddError("TTL on DyNumber, Date32, Datetime64 and Timestamp64 in column tables is disabled");
+                return false;
+            }
+            break;
         case NScheme::NTypeIds::Pg:
             errors.AddError("Unsupported column type for TTL in column tables");
             return false;

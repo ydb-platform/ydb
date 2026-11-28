@@ -122,9 +122,10 @@ class Workload(object):
     def rows_count(self, table_name):
         return self.driver.table_client.scan_query(f"SELECT count(*) FROM `{table_name}`").next().result_set.rows[0][0]
 
-    # Single-column (and tag-less) stats have no comma in column_tags; multi-column stats do.
     def statistics_count(self, table_statistics, path_id):
-        query = f"SELECT count(*) FROM `{table_statistics}` WHERE local_path_id = {path_id} AND column_tags NOT LIKE '%,%'"
+        # The traversal fence also has an empty column_tags key, with Uint32::Max as its reserved type.
+        query = (f"SELECT count(*) FROM `{table_statistics}` WHERE local_path_id = {path_id} "
+                 "AND stat_type != 4294967295u AND column_tags NOT LIKE '%,%'")
         return self.driver.table_client.scan_query(query).next().result_set.rows[0][0]
 
     def statistics_multi_count(self, table_statistics, path_id):

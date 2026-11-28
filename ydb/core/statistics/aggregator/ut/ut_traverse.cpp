@@ -424,38 +424,41 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
         UNIT_ASSERT_VALUES_EQUAL(failedCounter->Val(), 0);
     }
 
-    Y_UNIT_TEST_TWIN(BackgroundDeduplicateForceAnalyze, ColumnShard) {
+    Y_UNIT_TEST_TWIN(QueuedAnalyzeCollectsStatisticsAddedDuringBackgroundScan, ColumnShard) {
         TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
-
         CreateDatabase(env, "Database");
-        const auto tableInfo = PrepareTableWithIndexes(env, "Database", "Table", ColumnShard);
 
-        auto primaryCount = WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
+        TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> background(runtime, [](const auto& ev) {
+            return ev->Get()->Final;
+        });
+        const auto table = PrepareTable(env, "Database", "Table", ColumnShard);
+        runtime.WaitFor("background scan result", [&] { return !background.empty(); }, TDuration::Seconds(30));
 
-        InsertDataIntoTable(env, "Database", "Table", 500);
-        WaitForBackgroundAnalyzeToStabilize(runtime);
+        ExecuteYqlScript(env, R"(
+            ALTER TABLE `/Root/Database/Table`
+            ADD STATISTICS multi_stat ON (Key, Value) WITH (EQ_HEIGHT_HISTOGRAM);
+        )");
+        const auto sender = runtime.AllocateEdgeActor();
+        const TString operation = "new-histogram";
+        runtime.SendToPipe(table.SaTabletId, sender,
+            MakeAnalyzeRequest({table.PathId}, operation, "/Root/Database").release());
+        AnalyzeStatus(runtime, sender, table.SaTabletId, operation,
+            NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
 
-        ui64 saTabletId = 0;
-        ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
-
-        Analyze(runtime, saTabletId, {{tableInfo.PathId}}, "dedupOp", "/Root/Database");
-
-        WaitForBackgroundAnalyzeToStabilize(runtime);
-
-        // The force ANALYZE is deduplicated by the background traversal that
-        // already collected the same statistics, so it does not increment the
-        // background completed counter. The counter should equal the number
-        // of background traversals that completed (primary + any spurious).
-        auto counters = runtime.GetAppData(1).Counters;
-        auto completedCounter = GetServiceCounters(counters, "statistics")
-            ->GetSubgroup("subsystem", "background_analyze")
-            ->GetSubgroup("status", "completed")
-            ->FindCounter("BackgroundAnalyze");
-        UNIT_ASSERT(completedCounter);
-        UNIT_ASSERT_GE(completedCounter->Val(), primaryCount);
-
-        ValidateStatistics(runtime, tableInfo.PathId);
+        bool userScanStarted = false;
+        auto progress = runtime.AddObserver<TEvStatistics::TEvAnalyzeActorProgress>([&](const auto& ev) {
+            if (ev->Get()->OperationId == operation) {
+                userScanStarted = true;
+            }
+        });
+        background.Stop().Unblock();
+        const auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender, TDuration::Seconds(30));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetOperationId(), operation);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        UNIT_ASSERT(userScanStarted);
+        CheckEqHeightHistogram(runtime, table.PathId, {1, 2}, ColumnTableRowsNumber, 1);
     }
 
     Y_UNIT_TEST_TWIN(RestartPreservesAnalyzeBaseline, ColumnShard) {

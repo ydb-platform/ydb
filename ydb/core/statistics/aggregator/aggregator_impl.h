@@ -97,6 +97,8 @@ private:
     void OnDetach(const TActorContext& ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override;
     void OnActivateExecutor(const TActorContext& ctx) override;
+    void ApplyConfig(const NKikimrConfig::TAppConfig& config);
+    void StartRecovery(const NKikimrConfig::TAppConfig& config);
     void DefaultSignalTabletActive(const TActorContext& ctx) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;
     void SubscribeForConfigChanges(const TActorContext& ctx);
@@ -139,6 +141,9 @@ private:
     void Handle(TEvPrivate::TEvScheduleTraversal::TPtr& ev);
     void Handle(TEvPrivate::TEvScheduleForceTraversal::TPtr& ev);
     void StartTraversalScheduler();
+    bool HasScanUserDependencies = false;
+    void RefreshScanUserDependencies();
+    void ScheduleAnalyzeDeadlineCheck();
     void Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeDeadline::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev);
@@ -151,28 +156,50 @@ private:
 
     void PassAway() final;
 
-    void InitializeStatisticsTable();
-    void SaveStatisticsToTable();
-    void DeleteStatisticsFromTable();
+    struct TTraversal {
+        TPathId PathId;
+        TString OperationId; // Empty for background collection.
+        TString Database;
+        TInstant StartTime;
+        ui64 Attempt = 0;
 
-    void DispatchFinishTraversalTx(
-        NKikimrStat::TEvAnalyzeResponse::EStatus status,
-        NYql::TIssues issues = NYql::TIssues());
+        TActorId AnalyzeActorId;
+        TActorId SaveQueryActorId;
+        TActorId DeleteQueryActorId;
+        std::deque<TStatisticsItem> StatisticsToSave;
+        bool Published = false;
+        bool WaitingToSave = false;
+        bool WaitingToDelete = false;
+        bool Finishing = false;
+    };
+
+    struct TTraversalReply {
+        TActorId Recipient;
+        TString OperationId;
+    };
+
+    void ExpireAnalyzeOperations(NIceDb::TNiceDb& db, TInstant now, std::vector<TTraversalReply>& expired);
+    void ReplyToExpiredAnalyzeOperations(const TActorContext& ctx, const std::vector<TTraversalReply>& expired);
+
+    void InitializeStatisticsTable();
+    void SaveStatisticsToTable(TTraversal& traversal);
+    void DeleteStatisticsFromTable(TTraversal& traversal);
+    void DispatchFinishTraversalTx(TTraversal& traversal,
+        NKikimrStat::TEvAnalyzeResponse::EStatus status, NYql::TIssues issues = {});
 
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
-    void PersistTraversal(NIceDb::TNiceDb& db);
-
-    void StartAnalyzeActor(const TActorContext& ctx, const TString& operationId, const TString& database,
-        const TPathId& pathId, const TVector<ui32>& columnTags = {});
-
-    void ResetTraversalState(NIceDb::TNiceDb& db);
-    void ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActorContext& ctx);
-    void ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db, const TActorContext& ctx);
-    void FinishTraversal(
-        NIceDb::TNiceDb& db,
-        NKikimrStat::TEvAnalyzeResponse::EStatus status,
-        std::optional<Ydb::Table::AnalyzeState::State> forceTerminalState,
-        NYql::TIssues issues = {});
+    void PersistTraversal(NIceDb::TNiceDb& db, const TTraversal& traversal);
+    void DeletePersistedTraversal(NIceDb::TNiceDb& db, TPathId pathId);
+    ui64 AllocateTraversalAttempt();
+    void StartTraversal(const TActorContext& ctx, TTraversal& traversal);
+    bool HasActiveOperation(const TString& operationId) const;
+    void DiscardOperationTraversals(const TString& operationId, NIceDb::TNiceDb& db);
+    void RemoveTraversal(NIceDb::TNiceDb& db, TTraversal& traversal, bool succeeded);
+    TTraversal* FindTraversalByActor(TActorId actor, TActorId TTraversal::* field);
+    void ScheduleTraversalsForScan(NIceDb::TNiceDb& db, const TActorContext& ctx, bool allowBackground,
+        std::vector<std::pair<TPathId, ui64>>& starts);
+    TTraversalReply FinishTraversal(NIceDb::TNiceDb& db, TTraversal& traversal,
+        NKikimrStat::TEvAnalyzeResponse::EStatus status, const NYql::TIssues& issues);
 
     struct TBaseStatisticsTotals {
         ui64 RowCount = 0;
@@ -192,26 +219,30 @@ private:
         ui64 RowCount = 0;
     };
 
+    struct TTableBaseStats {
+        TChangeCounters Counters;
+        std::optional<ui64> BytesSize;
+    };
+
     bool IsChangeRatioAboveThreshold(
         const TChangeCounters& lastAnalyze, const TChangeCounters& current) const;
-    TChangeCounters GetCurrentChangeCounters(const TPathId& pathId) const;
-    std::optional<ui64> GetTableBytesSize(const TPathId& pathId) const;
-    const NKikimrStat::TPathEntry* FindBaseStatisticsEntry(
-        const TPathId& pathId, NKikimrStat::TSchemeShardStats& stats) const;
-
-    // Returns cached change counters, rebuilding the cache from BaseStatistics
-    // if it is invalid. The cache is invalidated when BaseStatistics is updated
-    // (TTxSchemeShardStats::Complete) or when a traversal finishes (FinishTraversal).
-    const THashMap<TPathId, TChangeCounters>& GetCachedChangeCounters();
-    void InvalidateCachedChangeCounters();
+    TTableBaseStats GetTableBaseStats(const TPathId& pathId, TSSId schemeShardId);
 
     std::optional<bool> IsKnownTable(const TPathId& pathId) const;
-
-    TString LastTraversalWasForceString() const;
 
     static constexpr TDuration AnalyzeOpHistoryRetention = TDuration::Days(7);
 
     STFUNC(StateInit) {
+        namespace NConfigEvents = NConsole::TEvConfigsDispatcher;
+        if (ev->GetTypeRewrite() == NConfigEvents::EvGetConfigResponse) {
+            StartRecovery(*ev->Get<NConfigEvents::TEvGetConfigResponse>()->Config);
+            return;
+        }
+        if (ev->GetTypeRewrite() == TEvents::TEvUndelivered::EventType &&
+                ev->Get<TEvents::TEvUndelivered>()->SourceType == NConfigEvents::EvGetConfigRequest) {
+            StartRecovery(NKikimrConfig::TAppConfig::default_instance());
+            return;
+        }
         StateInitImpl(ev, SelfId());
     }
 
@@ -273,13 +304,6 @@ private:
     bool AnalyzeCountersDirty = true;
     static constexpr TDuration AnalyzeCountersReportPeriod = TDuration::Seconds(1);
 
-    // Cached parsed change counters (pathId -> TChangeCounters).
-    // Invalidated when BaseStatistics is updated (TTxSchemeShardStats::Complete)
-    // or when a traversal finishes (FinishTraversal). This avoids re-parsing
-    // all BaseStatistics protobuf blobs on every 1-second scheduling tick.
-    THashMap<TPathId, TChangeCounters> CachedChangeCounters;
-    bool CachedChangeCountersValid = false;
-
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;
     bool EnableBackgroundAnalyzeChangeRatio = false;
@@ -297,6 +321,10 @@ private:
         std::shared_ptr<TString> Committed; // Value that is safely persisted in local DB. Can be nullptr.
         std::shared_ptr<TString> Latest; // Value from the latest update.
         TBaseStatisticsTotals CommittedTotals;
+        std::optional<THashMap<TPathId, TTableBaseStats>> ParsedTables; // Populated on demand and reset when Latest changes.
+
+        void IndexTables(const NKikimrStat::TSchemeShardStats& stats);
+        const THashMap<TPathId, TTableBaseStats>& GetTables();
     };
     std::unordered_map<TSSId, TSerializedBaseStats> BaseStatistics;
     TBaseStatisticsTotals BaseStatisticsTotals;
@@ -326,9 +354,7 @@ private:
 
     bool IsStatisticsTableCreated = false;
     TPathId StatisticsTablePathId;
-    bool PendingSaveStatistics = false;
-    std::deque<TStatisticsItem> StatisticsToSave;
-    bool PendingDeleteStatistics = false;
+
 
     // period for both force and schedule traversals
     static constexpr TDuration TraversalPeriod = TDuration::Seconds(1);
@@ -361,27 +387,18 @@ private:
         };
     };
 
-    // Returns the table analyzed longest ago whose statistics are stale by
-    // change ratio, or nullptr if none is stale. Declared after TScheduleTraversal
-    // because it returns a pointer into ScheduleTraversals.
-    TScheduleTraversal* FindStaleTable();
+    // Select up to limit eligible tables above the change-ratio threshold, oldest first.
+    std::vector<const TScheduleTraversal*> FindStaleTables(size_t limit);
 
     static constexpr TDuration AnalyzeDeadline = TDuration::Days(1);
     static constexpr TDuration AnalyzeDeadlinePeriod = TDuration::Seconds(1);
+    bool AnalyzeDeadlineCheckScheduled = false;
 
-    // alternate between forced and scheduled traversals
-    bool LastTraversalWasForce = false;
-
-private: // stored in local db
-
-    TString ForceTraversalOperationId;
-
-    TString TraversalDatabase;
-    TPathId TraversalPathId;
-    TInstant TraversalStartTime;
-    TActorId AnalyzeActorId;
-    TActorId SaveQueryActorId;
-    bool FinishingTraversal = false;
+    std::unordered_map<TPathId, TTraversal> ActiveTraversals;
+    // Interrupted background traversals whose tables disappeared from SchemeShard's schedule.
+    std::unordered_set<TPathId> PendingBackgroundChecks;
+    TActorId ScanBudgetActorId;
+    ui32 AttemptSequence = 0;
 
     std::unordered_map<TPathId, TScheduleTraversal> ScheduleTraversals;
     std::unordered_map<ui64, std::unordered_set<TPathId>> ScheduleTraversalsBySchemeShard;
@@ -415,7 +432,6 @@ private: // stored in local db
         std::vector<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;
-        bool RequestingActorReattached = false;
         TInstant CreatedAt;
         // Terminal state (STATE_UNSPECIFIED means non-terminal; live state is derived at read time)
         Ydb::Table::AnalyzeState::State State = Ydb::Table::AnalyzeState::STATE_UNSPECIFIED;
@@ -428,7 +444,6 @@ private: // stored in local db
     std::list<TForceTraversalOperation> ForceTraversals;
 
 private:
-    TForceTraversalOperation* CurrentForceTraversalOperation();
     TForceTraversalOperation* ForceTraversalOperation(const TString& operationId);
     void DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db);
 
@@ -440,7 +455,6 @@ private:
     void RecalcForceTraversalInflightMaxTimeCounter(TInstant now);
 
     TForceTraversalTable* ForceTraversalTable(const TString& operationId, const TPathId& pathId);
-    TForceTraversalTable* CurrentForceTraversalTable();
     void UpdateForceTraversalTableStatus(const TForceTraversalTable::EStatus status, const TString& operationId, TStatisticsAggregator::TForceTraversalTable& table, NIceDb::TNiceDb& db);
 
     // Mark a force-traversal operation as terminal (DONE/CANCELLED).

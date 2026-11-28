@@ -198,6 +198,12 @@ struct TEvStatistics {
         EvAnalyzeOpForgetRequest,
         EvAnalyzeOpForgetResponse,
         EvAnalyzeActorProgress,
+        EvAnalyzeScanBudgetConfigure,
+        EvAnalyzeScanBudgetOpen,
+        EvAnalyzeScanBudgetSubmit,
+        EvAnalyzeScanBudgetClose,
+        EvAnalyzeScanBudgetStopped,
+        EvAnalyzeScanBudgetSetUserDependencies,
 
         EvEnd
     };

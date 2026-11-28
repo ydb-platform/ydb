@@ -32,6 +32,7 @@ PEERDIR(
 SRCS(
     ut_base_statistics_counters.cpp
     ut_analyze.cpp
+    ut_analyze_scan_budget.cpp
     ut_traverse.cpp
     ut_analyze_op.cpp
     ut_key_range_predicate.cpp

@@ -4,6 +4,8 @@
 
 #include <util/string/vector.h>
 
+#include <unordered_set>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
 namespace NKikimr::NStat {
@@ -33,7 +35,19 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             {"replyToActorId", ReplyToActorId},
             {"record", Record()});
 
+        if (Record().GetOperationId().empty() || Record().GetTables().empty()) {
+            TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR;
+            TerminalReplayIssues.AddIssue(NYql::TIssue("ANALYZE requires an operation ID and at least one table"));
+            return true;
+        }
+        std::unordered_set<TPathId> paths;
         for (const auto& table : Record().GetTables()) {
+            const auto pathId = TPathId::FromProto(table.GetPathId());
+            if (!pathId || !paths.insert(pathId).second) {
+                TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR;
+                TerminalReplayIssues.AddIssue(NYql::TIssue("ANALYZE requires a distinct path ID for each table"));
+                return true;
+            }
             const double rate = table.GetSampleRate();
             if (!(rate > 0 && rate <= 1)) {
                 TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR;
@@ -70,6 +84,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 {"operationId", operationId.Quote()},
                 {"existingOperationDatabase", existingOperation->DatabaseName},
                 {"requestDatabase", Record().GetDatabase()});
+            Self->DiscardOperationTraversals(operationId, db);
             Self->DeleteForceTraversalOperation(operationId, db);
             existingOperation = nullptr;
         }
@@ -102,13 +117,13 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                     {"tabletId", Self->TabletID()},
                     {"operationId", operationId.Quote()},
                     {"replyToActorId", ReplyToActorId});
-                existingOperation->RequestingActorReattached = true;
                 return true;
             } else {
                 YDB_LOG_DEBUG("TTxAnalyze::Execute. Delete broken force traversal.",
                     {"tabletId", Self->TabletID()},
                     {"operationId", operationId.Quote()},
                     {"replyToActorId", ReplyToActorId});
+                Self->DiscardOperationTraversals(operationId, db);
                 Self->DeleteForceTraversalOperation(operationId, db);
             }
         }
@@ -196,6 +211,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             return;
         }
 
+        Self->ScheduleAnalyzeDeadlineCheck();
         ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleForceTraversal());
     }
 };

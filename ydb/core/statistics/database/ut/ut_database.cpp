@@ -130,6 +130,59 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT_VALUES_EQUAL(*result->Get()->Data, "new-full");
     }
 
+    Y_UNIT_TEST(OlderTraversalCannotOverwriteOrDeleteNewStatistics) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.Register(CreateStatisticsTableCreator(
+            std::make_unique<TEvStatistics::TEvStatTableCreationResponse>(), "/Root/Database"),
+            0, 0, TMailboxType::Simple, 0, sender);
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvStatTableCreationResponse>(sender);
+
+        const TPathId path(1, 1);
+        const auto type = EStatType::SIMPLE_COLUMN;
+        auto write = [&](ui64 attempt, TString data) {
+            runtime.Register(CreateSaveStatisticsQuery(sender, "/Root/Database", path,
+                {TStatisticsItem(1, type, std::move(data))}, attempt));
+        };
+        auto awaitWrite = [&] {
+            const auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender);
+            UNIT_ASSERT_C(response->Get()->Success, response->Get()->Issues.ToString());
+        };
+        auto erase = [&](ui64 attempt) {
+            runtime.Register(CreateDeleteStatisticsQuery(sender, "/Root/Database", path, attempt));
+            const auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvDeleteStatisticsQueryResponse>(sender);
+            UNIT_ASSERT_C(response->Get()->Success, response->Get()->Issues.ToString());
+        };
+        auto read = [&] {
+            runtime.RunCall([&] {
+                DispatchLoadStatisticsQuery(sender, 0, "/Root/Database", path, type, TColumnTags(1u));
+                return 0;
+            });
+            return runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
+        };
+
+        // Suspend the older transaction after it reads the fence and before it writes.
+        TBlockEvents<NKqp::TEvKqp::TEvQueryRequest> hold(runtime, [](const auto& ev) {
+            return ev->Get()->GetQuery().Contains("DECLARE $attempt AS String");
+        });
+        write(1, "old");
+        runtime.WaitFor("old statistics write", [&] { return !hold.empty(); });
+        hold.Stop();
+        write(2, "new");
+        awaitWrite();
+        hold.Unblock();
+        awaitWrite();
+        erase(1);
+        UNIT_ASSERT_VALUES_EQUAL(read()->Get()->Data.value(), "new");
+
+        erase(3);
+        write(2, "late");
+        awaitWrite();
+        UNIT_ASSERT(!read()->Get()->Data);
+    }
+
     Y_UNIT_TEST(MalformedSampleFallsBackToFullStatistics) {
         TTestEnv env(1, 1, false);
         auto& runtime = *env.GetServer().GetRuntime();

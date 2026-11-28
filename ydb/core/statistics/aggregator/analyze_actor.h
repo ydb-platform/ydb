@@ -1,5 +1,6 @@
 #pragma once
 
+#include "analyze_scan_budget.h"
 #include "column_statistic_eval.h"
 #include "select_builder.h"
 
@@ -10,6 +11,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 
+#include <memory>
 #include <optional>
 #include <queue>
 
@@ -23,8 +25,6 @@ public:
     static constexpr ui32 MaxHistogramOversampleFactor = 256;
 
     struct TConfig {
-        ui64 MaxTotalScanActorsInFlight = 100;
-        i64 MaxPerNodeScanActorsInFlight = 1;
         ui64 ColumnTableWholeTableScanMaxBytes = 10ULL << 30; // 10 GiB
         ui64 RowTableWholeTableScanMaxBytes = 10ULL << 30; // 10 GiB
         std::optional<ui64> TableBytesSize;
@@ -36,6 +36,7 @@ public:
 
 private:
     TActorId Parent;
+    TActorId ScanBudget;
     TString OperationId;
     TString DatabaseName;
     TPathId PathId;
@@ -201,7 +202,9 @@ private:
 
     std::queue<TColumnStatEvalTask> PendingTasks;
 
-    std::optional<TSelectBuilder> SelectBuilder;
+    // Bound this table's submitted work, including scans waiting at the shared budget.
+    std::optional<TAnalyzeScanLimits> SubmissionLimits;
+    std::shared_ptr<const TSelectBuilder> SelectBuilder;
     ui32 CountSeq = 0;
     std::vector<TColumnStatEvalTask> InProgressTasks;
 
@@ -214,10 +217,9 @@ private:
     };
     THashMap<ui32, TNodeState> NodeId2State;
 
-    struct TScanActorInfo {
-        ui32 TabletNodeId = 0;
-    };
-    THashMap<TActorId, TScanActorInfo> ScanActorsInFlight;
+    // Includes work waiting for admission and workers executing a query.
+    ui64 NextScanId = 0;
+    THashMap<ui64, ui32> OutstandingScans;
 
     ui64 RowCount = 0;
     bool FirstScan = true;
@@ -226,6 +228,7 @@ private:
 
     void StartColumnStatEvalTasks();
     bool DispatchSomeScanActors();
+    void Handle(TEvAnalyzeScanBudget::TEvConfigure::TPtr& ev);
 
     void HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
@@ -237,8 +240,10 @@ public:
         TString databaseName,
         TPathId pathId,
         TVector<ui32> columnTags,
-        const TConfig& config)
+        const TConfig& config,
+        TActorId scanBudget)
     : Parent(parent)
+    , ScanBudget(scanBudget)
     , OperationId(std::move(operationId))
     , DatabaseName(std::move(databaseName))
     , PathId(std::move(pathId))
@@ -268,6 +273,7 @@ public:
 
     STFUNC(StateScan) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvAnalyzeScanBudget::TEvConfigure, Handle);
             hFunc(TEvPrivate::TEvAnalyzeScanResult, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }

@@ -12,7 +12,7 @@ inline constexpr TStringBuf StatisticsTablePath = ".metadata/statistics_v2";
 NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBase> event, const TString& database);
 
 NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
-    const TPathId& pathId, std::vector<TStatisticsItem>&& items);
+    const TPathId& pathId, std::vector<TStatisticsItem>&& items, ui64 attemptId = 0);
 
 void DispatchLoadStatisticsQuery(
     const NActors::TActorId& replyActorId, ui64 queryId,
@@ -20,6 +20,6 @@ void DispatchLoadStatisticsQuery(
     bool acceptSampledStatistics = false);
 
 NActors::IActor* CreateDeleteStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
-    const TPathId& pathId);
+    const TPathId& pathId, ui64 attemptId = 0);
 
 };

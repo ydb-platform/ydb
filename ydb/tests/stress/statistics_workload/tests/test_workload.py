@@ -9,6 +9,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_cluster import KiKiMR
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.fixtures import ydb_database_ctx
+from ydb.tests.stress.statistics_workload.workload import Workload
 
 
 class TestStatisticsWorkload:
@@ -58,3 +59,22 @@ class TestStatisticsWorkload:
             "--duration", self.base_duration,
             "--log_file", log_file,
         ])
+
+    def test_statistics_count_excludes_traversal_fence(self):
+        with ydb.QuerySessionPool(self.driver) as pool:
+            pool.execute_with_retries("""
+                CREATE TABLE stats (
+                    local_path_id Uint64, stat_type Uint32, column_tags String,
+                    PRIMARY KEY (local_path_id, stat_type, column_tags)
+                )
+            """)
+            pool.execute_with_retries("""
+                UPSERT INTO stats (local_path_id, stat_type, column_tags) VALUES
+                    (1ul, 4294967295u, ''),
+                    (2ul, 4294967295u, ''), (2ul, 4u, ''), (2ul, 1u, '1'), (2ul, 5u, '1,2')
+            """)
+        with Workload('localhost', self.cluster.nodes[1].port, self.database,
+                      duration=0, batch_size=1, batch_count=1, prefix='') as workload:
+            workload.driver.wait(timeout=60)
+            assert workload.statistics_count("stats", 1) == 0
+            assert workload.statistics_count("stats", 2) == 2

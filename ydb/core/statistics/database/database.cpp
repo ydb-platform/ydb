@@ -6,6 +6,7 @@
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <util/string/cast.h>
 #include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
@@ -111,18 +112,103 @@ NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBas
 }
 
 
-class TSaveStatisticsQuery : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse> {
-private:
+// A reserved key in the same table keeps old retry actors from overwriting a
+// newer traversal. Reading the fence and changing the statistics must share a
+// serializable transaction, including when retrying a failed transaction.
+static constexpr ui32 TraversalFenceType = std::numeric_limits<ui32>::max();
+
+class TTraversalWriteQuery : public TQueryBase {
+protected:
+    TTraversalWriteQuery(const TString& database, const TPathId& pathId, ui64 attemptId)
+        : TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
+        , PathId(pathId)
+        , AttemptId(attemptId)
+    {}
+
     const TPathId PathId;
+    virtual void WriteStatistics() = 0;
+    virtual void OnWriteResult() = 0;
+
+    TTxControl WriteTx(bool commit) const {
+        if (TxId) {
+            return commit ? TTxControl::ContinueAndCommitTx() : TTxControl::ContinueTx();
+        }
+        return commit ? TTxControl::BeginAndCommitTx() : TTxControl::BeginTx();
+    }
+
+private:
+    const ui64 AttemptId;
+
+    NYdb::TParamsBuilder FenceKey() const {
+        NYdb::TParamsBuilder params;
+        params.AddParam("$owner").Uint64(PathId.OwnerId).Build();
+        params.AddParam("$path").Uint64(PathId.LocalPathId).Build();
+        params.AddParam("$type").Uint32(TraversalFenceType).Build();
+        return params;
+    }
+
+    void OnRunQuery() final {
+        if (!AttemptId) {
+            StartWrite();
+            return;
+        }
+        auto params = FenceKey();
+        SetQueryResultHandler(&TTraversalWriteQuery::OnReadFence);
+        RunDataQuery(TStringBuilder() << R"(
+            DECLARE $owner AS Uint64;
+            DECLARE $path AS Uint64;
+            DECLARE $type AS Uint32;
+            SELECT data FROM `)" << StatisticsTablePath << R"(`
+            WHERE owner_id = $owner AND local_path_id = $path
+                AND stat_type = $type AND column_tags = '';
+        )", &params, TTxControl::BeginTx());
+    }
+
+    void OnReadFence() {
+        NYdb::TResultSetParser rows(ResultSets.at(0));
+        if (rows.TryNextRow()) {
+            auto& data = rows.ColumnParser("data");
+            const ui64 previous = FromString<ui64>(data.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
+                ? data.GetOptionalString().value() : data.GetString());
+            if (previous > AttemptId) {
+                CommitTransaction();
+                return;
+            }
+            if (previous == AttemptId) {
+                StartWrite();
+                return;
+            }
+        }
+        auto params = FenceKey();
+        params.AddParam("$attempt").String(ToString(AttemptId)).Build();
+        SetQueryResultHandler(&TTraversalWriteQuery::StartWrite);
+        RunDataQuery(TStringBuilder() << R"(
+            DECLARE $owner AS Uint64;
+            DECLARE $path AS Uint64;
+            DECLARE $type AS Uint32;
+            DECLARE $attempt AS String;
+            UPSERT INTO `)" << StatisticsTablePath << R"(`
+                (owner_id, local_path_id, stat_type, column_tags, data)
+                VALUES ($owner, $path, $type, '', $attempt);
+        )", &params, TTxControl::ContinueTx());
+    }
+
+    void StartWrite() {
+        SetQueryResultHandler(&TTraversalWriteQuery::OnWriteResult);
+        WriteStatistics();
+    }
+};
+
+class TSaveStatisticsQuery : public TTraversalWriteQuery, public TQueryRetryActorMixin<TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse> {
+private:
     std::vector<TStatisticsItem> SampledItems;
     std::vector<TStatisticsItem> FullItems;
     bool SavingSampledRows = true;
 
 public:
     TSaveStatisticsQuery(
-        const TString& database, const TPathId& pathId, std::vector<TStatisticsItem> items)
-        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
-        , PathId(pathId)
+        const TString& database, const TPathId& pathId, std::vector<TStatisticsItem> items, ui64 attemptId)
+        : TTraversalWriteQuery(database, pathId, attemptId)
     {
         for (auto& item : items) {
             if (item.Sampling) {
@@ -133,12 +219,16 @@ public:
         }
     }
 
-    void OnRunQuery() override {
+    void WriteStatistics() override {
         if (SavingSampledRows && SampledItems.empty()) {
             SavingSampledRows = false;
         }
         const auto& items = SavingSampledRows ? SampledItems : FullItems;
         if (items.empty()) {
+            if (TxId) {
+                CommitTransaction();
+                return;
+            }
             Finish();
             return;
         }
@@ -193,20 +283,14 @@ public:
         rows.EndList().Build();
 
         // Separate statements avoid multiple write effects in RBO; one transaction keeps the batch atomic.
-        TTxControl txControl = TTxControl::BeginAndCommitTx();
-        if (SavingSampledRows && !FullItems.empty()) {
-            txControl = TTxControl::BeginTx();
-        } else if (!SavingSampledRows && !SampledItems.empty()) {
-            txControl = TTxControl::ContinueAndCommitTx();
-        }
-        RunDataQuery(sql, &params, txControl);
+        RunDataQuery(sql, &params, WriteTx(!SavingSampledRows || FullItems.empty()));
     }
 
-    void OnQueryResult() override {
+    void OnWriteResult() override {
         if (SavingSampledRows) {
             SavingSampledRows = false;
             if (!FullItems.empty()) {
-                OnRunQuery();
+                WriteStatistics();
                 return;
             }
         }
@@ -226,14 +310,16 @@ private:
     const TString Database;
     const TPathId PathId;
     const std::vector<TStatisticsItem> Items;
+    const ui64 AttemptId;
 
 public:
     TSaveStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
-        const TPathId& pathId, std::vector<TStatisticsItem>&& items)
+        const TPathId& pathId, std::vector<TStatisticsItem>&& items, ui64 attemptId)
         : ReplyActorId(replyActorId)
         , Database(database)
         , PathId(pathId)
         , Items(std::move(items))
+        , AttemptId(attemptId)
     {}
 
     void Bootstrap() {
@@ -243,7 +329,7 @@ public:
                 TQueryRetryActorBase::Retryable, TDuration::MilliSeconds(10),
                 TDuration::MilliSeconds(200), TDuration::Seconds(1),
                 std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
-            Database, PathId, std::move(Items)
+            Database, PathId, std::move(Items), AttemptId
         ));
         Become(&TSaveStatisticsRetryingQuery::StateFunc);
     }
@@ -259,9 +345,9 @@ public:
 };
 
 NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
-    const TPathId& pathId, std::vector<TStatisticsItem>&& items)
+    const TPathId& pathId, std::vector<TStatisticsItem>&& items, ui64 attemptId)
 {
-    return new TSaveStatisticsRetryingQuery(replyActorId, database, pathId, std::move(items));
+    return new TSaveStatisticsRetryingQuery(replyActorId, database, pathId, std::move(items), attemptId);
 }
 
 
@@ -354,26 +440,26 @@ void DispatchLoadStatisticsQuery(
 }
 
 
-class TDeleteStatisticsQuery : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TDeleteStatisticsQuery, TEvStatistics::TEvDeleteStatisticsQueryResponse> {
-private:
-    const TPathId PathId;
-
+class TDeleteStatisticsQuery : public TTraversalWriteQuery, public TQueryRetryActorMixin<TDeleteStatisticsQuery, TEvStatistics::TEvDeleteStatisticsQueryResponse> {
 public:
-    TDeleteStatisticsQuery(const TString& database, const TPathId& pathId)
-        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
-        , PathId(pathId)
+    TDeleteStatisticsQuery(const TString& database, const TPathId& pathId, ui64 attemptId)
+        : TTraversalWriteQuery(database, pathId, attemptId)
     {
     }
 
-    void OnRunQuery() override {
+    void WriteStatistics() override {
+        // Keep one fence row for the retired path. An older save can reach the
+        // database after this delete and would recreate the statistics without it.
         TString sql = TStringBuilder() << R"(
             DECLARE $owner_id AS Uint64;
             DECLARE $local_path_id AS Uint64;
+            DECLARE $fence_type AS Uint32;
 
             DELETE FROM `)" << StatisticsTablePath << R"(`
             WHERE
                 owner_id = $owner_id AND
-                local_path_id = $local_path_id;
+                local_path_id = $local_path_id AND
+                (stat_type IS NULL OR stat_type != $fence_type);
         )";
 
         NYdb::TParamsBuilder params;
@@ -385,10 +471,11 @@ public:
                 .Uint64(PathId.LocalPathId)
                 .Build();
 
-        RunDataQuery(sql, &params);
+        params.AddParam("$fence_type").Uint32(TraversalFenceType).Build();
+        RunDataQuery(sql, &params, WriteTx(true));
     }
 
-    void OnQueryResult() override {
+    void OnWriteResult() override {
         Finish();
     }
 
@@ -406,13 +493,15 @@ private:
     const NActors::TActorId ReplyActorId;
     const TString Database;
     const TPathId PathId;
+    const ui64 AttemptId;
 
 public:
     TDeleteStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
-        const TPathId& pathId)
+        const TPathId& pathId, ui64 attemptId)
         : ReplyActorId(replyActorId)
         , Database(database)
         , PathId(pathId)
+        , AttemptId(attemptId)
     {}
 
     void Bootstrap() {
@@ -422,7 +511,7 @@ public:
                 TQueryRetryActorBase::Retryable, TDuration::MilliSeconds(10),
                 TDuration::MilliSeconds(200), TDuration::Seconds(1),
                 std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
-            Database, PathId
+            Database, PathId, AttemptId
         ));
         Become(&TDeleteStatisticsRetryingQuery::StateFunc);
     }
@@ -438,9 +527,9 @@ public:
 };
 
 NActors::IActor* CreateDeleteStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
-    const TPathId& pathId)
+    const TPathId& pathId, ui64 attemptId)
 {
-    return new TDeleteStatisticsRetryingQuery(replyActorId, database, pathId);
+    return new TDeleteStatisticsRetryingQuery(replyActorId, database, pathId, attemptId);
 }
 
 } // NKikimr::NStat

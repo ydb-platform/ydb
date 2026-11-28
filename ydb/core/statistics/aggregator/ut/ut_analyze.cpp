@@ -1,12 +1,15 @@
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/statistics/aggregator/aggregator_impl.h>
+#include <ydb/core/statistics/aggregator/analyze_scan_budget.h>
 
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/core/kqp/common/compilation/events.h>
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/tabletid.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -20,6 +23,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/cast.h>
 
 #include <deque>
@@ -29,6 +33,7 @@ namespace NStat {
 
 struct TStatisticsAggregatorTestAccess {
     using TTraversalTick = TStatisticsAggregator::TEvPrivate::TEvScheduleTraversal;
+    using TDeadlineTick = TStatisticsAggregator::TEvPrivate::TEvAnalyzeDeadline;
     using TTraversalWakeup = TStatisticsAggregator::TEvPrivate::TEvScheduleForceTraversal;
     using TAnalyzeCountersTick = TStatisticsAggregator::TEvPrivate::TEvReportAnalyzeCounters;
 };
@@ -78,7 +83,8 @@ void CheckTraversalSchedulerRate(TTestActorRuntime& runtime, ui64 tabletId, bool
     }
 }
 
-void SetAggregatorStatisticsConfig(TTestEnv& env, ui64 tabletId, bool enabled, bool background) {
+void SetAggregatorStatisticsConfig(TTestEnv& env, ui64 tabletId, bool enabled, bool background,
+        std::optional<ui32> tableLimit = {}) {
     auto& runtime = *env.GetServer().GetRuntime();
     const auto& settings = env.GetServer().GetSettings();
     auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
@@ -87,6 +93,9 @@ void SetAggregatorStatisticsConfig(TTestEnv& env, ui64 tabletId, bool enabled, b
     config->MutableFeatureFlags()->SetEnableColumnStatistics(enabled);
     *config->MutableStatisticsConfig() = settings.AppConfig->GetStatisticsConfig();
     config->MutableStatisticsConfig()->SetEnableBackgroundColumnStatsCollection(background);
+    if (tableLimit) {
+        config->MutableStatisticsConfig()->SetAnalyzeMaxTablesInFlight(*tableLimit);
+    }
     const auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(tabletId, sender, request.release());
     UNIT_ASSERT(runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender));
@@ -179,6 +188,85 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         runtime.WaitFor("disabled ANALYZE pending counter", [&] { return pendingCounter->Val() == 0; });
         runtime.WaitFor("ANALYZE counter timer with column statistics disabled", [&] { return !ticks.empty(); });
         UNIT_ASSERT_VALUES_EQUAL(ticks.size(), 1);
+    }
+
+    Y_UNIT_TEST(MigratedTableUsesReportingSchemeShard) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            auto* config = settings.AppConfig->MutableStatisticsConfig();
+            config->SetBackgroundAnalyzeChangeRatioThresholdPercent(20);
+            config->SetAnalyzeColumnTableWholeTableScanMaxBytes(1024);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        constexpr ui64 tenant = 123;
+        // This aggregator only receives the migrated table from the tenant SchemeShard.
+        TBlockEvents<TEvStatistics::TEvSchemeShardStats> automaticReports(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetSchemeShardId() != tenant;
+        });
+        CreateDatabase(env, "Database");
+        const auto table = PrepareTable(env, "Database", "Table", true);
+        const auto aggregator = ResolveTablet(runtime, table.SaTabletId);
+        const auto nodeIndex = aggregator.NodeId() - runtime.GetFirstNodeId();
+        const auto counters = GetServiceCounters(runtime.GetAppData(nodeIndex).Counters, "statistics")
+            ->GetSubgroup("subsystem", "background_analyze");
+        const auto pending = counters->GetSubgroup("status", "pending")->GetCounter("BackgroundAnalyze");
+        const auto completed = counters->GetSubgroup("status", "completed")->GetCounter("BackgroundAnalyze", true);
+        UNIT_ASSERT_VALUES_UNEQUAL(tenant, table.PathId.OwnerId);
+
+        auto sendReport = [&](ui64 updates, ui64 bytes) {
+            NKikimrStat::TSchemeShardStats stats;
+            stats.SetAreAllStatsFull(true);
+            auto* entry = stats.AddEntries();
+            entry->MutablePathId()->SetOwnerId(table.PathId.OwnerId);
+            entry->MutablePathId()->SetLocalId(table.PathId.LocalPathId);
+            entry->SetIsColumnTable(true);
+            entry->SetAreStatsFull(true);
+            entry->SetRowCount(1000);
+            entry->SetRowUpdates(updates);
+            entry->SetBytesSize(bytes);
+            auto report = std::make_unique<TEvStatistics::TEvSchemeShardStats>();
+            report->Record.SetSchemeShardId(tenant);
+            UNIT_ASSERT(stats.SerializeToString(report->Record.MutableStats()));
+            runtime.SendToPipe(table.SaTabletId, sender, report.release());
+        };
+        auto waitPending = [&](i64 count) {
+            runtime.WaitFor("pending background ANALYZE count", [&] { return pending->Val() == count; },
+                TDuration::Seconds(30));
+        };
+
+        sendReport(1000, 2048);
+        waitPending(1);
+        Analyze(runtime, table.SaTabletId, {table.PathId}, "take-baseline", "/Root/Database");
+        waitPending(0);
+
+        // The explicit ANALYZE set the baseline to 1000 updates. A 19.9% change stays fresh.
+        sendReport(1199, 512);
+        SetAggregatorStatisticsConfig(env, table.SaTabletId, true, true);
+        CheckTraversalSchedulerRate(runtime, table.SaTabletId);
+        UNIT_ASSERT_VALUES_EQUAL(pending->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(completed->Val(), 0);
+
+        SetAggregatorStatisticsConfig(env, table.SaTabletId, true, false);
+        sendReport(1200, 512);
+        waitPending(1);
+        // Recovery must use the persisted reporting SchemeShard and snapshot before any new report.
+        RebootTablet(runtime, table.SaTabletId, sender);
+        WaitForAggregatorCommit(runtime, table.SaTabletId);
+
+        // The tenant reports 512 bytes, so the background traversal can scan the whole
+        // table. A missing size would submit a scan pinned to a shard's node.
+        size_t wholeScans = 0;
+        auto scans = runtime.AddObserver<TEvAnalyzeScanBudget::TEvSubmit>([&](auto& ev) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->NodeId, 0);
+            ++wholeScans;
+        });
+        SetAggregatorStatisticsConfig(env, table.SaTabletId, true, true);
+        runtime.WaitFor("change-triggered ANALYZE of migrated table", [&] { return completed->Val() >= 1; },
+            TDuration::Seconds(30));
+        UNIT_ASSERT_GT(wholeScans, 0);
+        waitPending(0);
+        CheckTraversalSchedulerRate(runtime, table.SaTabletId);
+        UNIT_ASSERT_VALUES_EQUAL(completed->Val(), 1);
     }
 
     Y_UNIT_TEST_TWIN(Analyze, ColumnShard) {
@@ -977,6 +1065,207 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         CheckTableSummaryRowCount(runtime, second.PathId, 0);
     }
 
+    Y_UNIT_TEST_TWIN(ParallelAnalyzeSkipsBusyPaths, ColumnShard) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeMaxTablesInFlight(1);
+            settings.FeatureFlags.SetEnableBackgroundAnalyzeChangeRatio(false);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto a = CreateEmptyTable(env, "Database", "A", ColumnShard);
+        const auto b = CreateEmptyTable(env, "Database", "B", ColumnShard);
+        const auto c = CreateEmptyTable(env, "Database", "C", ColumnShard);
+        WaitForSchemeShardStatsUpdate(runtime, a.PathId.OwnerId, true);
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto pipe = runtime.ConnectToPipe(a.SaTabletId, sender, 0, GetPipeConfigWithRetries());
+        const auto submit = [&](const TTableInfo& table, const TString& id) {
+            runtime.SendToPipe(pipe, sender, MakeAnalyzeRequest({table.PathId}, id, "/Root/Database").release());
+        };
+        const auto state = [&](const TString& id) {
+            return TestGetAnalyzeOp(runtime, a.SaTabletId, "/Root/Database", id).GetAnalyzeOperation().GetState();
+        };
+
+        TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> results(runtime, [](auto& ev) {
+            return ev->Get()->Final;
+        });
+        submit(a, "firstA");
+        runtime.WaitFor("first table", [&] { return results.size() == 1; }, TDuration::Seconds(30));
+        submit(a, "secondA");
+        submit(b, "firstB");
+        submit(c, "firstC");
+        runtime.SendToPipe(pipe, sender, new TEvTablet::TEvGetCounters());
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(sender));
+        UNIT_ASSERT_VALUES_EQUAL(state("firstB"), Ydb::Table::AnalyzeState::STATE_ENQUEUED);
+        SetAggregatorStatisticsConfig(env, a.SaTabletId, true, false, 2);
+        runtime.WaitFor("second table bypassed busy A", [&] { return results.size() == 2; }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(state("firstA"), Ydb::Table::AnalyzeState::STATE_IN_PROGRESS);
+        UNIT_ASSERT_VALUES_EQUAL(state("secondA"), Ydb::Table::AnalyzeState::STATE_ENQUEUED);
+        UNIT_ASSERT_VALUES_EQUAL(state("firstB"), Ydb::Table::AnalyzeState::STATE_IN_PROGRESS);
+        UNIT_ASSERT_VALUES_EQUAL(state("firstC"), Ydb::Table::AnalyzeState::STATE_ENQUEUED);
+
+        TestCancelAnalyzeOp(runtime, a.SaTabletId, "/Root/Database", "firstB", Ydb::StatusIds::SUCCESS);
+        runtime.WaitFor("C acquired the cancelled slot", [&] { return results.size() == 3; }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(state("firstA"), Ydb::Table::AnalyzeState::STATE_IN_PROGRESS);
+        UNIT_ASSERT_VALUES_EQUAL(state("secondA"), Ydb::Table::AnalyzeState::STATE_ENQUEUED);
+        UNIT_ASSERT_VALUES_EQUAL(state("firstB"), Ydb::Table::AnalyzeState::STATE_CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(state("firstC"), Ydb::Table::AnalyzeState::STATE_IN_PROGRESS);
+
+        results.Stop().Unblock();
+        THashSet<TString> replied;
+        for (size_t i = 0; i < 4; ++i) {
+            const auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender, TDuration::Seconds(30));
+            UNIT_ASSERT(response);
+            const auto& record = response->Get()->Record;
+            UNIT_ASSERT(replied.insert(record.GetOperationId()).second);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), record.GetOperationId() == "firstB"
+                ? NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED : NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        }
+        CheckTableSummaryRowCount(runtime, a.PathId, 0);
+        CheckTableSummaryRowCount(runtime, c.PathId, 0);
+
+        // The periodic scheduler should pick up a fresh table while B is in its cancellation cooldown.
+        const auto fresh = CreateEmptyTable(env, "Database", "Fresh", ColumnShard);
+        THashSet<TPathId> background;
+        auto progress = runtime.AddObserver<TEvStatistics::TEvAnalyzeActorProgress>([&](auto& ev) {
+            if (ev->Get()->OperationId.empty()) {
+                background.insert(ev->Get()->PathId);
+            }
+        });
+        SetAggregatorStatisticsConfig(env, a.SaTabletId, true, true, 2);
+        runtime.WaitFor("background scan of the fresh table", [&] { return background.contains(fresh.PathId); },
+            TDuration::Seconds(30));
+        CheckTraversalSchedulerRate(runtime, a.SaTabletId);
+        UNIT_ASSERT(!background.contains(b.PathId));
+    }
+
+    Y_UNIT_TEST_QUAD(ParallelAnalyzeResumesTablesAfterReboot, ColumnShard, LowerLimit) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeMaxTablesInFlight(2);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto a = CreateEmptyTable(env, "Database", "A", ColumnShard);
+        const auto b = CreateEmptyTable(env, "Database", "B", ColumnShard);
+        WaitForSchemeShardStatsUpdate(runtime, a.PathId.OwnerId, true);
+        const auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeAnalyzeRequest({a.PathId, b.PathId}, "both", "/Root/Database");
+        request->Record.MutableTables(0)->SetPath(a.Path);
+        request->Record.MutableTables(1)->SetPath(b.Path);
+        TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> results(runtime, [](auto& ev) {
+            return ev->Get()->Final;
+        });
+        runtime.SendToPipe(a.SaTabletId, sender, request.release());
+        runtime.WaitFor("two active tables in one operation", [&] { return results.size() == 2; }, TDuration::Seconds(30));
+
+        if constexpr (LowerLimit) {
+            const auto aggregator = ResolveTablet(runtime, a.SaTabletId);
+            bool delivered = false;
+            auto updates = runtime.AddObserver<NConsole::TEvConsole::TEvConfigNotificationRequest>([&](const auto& ev) {
+                const auto& stats = ev->Get()->Record.GetConfig().GetStatisticsConfig();
+                if (ev->GetRecipientRewrite() == aggregator && stats.HasAnalyzeMaxTablesInFlight()
+                        && stats.GetAnalyzeMaxTablesInFlight() == 1) {
+                    delivered = true;
+                }
+            });
+            auto configure = std::make_unique<NConsole::TEvConsole::TEvConfigureRequest>();
+            auto* item = configure->Record.AddActions()->MutableAddConfigItem()->MutableConfigItem();
+            item->SetKind(NKikimrConsole::TConfigItem::StatisticsConfigItem);
+            item->MutableUsageScope()->MutableTenantAndNodeTypeFilter();
+            auto* stats = item->MutableConfig()->MutableStatisticsConfig();
+            *stats = env.GetSettings()->AppConfig->GetStatisticsConfig();
+            stats->SetAnalyzeMaxTablesInFlight(1);
+            runtime.SendToPipe(MakeConsoleID(), sender, configure.release());
+            const auto response = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigureResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS,
+                response->Get()->Record.ShortDebugString());
+            runtime.WaitFor("lower table limit delivered", [&] { return delivered; }, TDuration::Seconds(30));
+        }
+        WaitForAggregatorCommit(runtime, a.SaTabletId);
+        RebootTablet(runtime, a.SaTabletId, runtime.AllocateEdgeActor());
+        // The pre-reboot results are still held, so only the recovered tables can produce new results.
+        const size_t recovered = LowerLimit ? 1 : 2;
+        runtime.WaitFor("recovered active tables", [&] { return results.size() >= 2 + recovered; }, TDuration::Seconds(30));
+        const auto op = TestGetAnalyzeOp(runtime, a.SaTabletId, "/Root/Database", "both").GetAnalyzeOperation();
+        UNIT_ASSERT_VALUES_EQUAL(op.GetState(), Ydb::Table::AnalyzeState::STATE_IN_PROGRESS);
+        UNIT_ASSERT_VALUES_EQUAL(op.InProgressPathsSize(), recovered);
+
+        results.Stop().Unblock();
+        const auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender, TDuration::Seconds(30));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetOperationId(), "both");
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        const auto done = TestGetAnalyzeOp(runtime, a.SaTabletId, "/Root/Database", "both").GetAnalyzeOperation();
+        UNIT_ASSERT_VALUES_EQUAL(done.DonePathsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(done.GetProgress(), 100.0f);
+        CheckTableSummaryRowCount(runtime, a.PathId, 0);
+        CheckTableSummaryRowCount(runtime, b.PathId, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(ParallelBackgroundAnalyzeGivesQueuedUsersPriority, ColumnShard) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            auto* config = settings.AppConfig->MutableStatisticsConfig();
+            config->SetAnalyzeMaxTablesInFlight(2);
+            config->SetBaseStatsSendInitialDelaySeconds(3);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const TVector<TTableInfo> tables{
+            CreateEmptyTable(env, "Database", "A", ColumnShard),
+            CreateEmptyTable(env, "Database", "B", ColumnShard),
+            CreateEmptyTable(env, "Database", "C", ColumnShard),
+            CreateEmptyTable(env, "Database", "D", ColumnShard)};
+        const auto tabletId = tables.front().SaTabletId;
+        WaitForSchemeShardStatsUpdate(runtime, tables.front().PathId.OwnerId, true);
+        const auto aggregator = ResolveTablet(runtime, tabletId);
+        THashMap<TActorId, TPathId> paths;
+        THashMap<TActorId, TString> operations;
+        auto progress = runtime.AddObserver<TEvStatistics::TEvAnalyzeActorProgress>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == aggregator) {
+                paths[ev->Sender] = ev->Get()->PathId;
+                operations[ev->Sender] = ev->Get()->OperationId;
+            }
+        });
+        TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> results(runtime, [&](auto& ev) {
+            return ev->GetRecipientRewrite() == aggregator && ev->Get()->Final;
+        });
+        SetAggregatorStatisticsConfig(env, tabletId, true, true);
+        runtime.WaitFor("two background traversals", [&] { return results.size() == 2; }, TDuration::Seconds(30));
+        const TPathId first = paths.at(results.front()->Sender);
+        const TPathId second = paths.at(results.back()->Sender);
+        UNIT_ASSERT_UNEQUAL(first, second);
+        UNIT_ASSERT(operations.at(results.front()->Sender).empty());
+        UNIT_ASSERT(operations.at(results.back()->Sender).empty());
+        const auto eligible = FindIf(tables, [&](const auto& table) {
+            return table.PathId != first && table.PathId != second;
+        });
+        UNIT_ASSERT(eligible != tables.end());
+
+        // Hold completion/submit wakeups so the next periodic tick chooses
+        // between the queued user request and other overdue background tables.
+        auto wakeups = runtime.AddObserver<TStatisticsAggregatorTestAccess::TTraversalWakeup>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == aggregator) {
+                ev.Reset();
+            }
+        });
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto pipe = runtime.ConnectToPipe(tabletId, sender, 0, GetPipeConfigWithRetries());
+        runtime.SendToPipe(pipe, sender, MakeAnalyzeRequest({eligible->PathId}, "user", "/Root/Database").release());
+        runtime.SendToPipe(pipe, sender, new TEvTablet::TEvGetCounters());
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(sender));
+        UNIT_ASSERT_VALUES_EQUAL(TestGetAnalyzeOp(runtime, tabletId, "/Root/Database", "user").GetAnalyzeOperation().GetState(),
+            Ydb::Table::AnalyzeState::STATE_ENQUEUED);
+
+        results.Unblock(1);
+        runtime.WaitFor("queued table starts before background", [&] { return results.size() == 2; }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(operations.at(results.back()->Sender), "user");
+        UNIT_ASSERT_VALUES_EQUAL(paths.at(results.back()->Sender), eligible->PathId);
+        results.Stop().Unblock();
+        const auto user = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender, TDuration::Seconds(30));
+        UNIT_ASSERT(user);
+        UNIT_ASSERT_VALUES_EQUAL(user->Get()->Record.GetOperationId(), "user");
+        UNIT_ASSERT_VALUES_EQUAL(user->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+    }
+
     Y_UNIT_TEST_TWIN(AnalyzeBackgroundFailuresWaitForPeriodicTick, ColumnShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
@@ -1112,6 +1401,106 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
             UNIT_ASSERT(response);
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetOperationId(), GetOperationId(i));
+        }
+    }
+
+    Y_UNIT_TEST(RecoverDroppedBackgroundTable) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto table = CreateEmptyTable(env, "Database", "Table", false);
+        Analyze(runtime, table.SaTabletId, {table.PathId}, "baseline");
+        const auto oldAggregator = ResolveTablet(runtime, table.SaTabletId);
+        TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> results(runtime, [&](auto& ev) {
+            return ev->GetRecipientRewrite() == oldAggregator && ev->Get()->Final;
+        });
+        runtime.AdvanceCurrentTime(TDuration::Days(2));
+        SetAggregatorStatisticsConfig(env, table.SaTabletId, true, true);
+        runtime.WaitFor("background traversal awaiting completion", [&] { return !results.empty(); });
+
+        DropTable(env, "Database", "Table");
+        bool removed = false;
+        auto reports = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev) {
+            if (ev->Get()->Record.GetSchemeShardId() == table.PathId.OwnerId) {
+                NKikimrStat::TSchemeShardStats stats;
+                if (stats.ParseFromString(ev->Get()->Record.GetStats())) {
+                    removed = !AnyOf(stats.GetEntries(), [&](const auto& entry) {
+                        return TPathId::FromProto(entry.GetPathId()) == table.PathId;
+                    });
+                }
+            }
+        });
+        runtime.WaitFor("dropped table to leave SchemeShard statistics", [&] { return removed; });
+        WaitForAggregatorCommit(runtime, table.SaTabletId);
+        RebootTablet(runtime, table.SaTabletId, runtime.AllocateEdgeActor());
+        const auto aggregator = ResolveTablet(runtime, table.SaTabletId);
+        size_t deletes = 0;
+        auto deleted = runtime.AddObserver<TEvStatistics::TEvDeleteStatisticsQueryResponse>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == aggregator && ev->Get()->Success) {
+                ++deletes;
+            }
+        });
+        // The startup configuration disables background collection. The pending path must survive it.
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(deletes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountStatisticsV2Rows(env, "Database", table.PathId, EStatType::TABLE_SUMMARY, ""), 1);
+        SetAggregatorStatisticsConfig(env, table.SaTabletId, true, true);
+        runtime.WaitFor("cleanup of the recovered dropped table", [&] { return deletes != 0; }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(CountStatisticsV2Rows(env, "Database", table.PathId, EStatType::TABLE_SUMMARY, ""), 0);
+    }
+
+    Y_UNIT_TEST(RecoveryExpiresAnalyzeBeforeResumingWork) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto table = CreateEmptyTable(env, "Database", "Table", false);
+        const auto oldAggregator = ResolveTablet(runtime, table.SaTabletId);
+        const auto sender = runtime.AllocateEdgeActor();
+        size_t admissions = 0;
+        auto wakeups = runtime.AddObserver<TStatisticsAggregatorTestAccess::TTraversalWakeup>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == oldAggregator) {
+                ++admissions;
+            }
+        });
+        TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> results(runtime, [&](auto& ev) {
+            return ev->GetRecipientRewrite() == oldAggregator && ev->Get()->Final;
+        });
+        runtime.SendToPipe(table.SaTabletId, sender,
+            MakeAnalyzeRequest({table.PathId}, "active", "/Root/Database").release());
+        runtime.WaitFor("active traversal", [&] { return !results.empty(); });
+        runtime.SendToPipe(table.SaTabletId, sender,
+            MakeAnalyzeRequest({table.PathId}, "queued", "/Root/Database").release());
+        // Each submission schedules a traversal in TTxAnalyze::Complete, after its commit.
+        runtime.WaitFor("both submissions committed", [&] { return admissions == 2; }, TDuration::Seconds(30));
+        AnalyzeStatus(runtime, sender, table.SaTabletId, "queued", NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
+
+        // Hold periodic deadline checks so only startup can fail these operations.
+        auto ticks = runtime.AddObserver<TStatisticsAggregatorTestAccess::TDeadlineTick>([](auto& ev) { ev.Reset(); });
+        size_t restarted = 0;
+        auto progress = runtime.AddObserver<TEvStatistics::TEvAnalyzeActorProgress>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() != oldAggregator && ev->Get()->PathId == table.PathId) {
+                ++restarted;
+            }
+        });
+        runtime.AdvanceCurrentTime(TDuration::Days(2));
+        RebootTablet(runtime, table.SaTabletId, runtime.AllocateEdgeActor());
+        THashSet<TString> failed;
+        for (size_t i = 0; i < 2; ++i) {
+            auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender, TDuration::Seconds(30));
+            UNIT_ASSERT(response);
+            const auto& record = response->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            UNIT_ASSERT_C(issues.ToString().Contains("deadline exceeded"), issues.ToString());
+            failed.insert(record.GetOperationId());
+        }
+        UNIT_ASSERT(failed.contains("active") && failed.contains("queued"));
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(restarted, 0);
+        for (const auto& id : failed) {
+            UNIT_ASSERT_VALUES_EQUAL(TestGetAnalyzeOp(runtime, table.SaTabletId, "/Root/Database", id)
+                .GetAnalyzeOperation().GetState(), Ydb::Table::AnalyzeState::STATE_FAILED);
         }
     }
 
@@ -1262,7 +1651,7 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         runtime.SendToPipe(tableInfo.SaTabletId, sender2, analyzeRequest2.release());
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender2);
 
-        // Make sure that the old operation is performed after the reattach request
+        // A retry of the recovered operation receives its terminal status.
         auto analyzeRequest3 = MakeAnalyzeRequest({tableInfo.PathId}, operationId);
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest3.release());
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
@@ -1315,6 +1704,44 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
 
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
         ValidateStatistics(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(AnalyzeDroppedColumnFencesCancelledSave) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()->SetEnableBackgroundColumnStatsCollection(false);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto table = CreateEmptyTable(env, "Database", "Table", /*columnShard=*/false);
+        WaitForSchemeShardStatsUpdate(runtime, table.PathId.OwnerId);
+        const auto sender = runtime.AllocateEdgeActor();
+
+        // Hold the first save before it can publish the table summary or advance the fence.
+        TBlockEvents<NKqp::TEvKqp::TEvQueryRequest> oldWrite(runtime, [](const auto& ev) {
+            return ev->Get()->GetQuery().Contains("DECLARE $attempt AS String");
+        });
+        runtime.SendToPipe(table.SaTabletId, sender,
+            MakeAnalyzeRequest({table.PathId}, "old", "/Root/Database").release());
+        runtime.WaitFor("old ANALYZE write", [&] { return !oldWrite.empty(); }, TDuration::Seconds(30));
+        oldWrite.Stop();
+        TestCancelAnalyzeOp(runtime, table.SaTabletId, "/Root/Database", "old", Ydb::StatusIds::SUCCESS);
+
+        // Submit the previously valid tag for Value after dropping that column.
+        ExecuteYqlScript(env, "ALTER TABLE `/Root/Database/Table` DROP COLUMN `Value`;");
+        Analyze(runtime, table.SaTabletId, {{table.PathId, {2}}}, "dropped-column", "/Root/Database");
+
+        // The old transaction can abort on the new fence. Wait for the retry actor's final reply.
+        const auto aggregator = ResolveTablet(runtime, table.SaTabletId);
+        bool writeFinished = false;
+        auto oldReply = runtime.AddObserver<TEvStatistics::TEvSaveStatisticsQueryResponse>([&](const auto& ev) {
+            if (ev->GetRecipientRewrite() == aggregator && ev->Get()->PathId == table.PathId) {
+                UNIT_ASSERT_C(ev->Get()->Success, ev->Get()->Issues.ToString());
+                writeFinished = true;
+            }
+        });
+        oldWrite.Unblock();
+        runtime.WaitFor("cancelled ANALYZE write to finish", [&] { return writeFinished; }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(CountStatisticsV2Rows(env, "Database", table.PathId, EStatType::TABLE_SUMMARY, ""), 0);
     }
 
     Y_UNIT_TEST_TWIN(DropTableNavigateError, ColumnShard) {
@@ -1425,9 +1852,10 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
 
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender3);
 
-        // op1 must still be enqueued after reboot
-        AnalyzeStatus(runtime, sender1, table1.SaTabletId, "op1",
-            NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
+        // Replacing the queued op2 must preserve the active op1, which resumes
+        // after reboot and completes before op2 acquires the single slot.
+        const auto op1 = TestGetAnalyzeOp(runtime, table1.SaTabletId, "", "op1");
+        UNIT_ASSERT_VALUES_EQUAL(op1.GetAnalyzeOperation().GetState(), Ydb::Table::AnalyzeState::STATE_DONE);
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeRebootShard, ColumnShard) {

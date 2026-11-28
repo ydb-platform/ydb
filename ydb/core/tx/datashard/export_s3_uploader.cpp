@@ -1142,6 +1142,15 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     metadata.SetSourceDatabase(Task.GetSourceDatabase());
 
     TVector<TChangefeedExportDescriptions> changefeeds;
+    // Computed by the SchemeShard against the snapshot the export copied, and recorded whether
+    // or not changefeed definitions are exported.
+    if (Task.GetAsyncReplicationFeedsKnown()) {
+        metadata.MarkAsyncReplicationFeedsKnown();
+        for (const auto& name : Task.GetAsyncReplicationFeeds()) {
+            metadata.AddAsyncReplicationFeed(name);
+        }
+    }
+
     const bool exportChangefeeds = AppData()->FeatureFlags.GetEnableChangefeedsExport();
     if (exportChangefeeds) {
         const auto& persQueues = Task.GetChangefeedUnderlyingTopics();

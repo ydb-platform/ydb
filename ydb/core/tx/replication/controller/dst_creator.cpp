@@ -682,6 +682,49 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             && got.GetReplicationConfig().GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE;
     }
 
+    // The export lists feeds after copying the data, so a feed created mid-export still counts.
+    // Refuses a snapshot that this replication's feed does not cover. The feed name is a GUID
+    // minted by this replication on that source table, so no other database, cluster or table can
+    // produce a snapshot containing it -- which is why the recorded source database is diagnostic
+    // only and never grounds for refusal. An unstamped snapshot is refused rather than accepted:
+    // a check that passes when it cannot see anything is indistinguishable from no check, and the
+    // feature flag is what keeps older sources working.
+    bool CheckSnapshotProvenance(const NKikimrSchemeOp::TTableReplicationConfig& config,
+            TString& error) const
+    {
+        if (!AppData()->FeatureFlags.GetEnableAsyncReplicationSnapshotProvenance()) {
+            return true;
+        }
+
+        // An index implementation table has its own feed, which the snapshot does not record.
+        if (Kind != TReplication::ETargetKind::Table || !StreamName) {
+            return true;
+        }
+
+        if (!config.GetSnapshotFeedsKnown()) {
+            error = TStringBuilder() << "Cannot attach destination table '" << DstPath
+                << "': the snapshot that filled it records no async replication provenance, so"
+                << " there is no way to tell whether it predates this replication's changefeed."
+                << " Export the source with a version that records it, or disable"
+                << " EnableAsyncReplicationSnapshotProvenance";
+            return false;
+        }
+
+        for (const auto& name : config.GetSnapshotReplicationFeeds()) {
+            if (name == StreamName) {
+                return true;
+            }
+        }
+
+        error = TStringBuilder() << "Cannot attach destination table '" << DstPath
+            << "': the snapshot that filled it records no async replication feed named '"
+            << StreamName << "', so it was taken before replication began capturing changes."
+            << " Changes made in between are in neither the snapshot nor the feed. Drop the"
+            << " destination table, drop and recreate the replication, then export the source"
+            << " only after its changefeeds are ready and import that snapshot";
+        return false;
+    }
+
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
         if (!NeedsSwitchover(got)) {
             if (!got.HasReplicationConfig()) {
@@ -715,6 +758,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 }
 
                 error = "Destination table import is not complete (expected IMPORTED)";
+                return false;
+            }
+
+            if (!CheckSnapshotProvenance(got.GetReplicationConfig(), error)) {
                 return false;
             }
         }
@@ -1076,7 +1123,8 @@ public:
             bool initialScan,
             TReplication::EState desiredState,
             bool switchover,
-            TTopicMirrorSettings&& topicMirror)
+            TTopicMirrorSettings&& topicMirror,
+            const TString& streamName)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -1085,6 +1133,7 @@ public:
         , TargetId(tid)
         , Kind(kind)
         , SrcPath(srcPath)
+        , StreamName(streamName)
         , DstPath(dstPath)
         , Mode(mode)
         , Consistency(consistency)
@@ -1140,6 +1189,7 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
+    const TString StreamName;
     const TString DstPath;
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
@@ -1250,16 +1300,20 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
         replication->GetConfig().GetInitialScan(), replication->GetDesiredState(),
-        IsSwitchover(replication->GetConfig()));
+        IsSwitchover(replication->GetConfig()),
+        target->GetStreamName());
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        TReplication::EState desiredState, bool switchover)
+        TReplication::EState desiredState, bool switchover,
+        const TString& streamName)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState, switchover, {});
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath,
+        mode, consistency, database, initialScan, desiredState, switchover, {},
+        streamName);
 }
 
 IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
@@ -1269,7 +1323,7 @@ IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const 
 {
     return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, TReplication::ETargetKind::Topic,
         srcPath, dstPath, EReplicationMode::ReadOnly, EConsistencyLevel::Row, database, true,
-        TReplication::EState::Ready, false, std::move(topicMirror));
+        TReplication::EState::Ready, false, std::move(topicMirror), {});
 }
 
 }

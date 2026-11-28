@@ -353,6 +353,12 @@ message TTableReplicationConfig {
     // PathId of the replication that owns this table. May outlive a dropped replication;
     // a new replication can claim the table once the old replication's path is deleted.
     optional NKikimrProto.TPathID OwnerPathId = 4;
+
+    // Stamped by the import. Absent reads as unknown, never as a mismatch.
+    optional string SnapshotSourceDatabase = 5;
+    // Empty is a mismatch; SnapshotFeedsKnown tells that apart from never enumerated.
+    repeated string SnapshotReplicationFeeds = 6;
+    optional bool SnapshotFeedsKnown = 7 [default = false];
 }
 
 message TTableIncrementalBackupConfig {
@@ -1626,6 +1632,9 @@ message TBackupTask {
 
     optional TPathDescription Table = 10; // for further restore
     optional string SourceDatabase = 21; // for restoring absolute references in table settings
+    // Async replication feeds that already existed when the exported snapshot was taken.
+    repeated string AsyncReplicationFeeds = 22;
+    optional bool AsyncReplicationFeedsKnown = 23 [default = false];
     repeated TPathDescription ChangefeedUnderlyingTopics = 17; // for further restore
 
     message TScanSettings {

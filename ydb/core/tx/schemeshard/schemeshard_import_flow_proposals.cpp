@@ -147,6 +147,25 @@ bool CheckIndexMaterializationCompatible(
 
 } // namespace
 
+static void StampSnapshotProvenance(NKikimrSchemeOp::TTableReplicationConfig& config,
+        const NBackup::TMetadata& metadata)
+{
+    config.ClearSnapshotSourceDatabase();
+    config.ClearSnapshotReplicationFeeds();
+    config.ClearSnapshotFeedsKnown();
+
+    if (const auto& database = metadata.GetSourceDatabase()) {
+        config.SetSnapshotSourceDatabase(database);
+    }
+
+    if (const auto& feeds = metadata.GetAsyncReplicationFeeds()) {
+        config.SetSnapshotFeedsKnown(true);
+        for (const auto& name : *feeds) {
+            config.AddSnapshotReplicationFeeds(name);
+        }
+    }
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -266,14 +285,18 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         if (item.ReplicationConfig) {
             auto config = *item.ReplicationConfig;
             config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
+            StampSnapshotProvenance(config, item.Metadata);
             *tableDesc.MutableReplicationConfig() = config;
+            auto implConfig = config;
+            implConfig.ClearSnapshotReplicationFeeds();
+            implConfig.ClearSnapshotFeedsKnown();
             for (auto& index : *indexedTable.MutableIndexDescription()) {
                 if (!NTableIndex::HasReplicatedImplTables(NTableIndex::GetIndexType(index))) {
                     continue;
                 }
 
                 for (auto& implTable : *index.MutableIndexImplTableDescriptions()) {
-                    *implTable.MutableReplicationConfig() = config;
+                    *implTable.MutableReplicationConfig() = implConfig;
                 }
             }
         }

@@ -4222,13 +4222,26 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    void CheckImportedReplica(TTestBasicRuntime& runtime, const TString& path) {
+    void CheckImportedReplica(TTestBasicRuntime& runtime, const TString& path,
+            const TMaybe<TString>& expectedSourceDatabase = Nothing(),
+            const TMaybe<TVector<TString>>& expectedFeeds = Nothing()) {
         const auto desc = DescribePrivatePath(runtime, path, true, true);
         UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
         const auto& config = desc.GetPathDescription().GetTable().GetReplicationConfig();
         UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
         UNIT_ASSERT_VALUES_EQUAL(config.GetConsistencyLevel(), TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL);
         UNIT_ASSERT_VALUES_EQUAL(config.GetImportState(), TTableReplicationConfig::IMPORTED);
+        if (expectedSourceDatabase) {
+            UNIT_ASSERT_VALUES_EQUAL(config.GetSnapshotSourceDatabase(), *expectedSourceDatabase);
+        }
+        if (expectedFeeds) {
+            UNIT_ASSERT_C(config.GetSnapshotFeedsKnown(),
+                "the metadata listed the feeds, so the table must record that they are known");
+            UNIT_ASSERT_VALUES_EQUAL(config.SnapshotReplicationFeedsSize(), expectedFeeds->size());
+            for (size_t i = 0; i < expectedFeeds->size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(config.GetSnapshotReplicationFeeds(i), expectedFeeds->at(i));
+            }
+        }
     }
 
     enum class EFinalizeReboot {
@@ -4245,7 +4258,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         CreateReplicaPlaceholder(runtime, env, 10);
         const auto placeholder = DescribePath(runtime, "/MyRoot/Table").GetPathId();
         const auto data = GenerateTestData("", 3);
-        const TTestDataWithScheme backup(R"(
+        TTestDataWithScheme backup(R"(
             columns { name: "key" type { optional_type { item { type_id: UINT32 } } } }
             columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
             primary_key: "key"
@@ -4253,6 +4266,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 value_since_unix_epoch { column_name: "key" column_unit: UNIT_SECONDS expire_after_seconds: 1 }
             }
         )", {data});
+        backup.Metadata = R"({"version": 0, "source_database": "/MyRoot", "async_replication_feeds": ["repl_feed"]})";
         TPortManager ports;
         const auto port = ports.GetPort();
         TS3Mock s3(ConvertTestData(backup), TS3Mock::TSettings(port));
@@ -4319,7 +4333,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         }
         env.TestWaitNotification(runtime, 20);
         TestGetImport(runtime, 20, "/MyRoot");
-        CheckImportedReplica(runtime, "/MyRoot/Table");
+        CheckImportedReplica(runtime, "/MyRoot/Table", TString("/MyRoot"),
+            TVector<TString>{"repl_feed"});
         const auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
         UNIT_ASSERT_UNEQUAL(desc.GetPathId(), placeholder);
         UNIT_ASSERT(desc.GetPathDescription().GetTable().GetTTLSettings().HasEnabled());
@@ -4329,7 +4344,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         runtime.AdvanceCurrentTime(TDuration::Hours(1));
         env.SimulateSleep(runtime, TDuration::Seconds(10));
-        CheckImportedReplica(runtime, "/MyRoot/Table");
+        CheckImportedReplica(runtime, "/MyRoot/Table", TString("/MyRoot"),
+            TVector<TString>{"repl_feed"});
         NKqp::CompareYson(data.YsonStr, ReadTable(runtime, shardId, "Table", {"key"}, {"key", "value"}));
     }
 
@@ -8265,12 +8281,31 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         bool applicationChangefeedExported = false;
         for (const auto& [key, content] : s3Mock.GetData()) {
             UNIT_ASSERT_C(!key.Contains(AsyncReplicationChangefeedName), key);
-            UNIT_ASSERT_C(!content.Contains(AsyncReplicationChangefeedName), key);
+            // metadata.json is checked below: a replication feed's name is recorded there on
+            // purpose, and the substring also occurs in the field name itself.
+            if (!key.EndsWith("metadata.json")) {
+                UNIT_ASSERT_C(!content.Contains(AsyncReplicationChangefeedName), key);
+            }
             if (key.EndsWith("/Stream_1/changefeed_description.pb")) {
                 applicationChangefeedExported = true;
             }
         }
         UNIT_ASSERT(applicationChangefeedExported);
+
+        // The definition is never exported, but a feed installed by async replication has its
+        // name recorded as snapshot provenance, while a user-omitted one has not.
+        const bool isReplicationFeed = AnyOf(attrs, [](const auto& attr) {
+            return attr.first == "__async_replication";
+        });
+        const auto metadata = NBackup::TMetadata::Deserialize(s3Mock.GetData().at("/metadata.json"));
+        const auto& feeds = metadata.GetAsyncReplicationFeeds();
+        UNIT_ASSERT(feeds);
+        if (isReplicationFeed) {
+            UNIT_ASSERT_VALUES_EQUAL(feeds->size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL((*feeds)[0], TString(AsyncReplicationChangefeedName));
+        } else {
+            UNIT_ASSERT(feeds->empty());
+        }
 
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {

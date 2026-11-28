@@ -38,6 +38,21 @@ void TMetadata::AddChangefeed(const TChangefeedMetadata& changefeed) {
     Changefeeds->push_back(changefeed);
 }
 
+void TMetadata::MarkAsyncReplicationFeedsKnown() {
+    if (!AsyncReplicationFeeds) {
+        AsyncReplicationFeeds.emplace();
+    }
+}
+
+void TMetadata::AddAsyncReplicationFeed(const TString& name) {
+    MarkAsyncReplicationFeedsKnown();
+    AsyncReplicationFeeds->push_back(name);
+}
+
+const std::optional<std::vector<TString>>& TMetadata::GetAsyncReplicationFeeds() const {
+    return AsyncReplicationFeeds;
+}
+
 const std::optional<std::vector<TChangefeedMetadata>>& TMetadata::GetChangefeeds() const {
     return Changefeeds;
 }
@@ -115,6 +130,14 @@ TString TMetadata::Serialize() const {
     }
     m["changefeeds"] = changefeeds;
 
+    if (AsyncReplicationFeeds) {
+        NJson::TJsonArray feeds;
+        for (const auto& name : *AsyncReplicationFeeds) {
+            feeds.AppendValue(name);
+        }
+        m["async_replication_feeds"] = std::move(feeds);
+    }
+
     NJson::TJsonArray indexes;
     if (Indexes) {
         for (const auto& index : *Indexes) {
@@ -178,6 +201,13 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
                 .ExportPrefix = changefeed["prefix"].GetString(),
                 .Name = changefeed["name"].GetString(),
             });
+        }
+    }
+
+    if (json.Has("async_replication_feeds")) {
+        result.AsyncReplicationFeeds.emplace();
+        for (const auto& feed : json["async_replication_feeds"].GetArraySafe()) {
+            result.AsyncReplicationFeeds->push_back(feed.GetStringSafe());
         }
     }
 

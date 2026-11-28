@@ -74,6 +74,10 @@ public:
     void AddChangefeed(const TChangefeedMetadata& changefeed);
     const std::optional<std::vector<TChangefeedMetadata>>& GetChangefeeds() const;
 
+    void MarkAsyncReplicationFeedsKnown();
+    void AddAsyncReplicationFeed(const TString& name);
+    const std::optional<std::vector<TString>>& GetAsyncReplicationFeeds() const;
+
     void AddIndex(const TIndexMetadata& index);
     const std::optional<std::vector<TIndexMetadata>>& GetIndexes() const;
 
@@ -102,6 +106,7 @@ private:
     // []: The export has no changefeeds
     // [...]: The export must have all changefeeds listed here
     std::optional<std::vector<TChangefeedMetadata>> Changefeeds;
+    std::optional<std::vector<TString>> AsyncReplicationFeeds;
 
     // Indexes:
     // Undefined (previous versions): we don't know if we see the export with _materialized_ indexes or without them, so list suitable S3 files to find out all materialized indexes

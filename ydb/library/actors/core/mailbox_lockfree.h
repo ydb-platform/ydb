@@ -135,7 +135,7 @@ namespace NActors {
          * Removes the next event from the mailbox. Returns nullptr for an
          * empty mailbox, which stays locked.
          */
-        std::unique_ptr<IEventHandle> Pop() noexcept;
+        IEventHandle* Pop() noexcept;
 
         /**
          * Counts the number of events for the given localActorId

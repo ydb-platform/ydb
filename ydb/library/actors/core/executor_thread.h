@@ -88,7 +88,7 @@ namespace NActors {
     protected:
         void ProcessExecutorPool();
 
-        TProcessingResult Execute(TMailbox* mailbox, bool isTailExecution, NHPTimer::STime mailboxScheduledTimestampTs);
+        TProcessingResult Execute(TMailbox* mailbox, bool isTailExecution, NHPTimer::STime mailboxScheduledTimestampTs, NHPTimer::STime npNow);
 
         TExecutorThreadStats* UpdateThreadStats();
 

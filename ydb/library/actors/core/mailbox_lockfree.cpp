@@ -461,7 +461,7 @@ namespace NActors {
         return nullptr;
     }
 
-    std::unique_ptr<IEventHandle> TMailbox::Pop() noexcept {
+    IEventHandle* TMailbox::Pop() noexcept {
         if (!EventHead) {
             PreProcessEvents();
         }
@@ -474,7 +474,7 @@ namespace NActors {
             }
             SetNextPtr(ev, nullptr);
         }
-        return std::unique_ptr<IEventHandle>(ev);
+        return ev;
     }
 
     std::pair<ui32, ui32> TMailbox::CountMailboxEvents(ui64 localActorId, ui32 maxTraverse) noexcept {

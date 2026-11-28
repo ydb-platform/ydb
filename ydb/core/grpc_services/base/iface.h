@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/audit/audit_log.h>
+
 #include <util/generic/fwd.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
@@ -27,7 +29,7 @@ struct  TRlPath;
 
 namespace NGRpcService {
 
-using TAuditLogParts = TVector<std::pair<TString, TString>>;
+using TAuditLogParts = NAudit::TAuditLogFields;
 using TAuditLogHook = std::function<void (ui32 status, const TAuditLogParts&)>;
 
 class IRequestCtxBaseMtSafe {

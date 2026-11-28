@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/audit/audit_log.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
@@ -12,7 +13,7 @@ namespace NMonitoring::NAudit {
 
 TString ExtractRemoteAddress(const NHttp::THttpIncomingRequest* request);
 
-using TAuditParts = TVector<std::pair<TString, TString>>;
+using TAuditParts = NKikimr::NAudit::TAuditLogFields;
 
 enum ERequestStatus {
     Success,

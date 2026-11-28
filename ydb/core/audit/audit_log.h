@@ -3,6 +3,7 @@
 #include <utility>
 #include <atomic>
 
+#include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -37,6 +38,18 @@ namespace NActors {
 namespace NKikimr::NAudit {
 
 using TAuditLogParts = TVector<std::pair<TString, TString>>;
+using TAuditLogFields = THashMap<TString, TString>;
+
+inline constexpr TStringBuf RequiredFields[] = {
+    "component", "subject", "sanitized_token", "remote_address", "operation", "status",
+};
+
+// Required in addition to RequiredFields when status is ERROR.
+inline constexpr TStringBuf RequiredFieldsOnError[] = {
+    "reason",
+};
+
+// TODO: Make audit_log_class, log_time and request_id required after their rollout.
 
 extern std::atomic<bool> AUDIT_LOG_ENABLED;
 

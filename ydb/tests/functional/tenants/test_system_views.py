@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+from collections import Counter
 
 from hamcrest import (
     anything,
@@ -23,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 class BaseSystemViews(object):
+    query_stats_interval_seconds = 1
+
     @classmethod
     def setup_class(cls):
         cls.cluster = KiKiMR(
@@ -34,6 +37,9 @@ class BaseSystemViews(object):
         )
         cls.cluster.config.yaml_config['feature_flags']['enable_column_statistics'] = False
         cls.cluster.config.yaml_config['feature_flags']['collect_hour_metric'] = True
+        cls.cluster.config.yaml_config['sys_view_config'] = {
+            'query_stats_interval_seconds': cls.query_stats_interval_seconds,
+        }
         cls.cluster.start()
 
     @classmethod
@@ -79,7 +85,7 @@ class BaseSystemViews(object):
 
     def read_query_metrics(self, driver, database, interval='one_minute', query_text=None):
         table = os.path.join(database, '.sys/query_metrics_{}'.format(interval))
-        query = "select Count, SumReadBytes, SumRequestUnits from `{}`".format(table)
+        query = "select IntervalEnd, Count, SumReadBytes, SumRequestUnits from `{}`".format(table)
         if query_text is not None:
             query += " where QueryText = '{}'".format(query_text.replace("'", "''"))
         return self._stream_query_result(
@@ -88,20 +94,20 @@ class BaseSystemViews(object):
         )
 
     def wait_query_metrics(self, driver, interval, query_text=None, expected_count=None, timeout=90):
-        deadline = time.time() + timeout
+        deadline = time.monotonic() + timeout
         metrics = []
-        while time.time() < deadline:
+        while time.monotonic() < deadline:
             metrics = self.read_query_metrics(driver, self.database, interval, query_text)
             if metrics and (expected_count is None or metrics[0].Count == expected_count):
                 return metrics
-            time.sleep(2)
+            time.sleep(min(2, self.query_stats_interval_seconds / 5))
         return metrics
 
     def read_query_stats(self, driver, database, table_name):
         table = os.path.join(database, '.sys', table_name)
         return self._stream_query_result(
             driver,
-            "select Duration, ReadBytes, CPUTime, RequestUnits from `{}`;".format(table)
+            "select IntervalEnd, QueryText, Duration, ReadBytes, CPUTime, RequestUnits from `{}`;".format(table)
         )
 
     def _stream_query_result(self, driver, query):
@@ -127,8 +133,12 @@ class BaseSystemViews(object):
             self.database
         )
 
-        with ydb.Driver(driver_config) as driver:
+        # Read system views from Root so the polling queries are collected for
+        # Root, not for the database whose top queries we are checking.
+        with ydb.Driver(driver_config) as driver, \
+             ydb.Driver(endpoint=driver_config.endpoint, database='/Root') as observer:
             driver.wait(timeout=10)
+            observer.wait(timeout=10)
 
             self.create_table(driver, table)
 
@@ -140,13 +150,14 @@ class BaseSystemViews(object):
                         queries.append(query)
                         session.transaction().execute(query, commit_tx=True)
 
-            time.sleep(70)
-
+            queries_per_interval = {}
             for interval in ('one_minute', 'one_hour'):
+                queries_per_interval[interval] = Counter()
                 for query in queries:
                     metrics = self.wait_query_metrics(
-                        driver, interval, query_text=query, expected_count=1)
+                        observer, interval, query_text=query, expected_count=1)
                     assert_that(metrics, has_length(1))
+                    queries_per_interval[interval][metrics[0].IntervalEnd] += 1
                     assert_that(metrics[0], has_properties({
                         'Count': 1,
                         'SumReadBytes': 0,
@@ -163,9 +174,14 @@ class BaseSystemViews(object):
                 'top_queries_by_request_units_one_minute',
                 'top_queries_by_request_units_one_hour'
             ]:
-                stats = self.read_query_stats(driver, self.database, table_name)
+                stats = self.read_query_stats(observer, self.database, table_name)
 
-                assert_that(stats, has_length(min(query_count, 5)))
+                # Queries may cross a collection boundary. Each interval has
+                # its own top five, even when the configured interval is short.
+                interval = 'one_minute' if table_name.endswith('one_minute') else 'one_hour'
+                expected = {end: min(count, 5) for end, count in queries_per_interval[interval].items()}
+                assert Counter(row.IntervalEnd for row in stats) == expected
+                assert all(row.QueryText in queries for row in stats)
                 assert_that(stats[0], has_properties({
                     'Duration': anything(),
                     'ReadBytes': 0,
@@ -245,14 +261,14 @@ class TestQueryMetricsOneHourRestart(BaseSystemViews):
                 with pool.checkout() as session:
                     session.transaction().execute(query, commit_tx=True)
 
-            deadline = time.time() + 90
+            deadline = time.monotonic() + 90
             metrics = []
-            while time.time() < deadline:
+            while time.monotonic() < deadline:
                 metrics = self.read_query_metrics(
                     driver, self.database, 'one_hour', query)
                 if sum(metric.Count for metric in metrics) >= 2:
                     break
-                time.sleep(2)
+                time.sleep(min(2, self.query_stats_interval_seconds / 5))
 
             assert_that(metrics, has_length(greater_than(0)))
             assert_that(sum(metric.Count for metric in metrics), greater_than(1))

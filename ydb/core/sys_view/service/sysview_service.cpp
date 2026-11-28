@@ -125,14 +125,18 @@ public:
     explicit TSysViewService(
         TExtCountersConfig&& config,
         bool hasExternalCounters,
-        EProcessorMode processorMode)
+        const NKikimrConfig::TSysViewConfig& sysViewConfig)
         : Config(std::move(config))
         , HasExternalCounters(hasExternalCounters)
-        , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 5 : 60))
-        , CollectInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 3 : 30))
-        , SendInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 2 : 20))
-        , ProcessLabeledCountersInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 5 : 60))
-    {}
+        , TotalInterval(QueryStatsInterval(sysViewConfig))
+        , CollectInterval(TotalInterval / 2)
+        , SendInterval(TotalInterval / 3)
+        , SummaryRetryInterval(Min(TDuration::Seconds(2), TotalInterval / 10))
+        , ProcessLabeledCountersInterval(TDuration::Seconds(sysViewConfig.GetLabeledCountersIntervalSeconds()))
+    {
+        Y_ENSURE(ProcessLabeledCountersInterval > TDuration::Zero(),
+            "SysViewConfig.LabeledCountersIntervalSeconds must be positive");
+    }
 
     void Bootstrap(const TActorContext &ctx) {
         auto now = AppData()->TimeProvider->Now();
@@ -1015,6 +1019,7 @@ private:
     const TDuration TotalInterval;
     const TDuration CollectInterval;
     const TDuration SendInterval;
+    const TDuration SummaryRetryInterval;
     const TDuration ProcessLabeledCountersInterval;
 
     template <typename TInterval>
@@ -1160,7 +1165,6 @@ private:
     static constexpr i64 ConcurrentScansLimit = 5;
     TIntrusivePtr<TScanLimiter> ScanLimiter;
 
-    static constexpr TDuration SummaryRetryInterval = TDuration::Seconds(2);
     static constexpr size_t SummaryRetryAttempts = 5;
 
     static constexpr TDuration ProcessCountersInterval = TDuration::Seconds(5);
@@ -1172,15 +1176,16 @@ private:
 };
 
 THolder<NActors::IActor> CreateSysViewService(
-    TExtCountersConfig&& config, bool hasExternalCounters)
+    TExtCountersConfig&& config, bool hasExternalCounters,
+    const NKikimrConfig::TSysViewConfig& sysViewConfig)
 {
     return MakeHolder<TSysViewService>(
-        std::move(config), hasExternalCounters, EProcessorMode::MINUTE);
+        std::move(config), hasExternalCounters, sysViewConfig);
 }
 
 THolder<NActors::IActor> CreateSysViewServiceForTests() {
     return MakeHolder<TSysViewService>(
-        TExtCountersConfig(), true, EProcessorMode::FAST);
+        TExtCountersConfig(), true, SysViewConfigForTests());
 }
 
 } // NSysView

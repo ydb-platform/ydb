@@ -6,10 +6,10 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class TIndexCheckerProcessor: public IResourceProcessor {
+class TCheckIndexOperation: public IProgramOperation {
 private:
     IDataSource::TCheckIndexContext IndexContext;
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
 
     virtual bool HasSubColumns() const override {
         return !!IndexContext.GetSubColumnName();
@@ -54,7 +54,7 @@ public:
         return IndexContext;
     }
 
-    TIndexCheckerProcessor(const ui32 inputDataId, const ui32 inputConstId, const IDataSource::TCheckIndexContext& context, const ui32 outputId)
+    TCheckIndexOperation(const ui32 inputDataId, const ui32 inputConstId, const IDataSource::TCheckIndexContext& context, const ui32 outputId)
         : TBase({ inputDataId, inputConstId }, { outputId }, EProcessorType::CheckIndexData)
         , IndexContext(context) {
     }

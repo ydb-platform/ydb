@@ -3,7 +3,7 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
+TConclusion<TExecutionResult> TFetchOriginalDataOperation::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     auto& source = context.GetDataSource();
     THashSet<uint32_t> uniqueEntityIds;
@@ -58,7 +58,7 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
     return source.StartFetch(context, logic);
 }
 
-TConclusion<TExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
+TConclusion<TExecutionResult> TAssembleOriginalDataOperation::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     const auto acc = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
     for (auto&& sc : DataAddress.GetSubColumnNames(true)) {

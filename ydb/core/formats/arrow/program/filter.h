@@ -3,9 +3,9 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class TFilterProcessor: public IResourceProcessor {
+class TFilterOperation: public IProgramOperation {
 private:
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
     virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     virtual bool IsAggregation() const override {
@@ -13,7 +13,7 @@ private:
     }
 
 public:
-    TFilterProcessor(const TColumnChainInfo& input)
+    TFilterOperation(const TColumnChainInfo& input)
         : TBase({ input }, {}, EProcessorType::Filter) {
     }
 };

@@ -83,13 +83,13 @@ TStepAction::TStepAction(std::unique_ptr<TDataSourceLease> sourceLease, TFetchin
 
 void TProgramStep::ReportTracing(IDataSource& source, const NArrow::NAccessor::TAccessorsCollection& resources,
     const TDuration executionDurationMs, const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
-    const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor) const {
+    const std::shared_ptr<NArrow::NSSA::IProgramOperation>& processor) const {
     const auto& scanOrbit = source.GetContext()->GetCommonContext()->GetScanOrbit();
     if (!NLWTrace::HasShuttles(source.GetDataSourceOrbit()) && !(scanOrbit && NLWTrace::HasShuttles(*scanOrbit)) &&
         !LWPROBE_ENABLED(ProgramConst) && !LWPROBE_ENABLED(ProgramCalculation) && !LWPROBE_ENABLED(ProgramProjection) &&
         !LWPROBE_ENABLED(ProgramFilter) && !LWPROBE_ENABLED(ProgramAggregation) && !LWPROBE_ENABLED(ProgramFetchOriginalData) &&
         !LWPROBE_ENABLED(ProgramAssembleOriginalData) && !LWPROBE_ENABLED(ProgramCheckIndexData) && !LWPROBE_ENABLED(ProgramCheckHeaderData) &&
-        !LWPROBE_ENABLED(ProgramStreamLogic) && !LWPROBE_ENABLED(ProgramReserveMemory)) {
+        !LWPROBE_ENABLED(ProgramShortCircuitLogic) && !LWPROBE_ENABLED(ProgramReserveMemory)) {
         return;
     }
     const auto& step = source.GetExecutionContext().GetCursorStep();
@@ -105,7 +105,7 @@ void TProgramStep::ReportTracing(IDataSource& source, const NArrow::NAccessor::T
     TString indexStatus = "Unknown";
     ui32 indexFilteredRows = source.GetRecordsCount();
     if (processorType == NArrow::NSSA::EProcessorType::CheckIndexData) {
-        auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
+        auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TCheckIndexOperation*>(processor.get());
         if (indexProcessor && source.GetSourceSchemaOptional()) {
             const auto& idxCtx = indexProcessor->GetIndexContext();
             NIndexes::NRequest::TOriginalDataAddress addr(idxCtx.GetColumnId(), idxCtx.GetSubColumnName());
@@ -172,7 +172,7 @@ void TProgramStep::ReportTracing(IDataSource& source, const NArrow::NAccessor::T
         case NArrow::NSSA::EProcessorType::FetchOriginalData: {
             ui64 blobBytes = 0;
             ui64 rawBytes = 0;
-            auto* fetchProcessor = dynamic_cast<const NArrow::NSSA::TOriginalColumnDataProcessor*>(processor.get());
+            auto* fetchProcessor = dynamic_cast<const NArrow::NSSA::TFetchOriginalDataOperation*>(processor.get());
             if (fetchProcessor) {
                 std::set<ui32> dataColumnIds;
                 for (auto&& [colId, addr] : fetchProcessor->GetDataAddresses()) {
@@ -228,8 +228,8 @@ void TProgramStep::ReportTracing(IDataSource& source, const NArrow::NAccessor::T
         case NArrow::NSSA::EProcessorType::CheckHeaderData:
             LWTRACK(ProgramCheckHeaderData, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
-        case NArrow::NSSA::EProcessorType::StreamLogic:
-            LWTRACK(ProgramStreamLogic, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
+        case NArrow::NSSA::EProcessorType::ShortCircuitLogic:
+            LWTRACK(ProgramShortCircuitLogic, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::ReserveMemory:
             LWTRACK(ProgramReserveMemory, PROGRAM_PROBE_ARGS, reservedMemory, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);

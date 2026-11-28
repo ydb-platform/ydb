@@ -5,7 +5,7 @@
 #include <ydb/core/formats/arrow/program/distinct_marker.h>
 #include <ydb/core/formats/arrow/program/filter.h>
 #include <ydb/core/formats/arrow/program/projection.h>
-#include <ydb/core/formats/arrow/program/stream_logic.h>
+#include <ydb/core/formats/arrow/program/short_circuit_logic.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 
 #include <ydb/library/arrow_kernels/operations.h>
@@ -238,45 +238,45 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
     return TConclusionStatus::Fail("incompatible method type");
 }
 
-TConclusion<std::shared_ptr<TConstProcessor>> TProgramBuilder::MakeConstant(
+TConclusion<std::shared_ptr<TConstantOperation>> TProgramBuilder::MakeConstant(
     const TColumnInfo& name, const NKikimrSSA::TProgram::TConstant& constant) const {
     using TId = NKikimrSSA::TProgram::TConstant;
 
     switch (constant.GetValueCase()) {
         case TId::kBool:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::BooleanScalar>(constant.GetBool()), name.GetColumnId());
+            return std::make_shared<TConstantOperation>(std::make_shared<arrow::BooleanScalar>(constant.GetBool()), name.GetColumnId());
         case TId::kInt8:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::Int8Scalar>(i8(constant.GetInt8())), name.GetColumnId());
+            return std::make_shared<TConstantOperation>(std::make_shared<arrow::Int8Scalar>(i8(constant.GetInt8())), name.GetColumnId());
         case TId::kUint8:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::UInt8Scalar>(ui8(constant.GetUint8())), name.GetColumnId());
+            return std::make_shared<TConstantOperation>(std::make_shared<arrow::UInt8Scalar>(ui8(constant.GetUint8())), name.GetColumnId());
         case TId::kInt16:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::Int16Scalar>(i16(constant.GetInt16())), name.GetColumnId());
+            return std::make_shared<TConstantOperation>(std::make_shared<arrow::Int16Scalar>(i16(constant.GetInt16())), name.GetColumnId());
         case TId::kUint16:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::UInt16Scalar>(ui16(constant.GetUint16())), name.GetColumnId());
+            return std::make_shared<TConstantOperation>(std::make_shared<arrow::UInt16Scalar>(ui16(constant.GetUint16())), name.GetColumnId());
         case TId::kInt32:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::Int32Scalar>(constant.GetInt32()), name.GetColumnId());
+            return std::make_shared<TConstantOperation>(std::make_shared<arrow::Int32Scalar>(constant.GetInt32()), name.GetColumnId());
         case TId::kUint32:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::UInt32Scalar>(constant.GetUint32()), name.GetColumnId());
+            return std::make_shared<TConstantOperation>(std::make_shared<arrow::UInt32Scalar>(constant.GetUint32()), name.GetColumnId());
         case TId::kInt64:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(constant.GetInt64()), name.GetColumnId());
+            return std::make_shared<TConstantOperation>(std::make_shared<arrow::Int64Scalar>(constant.GetInt64()), name.GetColumnId());
         case TId::kUint64:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::UInt64Scalar>(constant.GetUint64()), name.GetColumnId());
+            return std::make_shared<TConstantOperation>(std::make_shared<arrow::UInt64Scalar>(constant.GetUint64()), name.GetColumnId());
         case TId::kFloat:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::FloatScalar>(constant.GetFloat()), name.GetColumnId());
+            return std::make_shared<TConstantOperation>(std::make_shared<arrow::FloatScalar>(constant.GetFloat()), name.GetColumnId());
         case TId::kDouble:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::DoubleScalar>(constant.GetDouble()), name.GetColumnId());
+            return std::make_shared<TConstantOperation>(std::make_shared<arrow::DoubleScalar>(constant.GetDouble()), name.GetColumnId());
         case TId::kTimestamp:
-            return std::make_shared<TConstProcessor>(
+            return std::make_shared<TConstantOperation>(
                 std::make_shared<arrow::TimestampScalar>(constant.GetTimestamp(), arrow::timestamp(arrow::TimeUnit::MICRO)), name.GetColumnId());
         case TId::kBytes: {
             TString str = constant.GetBytes();
-            return std::make_shared<TConstProcessor>(
+            return std::make_shared<TConstantOperation>(
                 std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(str.data(), str.size())) /* owning: str is a local copy */, arrow::binary()),
                 name.GetColumnId());
         }
         case TId::kText: {
             TString str = constant.GetText();
-            return std::make_shared<TConstProcessor>(
+            return std::make_shared<TConstantOperation>(
                 std::make_shared<arrow::StringScalar>(std::string(str.data(), str.size())), name.GetColumnId());
         }
         case TId::VALUE_NOT_SET:
@@ -329,14 +329,14 @@ TConclusion<NAggregation::EAggregate> TProgramBuilder::GetAggregationType(
     return TConclusionStatus::Fail("incorrect case for aggregation construct");
 }
 
-TConclusion<std::shared_ptr<TConstProcessor>> TProgramBuilder::MaterializeParameter(const TColumnInfo& name,
+TConclusion<std::shared_ptr<TConstantOperation>> TProgramBuilder::MaterializeParameter(const TColumnInfo& name,
     const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow::RecordBatch>& parameterValues) const {
     auto parameterName = parameter.GetName();
     auto column = parameterValues->GetColumnByName(parameterName);
     if (!column || column->length() != 1) {
         return TConclusionStatus::Fail("incorrect column data as parameter: " + name.GetColumnName());
     }
-    return std::make_shared<TConstProcessor>(TStatusValidator::GetValid(column->GetScalar(0)), name.GetColumnId());
+    return std::make_shared<TConstantOperation>(TStatusValidator::GetValid(column->GetScalar(0)), name.GetColumnId());
 }
 
 TConclusionStatus TProgramBuilder::ReadAssign(
@@ -357,15 +357,15 @@ TConclusionStatus TProgramBuilder::ReadAssign(
             if (assign.GetFunction().HasYqlOperationId() &&
                 assign.GetFunction().GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::And) {
                 auto processor =
-                    std::make_shared<TStreamLogicProcessor>(std::move(arguments), columnName.GetColumnId(), NKernels::EOperation::And);
+                    std::make_shared<TShortCircuitLogicOperation>(std::move(arguments), columnName.GetColumnId(), NKernels::EOperation::And);
                 Builder.Add(processor);
             } else if (assign.GetFunction().HasYqlOperationId() &&
                        assign.GetFunction().GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Or) {
                 auto processor =
-                    std::make_shared<TStreamLogicProcessor>(std::move(arguments), columnName.GetColumnId(), NKernels::EOperation::Or);
+                    std::make_shared<TShortCircuitLogicOperation>(std::move(arguments), columnName.GetColumnId(), NKernels::EOperation::Or);
                 Builder.Add(processor);
             } else {
-                auto processor = TCalculationProcessor::Build(std::move(arguments), columnName.GetColumnId(), function.DetachResult(), kernelLogic);
+                auto processor = TCalculationOperation::Build(std::move(arguments), columnName.GetColumnId(), function.DetachResult(), kernelLogic);
                 if (processor.IsFail()) {
                     return processor;
                 }
@@ -403,7 +403,7 @@ TConclusionStatus TProgramBuilder::ReadFilter(const NKikimrSSA::TProgram::TFilte
     if (!column.HasId() || !column.GetId()) {
         return TConclusionStatus::Fail("incorrect column in filter predicate");
     }
-    Builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(column.GetId())));
+    Builder.Add(std::make_shared<TFilterOperation>(TColumnChainInfo(column.GetId())));
     return TConclusionStatus::Success();
 }
 
@@ -415,7 +415,7 @@ TConclusionStatus TProgramBuilder::ReadProjection(const NKikimrSSA::TProgram::TP
     for (auto& col : projection.GetColumns()) {
         columns.emplace_back(col.GetId());
     }
-    Builder.Add(std::make_shared<TProjectionProcessor>(std::move(columns)));
+    Builder.Add(std::make_shared<TProjectionOperation>(std::move(columns)));
     return TConclusionStatus::Success();
 }
 
@@ -433,7 +433,7 @@ TConclusionStatus TProgramBuilder::ReadGroupBy(const NKikimrSSA::TProgram::TGrou
     };
 
     if (groupBy.GetKeyColumns().size()) {
-        NAggregation::TWithKeysAggregationProcessor::TBuilder aggrBuilder;
+        NAggregation::TGroupedAggregationOperation::TBuilder aggrBuilder;
         for (auto& key : groupBy.GetKeyColumns()) {
             aggrBuilder.AddKey(key.GetId());
         }
@@ -464,7 +464,7 @@ TConclusionStatus TProgramBuilder::ReadGroupBy(const NKikimrSSA::TProgram::TGrou
             }
             auto aggrType = GetAggregationType(agg.GetFunction());
             auto argColumnIds = extractColumnIds(agg.GetFunction().GetArguments());
-            auto status = TCalculationProcessor::Build(std::move(argColumnIds), columnName.GetColumnId(), func.DetachResult(), std::make_shared<TSimpleKernelLogic>());
+            auto status = TCalculationOperation::Build(std::move(argColumnIds), columnName.GetColumnId(), func.DetachResult(), std::make_shared<TSimpleKernelLogic>());
             if (status.IsFail()) {
                 return status;
             }
@@ -481,7 +481,7 @@ TConclusionStatus TProgramBuilder::ReadDistinct(const NKikimrSSA::TProgram::TDis
     }
     // DISTINCT is handled at the reader level (distinct-limit sync point).
     GetColumnInfo(distinct.GetKeyColumn());
-    Builder.Add(std::make_shared<TDistinctMarkerProcessor>(distinct.GetKeyColumn().GetId()));
+    Builder.Add(std::make_shared<TDistinctMarkerOperation>(distinct.GetKeyColumn().GetId()));
     return TConclusionStatus::Success();
 }
 

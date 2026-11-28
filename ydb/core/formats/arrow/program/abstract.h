@@ -16,6 +16,19 @@ class TAccessorsCollection;
 
 namespace NKikimr::NArrow::NSSA {
 
+// Identifies an operation input/output within an SSA program. Examples:
+// - a source table column, such as price or quantity;
+// - a computed column, such as price * quantity;
+// - a boolean predicate, such as price > 100, consumed by a filter or an AND operation;
+// - a scalar constant, such as 100 or "prefix", produced by TConstantOperation;
+// - a logical index-fetch result consumed by TCheckIndexOperation;
+// - a logical header-fetch result consumed by TCheckHeaderOperation.
+// For logical fetch results, the ID links the fetch to its consumer, while the
+// fetched index/header data is kept in IDataSource.
+// A resource is not necessarily a table column or an Arrow array in TAccessorsCollection.
+// Execution-only dependencies have no resource ID; graph nodes have separate IDs.
+using TResourceId = ui32;
+
 class IDataSource;
 
 class IMemoryCalculationPolicy {
@@ -65,7 +78,7 @@ using TAccessorsCollection = NAccessor::TAccessorsCollection;
 
 class TExecutionNodeContext {
 private:
-    YDB_ACCESSOR_DEF(THashSet<ui32>, RemoveResourceIds);
+    YDB_ACCESSOR_DEF(THashSet<TResourceId>, RemoveResourceIds);
 
 public:
 };
@@ -178,7 +191,7 @@ public:
 
 class TColumnChainInfo {
 private:
-    YDB_READONLY(ui32, ColumnId, 0);
+    YDB_READONLY(TResourceId, ColumnId, 0);
 
 public:
     TString DebugString() const {
@@ -186,8 +199,8 @@ public:
     }
 
     template <class TContainer>
-    static std::vector<ui32> ExtractColumnIds(const TContainer& container) {
-        std::vector<ui32> result;
+    static std::vector<TResourceId> ExtractColumnIds(const TContainer& container) {
+        std::vector<TResourceId> result;
         for (auto&& i : container) {
             result.emplace_back(i.GetColumnId());
         }
@@ -203,7 +216,7 @@ public:
         return result;
     }
 
-    static std::vector<TColumnChainInfo> BuildVector(const std::initializer_list<ui32> container) {
+    static std::vector<TColumnChainInfo> BuildVector(const std::initializer_list<TResourceId> container) {
         std::vector<TColumnChainInfo> result;
         for (auto&& i : container) {
             result.emplace_back(i);
@@ -211,7 +224,7 @@ public:
         return result;
     }
 
-    TColumnChainInfo(const ui32 columnId)
+    TColumnChainInfo(const TResourceId columnId)
         : ColumnId(columnId)
     {
     }
@@ -232,7 +245,7 @@ enum class EProcessorType {
     AssembleOriginalData,
     CheckIndexData,
     CheckHeaderData,
-    StreamLogic,
+    ShortCircuitLogic,
     ReserveMemory,
     // Stateless DISTINCT marker (see distinct_marker.h). Must not be treated as a real Filter:
     // TGraph::Collapse() AND-merges all Filter nodes, and the marker input is the (non-bool) key column.
@@ -334,7 +347,7 @@ public:
     }
 };
 
-class IResourceProcessor {
+class IProgramOperation {
 private:
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, Input);
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, Output);
@@ -371,11 +384,11 @@ public:
 
     virtual bool IsAggregation() const = 0;
 
-    virtual ~IResourceProcessor() = default;
+    virtual ~IProgramOperation() = default;
 
     NJson::TJsonValue DebugJson() const;
 
-    void ExchangeInput(const ui32 resourceIdFrom, const ui32 resourceIdTo) {
+    void ExchangeInput(const TResourceId resourceIdFrom, const TResourceId resourceIdTo) {
         bool found = false;
         for (auto&& i : Input) {
             YDB_LOG_VERIFY(i.GetColumnId() != resourceIdTo);
@@ -388,21 +401,21 @@ public:
         YDB_LOG_VERIFY(found);
     }
 
-    void AddInput(const ui32 resourceId) {
+    void AddInput(const TResourceId resourceId) {
         for (auto&& i : Input) {
             YDB_LOG_VERIFY(i.GetColumnId() != resourceId);
         }
         Input.emplace_back(TColumnChainInfo(resourceId));
     }
 
-    void AddOutput(const ui32 resourceId) {
+    void AddOutput(const TResourceId resourceId) {
         for (auto&& i : Output) {
             YDB_LOG_VERIFY(i.GetColumnId() != resourceId);
         }
         Output.emplace_back(TColumnChainInfo(resourceId));
     }
 
-    void RemoveInput(const ui32 resourceId) {
+    void RemoveInput(const TResourceId resourceId) {
         for (ui32 idx = 0; idx < Input.size(); ++idx) {
             if (Input[idx].GetColumnId() == resourceId) {
                 std::swap(Input[idx], Input.back());
@@ -413,7 +426,7 @@ public:
         YDB_LOG_VERIFY(false);
     }
 
-    bool HasInput(const ui32 resourceId) {
+    bool HasInput(const TResourceId resourceId) {
         for (ui32 idx = 0; idx < Input.size(); ++idx) {
             if (Input[idx].GetColumnId() == resourceId) {
                 return true;
@@ -422,25 +435,25 @@ public:
         return false;
     }
 
-    void SetOutputResourceIdOnce(const ui32 resourceId) {
+    void SetOutputResourceIdOnce(const TResourceId resourceId) {
         YDB_LOG_VERIFY(Output.size() == 1,
             {"size", Output.size()});
         Output.front() = TColumnChainInfo(resourceId);
     }
 
-    ui32 GetOutputColumnIdOnce() const {
+    TResourceId GetOutputColumnIdOnce() const {
         YDB_LOG_VERIFY(Output.size() == 1,
             {"size", Output.size()});
         return Output.front().GetColumnId();
     }
 
-    ui32 GetInputColumnIdOnce() const {
+    TResourceId GetInputColumnIdOnce() const {
         YDB_LOG_VERIFY(Input.size() == 1,
             {"size", Input.size()});
         return Input.front().GetColumnId();
     }
 
-    IResourceProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output, const EProcessorType type)
+    IProgramOperation(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output, const EProcessorType type)
         : Input(std::move(input))
         , Output(std::move(output))
         , ProcessorType(type)
@@ -456,7 +469,7 @@ private:
     std::vector<TColumnChainInfo> ColumnsToFetch;
     std::vector<TColumnChainInfo> OriginalColumnsToUse;
     std::vector<TColumnChainInfo> ColumnsToDrop;
-    YDB_READONLY_DEF(std::shared_ptr<IResourceProcessor>, Processor);
+    YDB_READONLY_DEF(std::shared_ptr<IProgramOperation>, Processor);
 
 public:
     const std::vector<TColumnChainInfo>& GetColumnsToFetch() const {
@@ -472,7 +485,7 @@ public:
     NJson::TJsonValue DebugJson() const;
 
     TResourceProcessorStep(std::vector<TColumnChainInfo>&& toFetch, std::vector<TColumnChainInfo>&& originalToUse,
-        std::shared_ptr<IResourceProcessor>&& processor, std::vector<TColumnChainInfo>&& toDrop)
+        std::shared_ptr<IProgramOperation>&& processor, std::vector<TColumnChainInfo>&& toDrop)
         : ColumnsToFetch(std::move(toFetch))
         , OriginalColumnsToUse(std::move(originalToUse))
         , ColumnsToDrop(std::move(toDrop))
@@ -481,11 +494,11 @@ public:
         YDB_LOG_VERIFY(Processor);
     }
 
-    const IResourceProcessor* operator->() const {
+    const IProgramOperation* operator->() const {
         return Processor.get();
     }
 
-    const IResourceProcessor& operator*() const {
+    const IProgramOperation& operator*() const {
         return *Processor;
     }
 };

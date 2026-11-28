@@ -9,7 +9,7 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-NJson::TJsonValue IResourceProcessor::DebugJson() const {
+NJson::TJsonValue IProgramOperation::DebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     if (Input.size()) {
         result.InsertValue("input_columns", JoinSeq(",", Input));
@@ -26,7 +26,7 @@ NJson::TJsonValue IResourceProcessor::DebugJson() const {
     return result;
 }
 
-TConclusion<TExecutionResult> IResourceProcessor::Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
+TConclusion<TExecutionResult> IProgramOperation::Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
     YDB_LOG_DEBUG("",
         {"execute", GetProcessorType()});
     return DoExecute(context, nodeContext);

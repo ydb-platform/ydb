@@ -5,7 +5,7 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<TExecutionResult> TIndexCheckerProcessor::DoExecute(
+TConclusion<TExecutionResult> TCheckIndexOperation::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     auto scalarConst = context.GetResources().GetConstantScalarVerified(GetInput().back().GetColumnId());
 

@@ -7,9 +7,9 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class TCalculationProcessor: public IResourceProcessor {
+class TCalculationOperation: public IProgramOperation {
 private:
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
 
     YDB_ACCESSOR_DEF(std::shared_ptr<IKernelLogic>, KernelLogic);
 
@@ -21,7 +21,7 @@ private:
 
     virtual TString DoGetSignalCategoryName() const override;
 
-    TCalculationProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
+    TCalculationOperation(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
         const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic)
         : TBase(std::move(input), std::move(output), EProcessorType::Calculation)
         , KernelLogic(kernelLogic)
@@ -43,7 +43,7 @@ private:
 
 
 public:
-    static TConclusion<std::shared_ptr<TCalculationProcessor>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, 
+    static TConclusion<std::shared_ptr<TCalculationOperation>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output,
         const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic);
 };
 

@@ -3,9 +3,9 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class TProjectionProcessor: public IResourceProcessor {
+class TProjectionOperation: public IProgramOperation {
 private:
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
 
     virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
@@ -14,7 +14,7 @@ private:
     }
 
 public:
-    TProjectionProcessor(std::vector<TColumnChainInfo>&& columns)
+    TProjectionOperation(std::vector<TColumnChainInfo>&& columns)
         : TBase(std::vector<TColumnChainInfo>(columns), {}, EProcessorType::Projection) {
     }
 };

@@ -6,9 +6,9 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class TOriginalColumnDataProcessor: public IResourceProcessor {
+class TFetchOriginalDataOperation: public IProgramOperation {
 private:
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
 
     THashMap<ui32, IDataSource::TDataAddress> DataAddresses;
     THashMap<ui32, IDataSource::TFetchIndexContext> IndexContext;
@@ -120,29 +120,29 @@ public:
         }
     }
 
-    explicit TOriginalColumnDataProcessor(const std::vector<ui32>& outputIds)
+    explicit TFetchOriginalDataOperation(const std::vector<ui32>& outputIds)
         : TBase({}, TColumnChainInfo::BuildVector(outputIds), EProcessorType::FetchOriginalData) {
     }
 
-    TOriginalColumnDataProcessor(const ui32 outputId, const IDataSource::TDataAddress& address)
+    TFetchOriginalDataOperation(const ui32 outputId, const IDataSource::TDataAddress& address)
         : TBase({}, TColumnChainInfo::BuildVector({ outputId }), EProcessorType::FetchOriginalData) {
         DataAddresses.emplace(address.GetColumnId(), address);
     }
 
-    TOriginalColumnDataProcessor(const ui32 outputId, const IDataSource::TFetchIndexContext& indexContext)
+    TFetchOriginalDataOperation(const ui32 outputId, const IDataSource::TFetchIndexContext& indexContext)
         : TBase({}, TColumnChainInfo::BuildVector({ outputId }), EProcessorType::FetchOriginalData) {
         IndexContext.emplace(indexContext.GetColumnId(), indexContext);
     }
 
-    TOriginalColumnDataProcessor(const ui32 outputId, const IDataSource::TFetchHeaderContext& indexContext)
+    TFetchOriginalDataOperation(const ui32 outputId, const IDataSource::TFetchHeaderContext& indexContext)
         : TBase({}, TColumnChainInfo::BuildVector({ outputId }), EProcessorType::FetchOriginalData) {
         HeaderContext.emplace(indexContext.GetColumnId(), indexContext);
     }
 };
 
-class TOriginalColumnAccessorProcessor: public IResourceProcessor {
+class TAssembleOriginalDataOperation: public IProgramOperation {
 private:
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
     IDataSource::TDataAddress DataAddress;
     virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
@@ -169,7 +169,7 @@ public:
         return DataAddress;
     }
 
-    TOriginalColumnAccessorProcessor(const ui32 inputId, const ui32 outputId, const IDataSource::TDataAddress& address)
+    TAssembleOriginalDataOperation(const ui32 inputId, const ui32 outputId, const IDataSource::TDataAddress& address)
         : TBase(TColumnChainInfo::BuildVector({ inputId }), TColumnChainInfo::BuildVector({ outputId }), EProcessorType::AssembleOriginalData)
         , DataAddress(address) {
     }

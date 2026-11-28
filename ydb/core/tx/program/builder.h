@@ -42,9 +42,9 @@ private:
     [[nodiscard]] TConclusion<std::shared_ptr<IStepFunction>> MakeFunction(const TColumnInfo& name,
         const NKikimrSSA::TProgram::TAssignment::TFunction& func, std::shared_ptr<IKernelLogic>& kernelLogic,
         std::vector<TColumnChainInfo>& arguments) const;
-    [[nodiscard]] TConclusion<std::shared_ptr<TConstProcessor>> MakeConstant(
+    [[nodiscard]] TConclusion<std::shared_ptr<TConstantOperation>> MakeConstant(
         const TColumnInfo& name, const NKikimrSSA::TProgram::TConstant& constant) const;
-    [[nodiscard]] TConclusion<std::shared_ptr<TConstProcessor>> MaterializeParameter(const TColumnInfo& name,
+    [[nodiscard]] TConclusion<std::shared_ptr<TConstantOperation>> MaterializeParameter(const TColumnInfo& name,
         const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow::RecordBatch>& parameterValues) const;
     [[nodiscard]] TConclusion<std::shared_ptr<IStepFunction>> MakeAggrFunction(
         const NKikimrSSA::TProgram::TAggregateAssignment::TAggregateFunction& func) const;

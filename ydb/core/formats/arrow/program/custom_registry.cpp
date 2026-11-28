@@ -102,7 +102,7 @@ static void RegisterHouseAggregates(cp::FunctionRegistry* registry) {
                            .ok());
 
         Y_ABORT_UNLESS(
-            registry->AddFunction(std::make_shared<CH::ArrowGroupBy>(NAggregation::TWithKeysAggregationProcessor::GetHouseGroupByName())).ok());
+            registry->AddFunction(std::make_shared<CH::ArrowGroupBy>(NAggregation::TGroupedAggregationOperation::GetHouseGroupByName())).ok());
     } catch (const std::exception& /*ex*/) {
         Y_ABORT_UNLESS(false);
     }

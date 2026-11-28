@@ -5,8 +5,10 @@
 #include <library/cpp/string_utils/quote/quote.h>
 #include <util/string/join.h>
 
+#include <algorithm>
+
 namespace NKikimr::NArrow::NSSA {
-class TCalculationProcessor;
+class TCalculationOperation;
 class IDataSource;
 }   // namespace NKikimr::NArrow::NSSA
 
@@ -23,7 +25,8 @@ public:
         friend class TCompiledGraph;
 
         YDB_READONLY(ui32, Identifier, 0);
-        YDB_READONLY_DEF(std::shared_ptr<IResourceProcessor>, Processor);
+        YDB_READONLY_DEF(std::shared_ptr<IProgramOperation>, Processor);
+        // One entry per predecessor; resource inputs and outputs belong to the operations.
         YDB_READONLY_DEF(std::vector<TNode*>, InputEdges);
         YDB_READONLY_DEF(std::vector<TNode*>, OutputEdges);
         std::optional<ui64> Weight;
@@ -31,17 +34,17 @@ public:
 
         void CalcWeight(const IColumnResolver& resolver, const ui64 sumChildren);
 
-        void ConnectTo(TNode* to) {
-            for (auto&& i : to->InputEdges) {
-                if (i->GetIdentifier() == GetIdentifier()) {
+        void ConnectTo(TNode& to) {
+            for (const auto* input : to.InputEdges) {
+                if (input == this) {
                     return;
                 }
             }
             for (auto&& i : OutputEdges) {
-                YDB_LOG_VERIFY(i->GetIdentifier() != to->GetIdentifier());
+                YDB_LOG_VERIFY(i != &to);
             }
-            to->InputEdges.emplace_back(this);
-            OutputEdges.emplace_back(to);
+            to.InputEdges.emplace_back(this);
+            OutputEdges.emplace_back(&to);
         }
 
         void SortInputs() {
@@ -89,7 +92,7 @@ public:
             return !!Weight;
         }
 
-        TNode(const ui32 identifier, const std::shared_ptr<IResourceProcessor>& processor)
+        TNode(const ui32 identifier, const std::shared_ptr<IProgramOperation>& processor)
             : Identifier(identifier)
             , Processor(processor) {
         }
@@ -147,9 +150,9 @@ public:
             return nullptr;
         }
         std::vector<std::shared_ptr<IResourcesAggregator>> aggregators;
-        for (auto&& i : ResultRoot->GetInputEdges()) {
-            if (i->GetProcessor()->IsAggregation()) {
-                aggregators.emplace_back(i->GetProcessor()->BuildResultsAggregator());
+        for (const auto* input : ResultRoot->GetInputEdges()) {
+            if (input->GetProcessor()->IsAggregation()) {
+                aggregators.emplace_back(input->GetProcessor()->BuildResultsAggregator());
                 if (!aggregators.back()) {
                     return nullptr;
                 }
@@ -170,7 +173,7 @@ public:
         return Nodes;
     }
 
-    bool IsGenerated(const ui32 resourceId) const {
+    bool IsGenerated(const TResourceId resourceId) const {
         return !SourceColumns.contains(resourceId);
     }
 
@@ -231,7 +234,7 @@ public:
             return !!CurrentNode;
         }
 
-        const std::shared_ptr<IResourceProcessor>& GetProcessorVerified() const {
+        const std::shared_ptr<IProgramOperation>& GetProcessorVerified() const {
             YDB_LOG_VERIFY(!!CurrentNode);
             return CurrentNode->GetProcessor();
         }

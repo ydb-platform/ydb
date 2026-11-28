@@ -639,4 +639,8 @@ message TTableServiceConfig {
     // Each compilation draws p from [0, 1) and uses the new RBO if p < NewRBORolloutRatio, otherwise the YQL optimizer.
     // 1 (default) always uses the new RBO; 0 never does.
     optional double NewRBORolloutRatio = 156 [default = 1.0, (InvalidateCompileCache) = true];
+
+    // Reject row-table reads in the new RBO to trigger fallback to the YQL optimizer.
+    // Requires EnableFallbackToYqlOptimizer; without it these queries fail compilation.
+    optional bool EnableFallbackOnRowTables = 157 [default = false, (InvalidateCompileCache) = true];
 };

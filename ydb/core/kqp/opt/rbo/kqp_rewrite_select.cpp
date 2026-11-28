@@ -1848,13 +1848,17 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     YQL_ENSURE(!TKqpReadTableSettings::Parse(readExpr).Sampling,
                         "Sampling is not supported by the relational optimizer");
                     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readExpr.Table().Path());
+                    auto sourceType = GetTableSourceType(tableDesc, ctx, node->Pos());
+                    if (kqpCtx.Config->GetEnableFallbackOnRowTables() && sourceType->Content() == "Row") {
+                        Y_ENSURE(false, "Fallback due to row table flag");
+                    }
 
                     // clang-format off
                     fromExpr = Build<TKqpOpRead>(ctx, node->Pos())
                         .Table(readExpr.Table())
                         .Alias(alias)
                         .Columns(readExpr.Columns())
-                        .SourceType(GetTableSourceType(tableDesc, ctx, node->Pos()))
+                        .SourceType(sourceType)
                         .UniqueId().Value(std::to_string(uniqueSourceIdCounter++)).Build()
                     .Done().Ptr();
                     // clang-format on

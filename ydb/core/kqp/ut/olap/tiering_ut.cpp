@@ -549,13 +549,46 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         testHelper.CreateTier(DEFAULT_TIER_NAME);
 
-        Cerr << "Wait for 40 seconds for tiers to be fetched" << Endl;
-        Sleep(TDuration::Seconds(40));
-        {
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetInt32(rows[0].at("level")), scanResult);
+        // The recreated tier is discovered asynchronously. Wait for an actual
+        // successful read instead of always reserving the test CPU for 40 seconds.
+        bool restored = false;
+        TString lastError;
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(60);
+        while (TMonotonic::Now() < deadline) {
+            auto settings = NYdb::NTable::TStreamExecScanQuerySettings()
+                .ClientTimeout(TDuration::Seconds(5));
+            auto it = tableClient.StreamExecuteScanQuery(selectQuery, settings).GetValueSync();
+            if (it.IsSuccess()) {
+                ui32 rowCount = 0;
+                for (;;) {
+                    auto part = it.ReadNext().GetValueSync();
+                    if (!part.IsSuccess()) {
+                        if (part.EOS()) {
+                            UNIT_ASSERT_VALUES_EQUAL(rowCount, 1);
+                            restored = true;
+                        } else {
+                            lastError = part.GetIssues().ToString();
+                        }
+                        break;
+                    }
+                    if (part.HasResultSet()) {
+                        auto resultSet = part.ExtractResultSet();
+                        NYdb::TResultSetParser parser(resultSet);
+                        while (parser.TryNextRow()) {
+                            UNIT_ASSERT_VALUES_EQUAL(GetInt32(parser.GetValue("level")), scanResult);
+                            ++rowCount;
+                        }
+                    }
+                }
+            } else {
+                lastError = it.GetIssues().ToString();
+            }
+            if (restored) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(200));
         }
+        UNIT_ASSERT_C(restored, "Recreated tier did not become readable: " << lastError);
     }
 
     Y_UNIT_TEST(ReadAfterRestartWithTransientSchemaSecretsFailure) {

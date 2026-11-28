@@ -1,6 +1,11 @@
 items:
 - name: Начало работы
   href: getting-started.md
+- name: Общие принципы SDK
+  href: sdk-principles/index.md
+  include:
+    mode: link
+    path: sdk-principles/toc_p.yaml
 - name: Потоковые запросы
   href: streaming-query/index.md
   include:

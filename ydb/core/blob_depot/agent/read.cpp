@@ -30,7 +30,11 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Terminated);
             Y_ABORT_UNLESS(Buffer.IsMonolith());
             Y_ABORT_UNLESS(Buffer.GetMonolith().size() == Size);
-            query->OnRead(ReadArg.Tag, TReadOutcome{TReadOutcome::TOk{Buffer.GetMonolith()}});
+            TRope data = Buffer.GetMonolith();
+            if (query->EncryptionInfo) {
+                data = query->CryptPayload(data, TLogoBlobID::FromBinary(ReadArg.Key), ReadArg.Offset);
+            }
+            query->OnRead(ReadArg.Tag, TReadOutcome{TReadOutcome::TOk{std::move(data)}});
             Abort();
         }
 

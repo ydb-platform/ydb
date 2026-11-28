@@ -10,6 +10,8 @@ namespace NKikimr::NBlobDepot {
             std::unique_ptr<IEventHandle> ev, TMonotonic received) {
 
         class TCheckIntegrityQuery : public TBlobStorageQuery<TEvBlobStorage::TEvCheckIntegrity> {
+            struct TLookup : TRequestContext {};
+
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
@@ -24,7 +26,12 @@ namespace NKikimr::NBlobDepot {
 
                 TString blobId = Request.Id.AsBinaryString();
 
-                if (const TResolvedValue *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
+                if (Agent.ManagedBridgeChild) {
+                    NKikimrBlobDepot::TEvResolve resolve;
+                    resolve.AddItems()->SetExactKey(blobId);
+                    SetResolveParameters(resolve, Request.DataKind);
+                    Agent.Issue(std::move(resolve), this, std::make_shared<TLookup>());
+                } else if (const TResolvedValue *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
                         std::make_shared<TRequestContext>(), false, Request.DataKind)) {
                     ProcessResolveResult(value);
                 } else {
@@ -46,7 +53,12 @@ namespace NKikimr::NBlobDepot {
                 if (result.Error()) {
                     EndWithError(NKikimrProto::ERROR, result.GetErrorReason());
                 } else if (const TResolvedValue *value = result.GetResolvedValue(); !value) {
-                    EndWithError(NKikimrProto::NODATA, "no data");
+                    if (Agent.ManagedBridgeChild) {
+                        EndWithSuccess(Request.MakeErrorResponse(NKikimrProto::NODATA, "no data",
+                            TGroupId::FromValue(Agent.VirtualGroupId)));
+                    } else {
+                        EndWithError(NKikimrProto::NODATA, "no data");
+                    }
                 } else {
                     TReadArg arg{
                         *value,
@@ -95,7 +107,24 @@ namespace NKikimr::NBlobDepot {
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvCheckIntegrityResult*>(&response)) {
                     TQuery::HandleCheckIntegrityResult(context, **p);
                 } else if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
-                    TQuery::HandleCheckIntegrityResolveResult(context, **p);
+                    if (dynamic_cast<TLookup*>(context.get())) {
+                        const auto& record = (*p)->Record;
+                        if (record.GetStatus() != NKikimrProto::OK) {
+                            return EndWithError(record.GetStatus(), record.GetErrorReason());
+                        }
+                        const auto *item = record.ResolvedKeysSize() ? &record.GetResolvedKeys(0) : nullptr;
+                        if (item && item->HasErrorReason()) {
+                            return EndWithError(NKikimrProto::ERROR, item->GetErrorReason());
+                        }
+                        if (item && item->ValueChainSize()) {
+                            const TResolvedValue value(*item);
+                            ProcessResolveResult(&value);
+                        } else {
+                            ProcessResolveResult(nullptr);
+                        }
+                    } else {
+                        TQuery::HandleCheckIntegrityResolveResult(context, **p);
+                    }
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
                     YDB_LOG_DEBUG("TTabletDisconnected",
                         {"marker", "BDA61"},

@@ -142,7 +142,7 @@ namespace NKikimr::NBlobDepot {
         Self->Execute(std::make_unique<TTxHardGC>(Self, channel, groupId, hardGenStep));
     }
 
-    std::optional<TString> TData::CheckKeyAgainstBarrier(const TKey& key) {
+    std::optional<TString> TData::CheckKeyAgainstBarrier(const TKey& key, bool issueKeep) {
         const auto& v = key.AsVariant();
         if (const auto *id = std::get_if<TLogoBlobID>(&v)) {
             bool underSoft, underHard;
@@ -152,7 +152,8 @@ namespace NKikimr::NBlobDepot {
                     id->TabletID(), id->Channel(), true);
             } else if (underSoft) {
                 const TData::TValue *value = Self->Data->FindKey(key);
-                if (!value || value->KeepState != NKikimrBlobDepot::EKeepState::Keep) {
+                if ((!value || value->KeepState != EKeepState::Keep) &&
+                        !(issueKeep && (!value || value->KeepState != EKeepState::DoNotKeep))) {
                     return TStringBuilder() << "under soft barrier# " << Self->BarrierServer->ToStringBarrier(
                         id->TabletID(), id->Channel(), false);
                 }

@@ -60,6 +60,9 @@ namespace NKikimr::NBlobDepot {
 
                 IsLast = KeepIndex == NumKeep && DoNotKeepIndex == NumDoNotKeep;
 
+                if (Request.IgnoreBlock) {
+                    record.SetIgnoreBlock(true);
+                }
                 record.SetTabletId(Request.TabletId);
                 record.SetGeneration(Request.RecordGeneration);
 
@@ -69,9 +72,6 @@ namespace NKikimr::NBlobDepot {
                     record.SetHard(Request.Hard);
                     record.SetCollectGeneration(Request.CollectGeneration);
                     record.SetCollectStep(Request.CollectStep);
-                    if (Request.IgnoreBlock) {
-                        record.SetIgnoreBlock(true);
-                    }
 
                     YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_barrier",
                         {"marker", "BDEV04"},

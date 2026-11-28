@@ -146,4 +146,5 @@ enum ETxTypes {
     TXTYPE_QUERY_BLOCKS = 26 [(NKikimr.TxTypeOpts) = {Name: "TTxQueryBlocks"}];
     TXTYPE_STAGE_COOLING_PACK = 27 [(NKikimr.TxTypeOpts) = {Name: "TTxStageCoolingPack"}];
     TXTYPE_PUBLISH_COOLING_PACK = 28 [(NKikimr.TxTypeOpts) = {Name: "TTxPublishCoolingPack"}];
+    TXTYPE_BRIDGE_SCAN = 29 [(NKikimr.TxTypeOpts) = {Name: "TTxBridgeScan"}];
 }

@@ -10,6 +10,7 @@ namespace NKikimr::NBlobDepot {
     class TBlobDepot::TBlocksManager::TTxUpdateBlock : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
         const TBlockRequest Request;
         const TWriteSource WriteSource;
+        const ui32 BridgeGeneration;
         const TInstant Timestamp;
         std::unique_ptr<IEventHandle> Response;
         bool ProcessBlock = false;
@@ -19,16 +20,22 @@ namespace NKikimr::NBlobDepot {
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_UPDATE_BLOCK; }
 
         TTxUpdateBlock(TBlobDepot *self, const TBlockRequest& request, TWriteSource writeSource,
-                TInstant timestamp, std::unique_ptr<IEventHandle> response)
+                ui32 bridgeGeneration, TInstant timestamp, std::unique_ptr<IEventHandle> response)
             : TTransactionBase(self)
             , Request(request)
             , WriteSource(writeSource)
+            , BridgeGeneration(bridgeGeneration)
             , Timestamp(timestamp)
             , Response(std::move(response))
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto& response = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
+            if (!Self->CheckBridgeGeneration(BridgeGeneration)) {
+                response.SetStatus(NKikimrProto::RACE);
+                response.SetBridgeGroupGeneration(Self->Config.GetBridgeGroupGeneration());
+                return true;
+            }
             const bool raw = WriteSource == TWriteSource::SyncerMergeBlock;
             const bool versionRecord = raw && Request.TabletId >> 63;
             const ui64 tabletId = versionRecord ? ~Request.TabletId : Request.TabletId;
@@ -53,6 +60,7 @@ namespace NKikimr::NBlobDepot {
                         IsCompleteTabletDeletionBlock(Request.BlockedGeneration);
                     block.BlockedGeneration = Request.BlockedGeneration;
                     block.IssuerGuid = Request.IssuerGuid;
+                    ProcessBlock = true;
                     db.Table<Schema::Blocks>().Key(tabletId).Update(
                         NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(Request.BlockedGeneration),
                         NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(Request.IssuerGuid),
@@ -89,6 +97,7 @@ namespace NKikimr::NBlobDepot {
                         NIceDb::TUpdate<Schema::Blocks::Version>(*Request.Version));
                 }
             }
+            Self->BlocksManager->IndexBridgeBlock(tabletId, block);
             return true;
         }
 
@@ -428,6 +437,17 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
+    void TBlobDepot::TBlocksManager::IndexBridgeBlock(ui64 tabletId, const TBlock& block) {
+        if (Self->Config.HasBridgeGroupGeneration()) {
+            if (block.BlockedGeneration) {
+                BridgeBlocks[tabletId] = block.BlockedGeneration;
+            }
+            if (block.Version) {
+                BridgeBlocks[~tabletId] = block.Version;
+            }
+        }
+    }
+
     void TBlobDepot::TBlocksManager::AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration, ui64 issuerGuid,
             ui32 version) {
         Blocks[tabletId] = {
@@ -435,6 +455,7 @@ namespace NKikimr::NBlobDepot {
             .IssuerGuid = issuerGuid,
             .Version = version,
         };
+        IndexBridgeBlock(tabletId, Blocks.at(tabletId));
         if (IsCompleteTabletDeletionBlock(blockedGeneration)) {
             // data is not loaded yet, so this only enqueues the tablet; OnDataLoaded starts the purge
             OnTabletDeleted(tabletId);
@@ -522,8 +543,8 @@ namespace NKikimr::NBlobDepot {
                 .Version = record.HasVersion() ? std::optional<ui32>(record.GetVersion()) : std::nullopt,
                 .SkipBridgeAccountingForSubrequests = record.GetSkipBridgeAccountingForSubrequests(),
             };
-            Self->Execute(std::make_unique<TTxUpdateBlock>(Self, request, writeSource, TActivationContext::Now(),
-                std::move(response)));
+            Self->Execute(std::make_unique<TTxUpdateBlock>(Self, request, writeSource, record.GetBridgeGroupGeneration(),
+                TActivationContext::Now(), std::move(response)));
         }
 
         TActivationContext::Send(response.release()); // not sent if the request got processed and response now is nullptr

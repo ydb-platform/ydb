@@ -10,11 +10,12 @@ namespace NKikimr::NBlobDepot {
         class TRangeQuery : public TBlobStorageQuery<TEvBlobStorage::TEvRange> {
             struct TRead {
                 TLogoBlobID Id;
+                NKikimrBlobDepot::EKeepState KeepState;
             };
 
             std::unique_ptr<TEvBlobStorage::TEvRangeResult> Response;
             ui32 ReadsInFlight = 0;
-            std::map<TLogoBlobID, TString> FoundBlobs;
+            std::map<TLogoBlobID, TEvBlobStorage::TEvRangeResult::TResponse> FoundBlobs;
             std::vector<TRead> Reads;
             bool Reverse = false;
             bool ResolveFinished = false;
@@ -96,12 +97,15 @@ namespace NKikimr::NBlobDepot {
                     if (key.HasErrorReason()) {
                         return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to resolve blob# " << id
                             << ": " << key.GetErrorReason());
-                    } else if (Request.IsIndexOnly) {
-                        FoundBlobs.try_emplace(id);
+                    } else if (Request.IsIndexOnly && !(Agent.ManagedBridgeChild && Request.MustRestoreFirst)) {
+                        if (!Agent.ManagedBridgeChild || key.ValueChainSize()) {
+                            FoundBlobs.try_emplace(id, id, TString(), key.GetKeepState() == NKikimrBlobDepot::Keep,
+                                key.GetKeepState() == NKikimrBlobDepot::DoNotKeep);
+                        }
                     } else if (key.ValueChainSize()) {
                         const ui64 tag = key.HasCookie() ? key.GetCookie() : Reads.size();
                         if (tag == Reads.size()) {
-                            Reads.push_back(TRead{id});
+                            Reads.push_back(TRead{id, key.GetKeepState()});
                         } else {
                             Y_ABORT_UNLESS(Reads[tag].Id == id);
                         }
@@ -142,7 +146,9 @@ namespace NKikimr::NBlobDepot {
                 const bool success = std::visit(TOverloaded{
                     [&](TReadOutcome::TOk& ok) {
                         Y_ABORT_UNLESS(ok.Data.size() == read.Id.BlobSize());
-                        const bool inserted = FoundBlobs.try_emplace(read.Id, ok.Data.ConvertToString()).second;
+                        const bool inserted = FoundBlobs.try_emplace(read.Id, read.Id,
+                            Request.IsIndexOnly ? TString() : ok.Data.ConvertToString(),
+                            read.KeepState == NKikimrBlobDepot::Keep, read.KeepState == NKikimrBlobDepot::DoNotKeep).second;
                         Y_VERIFY_S(inserted, "AgentId# " << Agent.LogId << " QueryId# " << GetQueryId()
                             << " duplicate BlobId# " << read.Id << " received");
                         return true;
@@ -166,9 +172,9 @@ namespace NKikimr::NBlobDepot {
 
             void CheckAndFinish() {
                 if (ResolveFinished && !ReadsInFlight && !Finished) {
-                    for (auto& [id, buffer] : FoundBlobs) {
-                        Y_VERIFY_S(buffer.size() == Request.IsIndexOnly ? 0 : id.BlobSize(), "Id# " << id << " Buffer.size# " << buffer.size());
-                        Response->Responses.emplace_back(id, std::move(buffer));
+                    for (auto& [id, item] : FoundBlobs) {
+                        Y_ABORT_UNLESS(item.Buffer.size() == (Request.IsIndexOnly ? 0 : id.BlobSize()));
+                        Response->Responses.emplace_back(std::move(item));
                     }
                     if (Reverse) {
                         std::reverse(Response->Responses.begin(), Response->Responses.end());

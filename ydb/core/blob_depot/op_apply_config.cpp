@@ -13,8 +13,9 @@ namespace NKikimr::NBlobDepot {
 
         class TTxApplyConfig : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<IEventHandle> Response;
+            NKikimrBlobDepot::TBlobDepotConfig Next;
             TString ConfigProtobuf;
-            bool Changed = false;
+            bool RestartRequired = false;
 
         public:
             TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_APPLY_CONFIG; }
@@ -23,6 +24,7 @@ namespace NKikimr::NBlobDepot {
                     TActorId interconnectSession)
                 : TTransactionBase(self)
                 , Response(std::move(response))
+                , Next(ev.Record.GetConfig())
             {
                 if (interconnectSession) {
                     Response->Rewrite(TEvInterconnect::EvForward, interconnectSession);
@@ -43,9 +45,25 @@ namespace NKikimr::NBlobDepot {
                     return false;
                 }
 
-                Changed = !table.IsValid() || !table.HaveValue<Schema::Config::ConfigProtobuf>() ||
+                if (!Self->Configured && !Self->Config.HasBridgeGroupGeneration() && Next.HasBridgeGroupGeneration()) {
+                    // The first transaction can still be awaiting completion while its successor executes.
+                    // Install the initial fence now; admission stays closed until StartOperation().
+                    Self->Config = Next;
+                }
+                if (Self->Config.HasBridgeGroupGeneration()) {
+                    const ui32 generation = Next.GetBridgeGroupGeneration();
+                    if (generation < Self->Config.GetBridgeGroupGeneration() ||
+                            Next.GetBackupConfigRevision() < Self->Config.GetBackupConfigRevision()) {
+                        return true; // a retried controller request from an older stage
+                    }
+                    // Transactions executed after this update must apply the new fence, even before its completion.
+                    Self->Config.SetBridgeGroupGeneration(generation);
+                    Self->Config.SetBackupConfigRevision(Next.GetBackupConfigRevision());
+                }
+                const bool changed = !table.IsValid() || !table.HaveValue<Schema::Config::ConfigProtobuf>() ||
                     table.GetValue<Schema::Config::ConfigProtobuf>() != ConfigProtobuf;
-                if (Changed) {
+                if (changed) {
+                    RestartRequired = !Self->Config.HasBridgeGroupGeneration() || Self->Config.SerializeAsString() != ConfigProtobuf;
                     db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
                         NIceDb::TUpdate<Schema::Config::ConfigProtobuf>(ConfigProtobuf));
                 }
@@ -60,12 +78,13 @@ namespace NKikimr::NBlobDepot {
 
                 const bool wasConfigured = std::exchange(Self->Configured, true);
                 if (!wasConfigured) {
-                    const bool success = Self->Config.ParseFromString(ConfigProtobuf);
-                    Y_ABORT_UNLESS(success);
+                    if (!Self->Config.HasBridgeGroupGeneration()) {
+                        Self->Config = Next;
+                    }
                     Self->StartOperation();
                 }
                 TActivationContext::Send(Response.release());
-                if (wasConfigured && Changed) {
+                if (wasConfigured && RestartRequired) {
                     Self->RestartingForConfigChange = true;
                     Self->Send(Self->Tablet(), new TEvents::TEvPoison);
                 }

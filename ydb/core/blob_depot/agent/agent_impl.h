@@ -26,6 +26,7 @@ namespace NKikimr::NBlobDepot {
         XX(EvCollectGarbage) \
         XX(EvStatus) \
         XX(EvPatch) \
+        XX(EvAssimilate) \
         XX(EvCheckIntegrity) \
         // END
 
@@ -45,6 +46,7 @@ namespace NKikimr::NBlobDepot {
     };
 
     struct TTabletDisconnected {};
+    struct TBridgeGenerationCheck : TRequestContext {};
 
     struct TS3PutResult {
         std::optional<TString> Error;
@@ -147,6 +149,7 @@ namespace NKikimr::NBlobDepot {
             TEvBlobDepot::TEvQueryBlocksResult*,
             TEvBlobDepot::TEvCollectGarbageResult*,
             TEvBlobDepot::TEvCommitBlobSeqResult*,
+            TEvBlobDepot::TEvBridgeScanResult*,
             TEvBlobDepot::TEvResolveResult*,
             TEvBlobDepot::TEvPrepareWriteS3Result*,
 
@@ -323,6 +326,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobDepot::TEvQueryBlocksResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvCollectGarbageResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvCommitBlobSeqResult, HandleTabletResponse);
+                hFunc(TEvBlobDepot::TEvBridgeScanResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvResolveResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvPrepareWriteS3Result, HandleTabletResponse);
                 hFunc(NStorage::TEvNodeWardenBlobDepotS3RouterReady, Handle);
@@ -332,7 +336,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobStorage::TEvCheckIntegrityResult, HandleOtherResponse);
 
                 ENUMERATE_INCOMING_EVENTS(FORWARD_STORAGE_PROXY)
-                fFunc(TEvBlobStorage::EvAssimilate, HandleAssimilate);
+
                 hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle);
                 cFunc(TEvPrivate::EvProcessPendingEvent, HandleProcessPendingEvent);
                 fFunc(TEvPrivate::EvPendingEventQueueWatchdog, HandlePendingEventQueueWatchdog);
@@ -379,7 +383,8 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
             bool done = false;
-            if (const auto& info = ev->Get()->Info) {
+            GroupInfo = ev->Get()->Info;
+            if (const auto& info = GroupInfo) {
                 Y_ABORT_UNLESS(info->BlobDepotId);
                 if (TabletId != *info->BlobDepotId) {
                     ReleaseS3Wrapper();
@@ -448,6 +453,8 @@ namespace NKikimr::NBlobDepot {
             const ui64 QueryId;
         };
 
+        TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
+        bool ManagedBridgeChild = false;
         ui32 BlobDepotGeneration = 0;
         std::optional<ui32> DecommitGroupId;
         NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColor = {};
@@ -509,6 +516,7 @@ namespace NKikimr::NBlobDepot {
             , public TRequestSender
         {
         protected:
+            TIntrusivePtr<TBlobStorageGroupInfo> EncryptionInfo;
             std::unique_ptr<IEventHandle> Event; // original query event
             const TMonotonic Received;
             const ui64 QueryId;
@@ -521,6 +529,10 @@ namespace NKikimr::NBlobDepot {
             bool Destroyed = false;
             bool SkipBridgeAccountingForSubrequests = false;
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
+            std::unique_ptr<IEventBase> PendingBridgeRead;
+            bool CheckLocalBridgeGeneration();
+            void IssueGenerationCheck();
+            void SendSuccess(std::unique_ptr<IEventBase> response);
             ui32 BlockChecksRemain = 3;
             NWilson::TSpan Span;
 
@@ -530,6 +542,11 @@ namespace NKikimr::NBlobDepot {
             TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event, TMonotonic received);
             virtual ~TQuery();
 
+            std::optional<ui32> GetBridgeGroupGeneration() const;
+            TRope CryptPayload(const TRope& buffer, TLogoBlobID id, ui32 offset) const;
+            void Start();
+            void HandleGenerationCheck(const NKikimrBlobDepot::TEvBridgeScanResult& result);
+            ui32 RacingGeneration = 0;
             ui64 GetQueryNumber() const { return QueryId; }
             TInstant GetDeadline() const { return Deadline; }
             ui64 HotWriteCreditNeeded = 0;
@@ -671,7 +688,7 @@ namespace NKikimr::NBlobDepot {
 
         template<ui32 EventType> TQuery *CreateQuery(std::unique_ptr<IEventHandle> ev, TMonotonic received);
         void HandleStorageProxy(TAutoPtr<IEventHandle> ev);
-        void HandleAssimilate(TAutoPtr<IEventHandle> ev);
+
         void HandlePendingEvent();
         void HandleProcessPendingEvent();
         TPendingEvent ExtractPendingEvent(TPendingEventQueue::iterator it);

@@ -11,6 +11,10 @@ namespace NKikimr::NBlobDepot {
         class TGetQuery : public TBlobStorageQuery<TEvBlobStorage::TEvGet> {
             std::unique_ptr<TEvBlobStorage::TEvGetResult> Response;
             ui32 AnswersRemain;
+            struct TBridgeLookup : TRequestContext {
+                std::vector<bool> Found;
+                explicit TBridgeLookup(size_t count) : Found(count) {}
+            };
 
             struct TResolveKeyContext : TRequestContext {
                 ui32 QueryIdx;
@@ -65,6 +69,7 @@ namespace NKikimr::NBlobDepot {
                     TGroupId::FromValue(Agent.VirtualGroupId));
                 AnswersRemain = Request.QuerySize;
 
+                NKikimrBlobDepot::TEvResolve bridgeResolve;
                 for (ui32 i = 0; i < Request.QuerySize; ++i) {
                     auto& query = Request.Queries[i];
 
@@ -74,7 +79,13 @@ namespace NKikimr::NBlobDepot {
                     response.RequestedSize = query.Size;
 
                     TString blobId = query.Id.AsBinaryString();
-                    if (const TResolvedValue *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
+                    if (Agent.ManagedBridgeChild) {
+                        // Bridge reads carry current collect flags, which can change without a new value chain.
+                        auto *item = bridgeResolve.AddItems();
+                        item->SetExactKey(std::move(blobId));
+                        item->SetCookie(i);
+                        item->SetMustRestoreFirst(Request.MustRestoreFirst);
+                    } else if (const TResolvedValue *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
                             std::make_shared<TResolveKeyContext>(i), Request.MustRestoreFirst, Request.DataKind)) {
                         if (!ProcessSingleResult(i, value)) {
                             return; // error occured
@@ -89,6 +100,10 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
+                if (bridgeResolve.ItemsSize()) {
+                    SetResolveParameters(bridgeResolve, Request.DataKind);
+                    Agent.Issue(std::move(bridgeResolve), this, std::make_shared<TBridgeLookup>(Request.QuerySize));
+                }
                 CheckAndFinish();
             }
 
@@ -112,7 +127,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (const TResolvedValue *value = result.GetResolvedValue(); !value) {
                     r.Status = NKikimrProto::NODATA;
                     --AnswersRemain;
-                } else if (Request.IsIndexOnly) {
+                } else if (Request.IsIndexOnly && !(Agent.ManagedBridgeChild && Request.MustRestoreFirst)) {
                     r.Status = NKikimrProto::OK;
                     --AnswersRemain;
                 } else {
@@ -157,7 +172,9 @@ namespace NKikimr::NBlobDepot {
                 std::visit(TOverloaded{
                     [&](TReadOutcome::TOk& ok) {
                         resp.Status = NKikimrProto::OK;
-                        resp.Buffer = std::move(ok.Data);
+                        if (!Request.IsIndexOnly) {
+                            resp.Buffer = std::move(ok.Data);
+                        }
                     },
                     [&](TReadOutcome::TNodata& /*nodata*/) {
                         resp.Status = NKikimrProto::NODATA;
@@ -175,7 +192,18 @@ namespace NKikimr::NBlobDepot {
             }
 
             void CheckAndFinish() {
-                if (!AnswersRemain) {
+                if (!AnswersRemain && Response) {
+                    if (!Request.IsIndexOnly) {
+                        for (size_t i = 0, count = Response->ResponseSz; i < count; ++i) {
+                            const auto& item = Response->Responses[i];
+                            if (item.Status == NKikimrProto::OK) {
+                                const ui32 available = item.Id.BlobSize() - Min(item.Id.BlobSize(), item.Shift);
+                                Y_VERIFY_S(item.Buffer.size() == (item.RequestedSize ? Min(item.RequestedSize, available) : available),
+                                    "Id# " << item.Id << " Shift# " << item.Shift << " RequestedSize# " << item.RequestedSize
+                                    << " Buffer.size# " << item.Buffer.size());
+                            }
+                        }
+                    }
                     EndWithSuccess();
                 }
             }
@@ -191,7 +219,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void TraceResponse(std::optional<NKikimrProto::EReplyStatus> status) {
-                if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
+                if (Response && IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (ui32 i = 0; i < Response->ResponseSz; ++i) {
                         const auto& r = Response->Responses[i];
                         YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvGet_end",
@@ -209,16 +237,60 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
+            void HandleBridgeLookup(ui64 requestId, std::shared_ptr<TBridgeLookup> lookup,
+                    const NKikimrBlobDepot::TEvResolveResult& record) {
+                if (record.GetStatus() != NKikimrProto::OK && record.GetStatus() != NKikimrProto::OVERRUN) {
+                    return EndWithError(record.GetStatus(), record.GetErrorReason());
+                }
+                for (const auto& item : record.GetResolvedKeys()) {
+                    const ui64 i = item.GetCookie();
+                    Y_ABORT_UNLESS(item.HasCookie() && i < lookup->Found.size() && !lookup->Found[i]);
+                    lookup->Found[i] = true;
+                    auto& response = Response->Responses[i];
+                    response.Keep = item.GetKeepState() == NKikimrBlobDepot::Keep;
+                    response.DoNotKeep = item.GetKeepState() == NKikimrBlobDepot::DoNotKeep;
+                    if (item.HasErrorReason()) {
+                        if (!ProcessSingleResult(i, TKeyResolved(TKeyResolved::ResolutionError, item.GetErrorReason()))) {
+                            return;
+                        }
+                    } else if (item.ValueChainSize()) {
+                        const TResolvedValue value(item);
+                        if (!ProcessSingleResult(i, &value)) {
+                            return;
+                        }
+                    } else if (!ProcessSingleResult(i, nullptr)) {
+                        return;
+                    }
+                }
+                if (record.GetStatus() == NKikimrProto::OVERRUN) {
+                    Agent.RegisterRequest(requestId, this, std::move(lookup), {}, true);
+                    return;
+                }
+                for (ui32 i = 0; i != lookup->Found.size(); ++i) {
+                    if (!lookup->Found[i]) {
+                        Response->Responses[i].Status = NKikimrProto::NODATA;
+                        --AnswersRemain;
+                    }
+                }
+                CheckAndFinish();
+            }
+
+            void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) override {
                 if (auto *p = std::get_if<TKeyResolved>(&response)) {
                     ProcessSingleResult(context->Obtain<TResolveKeyContext>().QueryIdx, *p);
                     CheckAndFinish();
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
                     TQuery::HandleGetResult(context, **p);
                 } else if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
-                    TQuery::HandleResolveResult(context, **p);
+                    if (auto lookup = std::dynamic_pointer_cast<TBridgeLookup>(context)) {
+                        HandleBridgeLookup(id, std::move(lookup), (*p)->Record);
+                    } else {
+                        TQuery::HandleResolveResult(context, **p);
+                    }
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
-                    if (auto *resolveContext = dynamic_cast<TResolveKeyContext*>(context.get())) {
+                    if (dynamic_cast<TBridgeLookup*>(context.get())) {
+                        EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected during resolve");
+                    } else if (auto *resolveContext = dynamic_cast<TResolveKeyContext*>(context.get())) {
                         YDB_LOG_DEBUG("TTabletDisconnected",
                             {"marker", "BDA26"},
                             {"agentId", Agent.LogId},

@@ -45,6 +45,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
             hFunc(TEvBlobDepot::TEvDiscardSpoiledBlobSeq, Handle);
             hFunc(TEvBlobDepot::TEvResolve, Data->Handle);
+            hFunc(TEvBlobDepot::TEvBridgeScan, Handle);
             hFunc(TEvBlobDepot::TEvBlock, BlocksManager->Handle);
             hFunc(TEvBlobDepot::TEvQueryBlocks, BlocksManager->Handle);
             hFunc(TEvBlobDepot::TEvCollectGarbage, BarrierServer->Handle);
@@ -149,6 +150,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobDepot::TEvApplyConfig, Handle);
 
                 fFunc(TEvBlobDepot::EvRegisterAgent, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvBridgeScan, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvAllocateIds, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvCommitBlobSeq, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvDiscardSpoiledBlobSeq, handleFromAgentPipe);

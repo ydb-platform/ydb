@@ -34,6 +34,7 @@ LIBRARY()
         schema.h
 
         agent.cpp
+        bridge_scan.cpp
         assimilator.cpp
         assimilator.h
         blob_depot_tablet.h

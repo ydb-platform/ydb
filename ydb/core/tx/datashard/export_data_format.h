@@ -60,6 +60,11 @@ struct TParquetExportSettings {
         return *this;
     }
 
+    TParquetExportSettings& WithRowGroupBytes(ui64 rowGroupBytes) {
+        RowGroupBytes = rowGroupBytes;
+        return *this;
+    }
+
     TParquetExportSettings& WithCompression(const TCompressionSettings& compressionSettings) {
         CompressionSettings.Emplace(compressionSettings);
         return *this;
@@ -67,6 +72,10 @@ struct TParquetExportSettings {
 
     IExport::TTableColumns Columns;
     ui64 RowGroupSize = 10000;
+    // The limit on the cell bytes of a row group, 0 for no limit. A row wider than the
+    // limit is a row group of its own. The export sets it to the smaller of its batch size
+    // and a share of the restore read buffer (see ParquetRowGroupBytesLimit).
+    ui64 RowGroupBytes = 32ull << 20;
     TMaybe<TCompressionSettings> CompressionSettings;
 };
 
@@ -82,6 +91,9 @@ public:
     // (data produced but not yet returned via Flush). Formats that write row
     // output directly into the Collect out stream return 0.
     virtual size_t GetReadyOutputBytes() const = 0;
+    // Cell bytes of the rows the format holds unencoded (Parquet: the pending row group).
+    // Formats that encode every row at Collect return 0.
+    virtual size_t GetPendingInputBytes() const = 0;
     virtual TString GetError() const = 0;
 
     virtual ~IExportDataFormat() = default;

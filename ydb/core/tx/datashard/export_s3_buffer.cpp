@@ -59,6 +59,11 @@ public:
         return Buffer.Size();
     }
 
+    // The frame has consumed data (ready output or not), so ending it produces output.
+    bool HasInput() const {
+        return BytesAdded > 0;
+    }
+
 private:
     enum ECompressionResult {
         CONTINUE,
@@ -290,12 +295,22 @@ bool TS3Buffer::IsFilled() const {
     if (readyOutputBytes < MinBytes) {
         return false;
     }
+    // Even with MinBytes = 0, a non-final part needs a payload: a part with no data is
+    // useless, and S3 rejects it with EntityTooSmall. A compressor that has consumed rows
+    // yields them when its frame ends, but Parquet keeps the rows of an unfinished row
+    // group for the next part, so a buffer holding only those is not filled.
+    if (readyOutputBytes == 0 && !(Compression && Compression->HasInput())) {
+        return false;
+    }
     // After MinBytes, MaxBytes caps the uncompressed size and the memory held.
     return Rows >= RowsLimit || UncompressedBytes >= MaxBytes || GetMemoryBytes() >= MaxBytes;
 }
 
 ui64 TS3Buffer::GetMemoryBytes() const {
-    return Buffer.Size() + (Compression ? Compression->GetReadyOutputBytes() : 0) + DataFormat->GetReadyOutputBytes();
+    // The rows a format holds unencoded (Parquet: the pending row group) count too, so a
+    // part is sent at about MaxBytes with them, and the scan holds about a part.
+    return Buffer.Size() + (Compression ? Compression->GetReadyOutputBytes() : 0)
+        + DataFormat->GetReadyOutputBytes() + DataFormat->GetPendingInputBytes();
 }
 
 TString TS3Buffer::GetError() const {
@@ -303,6 +318,8 @@ TString TS3Buffer::GetError() const {
 }
 
 TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
+    // Per-part stats. Rows a format keeps pending (Parquet) are counted in the part they
+    // were read for but written into the next one; the totals over the parts are exact.
     Rows = 0;
     BytesRead = 0;
 
@@ -469,8 +486,15 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
 
             auto maybeSettings = ParquetExportSettingsFromTask(Task);
             auto settings = maybeSettings.value_or(TParquetExportSettings{});
+            // Row groups are cut by the batch, so a scan holds about a part of pending rows, and
+            // by a share of this node's restore read buffer, so a raised batch does not make
+            // groups a restore with the same settings cannot hold. A batch of 0 cuts nothing.
+            const ui64 restoreRowGroupBytes = ParquetRowGroupBytesLimit(
+                AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit());
+            const ui64 rowGroupBytes = maxBytes ? Min(maxBytes, restoreRowGroupBytes) : restoreRowGroupBytes;
             settings
-                .WithColumns(Columns);
+                .WithColumns(Columns)
+                .WithRowGroupBytes(rowGroupBytes);
 
             switch (CodecFromTask(Task)) {
             case ECompressionCodec::None:

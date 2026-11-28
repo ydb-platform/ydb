@@ -203,6 +203,8 @@ public:
 
     std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize, bool flushEmpty = false);
     std::shared_ptr<arrow::RecordBatch> GetBatch() const { return Batch; }
+    // Drops the batch kept from the last FlushBatch(), once the caller is done with it.
+    void ReleaseBatch() { Batch.reset(); }
 
 protected:
     void AppendCell(const TCell& cell, ui32 colNum);

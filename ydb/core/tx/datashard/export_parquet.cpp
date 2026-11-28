@@ -56,6 +56,10 @@ private:
 
 static std::shared_ptr<parquet::WriterProperties> CreateWriteProperties(const TParquetExportSettings& settings) {
     auto builder = std::make_unique<parquet::WriterProperties::Builder>();
+    // No column statistics: each row group would add the min and max of every column
+    // (up to 4 KiB each) to the footer, and the importer rejects a footer above its
+    // limit. Restore does not read them.
+    builder->disable_statistics();
     if (settings.CompressionSettings) {
         switch (settings.CompressionSettings->Algorithm) {
         case TParquetExportSettings::TCompressionSettings::EAlgorithm::Zstd:
@@ -89,7 +93,7 @@ bool FlushRowGroup(bool last) {
             return false;
         }
     }
-    
+
     if (!BatchBuilder) {
         ErrorString = "BatchBuilder not initialized";
         ArrowWriter.reset();
@@ -99,6 +103,9 @@ bool FlushRowGroup(bool last) {
     if (BatchBuilder->Rows() != 0) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
         auto batch = BatchBuilder->FlushBatch(true, false);
+        // The builder keeps the flushed batch: drop it, or the written row group stays
+        // in memory next to the one being collected.
+        BatchBuilder->ReleaseBatch();
         batches.push_back(batch);
         auto tableResult = arrow::Table::FromRecordBatches(batches);
         if (!tableResult.ok()) {
@@ -131,6 +138,7 @@ public:
 TDataFormatParquet(TParquetExportSettings&& settings)
     : Columns(std::move(settings.Columns))
     , RowGroupSize(settings.RowGroupSize)
+    , RowGroupBytes(settings.RowGroupBytes)
     , WriteProperties(CreateWriteProperties(settings))
     , OutStream(std::make_shared<TCheckpointOutputStream>())
 {
@@ -197,6 +205,20 @@ bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
         return false;
     }
 
+    // Cut the row group before a row that does not fit. A row wider than the limit is
+    // a row group of its own.
+    if (RowGroupBytes && BatchBuilder->Rows()) {
+        ui64 rowBytes = 0;
+        for (const auto& cell : *row) {
+            rowBytes += cell.Size();
+        }
+        if (BatchBuilder->Bytes() + rowBytes > RowGroupBytes) {
+            if (!FlushRowGroup(false)) {
+                return false;
+            }
+        }
+    }
+
     if (auto status = BatchBuilder->TryAddRow(*row); !status.ok()) {
         ErrorString = TStringBuilder() << "Failed to append row to arrow batch: " << status.ToString();
         BatchBuilder.reset();
@@ -217,7 +239,9 @@ TMaybe<TBuffer> Flush(bool last) override {
         return Nothing();
     }
 
-    if (!FlushRowGroup(last)) {
+    // The pending rows wait for the next row group rather than becoming a small one of
+    // their own; only the end of the file writes them.
+    if (last && !FlushRowGroup(true)) {
         return Nothing();
     }
 
@@ -237,6 +261,10 @@ size_t GetReadyOutputBytes() const override {
     return OutStream->GetBufferSize();
 }
 
+size_t GetPendingInputBytes() const override {
+    return BatchBuilder ? BatchBuilder->Bytes() : 0;
+}
+
 TString GetError() const override {
     return ErrorString;
 }
@@ -244,6 +272,7 @@ TString GetError() const override {
 private:
     const TTagToColumn Columns;
     const ui64 RowGroupSize;
+    const ui64 RowGroupBytes;
 
     std::shared_ptr<parquet::WriterProperties> WriteProperties;
     std::shared_ptr<arrow::Schema> Schema;

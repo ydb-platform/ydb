@@ -32,6 +32,13 @@ ECompressionCodec CodecFromTask(const NKikimrSchemeOp::TBackupTask& task);
 EDataFormat DataFormatFromTask(const NKikimrSchemeOp::TBackupTask& task);
 std::optional<TParquetExportSettings> ParquetExportSettingsFromTask(const NKikimrSchemeOp::TBackupTask& task);
 
+// Restore reads a Parquet file a row group at a time into a buffer of RestoreReadBufferSizeLimit
+// bytes, next to the parsed footer, and rejects a row group that does not fit. Export cuts row
+// groups by their cell bytes at an eighth of the limit (the share restore gives the serialized
+// footer), which leaves room for the encoding overhead and the footer in a restore with the same
+// setting. Never 0, which would disable the cut.
+ui64 ParquetRowGroupBytesLimit(ui64 restoreReadBufferSizeLimit);
+
 EDataFormat NextDataFormat(EDataFormat cur);
 ECompressionCodec NextCompressionCodec(ECompressionCodec cur);
 

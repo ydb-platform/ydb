@@ -170,6 +170,10 @@ size_t GetReadyOutputBytes() const override {
     return 0;
 }
 
+size_t GetPendingInputBytes() const override {
+    return 0;
+}
+
 TString GetError() const override {
     return ErrorString;
 }

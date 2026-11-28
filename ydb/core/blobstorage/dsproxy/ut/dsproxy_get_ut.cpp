@@ -1,5 +1,8 @@
 #include "defs.h"
 #include "dsproxy_vdisk_mock_ut.h"
+#include "dsproxy_env_mock_ut.h"
+#include "dsproxy_test_state_ut.h"
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/actor_helpers.h>
@@ -27,6 +30,62 @@ do {                            \
 
 
 Y_UNIT_TEST_SUITE(TDSProxyGetTest) {
+
+Y_UNIT_TEST(VGetTracePreservesPerItemNoData) {
+    for (const ui8 level : {0, 12, 13}) {
+        TTestBasicRuntime runtime(1, false);
+        SetupRuntime(runtime);
+        TDSProxyEnv env;
+        env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureNone), 0, 0);
+        TTestState state(runtime, env.Info);
+        const auto uploader = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploader);
+        TVector<NWilson::NTraceProto::Span> spans;
+        const auto observer = runtime.AddObserver<NWilson::TEvWilson>([&](NWilson::TEvWilson::TPtr& ev) {
+            spans.push_back(ev->Get()->Span);
+        });
+        const TLogoBlobID id(1, 1, 1, 0, 1024, 0);
+        auto request = state.CreateGetRequest({id}, false);
+        runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, request->ReleaseBase().Release(),
+            0, 0, nullptr, level ? NWilson::TTraceId::NewTraceId(level, 4095) : NWilson::TTraceId()));
+        for (size_t attempt = 0; ; ++attempt) {
+            UNIT_ASSERT(attempt < 32);
+            TAutoPtr<IEventHandle> handle;
+            const auto events = runtime.GrabEdgeEventsRethrow<TEvBlobStorage::TEvVGet, TEvBlobStorage::TEvGetResult>(handle);
+            if (auto* result = std::get<TEvBlobStorage::TEvGetResult*>(events)) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(result->Responses[0].Status, NKikimrProto::NODATA);
+                break;
+            }
+            TEvBlobStorage::TEvVGet::TPtr get = static_cast<TEventHandle<TEvBlobStorage::TEvVGet>*>(handle.Release());
+            auto response = state.CreateEventResultPtr(get, NKikimrProto::UNKNOWN);
+            state.GroupMock.OnVGet(*get->Get(), *response->Get());
+            response->Get()->Record.SetCookie(get->Get()->Record.GetCookie());
+            runtime.Send(response.Release());
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        bool detailed = false;
+        for (const auto& span : spans) {
+            if (span.name() != "DSProxy VGet roundtrip") {
+                continue;
+            }
+            detailed = true;
+            bool sawNoData = false;
+            for (const auto& event : span.events()) {
+                if (event.name() == "VGet item coverage") {
+                    for (const auto& attribute : event.attributes()) {
+                        if (attribute.key() == "item_status") {
+                            UNIT_ASSERT_VALUES_EQUAL(attribute.value().int_value(), NKikimrProto::NODATA);
+                            sawNoData = true;
+                        }
+                    }
+                }
+            }
+            UNIT_ASSERT(sawNoData);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(detailed, level >= 13);
+    }
+}
 
 Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
     for (bool mustRestore : {false, true}) {

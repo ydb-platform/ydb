@@ -1536,6 +1536,8 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             {GeneratedColumnDDL("EvaluateExpr(1 + 2)"), "EvaluateExpr"},
             {GeneratedColumnDDL("CAST(CurrentAuthenticatedUser() AS Int32)"), "CurrentAuthenticatedUser"},
             {GeneratedColumnDDL("CAST(SecureParam(\"token\") AS Int32)"), "SecureParam"},
+            {GeneratedColumnDDL("CAST(ApplyRemoteEmbedder(CAST(k AS String), 'model', 'https://example.com', 'token').Status AS Int32)"), "Unknown builtin: ApplyRemoteEmbedder"},
+            {GeneratedColumnDDL("CAST(Knn::ApplyRemoteEmbedder(CAST(k AS String), 'model', 'https://example.com', 'token').Status AS Int32)"), "Knn::ApplyRemoteEmbedder"},
         });
     }
 

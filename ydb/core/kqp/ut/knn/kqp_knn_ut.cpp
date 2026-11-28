@@ -11,7 +11,12 @@
 
 #include <ydb/library/testlib/helpers.h>
 
+#include <ydb/public/sdk/cpp/tests/unit/client/oidc/helpers/test_server.h>
+
+#include <util/generic/scope.h>
 #include <util/string/subst.h>
+
+#include <thread>
 
 namespace NKikimr {
 namespace NKqp {
@@ -20,6 +25,175 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpKnn) {
+    Y_UNIT_TEST_TWIN(RemoteEmbedderYieldsDuringHttp, streaming) {
+        TOidcTestServer server;
+        const TString url(server.Issuer());
+        const TString origin(url.substr(0, url.rfind('/')));
+        server.Enqueue(R"({"data":[{"index":0,"embedding":[1]}]})", HTTP_OK);
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        auto* queryConfig = settings.AppConfig.MutableQueryServiceConfig();
+        queryConfig->AddHostnamePatterns("^localhost$");
+        (*queryConfig->MutableRemoteEmbedderSecretOrigins())["/Root/embedder_token"] = origin;
+        TKikimrRunner kikimr(settings);
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto client = kikimr.GetQueryClient();
+        auto create = kikimr.RunCall([&] {
+            return client.ExecuteQuery("CREATE SECRET `/Root/embedder_token` WITH (value = 'embedder-token')",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        auto release = NThreading::NewPromise();
+        auto handshake = NThreading::NewPromise();
+        server.BlockTlsHandshakeUntil(release.GetFuture());
+        std::jthread watchdog([&] {
+            if (server.WaitForTlsHandshake()) {
+                handshake.SetValue();
+                release.GetFuture().Wait(TDuration::Seconds(5));
+            }
+            release.TrySetValue();
+        });
+        Y_DEFER { release.TrySetValue(); };
+
+        TStringBuilder query;
+        if (streaming) {
+            query << R"(
+                PROCESS AS_TABLE(AsList(AsStruct('text' AS Text, 1 AS PassThrough)))
+                USING ApplyRemoteEmbedder(TableRows(), 'model', ')";
+        } else {
+            query << "SELECT ApplyRemoteEmbedder('text', 'model', '";
+        }
+        query << url << "', '/Root/embedder_token'";
+        query << (streaming ? ", 1, 0, 0)" : ", 0).Status AS Status");
+        auto pending = kikimr.RunInThreadPool([&] {
+            return client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+        });
+
+        // The simulated runtime dispatches one actor at a time. It can reach this
+        // condition while TLS is held only if the compute actor gives up the worker.
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return handshake.HasValue() || pending.IsReady(); };
+        runtime->DispatchEvents(options);
+        const bool parked = handshake.HasValue() && !release.HasValue() && !pending.IsReady();
+        release.TrySetValue();
+        const auto result = runtime->WaitFuture(pending);
+        UNIT_ASSERT(parked);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto rows = TResultSetParser(result.GetResultSet(0));
+        UNIT_ASSERT(rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Status").GetUint32(), 200);
+        UNIT_ASSERT(!rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+    }
+
+    Y_UNIT_TEST(RemoteEmbedderRfcSyntax) {
+        TOidcTestServer server;
+        const TString url(server.Issuer());
+        const TString origin(url.substr(0, url.rfind('/')));
+        for (size_t i = 0; i < 4; ++i) {
+            server.Enqueue(R"({"data":[{"index":0,"embedding":[0.5,-0.25]}]})", HTTP_OK);
+        }
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* queryConfig = settings.AppConfig.MutableQueryServiceConfig();
+        queryConfig->AddHostnamePatterns("^localhost$");
+        (*queryConfig->MutableRemoteEmbedderSecretOrigins())["/Root/embedder_token"] = origin;
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        auto create = client.ExecuteQuery(R"(
+            CREATE SECRET `/Root/embedder_token` WITH (value = 'embedder-token');
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        auto unbound = client.ExecuteQuery(R"(
+            CREATE SECRET `/Root/unbound_embedder_token` WITH (value = 'unbound-token');
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(unbound.IsSuccess(), unbound.GetIssues().ToString());
+
+        auto scalar = client.ExecuteQuery(TStringBuilder() << R"(
+            SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << url << R"(', '/Root/embedder_token', 0 AS MaxRetries).Status AS Status;
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(scalar.IsSuccess(), scalar.GetIssues().ToString());
+        auto scalarRows = TResultSetParser(scalar.GetResultSet(0));
+        UNIT_ASSERT(scalarRows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(scalarRows.ColumnParser("Status").GetUint32(), 200);
+        UNIT_ASSERT(!scalarRows.TryNextRow());
+
+        const TString conditional = TStringBuilder() << R"(
+            DECLARE $call AS Bool;
+            SELECT ListMap(AsList('Молоко'), ($text) -> {
+                RETURN IF($call, ApplyRemoteEmbedder($text, 'test-model', ')" << url << R"(', '/Root/embedder_token', 0).Status, 42u);
+            }) AS Statuses;
+        )";
+        for (bool call : {false, true}) {
+            auto params = TParamsBuilder().AddParam("$call").Bool(call).Build().Build();
+            auto nested = client.ExecuteQuery(conditional, NQuery::TTxControl::NoTx(), std::move(params)).ExtractValueSync();
+            UNIT_ASSERT_C(nested.IsSuccess(), nested.GetIssues().ToString());
+            CompareYson(call ? "[[[200u]]]" : "[[[42u]]]", FormatResultSetYson(nested.GetResultSet(0)));
+            UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), call ? 2 : 1);
+        }
+
+        auto batch = client.ExecuteQuery(TStringBuilder() << R"(
+            $requests = AsList(AsStruct('Молоко' AS Text, AsStruct(1 AS Id) AS PassThrough));
+            PROCESS AS_TABLE($requests)
+            USING ApplyRemoteEmbedder(TableRows(), 'test-model', ')" << url << R"(', '/Root/embedder_token', 32, 10240, 5);
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(batch.IsSuccess(), batch.GetIssues().ToString());
+        auto batchRows = TResultSetParser(batch.GetResultSet(0));
+        UNIT_ASSERT(batchRows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(batchRows.ColumnParser("Status").GetUint32(), 200);
+        UNIT_ASSERT(!batchRows.TryNextRow());
+
+        for (const auto& [destination, expected] : std::initializer_list<std::pair<TString, TStringBuf>>{
+            {TString("http://") + origin.substr(8), "HTTPS is required"},
+            {"https://localhost:1", "destination does not match the approved HTTPS origin"},
+        }) {
+            auto blocked = client.ExecuteQuery(TStringBuilder() << R"(
+                SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << destination << R"(', '/Root/embedder_token', 0).Status;
+            )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!blocked.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(blocked.GetIssues().ToString(), expected);
+        }
+        auto noBinding = client.ExecuteQuery(TStringBuilder() << R"(
+            SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << url << R"(', '/Root/unbound_embedder_token', 0).Status;
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT(!noBinding.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(noBinding.GetIssues().ToString(), "no approved HTTPS origin");
+
+        auto invalid = client.ExecuteQuery(TStringBuilder() << R"(
+            SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << url << R"(', '').Status;
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(invalid.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(invalid.GetIssues().ToString(), "AuthSecretName must be a non-empty String literal");
+
+        auto table = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/EmbedderInput` (id Int32, text String, PRIMARY KEY (id));
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(table.IsSuccess(), table.GetIssues().ToString());
+        auto wrongKind = client.ExecuteQuery(TStringBuilder() << R"(
+            SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << url << R"(', '/Root/EmbedderInput', 0).Status;
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(wrongKind.GetStatus(), EStatus::BAD_REQUEST, wrongKind.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(wrongKind.GetIssues().ToString(), "/Root/EmbedderInput");
+
+        auto insert = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/EmbedderInput` (id, text) VALUES (1, 'Молоко');
+        )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+        auto scan = kikimr.GetTableClient().StreamExecuteScanQuery(TStringBuilder() << R"(
+            SELECT ApplyRemoteEmbedder(Unwrap(text), 'test-model', ')" << url << R"(', '/Root/embedder_token', 0).Status
+            FROM `/Root/EmbedderInput`;
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(scan.IsSuccess(), scan.GetIssues().ToString());
+        CompareYson("[[200u]]", StreamResultToYson(scan));
+        const auto requests = server.Requests();
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 4);
+        for (const auto& request : requests) {
+            UNIT_ASSERT_VALUES_EQUAL(request.Authorization, "Bearer embedder-token");
+            UNIT_ASSERT_VALUES_EQUAL(request.Path, "/realm/embeddings");
+        }
+    }
+
     void CheckDistance(float actual, float expected) {
         UNIT_ASSERT_C(std::abs(actual - expected) < 0.0001f,
             "Expected distance " << expected << ", got " << actual);

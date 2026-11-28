@@ -5,6 +5,11 @@ SPLIT_FACTOR(20)
 
 SIZE(MEDIUM)
 
+# This test executable exceeds DWARF32 relocation limits in relwithdebinfo builds.
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--strip-debug)
+ENDIF()
+
 SRCS(
     kqp_knn_ut.cpp
 )
@@ -13,6 +18,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/library/yql/udfs/common/knn
+    ydb/public/sdk/cpp/tests/unit/client/oidc/helpers
     yql/essentials/sql/pg_dummy
 )
 

@@ -21,7 +21,9 @@ PEERDIR(
     ydb/core/kqp/opt
     ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/provider
+    ydb/core/kqp/query_compiler/remote_embedder
     ydb/core/kqp/query_data
+    ydb/core/kqp/sql
     ydb/core/kqp/tracing
     ydb/core/local_indexes/bloom
     ydb/core/path_aliasing
@@ -46,11 +48,6 @@ PEERDIR(
     yql/essentials/providers/pg/provider
     yql/essentials/providers/result/provider
     yql/essentials/sql
-    yql/essentials/sql/v1/lexer/antlr4
-    yql/essentials/sql/v1/lexer/antlr4_ansi
-    yql/essentials/sql/v1/proto_parser/antlr4
-    yql/essentials/sql/v1/proto_parser/antlr4_ansi
-    yql/essentials/sql/v1/translation
 )
 
 YQL_LAST_ABI_VERSION()

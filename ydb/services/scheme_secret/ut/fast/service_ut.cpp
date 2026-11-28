@@ -441,6 +441,14 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         AssertBadRequest(promise, "<main>: Error: secrets `/Root/s1`, `/Root/s3` not found\n");
     }
 
+    Y_UNIT_TEST(RejectsDirectoryAsSecret) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        const auto promise = ResolveSecrets({"/Root/missing-secret", "/Root"}, kikimr);
+        AssertBadRequest(promise, "<main>: Error: secrets `/Root/missing-secret`, `/Root` not found\n");
+        AssertBadRequest(ResolveSecret("/Root", kikimr), "<main>: Error: secret `/Root` not found\n");
+    }
+
     Y_UNIT_TEST(SchemeShardRetrySingleSecret) {
         TKikimrSettings settings;
         auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(

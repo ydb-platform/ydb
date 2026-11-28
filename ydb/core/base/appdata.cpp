@@ -43,6 +43,8 @@
 #include <ydb/library/actors/util/should_continue.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
+#include "query_service_config.h"
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
@@ -85,6 +87,7 @@ struct TAppData::TImpl {
     NKikimrConfig::THealthCheckConfig HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    std::shared_ptr<const NKikimrConfig::TQueryServiceConfig> LiveQueryServiceConfig;
     NKikimrConfig::TBridgeConfig BridgeConfig;
     NKikimrConfig::TStatisticsConfig StatisticsConfig;
     TMetricsConfig MetricsConfig;
@@ -94,6 +97,14 @@ struct TAppData::TImpl {
     NKikimrConfig::TLongTxServiceConfig LongTxServiceConfig;
     NKikimrConfig::TUdfStoreConfig UdfStoreConfig;
 };
+
+std::shared_ptr<const NKikimrConfig::TQueryServiceConfig> LoadQueryServiceConfig(const TAppData& appData) {
+    return std::atomic_load(&appData.Impl->LiveQueryServiceConfig);
+}
+
+void PublishQueryServiceConfig(TAppData& appData, std::shared_ptr<const NKikimrConfig::TQueryServiceConfig> config) {
+    std::atomic_store(&appData.Impl->LiveQueryServiceConfig, std::move(config));
+}
 
 TAppData::TAppData(
         ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,

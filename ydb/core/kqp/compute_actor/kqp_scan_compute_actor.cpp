@@ -349,7 +349,8 @@ void TKqpScanComputeActor::DoBootstrap() {
     auto errorCallback = [actorSystem, selfId](const TString& error) {
         actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
     };
-    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
+    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling,
+        MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback), ComputeCtx, selfId));
 
     ComputeCtx.AddTableScan(0, Meta, GetStatsMode(), &TaskRunner->GetTypeEnv());
     ScanData = &ComputeCtx.GetTableScan(0);

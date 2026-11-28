@@ -533,10 +533,15 @@ private:
     }
 
     void HandleResolve(TEvDescribeSecretsResponse::TPtr& ev) {
-        YQL_ENSURE(ev->Get()->Description.Status == Ydb::StatusIds::SUCCESS, "failed to get secrets snapshot with issues: " << ev->Get()->Description.Issues.ToOneLineString());
+        const auto& description = ev->Get()->Description;
+        if (description.Status != Ydb::StatusIds::SUCCESS) {
+            TBase::ReplyErrorAndDie(description.Status, description.Issues);
+            return;
+        }
 
+        YQL_ENSURE(description.SecretValues.size() == SecretNames.size());
         for (size_t i = 0; i < SecretNames.size(); ++i) {
-            TasksGraph.GetMeta().SecureParams.emplace(SecretNames[i], ev->Get()->Description.SecretValues[i]);
+            TasksGraph.GetMeta().SecureParams.emplace(SecretNames[i], description.SecretValues[i]);
         }
 
         SecretSnapshotRequired = false;

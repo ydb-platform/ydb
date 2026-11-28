@@ -139,25 +139,28 @@ IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector
     return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
 }
 
-// It's a hack so we can simulate Scheme Cache retryable errors in tests
 NSchemeCache::TSchemeCacheNavigate::EStatus GetSchemeCacheEntryStatus(
     const TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* schemeCacheStatusGetter,
     NSchemeCache::TSchemeCacheNavigate::TEntry& entry)
 {
-    if (schemeCacheStatusGetter) {
-        return schemeCacheStatusGetter->GetStatus(entry);
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    const auto status = schemeCacheStatusGetter ? schemeCacheStatusGetter->GetStatus(entry) : entry.Status;
+    if (status == TNavigate::EStatus::Ok && (entry.Kind != TNavigate::KindSecret || !entry.SecretInfo)) {
+        return TNavigate::EStatus::PathErrorUnknown;
     }
-    return entry.Status;
+    return status;
 }
 
 NKikimrScheme::EStatus GetSchemeShardPathStatus(
     const TDescribeSchemaSecretsService::ISchemeShardStatusGetter* schemeShardStatusGetter,
     const NKikimrScheme::TEvDescribeSchemeResult& record)
 {
-    if (schemeShardStatusGetter) {
-        return schemeShardStatusGetter->GetStatus(record);
+    const auto status = schemeShardStatusGetter ? schemeShardStatusGetter->GetStatus(record) : record.GetStatus();
+    // The object can be replaced between the scheme-cache lookup and the describe request.
+    if (status == NKikimrScheme::EStatus::StatusSuccess && !record.GetPathDescription().HasSecretDescription()) {
+        return NKikimrScheme::EStatus::StatusPathDoesNotExist;
     }
-    return record.GetStatus();
+    return status;
 }
 
 bool IsRetryableSchemeShardStatus(NKikimrScheme::EStatus status) {
@@ -319,11 +322,17 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(
         Y_ENSURE(!secretDescription.HasValue(), "SchemeCache must never contain secret values");
 
         const TString secretPath = CanonizePath(entry.Path);
+        const TPathId authorizedPath = entry.TableId.PathId;
+        const auto [authorized, inserted] = respIt->second.AuthorizedPaths.emplace(secretPath, authorizedPath);
+        if (!inserted && authorized->second != authorizedPath) {
+            ReplySecretChanged(requestId, secretPath);
+            return;
+        }
         const auto secretIt = VersionedSecrets.find(secretPath);
 
         if (secretIt != VersionedSecrets.end() &&
             (LocalCacheHasActualVersion(secretIt->second, secretDescription.GetVersion()) &&
-            LocalCacheHasActualObject(secretIt->second, entry.TableId.PathId.LocalPathId)))
+            LocalCacheHasActualObject(secretIt->second, authorizedPath)))
         {
             // some secret version is in cache
             ++respIt->second.FilledSecretsCnt;
@@ -375,6 +384,12 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(
     }
 
     const auto& secretName = CanonizePath(rec.GetPath());
+    const auto authorized = respIt->second.AuthorizedPaths.find(secretName);
+    if (authorized == respIt->second.AuthorizedPaths.end()
+        || authorized->second != TPathId(rec.GetPathOwnerId(), rec.GetPathId())) {
+        ReplySecretChanged(requestId, secretName);
+        return;
+    }
 
     if (const auto it = SchemeBoardSubscribers.find(secretName); it == SchemeBoardSubscribers.end()) {
         SchemeBoardSubscribers[secretName] = Register(CreateSchemeBoardSubscriber(SelfId(), secretName));
@@ -413,7 +428,7 @@ void TDescribeSchemaSecretsService::Bootstrap() {
 void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecret& ev) {
     TResponseContext ctx;
     for (size_t i = 0; i < ev.SecretNames.size(); ++i) {
-        ctx.Secrets.emplace(ev.SecretNames[i], i);
+        ctx.Secrets.emplace(CanonizePath(ev.SecretNames[i]), i);
         ctx.Result = ev.Promise;
     }
     ResolveInFlight[LastRequestId] = std::move(ctx);
@@ -449,11 +464,15 @@ bool TDescribeSchemaSecretsService::LocalCacheHasActualVersion(const TVersionedS
 }
 
 bool TDescribeSchemaSecretsService::LocalCacheHasActualObject(const TVersionedSecret& secret,
-    const ui64& cacheSecretPathId
+    const TPathId& authorizedPath
 ) {
-    // This helps with the case when the secret was dropped and created again with the same name.
-    // Secret version will become zero again, which would not lead to a secret cache update.
-    return secret.PathId == cacheSecretPathId;
+    return TPathId(secret.PathOwnerId, secret.PathId) == authorizedPath;
+}
+
+void TDescribeSchemaSecretsService::ReplySecretChanged(ui64 requestId, const TString& secretName) {
+    FillResponse(requestId, NKqp::TEvDescribeSecretsResponse::TDescription(
+        Ydb::StatusIds::BAD_REQUEST,
+        {NYql::TIssue(TStringBuilder() << "Secret `" << secretName << "` changed during resolution")}));
 }
 
 bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& requestId,
@@ -478,7 +497,7 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
     TString firstUnresolvedPath;
     for (size_t i = 0; i < result.ResultSet.size(); ++i) {
         auto& entry = result.ResultSet[i];
-        switch (GetSchemeCacheEntryStatus(SchemeCacheStatusGetter, entry)) {
+        switch (const auto entryStatus = GetSchemeCacheEntryStatus(SchemeCacheStatusGetter, entry)) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok: {
                 break;
             }
@@ -510,7 +529,7 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
                 YDB_LOG_NOTICE("SchemeCache error",
                     {"event", "TEvNavigateKeySetResult"},
                     {"requestId", requestId},
-                    {"entryStatus", ToString(entry.Status)},
+                    {"entryStatus", ToString(entryStatus)},
                     {"unresolvedPaths", ListSecrets(unresolvedPaths)}
                 );
                 FillResponse(
@@ -676,6 +695,11 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
             return;
         }
 
+        const auto authorized = responseCtx.AuthorizedPaths.find(secretPath);
+        if (authorized == responseCtx.AuthorizedPaths.end() || !LocalCacheHasActualObject(it->second, authorized->second)) {
+            ReplySecretChanged(requestId, secretPath);
+            return;
+        }
         Y_ENSURE(secret.second < secretValues.size());
         secretValues[secret.second] = it->second.Value;
         revisions[secret.second] = NKqp::TSecretRevision{it->second.PathOwnerId, it->second.PathId, it->second.SecretVersion};

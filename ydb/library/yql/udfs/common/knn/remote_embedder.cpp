@@ -1,0 +1,681 @@
+#include "remote_embedder.h"
+#include "remote_embedder_http.h"
+
+#include "knn-serializer-shared.h"
+
+#include <ydb/library/actors/http/http.h>
+
+#include <ydb/library/yql/public/udf/udf_async_waiter.h>
+#include <yql/essentials/public/udf/udf_helpers.h>
+
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/time_provider/monotonic.h>
+#include <library/cpp/uri/uri.h>
+
+#include <util/stream/str.h>
+#include <util/string/ascii.h>
+
+#include <algorithm>
+#include <array>
+#include <utility>
+#include <cmath>
+#include <optional>
+
+using namespace NYql::NUdf;
+using NMonotonic::TMonotonic;
+
+namespace {
+
+constexpr ui32 DefaultBatchSize = 32;
+constexpr ui32 DefaultMaxRetries = 5;
+constexpr ui32 TransportError = 0;
+constexpr ui32 InvalidResponse = 502;
+constexpr size_t MaxBatchRows = 1024;
+constexpr size_t MaxBatchBytes = 1024 * 1024;
+constexpr size_t MaxEmbeddingBytes = 16 * 1024 * 1024;
+constexpr auto BatchTimeout = TDuration::Minutes(2);
+constexpr auto AttemptTimeout = TDuration::Seconds(60);
+
+bool IsSafeHttpRequestPart(TStringBuf part) {
+    return std::ranges::none_of(part, [](unsigned char c) {
+        return c <= ' ' || c == 0x7f;
+    });
+}
+
+struct TBatchResult {
+    ui32 Status = TransportError;
+    TVector<TString> Embeddings;
+};
+
+template <class T>
+bool WaitFor(const NThreading::TFuture<T>& future, TMonotonic deadline) {
+    if (auto* waiter = IAsyncUdfWaiter::Current) {
+        return waiter->Wait(future.IgnoreResult(), deadline);
+    }
+    // Direct, standalone UDF callers have no actor to wake up.
+    const auto now = TMonotonic::Now();
+    return now < deadline && future.Wait(deadline - now);
+}
+
+// Keep only the response fields needed to validate and serialize the batch.
+class TEmbeddingResponseParser final : public NJson::TJsonCallbacks {
+public:
+    explicit TEmbeddingResponseParser(size_t count)
+        : Embeddings(count)
+    {}
+
+    bool Complete() const {
+        return SeenData_ && RowCount_ == Embeddings.size();
+    }
+
+    TVector<TString> Embeddings;
+    ui64 PromptTokens = 0;
+
+private:
+    enum class EField { Ignore, Root, Data, Item, Index, Embedding, Coordinate, Usage, PromptTokens };
+
+    EField NextField() {
+        if (!Depth_) {
+            return EField::Root;
+        }
+        switch (Stack_[Depth_ - 1]) {
+            case EField::Data: return EField::Item;
+            case EField::Embedding: return EField::Coordinate;
+            default: return std::exchange(Key_, EField::Ignore);
+        }
+    }
+
+    bool OnMapKey(const TStringBuf& key) override {
+        Key_ = EField::Ignore;
+        switch (Stack_[Depth_ - 1]) {
+            case EField::Root:
+                if (key == "data") {
+                    Key_ = EField::Data;
+                } else if (key == "usage") {
+                    Key_ = EField::Usage;
+                }
+                break;
+            case EField::Item:
+                if (key == "index") {
+                    Key_ = EField::Index;
+                } else if (key == "embedding") {
+                    Key_ = EField::Embedding;
+                }
+                break;
+            case EField::Usage:
+                if (key == "prompt_tokens") {
+                    Key_ = EField::PromptTokens;
+                }
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    bool Push(EField field) {
+        if (Depth_ == Stack_.size()) {
+            return false;
+        }
+        Stack_[Depth_++] = field;
+        return true;
+    }
+
+    bool OnOpenMap() override {
+        const auto field = NextField();
+        switch (field) {
+            case EField::Item:
+                if (RowCount_ == Embeddings.size()) {
+                    return false;
+                }
+                Index_.reset();
+                CurrentEmbedding_.clear();
+                [[fallthrough]];
+            case EField::Root:
+            case EField::Usage:
+                return Push(field);
+            case EField::Ignore:
+            case EField::PromptTokens:
+                return Push(EField::Ignore);
+            default:
+                return false;
+        }
+    }
+
+    bool OnOpenArray() override {
+        const auto field = NextField();
+        switch (field) {
+            case EField::Data:
+                return !std::exchange(SeenData_, true) && Push(field);
+            case EField::Embedding:
+                if (!CurrentEmbedding_.empty() || RemainingBytes_ < HeaderLen || !Push(field)) {
+                    return false;
+                }
+                RemainingBytes_ -= HeaderLen;
+                Serializer_.emplace(&EmbeddingOutput_);
+                return true;
+            case EField::Ignore:
+            case EField::Usage:
+            case EField::PromptTokens:
+                return Push(EField::Ignore);
+            default:
+                return false;
+        }
+    }
+
+    bool OnCloseMap() override {
+        if (Stack_[--Depth_] != EField::Item) {
+            return true;
+        }
+        if (!Index_ || CurrentEmbedding_.empty() || !Embeddings[*Index_].empty()) {
+            return false;
+        }
+        Embeddings[*Index_] = std::move(CurrentEmbedding_);
+        ++RowCount_;
+        return true;
+    }
+
+    bool OnCloseArray() override {
+        if (Stack_[--Depth_] != EField::Embedding) {
+            return true;
+        }
+        const auto size = CurrentEmbedding_.size();
+        if (!size || (VectorBytes_ && size != VectorBytes_)) {
+            return false;
+        }
+        VectorBytes_ = size;
+        Serializer_->Finish();
+        Serializer_.reset();
+        return true;
+    }
+
+    bool AddCoordinate(double value) {
+        const auto coordinate = static_cast<float>(value);
+        if (!std::isfinite(coordinate) || RemainingBytes_ < sizeof(coordinate)) {
+            return false;
+        }
+        RemainingBytes_ -= sizeof(coordinate);
+        Serializer_->HandleElement(coordinate);
+        return true;
+    }
+
+    bool Integer(double numeric, std::optional<ui64> unsignedValue) {
+        switch (const auto field = NextField()) {
+            case EField::Index:
+                if (Index_ || !unsignedValue || *unsignedValue >= Embeddings.size()) {
+                    return false;
+                }
+                Index_ = *unsignedValue;
+                return true;
+            case EField::Coordinate:
+                return AddCoordinate(numeric);
+            case EField::PromptTokens:
+                PromptTokens = unsignedValue.value_or(0);
+                return true;
+            default:
+                return CanIgnore(field);
+        }
+    }
+
+    static bool CanIgnore(EField field) {
+        return field == EField::Ignore || field == EField::Usage || field == EField::PromptTokens;
+    }
+
+    bool OnInteger(long long value) override {
+        return Integer(value, value >= 0 ? std::optional<ui64>(value) : std::nullopt);
+    }
+
+    bool OnUInteger(unsigned long long value) override {
+        return Integer(value, value);
+    }
+
+    bool OnDouble(double value) override {
+        const auto field = NextField();
+        return field == EField::Coordinate ? AddCoordinate(value) : CanIgnore(field);
+    }
+
+    bool OnNull() override { return CanIgnore(NextField()); }
+    bool OnBoolean(bool) override { return CanIgnore(NextField()); }
+    bool OnString(const TStringBuf&) override { return CanIgnore(NextField()); }
+
+    std::array<EField, 16> Stack_;
+    size_t Depth_ = 0;
+    EField Key_ = EField::Ignore;
+    bool SeenData_ = false;
+    size_t RowCount_ = 0;
+    size_t RemainingBytes_ = MaxEmbeddingBytes;
+    size_t VectorBytes_ = 0;
+    std::optional<size_t> Index_;
+    TString CurrentEmbedding_;
+    TStringOutput EmbeddingOutput_{CurrentEmbedding_};
+    std::optional<NKnnVectorSerialization::TSerializer<float>> Serializer_;
+};
+
+// Each invocation owns its retry budget and rate limiter.
+class TEmbedderClient {
+public:
+    TEmbedderClient(TString model, TStringBuf baseUrl, TString token, TStringBuf secretName, ui32 maxRetries, ui32 tokensPerSecond)
+        : Model_(std::move(model))
+        , SecretName_(secretName)
+        , MaxRetries_(maxRetries)
+        , TokensPerSecond_(tokensPerSecond)
+    {
+        NUri::TUri url;
+        Y_ENSURE(url.ParseAbs(baseUrl, NUri::TFeature::FeaturesDefaultOrSchemeKnown) == NUri::TState::ParsedOK &&
+            (url.GetScheme() == NUri::TScheme::SchemeHTTP || url.GetScheme() == NUri::TScheme::SchemeHTTPS) &&
+            !url.GetHost().empty() && !(url.GetFieldMask() & (NUri::TField::FlagAuth | NUri::TField::FlagQuery | NUri::TField::FlagFrag)),
+            "RemoteEmbedder: BaseUrl must be an HTTP(S) base URL without credentials, query or fragment");
+        Y_ENSURE(!Model_.empty(), "RemoteEmbedder: Model must not be empty");
+        Y_ENSURE(Model_.size() <= MaxBatchBytes, "RemoteEmbedder: Model exceeds the request byte limit");
+        Y_ENSURE(!token.empty() && token.find_first_of("\r\n") == TString::npos,
+            "RemoteEmbedder: invalid authentication secret");
+        Path_ = url.GetField(NUri::TField::FieldPath);
+        while (Path_.EndsWith('/')) {
+            Path_.pop_back();
+        }
+        Path_ += "/embeddings";
+        UseTls_ = url.GetScheme() == NUri::TScheme::SchemeHTTPS;
+        Port_ = url.GetPort();
+        const auto host = url.GetHost();
+        DialHost_ = host.StartsWith('[') && host.EndsWith(']') ? host.SubStr(1, host.size() - 2) : host;
+        NKnn::ValidateRemoteEmbedderDestination(SecretName_, DialHost_, Port_, UseTls_);
+        // Include the port in the proxy DNS cache key even for a default port.
+        Authority_ = TStringBuilder() << host << ':' << Port_;
+        Y_ENSURE(Path_.size() <= NHttp::THttpRequestParser::MaxURLSize
+            && IsSafeHttpRequestPart(Path_) && IsSafeHttpRequestPart(Authority_),
+            "RemoteEmbedder: invalid HTTP request target");
+        Authorization_ = "Bearer " + token;
+    }
+
+    TBatchResult Apply(const TString& text) {
+        Y_ENSURE(text.size() <= MaxBatchBytes, "RemoteEmbedder: Text exceeds the request byte limit");
+        return ApplyRequest(NJson::TJsonValue(text), 1, Max<size_t>(1, text.size()));
+    }
+
+    TBatchResult Apply(const TVector<TString>& texts) {
+        NJson::TJsonValue input(NJson::JSON_ARRAY);
+        ui64 estimatedTokens = 0;
+        for (const auto& text : texts) {
+            input.AppendValue(text);
+            // No model-specific tokenizer is available. Bytes are a conservative
+            // estimate for byte-based tokenizers, including non-ASCII input.
+            estimatedTokens += Max<size_t>(1, text.size());
+        }
+        return ApplyRequest(std::move(input), texts.size(), estimatedTokens);
+    }
+
+private:
+    TBatchResult ApplyRequest(NJson::TJsonValue input, size_t count, ui64 estimatedTokens) {
+        Y_ENSURE(IAsyncUdfWaiter::Current || !SecretName_.StartsWith('/'),
+            "RemoteEmbedder: asynchronous query execution is unavailable");
+        NJson::TJsonValue request(NJson::JSON_MAP);
+        request["model"] = Model_;
+        request["encoding_format"] = "float";
+        request["input"] = std::move(input);
+        const TString body = NJson::WriteJson(request);
+        const auto deadline = TMonotonic::Now() + BatchTimeout;
+        for (ui64 attempt = 0; ; ++attempt) {
+            Y_ENSURE(Throttle(estimatedTokens, deadline), "RemoteEmbedder: rate-limit wait exceeds the batch deadline");
+            NKnn::ValidateRemoteEmbedderDestination(SecretName_, DialHost_, Port_, UseTls_);
+            const auto now = TMonotonic::Now();
+            if (now >= deadline) {
+                return {TransportError, {}};
+            }
+            auto pending = NKnn::PostRemoteEmbedderRequest(
+                Authority_, UseTls_, Path_, Authorization_, body, Min(deadline - now, AttemptTimeout));
+            if (!WaitFor(pending, deadline)) {
+                return {TransportError, {}};
+            }
+            const auto response = pending.ExtractValue();
+            const auto status = response.Status;
+            if (status >= 200 && status < 300) {
+                return ParseResponse(response.Body, count, status, estimatedTokens);
+            }
+            if (response.InvalidResponse || attempt >= MaxRetries_
+                || !(status == TransportError || status == 408 || status == 429 || status >= 500)) {
+                return {status, {}};
+            }
+            const auto delay = TDuration::MilliSeconds(Min<ui64>(10000, 100ULL << Min<ui64>(attempt, 7)));
+            if (!Wait(delay, deadline)) {
+                return {status, {}};
+            }
+        }
+    }
+
+    static bool Wait(TDuration delay, TMonotonic deadline) {
+        const auto now = TMonotonic::Now();
+        return now < deadline && delay < deadline - now
+            && WaitFor(NKnn::WaitBeforeRemoteEmbedderRequest(delay), deadline);
+    }
+
+    bool Throttle(ui64 tokens, TMonotonic deadline) {
+        if (!TokensPerSecond_) {
+            return true;
+        }
+        auto now = TMonotonic::Now();
+        if (NextRequest_ > now) {
+            if (!Wait(NextRequest_ - now, deadline)) {
+                return false;
+            }
+            now = TMonotonic::Now();
+        }
+        NextRequest_ = now + TokenDuration(tokens);
+        return true;
+    }
+
+    TDuration TokenDuration(ui64 tokens) const {
+        const ui64 remainder = tokens % TokensPerSecond_;
+        return TDuration::Seconds(tokens / TokensPerSecond_) +
+            TDuration::MicroSeconds((remainder * 1000000 + TokensPerSecond_ - 1) / TokensPerSecond_);
+    }
+
+    TBatchResult ParseResponse(TStringBuf body, size_t count, ui32 status, ui64 estimatedTokens) {
+        TEmbeddingResponseParser parser(count);
+        NJson::TJsonReaderConfig config;
+        config.UseIterativeParser = true;
+        TMemoryInput input(body.data(), body.size());
+        if (!NJson::ReadJson(&input, &config, &parser) || !parser.Complete()) {
+            return {InvalidResponse, {}};
+        }
+        if (TokensPerSecond_ && parser.PromptTokens > estimatedTokens) {
+            const auto extraTokens = parser.PromptTokens - estimatedTokens;
+            if (extraTokens >= TokensPerSecond_ * BatchTimeout.Seconds()) {
+                return {InvalidResponse, {}};
+            }
+            NextRequest_ += TokenDuration(extraTokens);
+        }
+        return {status, std::move(parser.Embeddings)};
+    }
+
+    TString Model_;
+    TString SecretName_;
+    TString Path_;
+    TString DialHost_;
+    TString Authority_;
+    TString Authorization_;
+    ui16 Port_;
+    bool UseTls_;
+    ui32 MaxRetries_;
+    ui32 TokensPerSecond_;
+    TMonotonic NextRequest_;
+};
+
+TString GetToken(const IValueBuilder* builder, TStringRef name) {
+    TStringRef token;
+    Y_ENSURE(builder->GetSecureParam(name, token), "RemoteEmbedder: authentication secret is not available");
+    return TString(token);
+}
+
+TUnboxedValue MakeResult(const IValueBuilder* builder, const TBatchResult& batch, size_t index, const TUnboxedValue* passThrough = nullptr) {
+    TUnboxedValue* items = nullptr;
+    auto result = builder->NewArray(passThrough ? 3 : 2, items);
+    const TStringBuf embedding = batch.Embeddings.empty() ? TStringBuf() : TStringBuf(batch.Embeddings[index]);
+    items[0] = builder->NewString(embedding);
+    if (passThrough) {
+        items[1] = *passThrough;
+    }
+    items[passThrough ? 2 : 1] = TUnboxedValuePod(batch.Status);
+    return result;
+}
+
+std::optional<size_t> EstimatePassThroughBytes(const ITypeInfoHelper& helper, const TType* type,
+    const TUnboxedValuePod& value, size_t limit)
+{
+    size_t size = sizeof(TUnboxedValue);
+    if (value.IsString()) {
+        return size + value.AsStringRef().Size();
+    }
+    if (!value.IsBoxed() || size > limit) {
+        return size;
+    }
+    if (const TOptionalTypeInspector optional(helper, type); optional) {
+        return EstimatePassThroughBytes(helper, optional.GetItemType(), value.GetOptionalValue(), limit);
+    }
+    if (const TTaggedTypeInspector tagged(helper, type); tagged) {
+        return EstimatePassThroughBytes(helper, tagged.GetBaseType(), value, limit);
+    }
+
+    const TStructTypeInspector structure(helper, type);
+    const TTupleTypeInspector tuple(helper, type);
+    const TListTypeInspector list(helper, type);
+    const auto* elements = list ? value.GetElements() : nullptr;
+    size_t count = 0;
+    if (structure) {
+        count = structure.GetMembersCount();
+    } else if (tuple) {
+        count = tuple.GetElementsCount();
+    } else if (elements && value.HasFastListLength()) {
+        count = value.GetListLength();
+    } else {
+        // Traversing other values can consume a lazy input or evaluate user code.
+        return std::nullopt;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        const auto* itemType = structure ? structure.GetMemberType(i) : tuple ? tuple.GetElementType(i) : list.GetItemType();
+        const auto item = elements ? elements[i] : value.GetElement(i);
+        const auto bytes = EstimatePassThroughBytes(helper, itemType, item, limit - size);
+        if (!bytes) {
+            return std::nullopt;
+        }
+        size += *bytes;
+        if (size > limit) {
+            break;
+        }
+    }
+    return size;
+}
+
+class TEmbedderStream: public TBoxedValue {
+public:
+    TEmbedderStream(const IValueBuilder* builder, const TUnboxedValuePod* args, ui32 textIndex, ui32 passThroughIndex,
+        TSourcePosition pos, ITypeInfoHelper::TPtr typeHelper, const TType* passThroughType)
+        : Builder_(builder)
+        , Input_(args[0])
+        , Client_(TString(args[1].AsStringRef()), args[2].AsStringRef(), GetToken(builder, args[3].AsStringRef()), args[3].AsStringRef(),
+              args[6] ? args[6].Get<ui32>() : DefaultMaxRetries, args[5] ? args[5].Get<ui32>() : 0)
+        , BatchSize_(args[4] ? args[4].Get<ui32>() : DefaultBatchSize)
+        , TextIndex_(textIndex)
+        , PassThroughIndex_(passThroughIndex)
+        , Pos_(pos)
+        , TypeHelper_(std::move(typeHelper))
+        , PassThroughType_(passThroughType)
+    {
+        Y_ENSURE(BatchSize_ > 0, "RemoteEmbedder: BatchSize must be positive");
+    }
+
+private:
+    EFetchStatus Fetch(TUnboxedValue& result) override try {
+        if (BatchReady_ && OutputIndex_ < PassThrough_.size()) {
+            result = MakeResult(Builder_, Batch_, OutputIndex_, &PassThrough_[OutputIndex_]);
+            PassThrough_[OutputIndex_++].Clear();
+            return EFetchStatus::Ok;
+        }
+        if (OutputIndex_) {
+            PassThrough_.clear();
+            Texts_.clear();
+            BatchBytes_ = 0;
+            Batch_ = {};
+            BatchReady_ = false;
+            OutputIndex_ = 0;
+        }
+        while (!Finished_ && Texts_.size() < Min<size_t>(BatchSize_, MaxBatchRows)) {
+            if (!PendingRow_) {
+                TUnboxedValue row;
+                switch (Input_.Fetch(row)) {
+                    case EFetchStatus::Yield:
+                        return EFetchStatus::Yield;
+                    case EFetchStatus::Finish:
+                        Finished_ = true;
+                        break;
+                    case EFetchStatus::Ok:
+                        PendingRow_ = std::move(row);
+                        break;
+                }
+            }
+            if (Finished_) {
+                break;
+            }
+            const auto text = PendingRow_.GetElement(TextIndex_);
+            const auto textRef = text.AsStringRef();
+            auto passThrough = PendingRow_.GetElement(PassThroughIndex_);
+            const auto passThroughBytes = EstimatePassThroughBytes(*TypeHelper_, PassThroughType_, passThrough, MaxBatchBytes);
+            const size_t rowBytes = size_t(textRef.Size()) + sizeof(TString) + passThroughBytes.value_or(sizeof(TUnboxedValue));
+            Y_ENSURE(rowBytes <= MaxBatchBytes, "RemoteEmbedder: stream row exceeds the batch byte limit");
+            if (rowBytes > MaxBatchBytes - BatchBytes_ || (!passThroughBytes && !Texts_.empty())) {
+                break;
+            }
+            BatchBytes_ += rowBytes;
+            Texts_.emplace_back(textRef);
+            PassThrough_.push_back(std::move(passThrough));
+            PendingRow_.Clear();
+            // Hold at most one pass-through value whose storage cannot be estimated.
+            if (!passThroughBytes) {
+                break;
+            }
+        }
+        if (Texts_.empty()) {
+            return EFetchStatus::Finish;
+        }
+        Batch_ = Client_.Apply(Texts_);
+        BatchReady_ = true;
+        return Fetch(result);
+    } catch (const std::exception& e) {
+        UdfTerminate((TStringBuilder() << Builder_->WithCalleePosition(Pos_) << " " << e.what()).c_str());
+    }
+
+    const IValueBuilder* Builder_;
+    TUnboxedValue Input_;
+    TEmbedderClient Client_;
+    ui32 BatchSize_;
+    ui32 TextIndex_;
+    ui32 PassThroughIndex_;
+    TSourcePosition Pos_;
+    ITypeInfoHelper::TPtr TypeHelper_;
+    const TType* PassThroughType_;
+    TVector<TString> Texts_;
+    TVector<TUnboxedValue> PassThrough_;
+    TUnboxedValue PendingRow_;
+    size_t BatchBytes_ = 0;
+    TBatchResult Batch_;
+    size_t OutputIndex_ = 0;
+    bool BatchReady_ = false;
+    bool Finished_ = false;
+};
+
+class TApplyRemoteEmbedder: public TBoxedValue {
+public:
+    TApplyRemoteEmbedder(TSourcePosition pos, bool stream, ui32 textIndex, ui32 passThroughIndex,
+        ITypeInfoHelper::TPtr typeHelper, const TType* passThroughType)
+        : Pos_(pos)
+        , Stream_(stream)
+        , TextIndex_(textIndex)
+        , PassThroughIndex_(passThroughIndex)
+        , TypeHelper_(std::move(typeHelper))
+        , PassThroughType_(passThroughType)
+    {
+    }
+
+private:
+    TUnboxedValue Run(const IValueBuilder* builder, const TUnboxedValuePod* args) const override try {
+        if (Stream_) {
+            return TUnboxedValuePod(new TEmbedderStream(builder, args, TextIndex_, PassThroughIndex_, Pos_, TypeHelper_, PassThroughType_));
+        }
+        TEmbedderClient client(TString(args[1].AsStringRef()), args[2].AsStringRef(), GetToken(builder, args[3].AsStringRef()), args[3].AsStringRef(),
+            args[4] ? args[4].Get<ui32>() : DefaultMaxRetries, 0);
+        return MakeResult(builder, client.Apply(TString(args[0].AsStringRef())), 0);
+    } catch (const std::exception& e) {
+        UdfTerminate((TStringBuilder() << builder->WithCalleePosition(Pos_) << " " << e.what()).c_str());
+    }
+
+    TSourcePosition Pos_;
+    bool Stream_;
+    ui32 TextIndex_;
+    ui32 PassThroughIndex_;
+    ITypeInfoHelper::TPtr TypeHelper_;
+    const TType* PassThroughType_;
+};
+
+void BuildRemoteEmbedderSignature(TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) try {
+    const auto helper = builder.TypeInfoHelper();
+    const TTupleTypeInspector user(*helper, userType);
+    const TTupleTypeInspector positional(*helper, user && user.GetElementsCount() ? user.GetElementType(0) : nullptr);
+    const auto* firstArg = positional && positional.GetElementsCount() ? positional.GetElementType(0) : nullptr;
+    if (!firstArg && user && user.GetElementsCount() > 1) {
+        const TStructTypeInspector named(*helper, user.GetElementType(1));
+        if (named) {
+            for (ui32 i = 0; i < named.GetMembersCount(); ++i) {
+                if (AsciiEqualsIgnoreCase(TStringBuf(named.GetMemberName(i)), "InputStream")) {
+                    firstArg = named.GetMemberType(i);
+                    break;
+                }
+            }
+        }
+    }
+    const TStreamTypeInspector input(*helper, firstArg);
+    const TListTypeInspector listHint(*helper, firstArg);
+    const bool stream = input || listHint;
+    const TType* inputType = nullptr;
+    const TType* passThroughType = nullptr;
+    ui32 textIndex = 0;
+    ui32 passThroughIndex = 0;
+    if (stream) {
+        // PROCESS supplies a List hint for TableRows(), then SqlProcess
+        // adapts its input to the Stream argument declared below.
+        const auto rowType = input ? input.GetItemType() : listHint.GetItemType();
+        const TStructTypeInspector row(*helper, rowType);
+        if (!row || row.GetMembersCount() != 2 ||
+            (textIndex = row.GetMemberIndex("Text")) == Max<ui32>() ||
+            (passThroughIndex = row.GetMemberIndex("PassThrough")) == Max<ui32>() ||
+            TDataTypeInspector(*helper, row.GetMemberType(textIndex)).GetTypeId() != TDataType<char*>::Id) {
+            builder.SetError("RemoteEmbedder: expected Stream<Struct<Text:String,PassThrough:T>>");
+            return;
+        }
+        inputType = builder.Stream()->Item(rowType).Build();
+        passThroughType = row.GetMemberType(passThroughIndex);
+    }
+    builder.UserType(userType);
+    auto result = builder.Struct(stream ? 3 : 2);
+    result->AddField<char*>("Embedding", nullptr);
+    if (stream) {
+        result->AddField("PassThrough", passThroughType, nullptr);
+    }
+    result->AddField<ui32>("Status", nullptr);
+    const auto resultType = result->Build();
+    builder.Returns(stream ? builder.Stream()->Item(resultType).Build() : resultType).OptionalArgs(stream ? 3 : 1);
+    auto args = builder.Args(stream ? 7 : 5);
+    if (stream) {
+        args->Add(inputType).Name("InputStream");
+    } else {
+        args->Add<char*>().Name("Text");
+    }
+    args->Add<char*>().Name("Model");
+    args->Add<char*>().Name("BaseUrl");
+    args->Add<char*>().Name("AuthSecretName");
+    if (stream) {
+        args->Add<TOptional<ui32>>().Name("BatchSize");
+        args->Add<TOptional<ui32>>().Name("MaxTokensPerSecond");
+    }
+    args->Add<TOptional<ui32>>().Name("MaxRetries");
+    args->Done();
+    if (!typesOnly) {
+        builder.Implementation(new TApplyRemoteEmbedder(builder.GetSourcePosition(), stream, textIndex, passThroughIndex, helper, passThroughType));
+    }
+} catch (const std::exception& e) {
+    builder.SetError(TStringBuf(e.what()));
+}
+
+} // namespace
+
+namespace NKnn {
+
+bool TRemoteEmbedder::DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+    if (name != Name()) {
+        return false;
+    }
+    BuildRemoteEmbedderSignature(userType, builder, typesOnly);
+    return true;
+}
+
+} // namespace NKnn

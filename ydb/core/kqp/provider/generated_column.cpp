@@ -1,14 +1,10 @@
 #include "generated_column.h"
 
+#include <ydb/core/kqp/sql/translator.h>
+
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
-#include <yql/essentials/sql/v1/lexer/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
-#include <yql/essentials/sql/v1/translation/sql.h>
 
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
@@ -29,15 +25,9 @@ TExprNode::TPtr CompileText(const TString& sqlText, TExprContext& ctx, NKikimr::
     auto translationSettings = settingsBuilder.Build(ctx);
     translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
 
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(settingsBuilder.GetIsAmbiguityError());
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-
-    NSQLTranslation::TTranslators translators(nullptr, NSQLTranslationV1::MakeTranslator(lexers, parsers), nullptr);
+    NSQLTranslation::TTranslators translators(nullptr,
+        NKikimr::NKqp::MakeKqpSqlV1Translator(settingsBuilder.GetIsAmbiguityError(), /*enableRemoteEmbedderAlias=*/false),
+        nullptr);
 
     auto queryAst = NSQLTranslation::SqlToYql(translators, sqlText, translationSettings);
     ctx.IssueManager.AddIssues(queryAst.Issues);
@@ -199,6 +189,9 @@ TGeneratedFindings CollectFindings(const TExprNode::TPtr& root) {
             findings.HasWindow = true;
         } else if (TCoParameter::Match(node.Get())) {
             findings.HasParameter = true;
+        } else if (node->IsCallable({"SqlCall", "Udf"}) && node->ChildrenSize()
+            && node->Head().IsAtom() && node->Head().Content() == "Knn.ApplyRemoteEmbedder") {
+            findings.NonRowCallable = "Knn::ApplyRemoteEmbedder";
         } else if (IsNonRowNode(*node)) {
             if (findings.NonRowCallable.empty()) {
                 findings.NonRowCallable = name;

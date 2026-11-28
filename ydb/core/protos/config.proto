@@ -1415,6 +1415,8 @@ message TQueryServiceConfig {
     reserved 24;
     optional TStreamingQueriesConfig StreamingQueries = 25;
     reserved 26;
+    // Absolute database secret path to approved HTTPS origin for ApplyRemoteEmbedder.
+    map<string, string> RemoteEmbedderSecretOrigins = 27;
 }
 
 // Config describes immediate controls and allows

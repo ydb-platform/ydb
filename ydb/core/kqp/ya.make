@@ -74,6 +74,7 @@ RECURSE(
     runtime
     script_executions
     session_actor
+    sql
     tests
 )
 

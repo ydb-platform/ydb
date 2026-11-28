@@ -58,9 +58,16 @@ We use the following symbols as abbreviations:
 1. ✅ **Allow administrators to stop another user’s query**.
 1. ✅ ㉖ **TRUNCATE TABLE**
 1. ✅ ㉖ **`SET NOT NULL` for existing table columns**
+1. ✅ ㉖ **`DISCARD SELECT`**: execute a statement without returning its result to the client (26.2)
+1. ✅ ㉖ **Compilation cache warmup**: a restarted or newly added database node precompiles the most frequently used queries taken from other nodes' caches before it starts serving clients (enabled by default in 26.4)
+1. ✅ ㉕ **Graceful node shutdown**: in-flight queries are not lost when a node is stopped, and SDKs are notified in advance to stop using its sessions (shutdown state by default in 26.1, SDK hints in 26.4)
+1. ✅ ㉔ **Query tracing**: detailed query processor spans (compilation, plan stages, tasks, shard reads) with configurable detail levels, `trace_id` in query system views (26.4)
+1. 🚧 ㉖ **Hourly query metrics**: `.sys/query_metrics_one_hour` system view (in 26.4 behind `CollectHourMetric`, enabled by default in main)
+1. 🚧 ㉖ **Progress of running queries** in `.sys/query_sessions`: duration, CPU time, compute memory, read ingress rate (behind `EnableKqpRuntimeStats`, off by default)
 1. ㉗ **SnapshotRW isolation level** (stronger than read-committed; snapshot reads and writes use a consistent snapshot)
 1. ㉗ **CHECKSUM TABLE** (verify data integrity)
 1. ㉗ **Functional (expression-based) secondary indexes** for row tables
+1. 🚧 ㉗ **Query plan cache v2**: eviction resistant to one-off queries, reuse of pre-CBO snapshots to re-plan without a full recompilation
 
 ## Database Core (Tablets, etc)
 1. ✅ ㉔ **Exact Nearest Neighbor Vector Search**
@@ -118,7 +125,6 @@ storage
 1. ㉗ **BigString support in DataShard** and large BLOB/CLOB/UTF8 (>8MB)
 
 ### Hardcore or system wide
-1. ✅ ㉔ **Tracing** capabilities (basic request tracing released in 24.3; user-facing KQP spans are a separate code-ready increment)
 1. ㉔ Automatically **balance tablet channels** via BlobStorage groups
 1. ✅ ㉓ **Datashard iterator reads via MVCC**
 1. 🚧 ㉓ **Avoid Node Broker as SPF** (72-hour Data Plane operation without NodeBroker is confirmed; the broader emergency-mode project and the NBS-specific guarantee are not established as complete)

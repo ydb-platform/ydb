@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package NKikimr.NYamlConfig.NTesting;
+
+message TReservedFieldsTestConfig {
+    uint64 KeptField = 1;
+
+    reserved 2, 3;
+    reserved "RemovedField", "AnotherRemovedField";
+}

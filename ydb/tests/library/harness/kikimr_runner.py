@@ -371,14 +371,15 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         finally:
             logger.info("Stopped node %s", self)
 
-    def kill(self):
+    def force_stop(self):
         self.__prepare_to_shutdown()
+        super(KiKiMRNode, self).kill()
+        logger.info("Force-stopped node %s", self)
 
-        try:
-            super(KiKiMRNode, self).kill()
-            self.start()
-        finally:
-            logger.info("Killed node %s", self)
+    def kill(self):
+        """Simulate a node crash followed by a restart."""
+        self.force_stop()
+        self.start()
 
     def send_signal(self, signal):
         self.daemon.process.send_signal(signal)
@@ -819,7 +820,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         ret = None
         try:
             if kill:
-                node.kill()
+                node.force_stop()
             else:
                 node.stop()
         except daemon.DaemonError as exceptions:

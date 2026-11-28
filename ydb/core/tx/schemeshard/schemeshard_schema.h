@@ -1224,6 +1224,12 @@ struct Schema : NIceDb::Schema {
         // rows) = false = does not deepen.
         struct LoadSplitLineage : Column<18, NScheme::NTypeIds::Bool> {};
 
+        struct HnswWaitRequired : Column<19, NScheme::NTypeIds::Bool> {};
+        struct HnswSchemaVersion : Column<20, NScheme::NTypeIds::Uint64> {};
+        struct HnswWaitStartedAt : Column<21, NScheme::NTypeIds::Uint64> {};
+        struct HnswProbeRound : Column<22, NScheme::NTypeIds::Uint64> {};
+        struct HnswReplicaSettingsRequested : Column<23, NScheme::NTypeIds::Bool> {};
+
         using TKey = TableKey<TxId, TxPartId>;
         using TColumns = TableColumns<
             TxId,
@@ -1243,7 +1249,12 @@ struct Schema : NIceDb::Schema {
             PlanStep,
             NeedUpdateObject,
             NeedSyncHive,
-            LoadSplitLineage
+            LoadSplitLineage,
+            HnswWaitRequired,
+            HnswSchemaVersion,
+            HnswWaitStartedAt,
+            HnswProbeRound,
+            HnswReplicaSettingsRequested
         >;
     };
 
@@ -1513,6 +1524,8 @@ struct Schema : NIceDb::Schema {
         struct ParentBuildId : Column<58, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct IsRebuild : Column<59, NScheme::NTypeIds::Bool> {};
         struct RebuildIndexName : Column<60, NScheme::NTypeIds::Utf8> {};
+        struct HnswWaitStartedAt : Column<61, NScheme::NTypeIds::Uint64> {};
+        struct HnswProbeRound : Column<63, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1575,7 +1588,9 @@ struct Schema : NIceDb::Schema {
             RowIdUniqueBuildId,
             ParentBuildId,
             IsRebuild,
-            RebuildIndexName
+            RebuildIndexName,
+            HnswWaitStartedAt,
+            HnswProbeRound
         >;
     };
 
@@ -2757,8 +2772,17 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, State>;
     };
 
+    struct HnswReplicaFailures : Table<142> {
+        struct TxId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Error : Column<2, NScheme::NTypeIds::String> {};
+        struct ExpiresAt : Column<3, NScheme::NTypeIds::Uint64> {};
+        using TKey = TableKey<TxId>;
+        using TColumns = TableColumns<TxId, Error, ExpiresAt>;
+    };
+
     using TTables = SchemaTables<
         DatabaseFreezes,
+        HnswReplicaFailures,
         Paths,
         TxInFlight,
         TxDependencies,

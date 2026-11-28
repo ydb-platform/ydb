@@ -10,36 +10,9 @@ namespace NKikimr::NDataShard {
     using namespace NActors;
 
     namespace {
-        TThreadPool& HnswDeletePool() {
-            static TThreadPool pool(TThreadPoolParams().SetThreadName("HnswDelete"));
-            static const bool started = [&] { pool.Start(1); return true; }();
-            Y_UNUSED(started);
-            return pool;
-        }
-
-        std::shared_ptr<THnswIndex> OwnHnswGraph(std::unique_ptr<THnswIndex> index,
-                                               std::shared_ptr<void> reservation) {
-            struct TOwnedGraph {
-                std::shared_ptr<void> Reservation;
-                std::unique_ptr<THnswIndex> Index;
-            };
-            auto* graph = new TOwnedGraph{std::move(reservation), std::move(index)};
-            std::shared_ptr<TOwnedGraph> owner(graph, [](TOwnedGraph* retired) noexcept {
-                try {
-                    // The queued memory remains charged until destruction finishes.
-                    if (HnswDeletePool().AddFunc([retired] { delete retired; })) { return; }
-                } catch (...) {
-                    // Allocation failure or shutdown must still release the graph.
-                }
-                delete retired;
-            });
-            return std::shared_ptr<THnswIndex>(std::move(owner), graph->Index.get());
-        }
-
         // One bounded CPU pool per process (and therefore at most two builders
         // per node). Scans, compactions and tablet mailboxes never run CreateIndex.
         TThreadPool& HnswBuildPool() {
-            HnswDeletePool();
             static TThreadPool pool(TThreadPoolParams().SetThreadName("HnswBuild"));
             static const bool started = [&] { pool.Start(2, 16); return true; }();
             Y_UNUSED(started);
@@ -103,7 +76,10 @@ namespace NKikimr::NDataShard {
                     if (index && !cancelled->load(std::memory_order_relaxed)) {
                         if (reduce) { reduce(index->EstimatedMemoryBytes()); }
                         result.MemoryReservation = reservation;
-                        result.Index = OwnHnswGraph(std::move(index), std::move(reservation));
+                        if (reservation) {
+                            index->SetGraphReservation(reservation, {}, /*deferDeletion=*/true);
+                        }
+                        result.Index = std::move(index);
                     }
                 } catch (const std::exception& error) {
                     result.Error = error.what();
@@ -267,7 +243,7 @@ namespace NKikimr::NDataShard {
                 DeferHnswIndexBuild(result->LocalTid, TDuration::Zero(), result->IndexId);
                 ScheduleHnswRebuild(result->LocalTid, result->IndexId);
             } else {
-                DisableHnswIndexBuild(result->LocalTid, result->IndexId);
+                DisableHnswIndexBuild(result->LocalTid, result->IndexId, /* belowMinRows */ true);
             }
             return;
         }

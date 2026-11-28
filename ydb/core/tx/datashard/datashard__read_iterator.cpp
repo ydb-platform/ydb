@@ -45,12 +45,20 @@ bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state, TPathI
     const auto& table = shard.GetUserTables().at(state.PathId.LocalPathId);
     const auto& record = state.Request->Record;
     const auto* index = table->HnswIndexes.FindPtr(indexId);
-    if (!index || !record.HasVectorTopK()
+    if (!index || index->Settings.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+            || !record.HasVectorTopK()
             || record.GetVectorTopK().GetColumn() >= record.ColumnsSize()
             || index->VectorColumnTag != record.GetColumns(record.GetVectorTopK().GetColumn())) {
         return false;
     }
-    return !shard.IsFollower() && !state.ReadVersion.IsMax();
+    if (state.ReadVersion.IsMax()) {
+        return false;
+    }
+    if (!shard.IsFollower()) {
+        return true;
+    }
+    const auto [edge, repeatable] = shard.GetSnapshotManager().GetFollowerReadEdge();
+    return repeatable && state.ReadVersion <= edge;
 }
 
 } // namespace
@@ -2964,6 +2972,9 @@ public:
             topState->Target = topK.GetTargetVector();
 
             if (AppData()->FeatureFlags.GetEnableHnswIndex() && TableInfo.HnswTable) {
+                if (Self->IsFollower()) {
+                    Self->ScheduleHnswFollowerSync();
+                }
                 const ui32 localTid = TableInfo.LocalTid;
                 const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
                 auto requested = topK.GetSettings();
@@ -2999,6 +3010,9 @@ public:
                         TStringBuilder() << "HNSWEfSearch must be in 1.." << NKMeans::MaxHnswEfSearch);
                     return;
                 }
+                if (selected && Self->IsFollower()) {
+                    Self->PrepareFollowerHnswIndex(localTid, txc.DB, state.ReadVersion, selected);
+                }
                 topState->HnswIndexId = selected;
                 const bool canUseHnsw = selected && CanUseHnsw(*Self, state, selected);
                 if (selected && !canUseHnsw) {
@@ -3012,7 +3026,7 @@ public:
                     }
                     Self->RegisterHnswCacheLookup(localTid, bool(topState->HnswIndex), selected);
                 }
-                if (canUseHnsw && !topState->HnswIndex) {
+                if (!Self->IsFollower() && canUseHnsw && !topState->HnswIndex) {
                     Self->RequestHnswIndexBuild(localTid, vectorColumnTag, hnswSettings, selected);
                 }
             }

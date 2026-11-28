@@ -405,6 +405,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     ParentDomainLink.SendSync(ctx);
 
     ScheduleConditionalEraseRun(ctx);
+    ScheduleHnswReplicaFailureCleanup(ctx);
     ScheduleServerlessStorageBilling(ctx);
 
     Y_ABORT_UNLESS(CleanDroppedPathsDisabled);
@@ -3118,6 +3119,17 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
                 NIceDb::TUpdate<Schema::TxInFlightV2::NeedSyncHive>(txState.NeedSyncHive),
                 NIceDb::TUpdate<Schema::TxInFlightV2::LoadSplitLineage>(txState.LoadSplitLineage)
                 );
+    if (txState.HnswReplicaSettingsRequested) {
+        db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(
+            NIceDb::TUpdate<Schema::TxInFlightV2::HnswReplicaSettingsRequested>(true));
+    }
+    if (txState.HnswWaitRequired) {
+        db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(
+            NIceDb::TUpdate<Schema::TxInFlightV2::HnswWaitRequired>(true),
+            NIceDb::TUpdate<Schema::TxInFlightV2::HnswSchemaVersion>(txState.HnswSchemaVersion),
+            NIceDb::TUpdate<Schema::TxInFlightV2::HnswWaitStartedAt>(txState.HnswWaitStartedAt.MicroSeconds()),
+            NIceDb::TUpdate<Schema::TxInFlightV2::HnswProbeRound>(txState.HnswProbeRound));
+    }
 
     for (const auto& shardOp : txState.Shards) {
         PersistUpdateTxShard(db, opId, shardOp.Idx, shardOp.Operation);
@@ -5995,6 +6007,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
     MaxBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxBuildIndexShardsInFlight();
     MaxStoredIndexBuilds = appData->SchemeShardConfig.GetMaxStoredIndexBuilds();
+    HnswIndexBuildWaitTimeout = TDuration::Seconds(appData->SchemeShardConfig.GetHnswIndexBuildWaitTimeoutSeconds());
     ConfigureCondErase(appData->SchemeShardConfig, ctx);
 
     SendStatsIntervalSecondsDedicated = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsDedicated();
@@ -6164,6 +6177,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvHive::TEvUpdateDomainReply, Handle);
 
         HFuncTraced(TEvDataShard::TEvProposeTransactionResult, Handle);
+        HFuncTraced(TEvPrivate::TEvHnswReplicaStatus, Handle);
+        HFuncTraced(TEvPrivate::TEvCleanupHnswReplicaFailures, Handle);
         HFuncTraced(TEvDataShard::TEvSchemaChanged, Handle);
         HFuncTraced(TEvDataShard::TEvStateChanged, Handle);
         HFuncTraced(TEvDataShard::TEvInitSplitMergeDestinationAck, Handle);
@@ -6297,6 +6312,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvIndexBuilder::TEvForgetRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvListRequest, Handle);
         HFuncTraced(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
+        HFuncTraced(TEvPrivate::TEvProgressHnswIndexBuild, Handle);
         HFuncTraced(TEvPrivate::TEvIndexBuildingMakeABill, Handle);
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
@@ -9080,6 +9096,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
         MaxBuildIndexShardsInFlight = schemeShardConfig.GetMaxBuildIndexShardsInFlight();
         MaxStoredIndexBuilds = schemeShardConfig.GetMaxStoredIndexBuilds();
+        HnswIndexBuildWaitTimeout = TDuration::Seconds(schemeShardConfig.GetHnswIndexBuildWaitTimeoutSeconds());
         ConfigureCondErase(schemeShardConfig, ctx);
     }
 

@@ -2,6 +2,7 @@
 #include "hnsw_index_build_actor.h"
 #include <ydb/core/tx/datashard/build_index/kmeans_helper.h>
 
+#include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 
 namespace NKikimr::NDataShard {
@@ -399,9 +400,6 @@ namespace NKikimr::NDataShard {
                                                          const Ydb::Table::VectorIndexSettings& settings, bool useCachedHnswParameters,
                                                          TRowVersion readVersion, TPathId indexId) const {
         indexId = ResolveHnswIndexId(localTid, indexId);
-        if (IsFollower()) {
-            return {};
-        }
         const auto* it = FindHnswIndexEntry(localTid, indexId);
         if (!it) {
             return {};
@@ -440,6 +438,7 @@ namespace NKikimr::NDataShard {
             return;
         }
         if (changedThreshold) {
+            entry->BelowMinRows = false;
             entry->NextScanAttemptAt = TInstant::Zero();
         }
         entry->VectorColumnTag = vectorColumnTag;
@@ -517,6 +516,7 @@ namespace NKikimr::NDataShard {
         }
         HnswBuildQueue.erase(HnswBuildQueue.begin());
         entry.Rebuilds += bool(entry.Index);
+        entry.BelowMinRows = false;
         entry.Building = true;
         entry.BuildVersion = baseVersion;
         entry.BuildReadPin = entry.Changes->PinReadVersion(baseVersion);
@@ -524,7 +524,6 @@ namespace NKikimr::NDataShard {
         entry.BuildToken = ++NextHnswBuildToken;
         entry.CancelBuild = std::make_shared<std::atomic<bool>>(false);
         entry.EvictedMemoryBytes = 0;
-        HnswRetiringMemoryOwners.erase(entry.MemoryOwner);
         HnswBuildsInFlight.insert(entry.BuildToken);
         return true;
     }
@@ -575,12 +574,33 @@ namespace NKikimr::NDataShard {
         if (table == HnswIndexCache.end()) {
             return;
         }
+        std::optional<bool> replicasChanged;
+        const auto hasReplicaChange = [&] {
+            if (!replicasChanged) {
+                NKikimrSchemeOp::TTableDescription oldDescription, newDescription;
+                before.GetSchema(oldDescription);
+                after.GetSchema(newDescription);
+                const auto& oldConfig = oldDescription.GetPartitionConfig();
+                const auto& newConfig = newDescription.GetPartitionConfig();
+                const auto& oldGroups = oldConfig.GetFollowerGroups();
+                const auto& newGroups = newConfig.GetFollowerGroups();
+                replicasChanged = oldConfig.GetFollowerCount() != newConfig.GetFollowerCount()
+                    || oldConfig.GetCrossDataCenterFollowerCount() != newConfig.GetCrossDataCenterFollowerCount()
+                    || oldConfig.GetAllowFollowerPromotion() != newConfig.GetAllowFollowerPromotion()
+                    || !std::equal(oldGroups.begin(), oldGroups.end(), newGroups.begin(), newGroups.end(),
+                        [](const auto& lhs, const auto& rhs) {
+                            return lhs.SerializeAsString() == rhs.SerializeAsString();
+                        });
+            }
+            return *replicasChanged;
+        };
         for (auto it = table->second.begin(); it != table->second.end();) {
             const auto* oldIndex = before.HnswIndexes.FindPtr(it->first);
             const auto* newIndex = after.HnswIndexes.FindPtr(it->first);
             bool unchanged = oldIndex && newIndex
                 && oldIndex->VectorColumnTag == newIndex->VectorColumnTag
-                && oldIndex->SchemaVersion == newIndex->SchemaVersion
+                && (oldIndex->SchemaVersion == newIndex->SchemaVersion
+                    || (it->second.Index && !it->second.Building && hasReplicaChange()))
                 && AreHnswIndexSettingsCompatible(oldIndex->Settings, newIndex->Settings)
                 && GetHnswMinRows(oldIndex->Settings) == GetHnswMinRows(newIndex->Settings)
                 && GetHnswDeltaRows(oldIndex->Settings) == GetHnswDeltaRows(newIndex->Settings);
@@ -592,6 +612,9 @@ namespace NKikimr::NDataShard {
                     && oldColumn->NotNull == newColumn->NotNull;
             }
             if (unchanged) {
+                // The replica ALTER advances the index schema version. The
+                // compatible graph still stores the same keys and embeddings.
+                it->second.IndexSchemaVersion = newIndex->SchemaVersion;
                 ++it;
             } else {
                 InvalidateHnswIndex(before.LocalTid, it->first);
@@ -601,7 +624,6 @@ namespace NKikimr::NDataShard {
     }
 
     void TDataShard::InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry) {
-        HnswRetiringMemoryOwners.insert(entry.MemoryOwner);
         if (entry.CancelBuild) {
             entry.CancelBuild->store(true, std::memory_order_relaxed);
         }
@@ -614,11 +636,17 @@ namespace NKikimr::NDataShard {
             Send(entry.BuildActor, new TEvents::TEvPoison()); entry.BuildActor = {};
         }
         entry.Building = false;
+        entry.BelowMinRows = false;
         entry.BuildReadPin.reset();
         entry.SnapshotReadPins.clear();
         entry.OpenTransactionsTracked = false;
         if (HnswCacheMemoryTracker) {
+            HnswCacheMemoryTracker->Retire(entry.MemoryOwner);
             HnswCacheMemoryTracker->ResetDemand(entry.MemoryOwner);
+        }
+        entry.MemoryOwner = THnswCacheMemoryTracker::AllocateOwner();
+        if (!entry.GraphKey.empty()) {
+            Send(MakeHnswCacheId(), new TEvHnswCache::TEvForget(std::exchange(entry.GraphKey, TString{})));
         }
         // Readers may still own a graph. They must stop using it if its journal
         // no longer receives every write (including eviction on memory pressure).
@@ -631,48 +659,49 @@ namespace NKikimr::NDataShard {
         entry.Pending.clear();
         entry.PendingReservations.clear();
         entry.UntrackedTransactions.clear();
+        entry.FollowerBootstrapChanges = {};
+        entry.FollowerDesiredBase = TRowVersion::Min();
+        entry.FollowerJournalTracking = false;
+        entry.FollowerNotRequired = false;
+        entry.FollowerGraph.reset();
+        entry.FollowerJournal.reset();
+        if (entry.FollowerSnapshot.HasRequestId() && TlsActivationContext) {
+            for (const auto* key : {&entry.FollowerSnapshot.GetGraphKey(), &entry.FollowerSnapshot.GetJournalKey()}) {
+                if (!key->empty()) {
+                    Send(MakeHnswCacheId(), new TEvHnswCache::TEvCancelAcquire(*key, entry.BuildToken));
+                }
+            }
+        }
+        entry.FollowerSnapshot.Clear();
+        entry.FollowerChangeCounter.reset();
+        entry.FollowerReadVersion = TRowVersion::Min();
+        entry.FollowerLeaderGeneration = 0;
+        if (entry.FollowerPipe) {
+            NTabletPipe::CloseAndForgetClient(SelfId(), entry.FollowerPipe);
+        }
+        if (Executor() && TlsActivationContext && IsFollower() && !IsStopping()) {
+            ScheduleHnswFollowerSync();
+        }
         entry.RowCountAtBuild = 0;
         entry.EvictedMemoryBytes = 0;
         entry.NextScanAttemptAt = TInstant::Zero();
     }
 
     void TDataShard::InvalidateHnswIndexes() {
-        if (HnswCacheMemoryTracker) {
-            HnswCacheMemoryTracker->ResetAllDemand();
-        }
         HnswBuildQueue.clear();
         ForEachHnswIndexEntry([&](ui32, const TPathId&, auto& entry) { InvalidateHnswIndexEntry(entry); });
     }
 
-    void TDataShard::EvictHnswIndexesToLimit(ui64 limit) {
-        const auto usage = HnswCacheMemoryTracker->GetUsageByOwner();
-        for (auto it = HnswRetiringMemoryOwners.begin(); it != HnswRetiringMemoryOwners.end();) {
-            const auto* bytes = usage.FindPtr(*it);
-            if (!bytes || !*bytes) {
-                HnswRetiringMemoryOwners.erase(it++);
-            } else {
-                ++it;
-            }
-        }
-        ui64 projectedUsed = 0;
-        for (const auto& [owner, bytes] : usage) {
-            if (!HnswRetiringMemoryOwners.contains(owner)) {
-                projectedUsed += bytes;
-            }
-        }
+    void TDataShard::EvictHnswIndexesToLimit() {
         ForEachHnswIndexEntry([&](ui32 localTid, const TPathId& indexId, auto& entry) {
-            if (projectedUsed <= limit || HnswRetiringMemoryOwners.contains(entry.MemoryOwner)) {
+            const ui64 bytes = HnswCacheMemoryTracker->RetireIfOverLimit(entry.MemoryOwner);
+            const bool retiringGraph = (entry.Index && entry.Index->IsGraphRetiring())
+                || (entry.FollowerGraph && entry.FollowerGraph->IsGraphRetiring());
+            if (!bytes && !retiringGraph) {
                 return;
             }
-            const auto* bytes = usage.FindPtr(entry.MemoryOwner);
-            if (!bytes || !*bytes) {
-                return;
-            }
-            // Count the entire retired reservation now, while keeping the real
-            // memory charged until every reader and background worker releases it.
-            projectedUsed -= *bytes;
             InvalidateHnswIndex(localTid, indexId);
-            entry.EvictedMemoryBytes = *bytes;
+            entry.EvictedMemoryBytes = bytes;
             entry.InitialBuildAttemptsLeft = 30;
             entry.NextScanAttemptAt = AppData()->TimeProvider->Now() + TDuration::Seconds(1);
         });
@@ -686,7 +715,7 @@ namespace NKikimr::NDataShard {
         if (buildToken && !IsHnswBuildCurrent(localTid, buildToken, indexId)) {
             return;
         }
-        if (IsFollower() || IsStopping() || State != TShardState::Ready || !AppData()->FeatureFlags.GetEnableHnswIndex()) {
+        if (IsStopping() || (!IsFollower() && State != TShardState::Ready) || !AppData()->FeatureFlags.GetEnableHnswIndex()) {
             InvalidateHnswIndex(localTid, indexId);
             DeferHnswIndexBuild(localTid, TDuration::Zero(), indexId);
             return;
@@ -704,14 +733,15 @@ namespace NKikimr::NDataShard {
         if (!entry.Changes->Valid) {
             ResetHnswIndexChanges(entry);
         }
-        index->SetSnapshot(baseVersion, entry.Changes);
-        Y_ENSURE(memoryReservation, "HNSW index installed without a memory reservation");
-        struct TOwnedIndex {
-            std::shared_ptr<void> Reservation;
-            std::shared_ptr<THnswIndex> Index;
-        };
-        auto owned = std::make_shared<TOwnedIndex>(TOwnedIndex{std::move(memoryReservation), std::move(index)});
-        index = std::shared_ptr<THnswIndex>(owned, owned->Index.get());
+        index->SetSnapshot(baseVersion, entry.Changes,
+            IsFollower() ? Max(baseVersion, entry.FollowerReadVersion) : TRowVersion::Max());
+        Y_ENSURE(memoryReservation || index->HasGraphReservation(), "HNSW index installed without a memory reservation");
+        if (!index->HasGraphReservation()) {
+            index->SetGraphReservation(std::move(memoryReservation));
+        }
+        if (!IsFollower()) {
+            index->SetGraphMemoryTracker(HnswCacheMemoryTracker, entry.MemoryOwner);
+        }
         entry.Generations.push_back(index);
         if (entry.Index && entry.Index->GetBaseVersion() != baseVersion) {
             entry.Retained.push_back(std::move(entry.Index));
@@ -729,8 +759,40 @@ namespace NKikimr::NDataShard {
         entry.BuildReadPin.reset();
         entry.NextScanAttemptAt = TInstant::Zero();
         HnswCacheMemoryTracker->ResetDemand(entry.MemoryOwner);
+        if (!IsFollower()) {
+            PublishHnswGraph(localTid, indexId);
+        }
         PruneHnswIndexes();
         ScheduleHnswRebuild(localTid, indexId);
+    }
+
+    void TDataShard::PublishHnswGraph(ui32 localTid, const TPathId& indexId) {
+        auto& entry = *FindHnswIndexEntry(localTid, indexId);
+        if (!entry.GraphKey.empty()) {
+            Send(MakeHnswCacheId(), new TEvHnswCache::TEvForget(std::move(entry.GraphKey)));
+        }
+        entry.GraphKey = TStringBuilder() << SelfId() << ':' << localTid << ':' << ++NextHnswGraphId;
+        auto event = MakeHolder<TEvHnswCache::TEvPublish>();
+        event->Key = entry.GraphKey;
+        event->Graph = entry.Index->CreateView(entry.Index->GetBaseVersion(), std::make_shared<THnswIndexChanges>());
+        event->Settings = entry.Settings;
+        Send(MakeHnswCacheId(), event.Release());
+        for (const auto& [pathId, table] : TableInfos) {
+            if (table->LocalTid == localTid) {
+                NKikimrHnsw::TGraphAnnouncement announcement;
+                announcement.SetTableOwnerId(PathOwnerId);
+                announcement.SetTablePathId(pathId);
+                announcement.SetSchemaVersion(table->GetTableSchemaVersion());
+                announcement.SetIndexOwnerId(indexId.OwnerId);
+                announcement.SetIndexLocalId(indexId.LocalPathId);
+                announcement.SetLeaderGeneration(Executor()->Generation());
+                announcement.SetBaseStep(entry.Index->GetBaseVersion().Step);
+                announcement.SetBaseTxId(entry.Index->GetBaseVersion().TxId);
+                Executor()->SendUserAuxUpdateToFollowers(TString(HnswGraphAuxPrefix) + announcement.SerializeAsString(),
+                    TActivationContext::AsActorContext());
+                break;
+            }
+        }
     }
 
     void TDataShard::RefreshHnswSnapshotPins(THnswIndexCacheEntry& entry) {
@@ -811,9 +873,17 @@ namespace NKikimr::NDataShard {
             return;
         }
         const auto low = SnapshotManager.GetLowWatermark();
-        const auto floor = GetHnswBuildVersion();
+        const auto followerEdge = SnapshotManager.GetFollowerReadEdge().first;
+        // The follower edge can remain behind the current read version on an
+        // idle table. Keep history for that stale snapshot as it advances.
+        const auto floor = IsFollower() || HasFollowers()
+            ? Min(GetHnswBuildVersion(), followerEdge)
+            : GetHnswBuildVersion();
         THashMap<ui32, std::vector<TRowVersion>> readVersions;
         ForEachHnswIndexEntry([&](ui32 tid, const TPathId&, auto& entry) {
+            if (IsFollower() && entry.Building) {
+                return;
+            }
             if (entry.Changes->Valid) {
                 RefreshHnswSnapshotPins(entry);
             }
@@ -876,16 +946,29 @@ namespace NKikimr::NDataShard {
         if (entry.Index || entry.Building) {
             // Readers, stored snapshots and builds pin their versions directly.
             // Advancing the floor is constant time; Set compacts just this key.
-            entry.Changes->AdvanceRetentionFloor(GetHnswBuildVersion());
-            entry.Changes->Set(std::move(key), change.Version, std::move(change.Vector), std::move(change.MemoryReservation));
+            if (!IsFollower()) {
+                const auto floor = GetHnswBuildVersion();
+                entry.Changes->AdvanceRetentionFloor(HasFollowers()
+                    ? Min(floor, SnapshotManager.GetFollowerReadEdge().first)
+                    : floor);
+            } else if (!entry.Building) {
+                entry.Changes->AdvanceRetentionFloor(entry.FollowerReadVersion);
+            }
+            entry.Changes->Set(std::move(key), change.Version, std::move(change.Vector),
+                std::move(change.MemoryReservation), change.RedoStep);
         }
         if (entry.NextScanAttemptAt == TInstant::Max()) {
+            entry.BelowMinRows = false;
             entry.NextScanAttemptAt = TInstant::Zero();
             if (!entry.Index) {
                 entry.InitialBuildAttemptsLeft = 30;
             }
         }
-        ScheduleHnswRebuild(localTid, indexId);
+        if (IsFollower()) {
+            ScheduleHnswFollowerSync();
+        } else {
+            ScheduleHnswRebuild(localTid, indexId);
+        }
     }
 
     void TDataShard::UpdateHnswIndex(ui32 localTid, NTable::ERowOp rowOp,

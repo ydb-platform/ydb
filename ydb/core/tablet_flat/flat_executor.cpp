@@ -1311,9 +1311,14 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
             if (proto.HasIntroducedParts() || proto.HasIntroducedTxStatus()) {
                 Y_ENSURE(nextAuxIdx < auxProto.BySwitchAuxSize());
                 aux = &auxProto.GetBySwitchAux(nextAuxIdx++);
-                Owner->OnFollowerPartsReplaced(proto.GetTableId());
             }
 
+            // Compaction (including memtable flush) only materializes changes
+            // already observed through redo. Imports and moves bypass redo.
+            // Keep invalidating for unmarked switches from older leaders.
+            if ((aux && !aux->GetFromCompaction()) || proto.BundleMovesSize()) {
+                Owner->OnFollowerPartsReplaced(proto.GetTableId());
+            }
             const ui32 followerGcStep = update->NeedFollowerGcAck ? Step0 : 0;
 
             AddFollowerPartSwitch(proto, aux, followerGcStep, Step0);
@@ -1857,6 +1862,9 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
 
         // N.B. there should be a single source table per part switch
         for (auto& [sourceTable, state] : perTable) {
+            if (Stats->IsFollower() && sourceTable != partSwitch.TableId) {
+                Owner->OnFollowerPartsReplaced(sourceTable);
+            }
             // Rebase source parts to their respective new epochs
             auto srcSubset = Database->PartSwitchSubset(sourceTable, NTable::TEpoch::Zero(), state.Bundles, { });
             TVector<NTable::TPartView> rebased(Reserve(srcSubset->Flatten.size()));
@@ -4139,6 +4147,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     NKikimrExecutorFlat::TFollowerPartSwitchAux::TBySwitch *bySwitchAux = nullptr;
     if (results || newTxStatus) {
         bySwitchAux = aux.AddBySwitchAux();
+        bySwitchAux->SetFromCompaction(true);
     }
 
     if (results) {

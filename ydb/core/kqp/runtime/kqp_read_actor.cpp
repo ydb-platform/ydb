@@ -455,6 +455,12 @@ public:
 
     void StartTableScan() {
         ScanStarted = true;
+        if (UseFollowers && Settings->HasVectorTopK()
+                && AppData()->FeatureFlags.GetEnableHnswIndex()) {
+            // A shared cache pins reads of a tablet to one follower connection.
+            // Select a cache once so retries, ACKs and cleanup keep its affinity.
+            PipeCacheId = MakeVectorReadFollowerPipeCacheID(SelfId().Hash() % VectorReadFollowerPipeCacheCount);
+        }
         THolder<TShardState> stateHolder = MakeHolder<TShardState>(Settings->GetShardIdHint());
         PendingShards.PushBack(stateHolder.Get());
         auto& state = *stateHolder.Release();
@@ -1669,10 +1675,7 @@ public:
             for (size_t i = 0; i < Reads.size(); ++i) {
                 ResetRead(i);
             }
-            Send(::MainPipeCacheId, new TEvPipeCache::TEvUnlink(0));
-            if (UseFollowers) {
-                Send(::FollowersPipeCacheId, new TEvPipeCache::TEvUnlink(0));
-            }
+            Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         }
         if (ReadActorSpan) {
             AddReadTraceAttributes(ReadActorSpan, Settings->GetTable().GetTablePath(), ReceivedRowCount, TotalRetries);

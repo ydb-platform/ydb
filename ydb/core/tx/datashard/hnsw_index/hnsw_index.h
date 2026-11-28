@@ -9,6 +9,7 @@
 #include <atomic>
 #include <mutex>
 
+#include <iosfwd>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -17,6 +18,7 @@
 namespace NKikimr::NDataShard {
 
     inline constexpr ui32 DefaultHnswM = 16;
+    class THnswCacheMemoryTracker;
 
     // Omitted proto3 parameters use the documented server-side default.
     ui64 GetHnswDeltaRows(const Ydb::Table::VectorIndexSettings& settings);
@@ -32,6 +34,63 @@ namespace NKikimr::NDataShard {
         bool Covered = true;
     };
 
+    // A bootstrap response may race with redo that has already passed its
+    // checkpoint. Remember those commits until the graph base becomes known;
+    // a late commit below that base must invalidate the downloaded generation.
+    class THnswBootstrapChanges {
+    public:
+        static constexpr size_t MaxSteps = 16384;
+        static constexpr ui64 RecordBytes = 128;
+
+        bool NeedsRecord(ui32 step) const {
+            return !SnapshotKnown && (Steps.empty() || Steps.back().Step != step);
+        }
+
+        bool Observe(ui32 step, TRowVersion version, std::shared_ptr<void> reservation = {}) {
+            if (SnapshotKnown)
+                return Covers(step) || version > Base;
+            if (!Steps.empty() && step < Steps.back().Step)
+                return false;
+            if (NeedsRecord(step)) {
+                if (Steps.size() == MaxSteps)
+                    return false;
+                Steps.push_back({step, version, std::move(reservation)});
+            } else {
+                Steps.back().Version = Min(Steps.back().Version, version);
+            }
+            return true;
+        }
+
+        bool HasChangesAfter(ui32 checkpoint) const {
+            return !Steps.empty() && Steps.back().Step > checkpoint;
+        }
+
+        bool SetSnapshot(TRowVersion base, ui32 checkpoint) {
+            for (const auto& change : Steps) {
+                if (change.Step > checkpoint && change.Version <= base)
+                    return false;
+            }
+            Base = base;
+            Checkpoint = checkpoint;
+            SnapshotKnown = true;
+            std::vector<TStep>().swap(Steps);
+            return true;
+        }
+
+        bool Covers(ui32 step) const { return SnapshotKnown && step <= Checkpoint; }
+
+    private:
+        struct TStep {
+            ui32 Step;
+            TRowVersion Version;
+            std::shared_ptr<void> Reservation;
+        };
+        std::vector<TStep> Steps;
+        TRowVersion Base;
+        ui32 Checkpoint = 0;
+        bool SnapshotKnown = false;
+    };
+
     // Owned by the tablet mailbox. Generations share committed history, never
     // transaction-local intents. Build workers only access the immutable graph.
     class THnswIndexChanges {
@@ -40,11 +99,12 @@ namespace NKikimr::NDataShard {
             TRowVersion Version;
             std::optional<TString> Vector;
             std::shared_ptr<void> MemoryReservation;
+            ui32 RedoStep = 0;
         };
         using THistory = std::vector<TVersion>;
 
         void Set(TString key, TRowVersion version, std::optional<TString> vector,
-                 std::shared_ptr<void> reservation = {});
+                 std::shared_ptr<void> reservation = {}, ui32 redoStep = 0);
         static const TVersion* Find(const THistory& history, TRowVersion version, TRowVersion base);
         const TVersion* Find(TStringBuf key, TRowVersion version, TRowVersion base) const;
         size_t CountAfter(TRowVersion base) const;
@@ -113,6 +173,28 @@ namespace NKikimr::NDataShard {
             TString& error, bool allowEmpty = false,
             const std::atomic<bool>* cancelled = nullptr);
 
+        // MVCC state is private to each tablet view; immutable graph storage
+        // and its memory reservation live until the last view is released.
+        std::unique_ptr<THnswIndex> CreateView(TRowVersion base,
+            std::shared_ptr<THnswIndexChanges> changes,
+            TRowVersion upper = TRowVersion::Max()) const;
+        bool SharesGraphWith(const THnswIndex& other) const;
+        bool HasGraphReservation() const;
+        void SetGraphMemoryTracker(std::shared_ptr<THnswCacheMemoryTracker> tracker, ui64 owner);
+        size_t GraphUseCount() const;
+        bool RetireGraphIfOverLimit() const;
+        bool IsGraphRetiring() const;
+        bool CanAdmitSearch(size_t k = 1, ui32 efSearch = 15) const;
+        void SetGraphReservation(std::shared_ptr<void> reservation,
+            std::shared_ptr<THnswCacheMemoryTracker> tracker = {}, bool deferDeletion = false);
+
+        // Portable graph-only snapshot. Journals and transaction-local changes
+        // are separate. Loading restores topology without running construction.
+        void SaveGraph(std::ostream& output) const;
+        static std::unique_ptr<THnswIndex> LoadGraph(std::istream& input,
+            const Ydb::Table::VectorIndexSettings& settings,
+            ui64 maxMemoryBytes, TString& error);
+
         // Returns up to k nearest neighbors of targetVector (same wire format as
         // build-time vectors), ordered from closest to farthest.
         THnswSearchResult Search(TStringBuf targetVector, size_t k,
@@ -148,6 +230,10 @@ namespace NKikimr::NDataShard {
         // formula as the build-time budget check.
         size_t EstimatedMemoryBytes() const;
 
+        // Headroom for a search's queues, result merging and one visited list.
+        // Used by readiness admission; it does not allocate or retain storage.
+        size_t EstimatedSearchMemoryBytes(size_t k = 1, ui32 efSearch = 15) const;
+
         // Estimates the memory required to hold an HNSW index over `rowCount`
         // vectors of `dimension` float elements, without building anything.
         // Used to decide up front whether a build should even be attempted.
@@ -155,6 +241,7 @@ namespace NKikimr::NDataShard {
                                           size_t serializedKeyBytes = 0);
 
     private:
+        class TGraph;
         class TImpl;
 
         explicit THnswIndex(std::unique_ptr<TImpl> impl);

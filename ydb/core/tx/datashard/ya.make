@@ -3,6 +3,7 @@ YQL_LIBRARY()
 SRCS(
     hnsw_index/hnsw_index_build_unit.cpp
     hnsw_index/hnsw_index_build_unit.h
+    hnsw_index/datashard_hnsw_replication.cpp
     datashard.h
     datashard__engine_host.h
     datashard__lock_rows.h
@@ -456,6 +457,7 @@ RESOURCE(
 )
 
 PEERDIR(
+    ydb/core/tx/datashard/hnsw
     contrib/libs/zstd
     library/cpp/containers/absl
     library/cpp/containers/stack_vector

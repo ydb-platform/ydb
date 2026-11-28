@@ -209,7 +209,7 @@ private:
                 {"actorId", subscriber},
             );
 
-            SideEffects.Send(subscriber, new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId)), ui64(txId));
+            SideEffects.Send(subscriber, Self->MakeNotifyTxCompletionResult(ui64(txId)), ui64(txId));
         }
     }
 

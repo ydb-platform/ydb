@@ -2,6 +2,7 @@
 
 #include <util/generic/algorithm.h>
 
+#include <atomic>
 #include <utility>
 
 namespace NKikimr::NDataShard {
@@ -13,7 +14,9 @@ namespace NKikimr::NDataShard {
     void THnswCacheMemoryTracker::Request(ui64 bytes, ui64 owner) {
         std::lock_guard guard(Mutex);
         auto& account = Accounts[owner];
+        ExcessDemand -= account.GetExcessDemand();
         account.Demand = Max(account.Demand, bytes);
+        ExcessDemand += account.GetExcessDemand();
         Report();
     }
 
@@ -65,17 +68,29 @@ namespace NKikimr::NDataShard {
         return usage;
     }
 
-    bool THnswCacheMemoryTracker::TryAcquire(ui64 bytes, ui64 owner) {
+    bool THnswCacheMemoryTracker::TryAcquire(ui64 bytes, ui64 owner, bool requestOnFailure) {
         std::lock_guard guard(Mutex);
-        auto& account = Accounts[owner];
-        if (!Limit || Used > Limit || bytes > Limit - Used) {
-            account.Demand = Max(account.Demand, SaturatingAdd(account.Used, bytes));
-            Report();
+        if (const auto* account = Accounts.FindPtr(owner); account && account->Retiring) {
             return false;
         }
-        account.Used += bytes;
-        Used += bytes;
-        Report();
+        if (!Limit || Used > Limit || bytes > Limit - Used) {
+            if (requestOnFailure) {
+                auto& account = Accounts[owner];
+                ExcessDemand -= account.GetExcessDemand();
+                account.Demand = Max(account.Demand, SaturatingAdd(account.Used, bytes));
+                ExcessDemand += account.GetExcessDemand();
+                Report();
+            }
+            return false;
+        }
+        if (bytes) {
+            auto& account = Accounts[owner];
+            ExcessDemand -= account.GetExcessDemand();
+            account.Used += bytes;
+            ExcessDemand += account.GetExcessDemand();
+            Used += bytes;
+            Report();
+        }
         return true;
     }
 
@@ -83,8 +98,13 @@ namespace NKikimr::NDataShard {
         std::lock_guard guard(Mutex);
         if (auto* account = Accounts.FindPtr(owner)) {
             const ui64 released = Min(bytes, account->Used);
+            ExcessDemand -= account->GetExcessDemand();
             account->Used -= released;
+            ExcessDemand += account->GetExcessDemand();
             Used -= released;
+            if (account->Retiring) {
+                RetiringBytes -= released;
+            }
             if (!account->Used && !account->Demand) {
                 Accounts.erase(owner);
             }
@@ -95,6 +115,7 @@ namespace NKikimr::NDataShard {
     void THnswCacheMemoryTracker::ResetDemand(ui64 owner) {
         std::lock_guard guard(Mutex);
         if (auto* account = Accounts.FindPtr(owner)) {
+            ExcessDemand -= account->GetExcessDemand();
             account->Demand = 0;
             if (!account->Used) {
                 Accounts.erase(owner);
@@ -103,35 +124,86 @@ namespace NKikimr::NDataShard {
         Report();
     }
 
-    void THnswCacheMemoryTracker::ResetAllDemand() {
+    ui64 THnswCacheMemoryTracker::AllocateOwner() noexcept {
+        static std::atomic<ui64> next = 0;
+        return next.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
+
+    bool THnswCacheMemoryTracker::HasPendingPressure() const {
         std::lock_guard guard(Mutex);
-        for (auto it = Accounts.begin(); it != Accounts.end();) {
-            it->second.Demand = 0;
-            if (!it->second.Used) {
-                Accounts.erase(it++);
-            } else {
-                ++it;
+        return GetRequiredBytes() > Limit;
+    }
+
+    void THnswCacheMemoryTracker::SetReclaimable(ui64 bytes) {
+        std::lock_guard guard(Mutex);
+        Reclaimable = bytes;
+        Report();
+    }
+
+    ui64 THnswCacheMemoryTracker::RetireIfOverLimit(ui64 owner) {
+        std::lock_guard guard(Mutex);
+        if (Used - RetiringBytes > Limit) {
+            if (auto* account = Accounts.FindPtr(owner); account && !account->Retiring && account->Used) {
+                account->Retiring = true;
+                RetiringBytes += account->Used;
+                return account->Used;
             }
         }
-        Report();
+        return 0;
+    }
+
+    void THnswCacheMemoryTracker::Retire(ui64 owner) {
+        std::lock_guard guard(Mutex);
+        if (auto* account = Accounts.FindPtr(owner); account && !account->Retiring) {
+            account->Retiring = true;
+            RetiringBytes += account->Used;
+        }
     }
 
     ui64 THnswCacheMemoryTracker::SaturatingAdd(ui64 a, ui64 b) {
         return b > Max<ui64>() - a ? Max<ui64>() : a + b;
     }
 
+    bool THnswCacheMemoryTracker::IsRetiring(ui64 owner) const {
+        std::lock_guard guard(Mutex);
+        const auto* account = Accounts.FindPtr(owner);
+        return account && account->Retiring;
+    }
+
+    ui64 THnswCacheMemoryTracker::GetRequiredBytes() const {
+        const auto demand = Used + ExcessDemand;
+        return demand > Max<ui64>() ? Max<ui64>() : static_cast<ui64>(demand);
+    }
+
     void THnswCacheMemoryTracker::Report() {
         if (Consumer) {
-            ui64 demand = Used;
-            for (const auto& [_, account] : Accounts) {
-                demand = SaturatingAdd(demand, account.Demand > account.Used ? account.Demand - account.Used : 0);
-            }
+            ui64 demand = GetRequiredBytes();
             if (GrowthHeadroom && Used) {
                 demand = Max(demand, SaturatingAdd(Used, Max<ui64>(64 * 1024, Used / 8)));
             }
-            // Serialize reports with reservations released by worker threads.
-            Consumer->SetReport({.Used = Used, .Demand = demand});
+            Consumer->SetReport({.Used = Used, .Demand = demand, .Reclaimable = Min(Used, Reclaimable)});
         }
+    }
+
+    std::shared_ptr<void> TryReserveHnswMemory(
+        const std::shared_ptr<THnswCacheMemoryTracker>& tracker, ui64 bytes, ui64 owner, bool requestOnFailure)
+    {
+        struct TReservation {
+            std::shared_ptr<THnswCacheMemoryTracker> Tracker;
+            ui64 Owner;
+            ui64 Bytes = 0;
+            ~TReservation() {
+                if (Bytes) {
+                    Tracker->Release(Bytes, Owner);
+                }
+            }
+        };
+        auto reservation = std::make_shared<TReservation>(TReservation{tracker, owner});
+        if (!tracker->TryAcquire(bytes, owner, requestOnFailure)) {
+            return {};
+        }
+        reservation->Bytes = bytes;
+        return reservation;
     }
 
 } // namespace NKikimr::NDataShard

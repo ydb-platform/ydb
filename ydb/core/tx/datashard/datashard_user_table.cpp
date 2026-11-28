@@ -1,6 +1,7 @@
 #include "datashard_user_table.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/follower_group.pb.h>
 
 #include <util/generic/algorithm.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -664,6 +665,24 @@ void TUserTable::ApplyAlter(
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
     auto& config = *schema.MutablePartitionConfig();
+
+    // SchemeShard sends the effective replica configuration with HNSW posting
+    // metadata. Keep it to distinguish replica changes from graph schema changes.
+    if (delta.HasLocalHnswIndex() && delta.HasPartitionConfig()) {
+        config.ClearFollowerCount();
+        if (configDelta.HasFollowerCount()) {
+            config.SetFollowerCount(configDelta.GetFollowerCount());
+        }
+        config.ClearCrossDataCenterFollowerCount();
+        if (configDelta.HasCrossDataCenterFollowerCount()) {
+            config.SetCrossDataCenterFollowerCount(configDelta.GetCrossDataCenterFollowerCount());
+        }
+        config.ClearAllowFollowerPromotion();
+        if (configDelta.HasAllowFollowerPromotion()) {
+            config.SetAllowFollowerPromotion(configDelta.GetAllowFollowerPromotion());
+        }
+        config.MutableFollowerGroups()->CopyFrom(configDelta.GetFollowerGroups());
+    }
 
     auto &alter = txc.DB.Alter();
 

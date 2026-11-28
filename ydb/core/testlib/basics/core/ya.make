@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/testlib/actors
+    ydb/core/tx/datashard/hnsw
     ydb/core/tx/scheme_board
     ydb/library/actors/dnsresolver
     ydb/library/actors/interconnect

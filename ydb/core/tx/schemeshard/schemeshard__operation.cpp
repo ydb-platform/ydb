@@ -1541,11 +1541,11 @@ void TOperation::AddNotifySubscriber(const TActorId& actorId) {
     Subscribers.insert(actorId);
 }
 
-void TOperation::DoNotify(TSchemeShard*, TSideEffects& sideEffects, const TActorContext& ctx) {
+void TOperation::DoNotify(TSchemeShard* ss, TSideEffects& sideEffects, const TActorContext& ctx) {
     Y_ABORT_UNLESS(IsReadyToNotify());
 
     for (auto& subscriber: Subscribers) {
-        THolder<TEvSchemeShard::TEvNotifyTxCompletionResult> msg = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(TxId));
+        THolder<TEvSchemeShard::TEvNotifyTxCompletionResult> msg(ss->MakeNotifyTxCompletionResult(ui64(TxId)));
         YDB_LOG_DEBUG_CTX(ctx, "TOperation DoNotify: send TEvNotifyTxCompletionResult",
             {"actorId", subscriber},
             {"message", msg->Record.ShortDebugString()},

@@ -222,6 +222,8 @@ message TFollowerPartSwitchAux {
         optional NKikimrProto.TLogoBlobID PartSwitchRef = 1;
         repeated TBundle HotBundles = 2;
         repeated TTxStatus HotTxStatus = 3;
+        // The follower already replayed the logical changes in these parts.
+        optional bool FromCompaction = 4;
     }
 
     repeated TBySwitch BySwitchAux = 1;

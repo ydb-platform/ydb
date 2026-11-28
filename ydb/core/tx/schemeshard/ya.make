@@ -96,6 +96,7 @@ RECURSE_FOR_TESTS(
 YQL_LIBRARY()
 
 SRCS(
+    hnsw_replica_probe.cpp
     defs.h
     operation_queue_timer.h
     schemeshard.cpp

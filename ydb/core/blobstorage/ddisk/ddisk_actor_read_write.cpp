@@ -337,7 +337,7 @@ namespace NKikimr::NDDisk {
                 --chunk->ChunkRefPins;
             }
             if (sync) {
-                SyncSourceCookies.erase(sync->SourceCookie);
+                ForgetSyncSource(sync->SourceCookie);
                 SyncsInFlight.erase(sync->Id);
                 *Counters.Interface.Sync.BytesInFlight -= sync->RequestedBytes;
             }
@@ -393,7 +393,7 @@ namespace NKikimr::NDDisk {
                         co_await NonCancellable(waiter);
                     }
 
-                    SyncSourceCookies.erase(std::exchange(sync->SourceCookie, 0));
+                    ForgetSyncSource(std::exchange(sync->SourceCookie, 0));
                     if (!sync->SourceResult) {
                         valid(status, error);
                         break;

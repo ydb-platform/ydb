@@ -190,11 +190,21 @@ public:
             LegacyInitSchema(txc);
         }
 
+        bool restoreLegacyRemovedRowVersions = false;
         for (ui32 i = 0 ; i < Ev->Get()->Record.TableSnapshotSize(); ++i) {
             ui32 localTableId = Ev->Get()->Record.GetTableSnapshot(i).GetTableId();
             TString compressedBody = Ev->Get()->Record.GetTableSnapshot(i).GetSnapshotData();
             TString snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody);
             txc.Env.LoanTable(localTableId, snapBody);
+            const auto& tableSnapshot = record.GetTableSnapshot(i);
+            if (tableSnapshot.HasRemovedRowVersions()) {
+                // Union across merge sources: a snapshot is readable only if
+                // its history is available in every source key range.
+                TSnapshotManager::RestoreRemovedRowVersions(txc.DB, localTableId,
+                    tableSnapshot.GetRemovedRowVersions());
+            } else if (localTableId >= Schema::MinLocalTid) {
+                restoreLegacyRemovedRowVersions = true;
+            }
         }
 
         NIceDb::TNiceDb db(txc.DB);
@@ -248,6 +258,13 @@ public:
             for (const auto& key : invalidKeys) {
                 Self->GetSnapshotManager().PersistRemoveSnapshot(db, key);
             }
+        }
+
+        if (restoreLegacyRemovedRowVersions) {
+            // Old sources only guaranteed persistent snapshots below their
+            // watermark. Restore those read guarantees even if the registry is
+            // unready, independently of optional additional cleanup below.
+            Self->GetSnapshotManager().RemoveRowVersions(txc.DB, TRowVersion::Min(), lowWatermark);
         }
 
         // Restore ancestor locks transferred from the src shard.
@@ -331,26 +348,10 @@ public:
         if (Self->ReceiveSnapshotsFrom.empty()) {
             const auto minVersion = Self->GetSnapshotManager().GetLowWatermark();
 
-            // Mark versions not accessible via snapshots as deleted
-            for (const auto& kv : Self->GetUserTables()) {
-                // FIXME: tables need to always have owner id
-                ui64 ownerId = Self->GetPathOwnerId();
-                ui64 tableId = kv.first;
-                ui32 localTableId = kv.second->LocalTid;
-                TRowVersion vlower = TRowVersion::Min();
-
-                for (const auto& kv : Self->GetSnapshotManager().GetSnapshots(TSnapshotTableKey(ownerId, tableId))) {
-                    TRowVersion vupper(kv.first.Step, kv.first.TxId);
-                    if (vlower < vupper) {
-                        txc.DB.RemoveRowVersions(localTableId, vlower, vupper);
-                    }
-                    vlower = vupper.Next();
-                }
-
-                if (vlower < minVersion) {
-                    txc.DB.RemoveRowVersions(localTableId, vlower, minVersion);
-                }
-            }
+            // Source deletions (or the legacy fallback) were restored above
+            // without consulting retention. Only additional cleanup is gated:
+            // the merged watermark may still contain retained snapshot points.
+            Self->GetSnapshotManager().CleanupUnretainedRowVersions(txc.DB, TRowVersion::Min(), minVersion);
 
             for (auto& kv : Self->ReplicatedTables) {
                 TReplicationSourceOffsetsDb rdb(txc);

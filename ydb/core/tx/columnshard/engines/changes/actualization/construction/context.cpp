@@ -68,7 +68,7 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
             "f", it->first.DebugString());
     } else {
         if (!dWait) {
-            AFL_VERIFY(features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
+            AFL_VERIFY(features.GetPortionSchemaVersion() < features.GetTargetScheme()->GetVersion());
         } else {
             Counters.OnPortionToEvict(info->GetTotalBlobBytes(), *dWait);
         }

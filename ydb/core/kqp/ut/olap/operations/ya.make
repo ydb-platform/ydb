@@ -11,6 +11,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    compact_ut.cpp
     delete_ut.cpp
     write_ut.cpp
 )

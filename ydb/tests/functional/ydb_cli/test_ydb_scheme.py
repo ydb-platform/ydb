@@ -4,9 +4,10 @@ import pytest
 import yatest
 
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin, set_ydb_cli_test_canondata_root
+from ydb.tests.library.common.wait_for import wait_for
 
 CLUSTER_CONFIG = dict(
-    extra_feature_flags=["enable_views", "enable_external_data_sources"],
+    extra_feature_flags=["enable_views", "enable_external_data_sources", "enable_data_shard_detailed_metrics"],
     extra_grpc_services=["view", "secret"],
     query_service_config=dict(available_external_data_sources=["ObjectStorage"]),
 )
@@ -146,6 +147,96 @@ class TestSchemeDescribe:
         ], output
         assert all(int(row[5]) >= 0 and row[6] for row in partitions), output
 
+    def test_migrate_orders_index_and_retention(self, ydb_cluster, ydb_database, ydb_client_session):
+        def cli(*args):
+            return execute_ydb_cli_command(ydb_cluster.nodes[1], ydb_database, list(args))
+
+        def table_rows(output):
+            return [
+                [cell.strip() for cell in line.split("│")[1:-1]]
+                for line in output.splitlines() if line.startswith("│")
+            ]
+
+        cli("scheme", "mkdir", "migration")
+        table = "migration/orders"
+        with ydb_client_session(ydb_database).checkout() as session:
+            session.execute_scheme(f"""
+                CREATE TABLE `{table}` (
+                    id Uint64,
+                    customer Utf8,
+                    amount Uint64 FAMILY archive,
+                    imported_at Uint64,
+                    INDEX by_customer GLOBAL ON (customer),
+                    PRIMARY KEY (id),
+                    FAMILY archive (COMPRESSION = "lz4")
+                ) WITH (METRICS_LEVEL = "TABLE", READ_REPLICAS_SETTINGS = "ANY_AZ:1");
+            """)
+            # The future timestamps keep the fixture out of expiry during the schema migration.
+            session.transaction().execute(f"""
+                UPSERT INTO `{table}` (id, customer, amount, imported_at) VALUES
+                    (1, 'alice'u, 20, 4102444800), (2, 'bob'u, 50, 4102444801);
+            """, commit_tx=True)
+
+            cli("table", "attribute", "add", table, "--attribute", "application=checkout",
+                "--attribute", "migration=covering-index")
+            cli("table", "ttl", "set", table, "--column", "imported_at", "--unit", "seconds",
+                "--expire-after", "86400", "--run-interval", "30m")
+
+            started = cli("table", "index", "add", "global-sync", table,
+                          "--index-name", "by_customer_v2", "--columns", "customer", "--cover", "amount")
+            operation_id, = [row[0] for row in table_rows(started) if row[0].startswith("ydb://buildindex/")]
+            operation = {}
+
+            def index_ready():
+                output = cli("operation", "get", operation_id)
+                header, row, *_ = table_rows(output)
+                operation.update(zip(header, row))
+                return operation["ready"] == "true"
+
+            assert wait_for(index_ready, timeout_seconds=60), operation
+            assert operation["id"] == operation_id
+            assert operation["status"] == "SUCCESS", operation
+            assert operation["state"] == "Done", operation
+            assert float(operation["progress"].rstrip("%")) == 100
+            assert operation["table"] == f"{ydb_database}/{table}"
+            assert operation["index"] == "by_customer_v2"
+            cli("operation", "forget", operation_id)
+
+            cli("table", "index", "rename", table, "--index-name", "by_customer_v2",
+                "--to", "by_customer", "--replace")
+            description = cli("scheme", "describe", table)
+            rows = table_rows(description)
+            assert [row[2:] for row in rows if row[0] == "by_customer"] == [["customer", "amount"]], description
+            assert all(row[0] != "by_customer_v2" for row in rows), description
+            assert ["application", "checkout"] in rows
+            assert ["migration", "covering-index"] in rows
+            assert any(row[0] == "archive" and row[2] == "LZ4" for row in rows), description
+            assert "Metrics level: TABLE" in description
+            assert "Read replicas total count in all AZs: 1" in description
+            assert "Ttl settings (value since unix epoch):" in description
+            assert "Column name: imported_at" in description
+            assert "Column unit: Seconds" in description
+            assert "Expire after: 86400.000000s" in description
+            assert "Run interval: 1800.000000s" in description
+
+            result, = session.transaction().execute(
+                f"SELECT id, amount FROM `{table}` VIEW by_customer WHERE customer = 'alice'u;",
+                commit_tx=True,
+            )
+            assert [(row.id, row.amount) for row in result.rows] == [(1, 20)]
+
+            cli("table", "index", "drop", table, "--index-name", "by_customer")
+            cli("table", "ttl", "reset", table)
+            cli("table", "attribute", "drop", table, "--attributes", "migration")
+            description = cli("scheme", "describe", table)
+            assert "Indexes:" not in description
+            assert "Ttl settings" not in description
+            assert ["application", "checkout"] in table_rows(description)
+            assert all(row[0] != "migration" for row in table_rows(description)), description
+
+        cli("table", "drop", table)
+        cli("scheme", "rmdir", "migration")
+
     def test_describe_external_data_source(self, ydb_cluster, ydb_database, ydb_client_session):
         database_path = ydb_database
         external_data_source = "external_data_source"
@@ -197,6 +288,13 @@ class TestSchemeDescribe:
             assert isinstance(references, list)
             assert len(references) == 1
             assert references[0] == expected_reference
+
+            output = execute_ydb_cli_command(
+                ydb_cluster.nodes[1], database_path, ["scheme", "describe", external_data_source]
+            )
+            assert "Properties:" in output
+            references_line, = [line for line in output.splitlines() if line.startswith("│") and "REFERENCES" in line]
+            assert json.loads(references_line.split("│")[2].strip()) == [expected_reference]
 
 
 class TestSecretSchemeDescribe:

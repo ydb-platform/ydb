@@ -60,6 +60,7 @@ ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_stop_clust
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_recovery[ydb_cluster0]
 ydb/tests/fq/yds test_recovery_mz.py.TestRecovery.test_recovery[ydb_cluster0]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
+ydb/tests/functional/bridge test_state_storage_selfheal_piles.py.TestBridgeStateStorageSelfHealPileTransitions.test_disconnected_pile_waits_for_rejoin[reassign]
 ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_one_dc_external_recovery
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
 ydb/tests/functional/restarts test_restarts.py.TestRestartSingleBlock42.test_restart_single_node_is_ok

@@ -15,6 +15,7 @@
 #include <library/cpp/protobuf/json/util.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/xrange.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
@@ -604,11 +605,11 @@ TString ValidateStateStorageConfig(
         TIntrusivePtr<TStateStorageInfo> oldSSInfo;
         newSSInfo = BuildStateStorageInfo(newSSConfig);
         oldSSInfo = BuildStateStorageInfo(oldSSConfig);
-        THashSet<TActorId> replicas;
+        THashSet<TActorId> newReplicas;
         for (auto& ringGroup : newSSInfo->RingGroups) {
             for (auto& ring : ringGroup.Rings) {
                 for (auto& node : ring.Replicas) {
-                    if (!replicas.insert(node).second) {
+                    if (!newReplicas.insert(node).second) {
                         return TStringBuilder() << name << " replicas ActorId intersection, specify"
                             " RingGroupActorIdOffset if you run multiple replicas on one node";
                     }
@@ -635,9 +636,9 @@ TString ValidateStateStorageConfig(
                 for (ui32 ringIndex : xrange(oldGroup.Rings.size())) {
                     const auto& oldRing = oldGroup.Rings[ringIndex];
                     const auto& newRing = newGroup.Rings[ringIndex];
-                    if (oldRing.IsDisabled || newRing.IsDisabled) {
-                        ++disabledCnt;
-                    } else if (oldRing != newRing) {
+                    const bool disabled = oldRing.IsDisabled || newRing.IsDisabled;
+                    disabledCnt += disabled;
+                    if ((oldGroup.WriteOnly || !disabled) && oldRing != newRing) {
                         return TStringBuilder() << name << " ring group #" << groupIndex
                             << " ring #" << ringIndex << " differs";
                     }
@@ -667,19 +668,21 @@ TString ValidateStateStorageConfig(
             }
         }
         for (auto& oldGroup : oldSSInfo->RingGroups) {
-            if (oldGroup.WriteOnly) {
+            if (AnyOf(newSSInfo->RingGroups, [&](const auto& group) { return oldGroup.SameConfiguration(group); })) {
                 continue;
             }
-            bool found = false;
-            for (auto& rg : newSSInfo->RingGroups) {
-                if (oldGroup.SameConfiguration(rg)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
+            if (!oldGroup.WriteOnly) {
                 return TStringBuilder() << "Can not delete not WriteOnly ring group. Make it WriteOnly before deletion old: "
                     << oldSSInfo->ToString() << " new: " << newSSInfo->ToString();
+            }
+            // A removed WriteOnly group must retire all its replica actors with it.
+            for (const auto& ring : oldGroup.Rings) {
+                for (const auto& replica : ring.Replicas) {
+                    if (newReplicas.contains(replica)) {
+                        return TStringBuilder() << name << " cannot reuse replica " << replica
+                            << " from a changed WriteOnly ring group; use a distinct RingGroupActorIdOffset";
+                    }
+                }
             }
         }
     } catch (const std::exception& e) {

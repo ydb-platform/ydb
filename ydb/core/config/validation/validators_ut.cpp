@@ -666,6 +666,55 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT(res.StartsWith("StateStorage ring #0differs from# Ring"));
     }
 
+    Y_UNIT_TEST(ChangeNToSelectRequiresNewReplicaIds) {
+        NKikimrConfig::TStateStorageConfig primary;
+        FillRing(primary.AddRingGroups(), 3, 3);
+
+        auto target = primary;
+        auto* group = target.AddRingGroups();
+        FillRing(group, 3, 1);
+        group->SetWriteOnly(true);
+        group->SetRingGroupActorIdOffset(100);
+        auto res = ValidateStateStorageConfig("StateStorage", primary, target);
+        UNIT_ASSERT_C(res.empty(), res);
+
+        auto current = target;
+        current.MutableRingGroups(1)->SetNToSelect(3);
+        res = ValidateStateStorageConfig("StateStorage", current, target);
+        UNIT_ASSERT_STRING_CONTAINS(res, "from a changed WriteOnly ring group");
+
+        target.MutableRingGroups(1)->SetRingGroupActorIdOffset(200);
+        res = ValidateStateStorageConfig("StateStorage", current, target);
+        UNIT_ASSERT_C(res.empty(), res);
+    }
+
+    Y_UNIT_TEST(WriteOnlyRingMembershipIsImmutable) {
+        NKikimrConfig::TStateStorageConfig current;
+        FillRing(current.AddRingGroups(), 3, 3);
+        auto* group = current.AddRingGroups();
+        group->SetNToSelect(1);
+        group->SetWriteOnly(true);
+        group->SetRingGroupActorIdOffset(100);
+        group->AddRing()->AddNode(1);
+
+        auto expanded = current;
+        expanded.MutableRingGroups(1)->MutableRing(0)->AddNode(2);
+        auto res = ValidateStateStorageConfig("StateStorage", current, expanded);
+        UNIT_ASSERT_STRING_CONTAINS(res, "from a changed WriteOnly ring group");
+        res = ValidateStateStorageConfig("StateStorage", expanded, current);
+        UNIT_ASSERT_STRING_CONTAINS(res, "from a changed WriteOnly ring group");
+
+        expanded.MutableRingGroups(1)->SetRingGroupActorIdOffset(200);
+        res = ValidateStateStorageConfig("StateStorage", current, expanded);
+        UNIT_ASSERT_C(res.empty(), res);
+
+        auto promoted = expanded;
+        promoted.MutableRingGroups(1)->ClearWriteOnly();
+        promoted.MutableRingGroups()->SwapElements(0, 1);
+        res = ValidateStateStorageConfig("StateStorage", expanded, promoted);
+        UNIT_ASSERT_C(res.empty(), res);
+    }
+
     Y_UNIT_TEST(CanReassignNodeInMultiGroupConfig) {
         NKikimrConfig::TStateStorageConfig current;
         FillRing(current.AddRingGroups());
@@ -686,6 +735,13 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         replaced.MutableRingGroups(1)->MutableRing(0)->MutableNode()->Set(0, 1000);
         res = ValidateStateStorageConfig("StateStorage", disabled, replaced, true);
         UNIT_ASSERT_C(res.empty(), res);
+
+        auto writeOnly = disabled;
+        writeOnly.MutableRingGroups(1)->SetWriteOnly(true);
+        auto reassigned = replaced;
+        reassigned.MutableRingGroups(1)->SetWriteOnly(true);
+        res = ValidateStateStorageConfig("StateStorage", writeOnly, reassigned, true);
+        UNIT_ASSERT_STRING_CONTAINS(res, "ring group #1 ring #0 differs");
 
         auto unsafe = current;
         unsafe.MutableRingGroups(1)->MutableRing(0)->MutableNode()->Set(0, 1000);

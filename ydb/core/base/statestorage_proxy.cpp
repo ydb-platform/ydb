@@ -1134,10 +1134,15 @@ protected:
     const TActorId Sender;
     const ui64 Cookie;
     TIntrusivePtr<TStateStorageInfo> Info;
-    TList<TActorId> AllReplicas;
-    ui32 Count;
-    ui32 UndeliveredCount;
     ui64 TabletID;
+    // Each target gets its own reply address because legacy replicas reply with a zero cookie.
+    THashMap<TActorId, ui32> PendingTargets;
+    TVector<ui32> GroupAcks;
+
+    static bool RequiresQuorum(const TStateStorageInfo::TRingGroup& group) {
+        return !group.WriteOnly
+            && (group.State == ERingGroupState::PRIMARY || group.State == ERingGroupState::SYNCHRONIZED);
+    }
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1148,10 +1153,23 @@ public:
         : Sender(sender)
         , Cookie(cookie)
         , Info(info)
-        , Count(0)
-        , UndeliveredCount(0)
         , TabletID(tabletId)
     {}
+
+    bool QuorumReached() const {
+        bool anyGroup = false;
+        for (ui32 idx : xrange(Info->RingGroups.size())) {
+            const auto& ringGroup = Info->RingGroups[idx];
+            if (!RequiresQuorum(ringGroup)) {
+                continue;
+            }
+            anyGroup = true;
+            if (GroupAcks[idx] <= ringGroup.NToSelect / 2) {
+                return false;
+            }
+        }
+        return anyGroup;
+    }
 
     void SendResponse(NKikimrProto::EReplyStatus status) {
         Send(Sender, new TEvStateStorage::TEvDeleteResult(TabletID, status), 0, Cookie);
@@ -1159,15 +1177,24 @@ public:
     }
 
     void SendResponse() {
-        SendResponse(Count > AllReplicas.size() / 2 ? NKikimrProto::OK : NKikimrProto::ERROR);
+        SendResponse(QuorumReached() ? NKikimrProto::OK : NKikimrProto::ERROR);
     }
 
     void Bootstrap() {
-        AllReplicas = Info->SelectAllReplicas();
-        if (!AllReplicas.empty()) {
-            for (const TActorId &replica : AllReplicas) {
-                Send(replica, new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid), IEventHandle::FlagTrackDelivery);
+        GroupAcks.assign(Info->RingGroups.size(), 0);
+        for (ui32 idx : xrange(Info->RingGroups.size())) {
+            TStateStorageInfo::TSelection selection;
+            Info->SelectReplicas(TabletID, &selection, idx);
+            // Clean up the selected replicas even in groups that do not require a quorum.
+            for (const TActorId& replica : selection) {
+                const TActorIdentity replyTo(RegisterAlias());
+                PendingTargets.emplace(replyTo, idx);
+                replyTo.Send(replica,
+                    new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid),
+                    IEventHandle::FlagTrackDelivery);
             }
+        }
+        if (!PendingTargets.empty()) {
             Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
             Become(&TThis::StateRequestedDelete);
         } else {
@@ -1184,16 +1211,22 @@ public:
     }
 
     void OnResponseReceived() {
-        if (Count + UndeliveredCount >= AllReplicas.size())
+        if (PendingTargets.empty())
             SendResponse();
     }
 
-    void Undelivered(TEvents::TEvUndelivered::TPtr &) {
-        ++UndeliveredCount;
-        OnResponseReceived();
+    void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
+        if (PendingTargets.erase(ev->Recipient)) {
+            OnResponseReceived();
+        }
     }
 
     void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
+        const auto target = PendingTargets.find(ev->Recipient);
+        if (target == PendingTargets.end()) {
+            return;
+        }
+
         const auto& record = ev->Get()->Record;
         const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
         const ui64 clusterStateGuid = record.GetClusterStateGuid();
@@ -1204,7 +1237,8 @@ public:
             SendResponse(NKikimrProto::ERROR);
             return;
         }
-        ++Count;
+        ++GroupAcks[target->second];
+        PendingTargets.erase(target);
         OnResponseReceived();
     }
 

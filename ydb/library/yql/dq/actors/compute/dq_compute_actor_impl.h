@@ -30,6 +30,8 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_event_budget.h>
+#include <util/system/datetime.h>
 
 #include <library/cpp/html/escape/escape.h>
 #include <util/generic/size_literals.h>
@@ -235,7 +237,8 @@ protected:
         , WatermarkGeneratorTracker(LogPrefix, taskCounters)
         , TaskCounters(taskCounters)
         , MetricsReporter(taskCounters)
-        , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
+        , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, NWilson::TTraceId(traceId), "ComputeActor")
+        , LifecycleSpan(6, std::move(traceId), "ComputeActor lifecycle", NWilson::EFlags::AUTO_END)
         , Running(!Task.GetCreateSuspended())
         , PassExceptions(passExceptions)
     {
@@ -660,6 +663,7 @@ protected:
 protected:
     void PassAway() override {
         Y_ABORT_UNLESS(Terminated);
+        LifecycleEvents.Event(LifecycleSpan, 10, "compute PassAway requested", NWilson::TSpanEventBudget::EKind::Terminal);
         NActors::TActorBootstrapped<TDerived>::PassAway();
     }
 
@@ -672,6 +676,10 @@ protected:
             return;
         }
 
+        LifecycleEvents.Event(LifecycleSpan, 10, "compute termination entered", NWilson::TSpanEventBudget::EKind::Terminal);
+        if (LifecycleSpan) {
+            LifecycleSpan.Attribute("ydb.compute.termination_success", success);
+        }
         try {
             if (MemoryQuota) {
                 // everything below dies without an operator quota, maybe under the scope of the current execution
@@ -740,11 +748,27 @@ protected:
             this->PassAway();
         } catch (const std::exception&) {
             // Try to guarantee actor destruction to prevent recursive exception throwing - assume that basic PassAway doesn't throw.
+            FinishLifecycleTrace("termination_exception");
             NActors::IActor::PassAway();
             throw;
         }
 
         DoTerminateImpl();
+        FinishLifecycleTrace("terminate_completed");
+    }
+
+    void FinishLifecycleTrace(const char* boundary) {
+        if (LifecycleSpan) {
+            LifecycleSpan.Attribute("ydb.task_id", static_cast<i64>(Task.GetId()));
+            LifecycleSpan.Attribute("ydb.stage_id", static_cast<i64>(Task.GetStageId()));
+            LifecycleSpan.Attribute("ydb.compute.end_boundary", TString(boundary));
+            LifecycleSpan.Attribute("ydb.compute.resume_handlers", static_cast<i64>(ResumeHandlers));
+            LifecycleSpan.Attribute("ydb.compute.measured_resume_handlers", static_cast<i64>(MeasuredResumeHandlers));
+            LifecycleSpan.Attribute("ydb.trace.event_budget.scope", TString("compute_lifecycle"));
+            LifecycleEvents.Event(LifecycleSpan, 10, "compute termination completed", NWilson::TSpanEventBudget::EKind::Terminal);
+            LifecycleEvents.Annotate(LifecycleSpan);
+            LifecycleSpan.End();
+        }
     }
 
     void Terminate(bool success, const TString& message) {
@@ -866,6 +890,9 @@ protected:
             Checkpoints // After finish graph should continue checkpoints distribution
         )) {
             ResumeEventScheduled = true;
+            if (LifecycleSpan && LifecycleSpan.GetTraceId().GetVerbosity() >= 10) {
+                ResumeScheduledAt = TMonotonic::Now();
+            }
             this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution{source});
         }
     }
@@ -880,6 +907,28 @@ protected: //TDqComputeActorChannels::ICallbacks
     //void TakeInputChannelData(TChannelDataOOB&& channelData, bool ack) is pure and must be overridded in derived class
 
     // void PeerFinished(ui64 channelId) is pure and must be overridded in derived class
+
+    void TraceChannelProgress(const char* name, const TDqComputeActorChannels::TChannelTraceInfo& info) override {
+        LifecycleEvents.Event(LifecycleSpan, 10, name, [&] {
+            NWilson::TKeyValueList attributes;
+            attributes["channel_id"] = static_cast<i64>(info.ChannelId);
+            attributes["sequence_no"] = static_cast<i64>(info.SeqNo);
+            attributes["message_eof"] = info.MessageEof;
+            attributes["early_finish"] = info.EarlyFinish;
+            attributes["retained_messages"] = static_cast<i64>(info.RetainedMessages);
+            if (info.FreeSpaceKnown) {
+                attributes[TStringBuf(name) == "channel data dispatched"
+                    ? "available_credit_bytes" : "advertised_free_bytes"] = info.FreeSpace;
+            }
+            if (info.EofSeqNo) {
+                attributes["eof_sequence_no"] = static_cast<i64>(info.EofSeqNo);
+                if (TStringBuf(name) == "channel data ack received") {
+                    attributes["eof_acknowledged"] = info.SeqNo >= info.EofSeqNo;
+                }
+            }
+            return attributes;
+        });
+    }
 
     void ResumeExecution(EResumeSource source) override final{
         ContinueExecute(source);
@@ -1253,11 +1302,45 @@ protected:
     }
 
 protected:
-    void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) {
+    void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr& ev) {
+        ++ResumeHandlers;
         ResumeEventScheduled = false;
-        if (Running) {
-            DoExecute();
+        const bool traceHandler = LifecycleEvents.Event(LifecycleSpan, 10, "compute resume handled", [&] {
+            NWilson::TKeyValueList attributes;
+            attributes["source"] = static_cast<i64>(ev->Get()->Source);
+            attributes["running"] = Running;
+            if (ResumeScheduledAt) {
+                attributes["schedule_to_handler_us"] = static_cast<i64>((TMonotonic::Now() - ResumeScheduledAt).MicroSeconds());
+            }
+            return attributes;
+        });
+        ResumeScheduledAt = {};
+        NWilson::TSpan handlerSpan;
+        TMonotonic started;
+        ui64 cpuStarted = 0;
+        if (traceHandler) {
+            ++MeasuredResumeHandlers;
+            handlerSpan = LifecycleSpan.CreateChild(10, "Compute resume handler", NWilson::EFlags::AUTO_END);
+            started = TMonotonic::Now();
+            cpuStarted = ThreadCPUTime();
         }
+        auto finishHandler = [&](bool failed) {
+            if (handlerSpan) {
+                handlerSpan.Attribute("ydb.handler.wall_us", static_cast<i64>((TMonotonic::Now() - started).MicroSeconds()));
+                handlerSpan.Attribute("ydb.handler.thread_cpu_us", static_cast<i64>(ThreadCPUTime() - cpuStarted));
+                handlerSpan.Attribute("ydb.handler.threw", failed);
+                handlerSpan.End();
+            }
+        };
+        try {
+            if (Running) {
+                DoExecute();
+            }
+        } catch (...) {
+            finishHandler(true);
+            throw;
+        }
+        finishHandler(false);
     }
 
     void HandleExecuteBase(TEvDqCompute::TEvChannelsInfo::TPtr& ev) {
@@ -2252,7 +2335,7 @@ protected:
 
         CA_LOG_T("Poll inputs");
         for (auto& [inputIndex, transform] : InputTransformsMap) {
-            if (auto resume = transform.PollAsyncInput(MetricsReporter, RuntimeSettings.AsyncInputPushLimit)) {
+            if (auto resume = transform.PollAsyncInput(MetricsReporter, RuntimeSettings.AsyncInputPushLimit, &LifecycleSpan, &LifecycleEvents)) {
                 if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
                     pollResult = resume;
                 }
@@ -2267,7 +2350,7 @@ protected:
 
         CA_LOG_T("Poll sources");
         for (auto& [inputIndex, source] : SourcesMap) {
-            if (auto resume =  source.PollAsyncInput(MetricsReporter, RuntimeSettings.AsyncInputPushLimit)) {
+            if (auto resume =  source.PollAsyncInput(MetricsReporter, RuntimeSettings.AsyncInputPushLimit, &LifecycleSpan, &LifecycleEvents)) {
                 if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
                     pollResult = resume;
                 }
@@ -2979,6 +3062,11 @@ protected:
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
     TDqComputeActorMetrics MetricsReporter;
     NWilson::TSpan ComputeActorSpan;
+    NWilson::TSpan LifecycleSpan;
+    NWilson::TSpanEventBudget LifecycleEvents;
+    TMonotonic ResumeScheduledAt;
+    ui64 ResumeHandlers = 0;
+    ui64 MeasuredResumeHandlers = 0;
     TDuration SourceCpuTime;
     TDuration InputTransformCpuTime;
 private:

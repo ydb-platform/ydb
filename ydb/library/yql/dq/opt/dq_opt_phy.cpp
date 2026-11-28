@@ -14,6 +14,9 @@
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <yql/essentials/core/yql_cost_function.h>
 
+#include <util/generic/algorithm.h>
+#include <util/generic/set.h>
+
 
 namespace NYql::NDq {
 
@@ -1571,6 +1574,75 @@ TExprBase DqBuildPartitionsStage(
 )
 {
     return DqBuildPartitionsStageStub<TCoPartitionsByKeys>(std::move(node), ctx, optCtx, parentsMap, allowStageMultiUsage, typeCtx, enableShuffleElimination, useSortForPartitionsByKeys);
+}
+
+TExprBase DqNarrowPartitionsByKeysInput(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,
+    bool allowStageMultiUsage)
+{
+    const auto partition = node.Cast<TCoPartitionsByKeys>();
+    const auto dqUnion = partition.Input().Maybe<TDqCnUnionAll>();
+    if (!dqUnion || !IsSingleConsumerConnection(dqUnion.Cast(), parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+    const auto* itemType = GetSeqItemType(partition.Input().Ref().GetTypeAnn());
+    if (!itemType || itemType->GetKind() != ETypeAnnotationKind::Struct) {
+        return node;
+    }
+    const auto& rowType = *itemType->Cast<TStructExprType>();
+    if (rowType.GetSize() < 2) {
+        return node;
+    }
+
+    const auto& stream = partition.ListHandlerLambda().Args().Arg(0).Ref();
+    const auto streamParents = parentsMap.find(&stream);
+    if (streamParents == parentsMap.end() || streamParents->second.size() != 1) {
+        return node;
+    }
+    const auto* condense = *streamParents->second.begin();
+    if (!condense->IsCallable(TCoCondense1::CallableName()) || &condense->Head() != &stream) {
+        return node;
+    }
+
+    TSet<TStringBuf> fields;
+    const auto collect = [&](const TExprNode& lambda) {
+        return HaveFieldsSubset(lambda.TailPtr(), lambda.Head().Head(), fields, parentsMap);
+    };
+    const auto* switchLambda = condense->Child(TCoCondense1::idx_SwitchHandler);
+    const auto& row = switchLambda->Head().Head();
+    const auto& switchBody = switchLambda->Tail();
+    if (switchBody.IsCallable("IsKeySwitch") && &switchBody.Head() == &row && switchBody.Child(1) != &row
+        && parentsMap.at(&row).size() == 1)
+    {
+        switchLambda = switchBody.Child(2);
+    }
+    if (!collect(partition.KeySelectorLambda().Ref()) || !collect(*switchLambda)
+        || !collect(*condense->Child(TCoCondense1::idx_InitHandler))
+        || !collect(*condense->Child(TCoCondense1::idx_UpdateHandler))
+        || (partition.SortKeySelectorLambda().Maybe<TCoLambda>() && !collect(partition.SortKeySelectorLambda().Ref())))
+    {
+        return node;
+    }
+
+    if (fields.empty()) {
+        const auto& items = rowType.GetItems();
+        const auto fixed = FindIf(items, [](const TItemExprType* item) { return IsFixedSizeData(item->GetItemType()); });
+        fields.insert((fixed != items.end() ? *fixed : items.front())->GetName());
+    }
+    if (fields.size() >= rowType.GetSize()) {
+        return node;
+    }
+
+    TExprNode::TListType members;
+    for (const auto& name : fields) {
+        members.push_back(ctx.NewAtom(partition.Pos(), name));
+    }
+    return Build<TCoPartitionsByKeys>(ctx, node.Pos())
+        .InitFrom(partition)
+        .Input<TCoExtractMembers>()
+            .Input(partition.Input())
+            .Members(ctx.NewList(partition.Pos(), std::move(members)))
+            .Build()
+        .Done();
 }
 
 TExprBase DqBuildPartitionStage(

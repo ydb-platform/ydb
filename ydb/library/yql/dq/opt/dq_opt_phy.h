@@ -76,6 +76,9 @@ NNodes::TExprBase DqBuildPartitionsStage(
     bool useSortForPartitionsByKeys = false
 );
 
+NNodes::TExprBase DqNarrowPartitionsByKeysInput(NNodes::TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,
+    bool allowStageMultiUsage = true);
+
 NNodes::TExprBase DqBuildPartitionStage(
     NNodes::TExprBase node,
     TExprContext& ctx,

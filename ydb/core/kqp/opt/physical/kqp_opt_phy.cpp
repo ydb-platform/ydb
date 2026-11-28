@@ -555,6 +555,13 @@ protected:
     TMaybeNode<TExprBase> BuildPartitionsStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
+        if (KqpCtx.Config->GetEnableNarrowWindowAggregateInput()) {
+            TExprBase narrowed = DqNarrowPartitionsByKeysInput(node, ctx, *getParents(), IsGlobal);
+            if (narrowed.Raw() != node.Raw()) {
+                DumpAppliedRule("NarrowPartitionsByKeysInput", node.Ptr(), narrowed.Ptr(), ctx);
+                return narrowed;
+            }
+        }
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
         const bool windowFunctionsV2 = KqpCtx.Config->GetWindowFunctionsV2();
         TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination, windowFunctionsV2);

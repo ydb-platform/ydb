@@ -1,4 +1,9 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+
+#include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <util/folder/dirut.h>
 
@@ -117,6 +122,60 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2, bo
         [[703u];["Value3"];[2];[17]];
         [[803u];["Value3"];[3];[17]]
     ])", FormatResultSetYson(exec.GetResultSet(0)));
+}
+
+NYql::TExprNode::TPtr FindStageProgram(const TString& ast, NYql::TExprContext& ctx, TStringBuf callable) {
+    auto parsed = NYql::ParseAst(ast);
+    UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
+    NYql::TExprNode::TPtr root;
+    UNIT_ASSERT_C(NYql::CompileExpr(*parsed.Root, root, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
+    NYql::TExprNode::TPtr program;
+    NYql::VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
+        if (!program && node->IsCallable("DqPhyStage")) {
+            const auto& stageProgram = node->ChildPtr(NYql::NNodes::TDqPhyStage::idx_Program);
+            if (NYql::FindNode(stageProgram, [&](const NYql::TExprNode::TPtr& child) { return child->IsCallable(callable); })) {
+                program = stageProgram;
+            }
+        }
+        return !program;
+    });
+    UNIT_ASSERT_C(program, ast);
+    return program;
+}
+
+bool HasMember(const NYql::TExprNode::TPtr& program, TStringBuf name) {
+    return bool(NYql::FindNode(program, [&](const NYql::TExprNode::TPtr& node) {
+        return node->IsAtom() && node->Content() == name;
+    }));
+}
+
+void CheckNarrowWindowAggregateResults(const TString& query,
+    const std::function<void(const TString& ast, bool narrow)>& checkAst = {})
+{
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
+    TKikimrRunner kikimr(appConfig);
+    auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+    TString expected;
+    for (bool narrow : {false, true}) {
+        const TString configuredQuery = TStringBuilder()
+            << "--!syntax_v1\nPRAGMA ydb.EnableNarrowWindowAggregateInput = '" << (narrow ? "true" : "false") << "';\n"
+            << query;
+        if (checkAst) {
+            auto explain = session.ExecuteQuery(configuredQuery, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+            checkAst(*explain.GetStats()->GetAst(), narrow);
+        }
+        auto result = session.ExecuteQuery(configuredQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        const auto actual = FormatResultSetYson(result.GetResultSet(0));
+        if (narrow) {
+            CompareYsonUnordered(expected, actual);
+        } else {
+            expected = actual;
+        }
+    }
 }
 
 void CheckStandardWindowFunctionAst(const TString& projection, bool useSortForPartitionsByKeys) {
@@ -244,6 +303,59 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             "    SUM(Data) OVER (PARTITION BY Text) AS tot\n"
             "FROM `/Root/EightShard`;\n",
             WindowFunctionsV2);
+    }
+
+    Y_UNIT_TEST(NarrowWindowAggregateInputDropsUnusedColumn) {
+        for (bool ordered : {false, true}) {
+            const TStringBuf order = ordered ? "ORDER BY Key ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING" : "";
+            CheckNarrowWindowAggregateResults(TStringBuilder() << R"(
+                $input = SELECT Key, Text, Data,
+                    Unwrap(CAST(Key AS String) || Text || CAST(Data AS String)) AS unused_fat_col
+                FROM `/Root/EightShard`;
+                SELECT Key, Text, Data, unused_fat_col, SUM(Data) OVER w AS total
+                FROM $input WINDOW w AS (PARTITION BY Text
+            )" << order << ");", [&](const TString& ast, bool narrow) {
+                UNIT_ASSERT_C(ast.Contains("unused_fat_col"), ast);
+                NYql::TExprContext ctx;
+                const auto aggregate = FindStageProgram(ast, ctx, "AggrAdd");
+                UNIT_ASSERT_C(HasMember(aggregate, "Data"), ast);
+                if (ordered) {
+                    UNIT_ASSERT_C(HasMember(aggregate, "Key"), ast);
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(HasMember(aggregate, "unused_fat_col"), !narrow, ast);
+            });
+        }
+    }
+
+    // #59253: AGGREGATE_LIST(TableRow()) reads the whole row, so the aggregate input must stay wide.
+    Y_UNIT_TEST(NarrowWindowAggregateInputKeepsPlainWholeRowAggregate) {
+        CheckNarrowWindowAggregateResults(R"(
+            $input = SELECT Key, Text, Data, CAST(Key AS String) AS trace_id,
+                Text AS extra1, Text AS extra2, Text AS extra3
+            FROM `/Root/EightShard`;
+            SELECT COUNT(*) AS rows, COUNT(DISTINCT trace_id) AS unique_rows,
+                ListSort(AGGREGATE_LIST(TableRow()), ($row) -> ($row.Key)) AS all_rows
+            FROM $input;
+        )");
+    }
+
+    Y_UNIT_TEST(NarrowWindowAggregateInputCountOverWholeTable) {
+        CheckNarrowWindowAggregateResults(R"(
+            $input = SELECT Key, Text, Data,
+                Unwrap(CAST(Key AS String) || Text || CAST(Data AS String)) AS unused_fat_col
+            FROM `/Root/EightShard`;
+            SELECT Key, unused_fat_col, COUNT(*) OVER () AS rows
+            FROM $input;
+        )");
+    }
+
+    Y_UNIT_TEST(NarrowWindowAggregateInputKeepsNestedWindowResults) {
+        CheckNarrowWindowAggregateResults(R"(
+            $first = SELECT Key, Text, Data, SUM(Data) OVER (PARTITION BY Text) AS total
+            FROM `/Root/EightShard`;
+            SELECT Key, Text, Data, total, SUM(total) OVER (PARTITION BY Text) AS second_total
+            FROM $first;
+        )");
     }
 
     Y_UNIT_TEST(WindowFunctionFullFrameFromJoinAst) {

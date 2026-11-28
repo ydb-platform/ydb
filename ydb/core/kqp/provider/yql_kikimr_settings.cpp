@@ -103,6 +103,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OptShuffleEliminationForAggregation);
     REGISTER_SETTING(*this, WindowFunctionsV2);
+    REGISTER_SETTING(*this, EnableNarrowWindowAggregateInput);
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
     REGISTER_SETTING(*this, OptValidateStreamingConstraints);
@@ -445,6 +446,10 @@ bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
 
 bool TKikimrConfiguration::GetWindowFunctionsV2() const {
     return WindowFunctionsV2.Get().GetOrElse(TTableServiceConfig::GetEnableWindowFunctionsV2());
+}
+
+bool TKikimrConfiguration::GetEnableNarrowWindowAggregateInput() const {
+    return EnableNarrowWindowAggregateInput.Get().GetOrElse(TTableServiceConfig::GetEnableNarrowWindowAggregateInput());
 }
 
 bool TKikimrConfiguration::GetEnableCsWriteAffinity() const {

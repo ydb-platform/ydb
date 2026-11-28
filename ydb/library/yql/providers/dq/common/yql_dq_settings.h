@@ -54,6 +54,7 @@ struct TDqSettings {
         static constexpr ui64 OutputChunkMaxSize = 4_MB;
         static constexpr ui64 ChunkSizeLimit = 128_MB;
         static constexpr bool EnableDqReplicate = false;
+        static constexpr bool EnableNarrowWindowAggregateInput = false;
         static constexpr ui64 WatermarksIdleTimeoutMs = 5000;
         static constexpr ui64 WatermarksGranularityMs = 1000;
         static constexpr ui64 WatermarksLateArrivalDelayMs = 5000;
@@ -127,6 +128,7 @@ public:
     NCommon::TConfSetting<bool, Static> _EnablePrecompute;
     NCommon::TConfSetting<bool, Static> UseFinalizeByKey;
     NCommon::TConfSetting<bool, Static> EnableDqReplicate;
+    NCommon::TConfSetting<bool, Static> EnableNarrowWindowAggregateInput;
     NCommon::TConfSetting<TString, Static> WatermarksMode;
     NCommon::TConfSetting<bool, Static> WatermarksEnableIdlePartitions;
 

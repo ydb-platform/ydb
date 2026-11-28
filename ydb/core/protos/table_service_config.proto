@@ -653,4 +653,6 @@ message TTableServiceConfig {
     // Reject row-table reads in the new RBO to trigger fallback to the YQL optimizer.
     // Requires EnableFallbackToYqlOptimizer; without it these queries fail compilation.
     optional bool EnableFallbackOnRowTables = 157 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool EnableNarrowWindowAggregateInput = 158 [default = false, (InvalidateCompileCache) = true];
 };

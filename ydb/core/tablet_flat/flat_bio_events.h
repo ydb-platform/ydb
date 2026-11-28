@@ -3,6 +3,9 @@
 #include "flat_bio_eggs.h"
 #include "flat_sausage_fetch.h"
 #include "flat_sausage_gut.h"
+#include "shared_cache_memory.h"
+
+#include <optional>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/base/events.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -23,19 +26,20 @@ namespace NBlockIO {
 
     struct TEvFetch : public TEventLocal<TEvFetch, ui32(EEv::Fetch)> {
         TEvFetch(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection,
-            TVector<TPageLocation> pages, ui64 cookie)
+            TVector<TPageLocation> pages, ui64 cookie, std::optional<NSharedCache::TMetadataAccounting> accounting = {})
             : Priority(priority)
             , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
             , Cookie(cookie)
-        {
-        }
+            , MetadataAccounting(std::move(accounting))
+        {}
 
         const EPriority Priority;
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TVector<TPageLocation> Pages;
         NWilson::TTraceId TraceId;
         const ui64 Cookie;
+        std::optional<NSharedCache::TMetadataAccounting> MetadataAccounting;
     };
 
     struct TEvData: public TEventLocal<TEvData, ui32(EEv::Data)> {

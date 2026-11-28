@@ -92,6 +92,7 @@ SRCS(
     probes.cpp
     shared_handle.cpp
     shared_cache_counters.cpp
+    shared_cache_memory.cpp
     shared_cache_btree_walk.cpp
     shared_cache_btree_walk.h
     shared_sausagecache_state.h

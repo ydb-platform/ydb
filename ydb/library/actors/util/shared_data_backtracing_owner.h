@@ -7,6 +7,7 @@
 
 class TBackTracingOwner : public NActors::TSharedData::IOwner {
     using THeader = NActors::TSharedData::THeader;
+    using TPrivateHeader = NActors::TSharedData::TPrivateHeader;
     using TSelf = TBackTracingOwner;
     using IOwner = NActors::TSharedData::IOwner;
 
@@ -15,6 +16,7 @@ class TBackTracingOwner : public NActors::TSharedData::IOwner {
     static constexpr size_t OverheadSize = NActors::TSharedData::OverheadSize;
 
     IOwner* RealOwner = nullptr;
+    bool UsesDefaultAllocator = false;
     TBackTrace BackTrace;
     const char* Info;
 public:
@@ -26,6 +28,7 @@ public:
 
     static char* Allocate(size_t size, const char* info = nullptr) {
         char* raw = reinterpret_cast<char*>(y_allocate(OverheadSize + size));
+        reinterpret_cast<TPrivateHeader*>(raw)->AllocSize = OverheadSize + size;
         THeader* header = reinterpret_cast<THeader*>(raw + PrivateHeaderSize);
         TSelf* btOwner = new TSelf;
         btOwner->BackTrace.Capture();
@@ -38,32 +41,50 @@ public:
     static void FakeOwner(const NActors::TSharedData& data, const char* info = nullptr) {
         THeader* header = Header(data);
         if (header) {
-            TSelf* btOwner = new TSelf();
+            auto btOwner = MakeHolder<TSelf>();
             btOwner->BackTrace.Capture();
             btOwner->Info = info;
-            if (header->Owner) {
-                btOwner->RealOwner = header->Owner;
-            }
-            header->Owner = btOwner;
+            btOwner->UsesDefaultAllocator = true;
+            auto* owner = header->Owner.load(std::memory_order_acquire);
+            do {
+                btOwner->RealOwner = owner;
+            } while (!header->Owner.compare_exchange_weak(
+                owner, btOwner.Get(), std::memory_order_acq_rel, std::memory_order_acquire));
+            Y_UNUSED(btOwner.Release());
         }
     }
 
     static void UnsafePrintBackTrace(NActors::TSharedData& data) {
-        THeader* header = Header(data);
-        if(header->Owner) {
-            TSelf* owner = static_cast<TSelf*>(header->Owner);
+        if (auto* owner = data.FindAllocationTag<TSelf>()) {
             owner->PrintBackTrace();
         }
     }
 
+    void* FindAllocationTag(const void* key) const noexcept override {
+        if (key == NActors::TSharedData::AllocationTagKey<TSelf>()) {
+            return const_cast<TSelf*>(this);
+        }
+        return RealOwner ? RealOwner->FindAllocationTag(key) : nullptr;
+    }
+
+    size_t GetAllocationSize(const char* data) const noexcept override {
+        if (RealOwner) {
+            return RealOwner->GetAllocationSize(data);
+        }
+        return reinterpret_cast<const TPrivateHeader*>(data - OverheadSize)->AllocSize;
+    }
+
     void Deallocate(char* data) noexcept override {
-        if (!RealOwner) {
-            THeader* header = reinterpret_cast<THeader*>(data - sizeof(THeader));
+        THeader* header = reinterpret_cast<THeader*>(data - sizeof(THeader));
+        header->Owner.store(RealOwner, std::memory_order_relaxed);
+        if (RealOwner) {
+            RealOwner->Deallocate(data);
+        } else if (UsesDefaultAllocator) {
+            NActors::TSharedData::Deallocate(data);
+        } else {
             header->~THeader();
             char* raw = data - OverheadSize;
             y_deallocate(raw);
-        } else {
-            RealOwner->Deallocate(data);
         }
 
         delete this;

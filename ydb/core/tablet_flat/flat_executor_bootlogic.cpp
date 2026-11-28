@@ -30,9 +30,11 @@ NBoot::TLoadBlobs::TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeG
     Logic->LoadEntry(this);
 }
 
-TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, ui64 bootAttempt, TTabletStorageInfo *info, ui64 maxBytesInFly)
+TExecutorBootLogic::TExecutorBootLogic(IOps* ops, const TActorId& self, ui64 bootAttempt, TTabletStorageInfo* info,
+    ui64 maxBytesInFly, THashSet<TLogoBlobID>& pendingMetadataCollections)
     : Ops(ops)
     , SelfId(self)
+    , PendingMetadataCollections(pendingMetadataCollections)
     , BootAttempt(bootAttempt)
     , Info(info)
     , GroupResolveCachedChannel(Max<ui32>())
@@ -197,13 +199,16 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoade
 
     SeenBlob(fetch.PageCollection->Label());
 
+    if (fetch.MetaOnly) {
+        PendingMetadataCollections.insert(fetch.PageCollection->Label());
+    }
     Ops->Send(
         NSharedCache::MakeSharedPageCacheId(),
         new NSharedCache::TEvRequest(
             NBlockIO::EPriority::Fast,
             std::move(fetch.PageCollection),
             std::move(fetch.Pages),
-            BootAttempt),
+            BootAttempt, fetch.MetaOnly),
         0, (ui64)ERequestTypeCookie::BootLogic);
 
     return NBoot::TSpawned(true);

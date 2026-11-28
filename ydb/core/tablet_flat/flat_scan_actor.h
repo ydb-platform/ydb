@@ -165,10 +165,10 @@ namespace NOps {
                 ui64 slot = ev->Cookie;
                 Y_ENSURE(slot < Components.size());
                 Y_ENSURE(slot < PageCollectionLoaders.size());
-                Y_ENSURE(!Components[slot].RawMeta);
+                Y_ENSURE(!Components[slot].SharedMeta);
                 auto& loader = PageCollectionLoaders[slot];
                 if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
-                    Components[slot].RawMeta = loader.ExtractSharedData();
+                    Components[slot].SetMeta(loader.ExtractSharedData());
                     Y_ENSURE(ComponentsLeft > 0);
                     if (0 == --ComponentsLeft) {
                         PageCollectionLoaders.clear();
@@ -194,14 +194,14 @@ namespace NOps {
 
             void RunLoader() {
                 if (auto fetch = Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, std::move(fetch.PageCollection), std::move(fetch.Pages)));
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, std::move(fetch.PageCollection), std::move(fetch.Pages), 0, fetch.MetaOnly));
                     ++ReadsLeft;
                 }
 
                 if (!ReadsLeft) {
                     TPartView partView = Loader->Result();
                     Send(Owner, new TEvPrivate::TEvPartLoaded(std::move(partView)));
-                    return PassAway();
+                    // The parent releases this loader after acquiring its own collection ownership
                 }
             }
 
@@ -209,6 +209,7 @@ namespace NOps {
                 sFunc(TEvents::TEvPoison, PassAway);
                 hFunc(NSharedCache::TEvResult, Handle);
                 hFunc(NBlockIO::TEvStat, Handle);
+                IgnoreFunc(NSharedCache::TEvUpdated);
             });
 
             void Handle(NSharedCache::TEvResult::TPtr& ev) {
@@ -223,7 +224,7 @@ namespace NOps {
 
                 Y_ENSURE(Loader);
                 Y_ENSURE(msg->Cookie == 0);
-                Loader->Save(std::move(msg->Pages));
+                Loader->Save(std::move(msg->Pages), std::move(msg->SharedMeta));
 
                 if (ReadsLeft == 0) {
                     RunLoader();
@@ -589,7 +590,6 @@ namespace NOps {
             auto* msg = ev->Get();
 
             const auto label = msg->Part->Label;
-            ColdPartLoaders.erase(label);
 
             auto& partView = ColdPartLoaded[label];
             partView = std::move(msg->Part);
@@ -598,6 +598,14 @@ namespace NOps {
             Y_ENSURE(partStore);
 
             Cache->AddCold(partView);
+
+            for (const auto& collection : partStore->PageCollections) {
+                Send(MakeSharedPageCacheId(),
+                    new NSharedCache::TEvRequest(Args.ReadPrio, collection->PageCollection, {}, 0, true));
+            }
+            // Enqueue our ownership requests before the loader unregisters from the same local cache
+            Send(ev->Sender, new TEvents::TEvPoison());
+            ColdPartLoaders.erase(label);
 
             if (MayProgress()) {
                 Spent->Alter(true /* resource available again */);
@@ -630,6 +638,11 @@ namespace NOps {
                 }
 
                 return Terminate(EStatus::StorageError);
+            }
+
+            if (msg.SharedMeta) {
+                Y_ENSURE(msg.Pages.empty());
+                return;
             }
 
             Cache->Save(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));

@@ -98,7 +98,7 @@ struct TPendingPartSwitch {
             : PartComponents(std::move(pc))
         {
             for (size_t idx = 0; idx < PartComponents.PageCollectionComponents.size(); ++idx) {
-                if (!PartComponents.PageCollectionComponents[idx].RawMeta) {
+                if (!PartComponents.PageCollectionComponents[idx].SharedMeta) {
                     Loaders.emplace_back(idx, PartComponents.PageCollectionComponents[idx].LargeGlobId);
                 }
             }
@@ -110,7 +110,7 @@ struct TPendingPartSwitch {
 
         bool Accept(TLargeGlobLoaders::iterator it, const TLogoBlobID& id, TString body) {
             if (it->Accept(id, std::move(body))) {
-                PartComponents.PageCollectionComponents[it->Index].RawMeta = it->Finish();
+                PartComponents.PageCollectionComponents[it->Index].SetMeta(it->Finish());
                 Loaders.erase(it);
                 return !Loaders;
             }
@@ -453,6 +453,8 @@ class TExecutor
     TWaitingSnaps WaitingSnapshots;
 
     ui64 BootAttempt = 0;
+    // Metadata registrations not yet adopted by the private cache
+    THashSet<TLogoBlobID> PendingMetadataCollections;
     THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
 
@@ -530,6 +532,7 @@ class TExecutor
     void Active(const TActorContext &ctx);
     void ActivateFollower(const TActorContext &ctx);
     void RecreatePrivateCache();
+    void ReleasePendingMetadata(const TExecutorCaches& retained = {});
     void ReflectSchemeSettings();
     void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) override;
     void CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal = false);

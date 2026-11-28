@@ -76,6 +76,24 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         return meta.Finish();
     }
 
+    Y_UNIT_TEST(DescriptorMemoryFootprint)
+    {
+        auto raw = MakeMeta();
+        const TLargeGlobId id(0, TLogoBlobID(10, 20, 30, 1, raw.size(), 0), raw.size());
+        const TPageCollection first(id, raw);
+        const TOuterPageCollection second(id, raw);
+        const auto usage = first.GetMetadataMemoryUsage();
+        const i64 minimumBytes = sizeof(TPageCollection) + raw.GetAllocationSize() + Blobs.size() * sizeof(ui64);
+        UNIT_ASSERT(usage >= minimumBytes);
+        UNIT_ASSERT_VALUES_EQUAL(second.GetMetadataMemoryUsage(), usage);
+
+        auto oversizedRaw = TSharedData::Uninitialized(raw.size() + 4096);
+        ::memcpy(oversizedRaw.mutable_data(), raw.data(), raw.size());
+        oversizedRaw.TrimBack(raw.size());
+        const TPageCollection oversized(id, std::move(oversizedRaw));
+        UNIT_ASSERT_VALUES_EQUAL(oversized.GetMetadataMemoryUsage(), usage + 4096);
+    }
+
     Y_UNIT_TEST(Align)
     {
         const std::array<ui64, 3> steps = {{ 200, 500, 1000 }};
@@ -580,6 +598,8 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
         auto blob = writer.Make();
         NTable::NPage::TExtBlobs extBlobs(blob, TLogoBlobID(1, 2, 3, 1, blob.size(), 0));
+        UNIT_ASSERT_VALUES_EQUAL(extBlobs.GetMetadataMemoryUsage(),
+            sizeof(NTable::NPage::TExtBlobs) + blob.size() + TSharedData::OverheadSize);
 
         // For independently addressed blobs, Offset equals pageId (index in Array)
         //   0:   0,  1:   1,  2:   2,  3:   3,  4:   4

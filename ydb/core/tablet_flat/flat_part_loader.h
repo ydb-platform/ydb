@@ -17,6 +17,7 @@ namespace NTable {
     class TLoader {
     public:
         enum class EStage : ui8 {
+            SharedMeta,
             Meta,
             PartView,
             Slice,
@@ -30,9 +31,10 @@ namespace NTable {
         struct TFetch : TMoveOnly {
             TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
             TVector<TPageLocation> Pages;
+            bool MetaOnly = false;
 
             explicit operator bool() const {
-                return bool(Pages);
+                return MetaOnly || bool(Pages);
             }
         };
 
@@ -190,6 +192,9 @@ namespace NTable {
                 TFetch fetch;
 
                 switch (Stage) {
+                    case EStage::SharedMeta:
+                        fetch = StageShareMeta();
+                        break;
                     case EStage::Meta:
                         StageParseMeta();
                         break;
@@ -221,7 +226,8 @@ namespace NTable {
             return { };
         }
 
-        void Save(TVector<NSharedCache::TEvResult::TLoaded>&& pages);
+        void Save(TVector<NSharedCache::TEvResult::TLoaded>&& pages,
+            TAtomicSharedPtr<const NPageCollection::TMeta> sharedMeta = {});
 
         constexpr static bool NeedIn(EPage page) noexcept
         {
@@ -245,10 +251,10 @@ namespace NTable {
         static TEpoch GrabEpoch(const TPartComponents &pc)
         {
             Y_ENSURE(pc.PageCollectionComponents, "PartComponents should have at least one pageCollectionComponent");
-            Y_ENSURE(pc.PageCollectionComponents[0].RawMeta, "PartComponents should have raw meta data");
+            Y_ENSURE(pc.PageCollectionComponents[0].SharedMeta, "PartComponents should have metadata");
 
             const auto &comp = pc.PageCollectionComponents[0];
-            NPageCollection::TMeta meta(TSharedData(comp.RawMeta), comp.LargeGlobId.Group);
+            const auto& meta = *comp.SharedMeta;
 
             for (ui32 page = meta.TotalPages(); page--;) {
                 if (meta.GetPageType(page) == ui32(EPage::Schem2)
@@ -299,6 +305,7 @@ namespace NTable {
             Y_ENSURE(Root.HasEpoch(), "TPart meta has no epoch info");
         }
 
+        TFetch StageShareMeta();
         void StageParseMeta();
         TFetch StageCreatePartView(bool preloadIndex);
         TFetch StageSliceBounds();
@@ -312,7 +319,9 @@ namespace NTable {
         const TString Opaque;
         const TVector<TString> Deltas;
         const TEpoch Epoch;
-        EStage Stage = EStage::Meta;
+        EStage Stage = EStage::SharedMeta;
+        size_t MetaSlot = 0;
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> MetaRequest;
         bool Rooted = false; /* Has full topology metablob */
         TPageId SchemeId = Max<TPageId>();
         TPageId GlobsId = Max<TPageId>();

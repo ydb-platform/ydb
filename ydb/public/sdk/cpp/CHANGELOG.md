@@ -1,3 +1,5 @@
+* Added opt-in long polling for endpoint discovery via `SetDiscoveryLongPolling(true)`.
+
 ## v3.28.0
 
 * Fixed endpoint pessimization percentages so unhealthy endpoint pools trigger discovery correctly, including pools with more than 100 endpoints.

@@ -40,6 +40,8 @@ public:
     std::string GetDatabase() const override { return Database; }
     std::shared_ptr<ICredentialsProviderFactory> GetCredentialsProviderFactory() const override { return CredentialsProviderFactory; }
     EDiscoveryMode GetDiscoveryMode() const override { return DiscoveryMode; }
+    bool GetDiscoveryLongPolling() const override { return DiscoveryLongPolling; }
+    TDuration GetDiscoveryLongPollTimeout() const override { return DiscoveryLongPollTimeout; }
     size_t GetMaxQueuedRequests() const override { return MaxQueuedRequests; }
     TTcpKeepAliveSettings GetTcpKeepAliveSettings() const override { return TcpKeepAliveSettings; }
     bool GetTcpNoDelay() const override { return TcpNoDelay; }
@@ -69,6 +71,8 @@ public:
     std::string Database;
     std::shared_ptr<ICredentialsProviderFactory> CredentialsProviderFactory = CreateInsecureCredentialsProviderFactory();
     EDiscoveryMode DiscoveryMode = EDiscoveryMode::Sync;
+    bool DiscoveryLongPolling = false;
+    TDuration DiscoveryLongPollTimeout = TDuration::Seconds(45);
     size_t MaxQueuedRequests = 100;
     NYdbGrpc::TTcpKeepAliveSettings TcpKeepAliveSettings =
         {
@@ -168,6 +172,16 @@ TDriverConfig& TDriverConfig::SetCredentialsProviderFactory(std::shared_ptr<ICre
 
 TDriverConfig& TDriverConfig::SetDiscoveryMode(EDiscoveryMode discoveryMode) {
     Impl_->DiscoveryMode = discoveryMode;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetDiscoveryLongPolling(bool enabled) {
+    Impl_->DiscoveryLongPolling = enabled;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetDiscoveryLongPollTimeout(TDuration timeout) {
+    Impl_->DiscoveryLongPollTimeout = timeout;
     return *this;
 }
 
@@ -386,6 +400,8 @@ TDriverConfig TDriver::GetConfig() const {
     config.SetCredentialsProviderFactory(Impl_->DefaultCredentialsProviderFactory_);
     config.SetDatabase(Impl_->DefaultDatabase_);
     config.SetDiscoveryMode(Impl_->DefaultDiscoveryMode_);
+    config.SetDiscoveryLongPolling(Impl_->DiscoveryLongPolling_);
+    config.SetDiscoveryLongPollTimeout(Impl_->DiscoveryLongPollTimeout_);
     config.SetMaxQueuedRequests(Impl_->MaxQueuedRequests_);
     config.SetGrpcMemoryQuota(Impl_->MemoryQuota_);
     config.SetTcpKeepAliveSettings(

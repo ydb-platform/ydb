@@ -23,9 +23,11 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <util/generic/mapfindptr.h>
+#include <util/system/event.h>
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <future>
 #include <memory>
@@ -79,10 +81,16 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
             auto* op = response->mutable_operation();
             op->set_ready(true);
             op->set_status(Ydb::StatusIds::SUCCESS);
-            op->mutable_result()->PackFrom(*result);
-            return grpc::Status::OK;
+            auto snapshot = *result;
+            auto status = OnListEndpoints ? OnListEndpoints(*context, *request, snapshot, *op) : grpc::Status::OK;
+            if (op->status() == Ydb::StatusIds::SUCCESS) {
+                op->mutable_result()->PackFrom(snapshot);
+            }
+            return status;
         }
 
+        std::function<grpc::Status(const grpc::ServerContext&, const Ydb::Discovery::ListEndpointsRequest&,
+            Ydb::Discovery::ListEndpointsResult&, Ydb::Operations::Operation&)> OnListEndpoints;
         // From database name to result
         std::unordered_map<std::string, Ydb::Discovery::ListEndpointsResult> MockResults;
         std::string BuildInfo;
@@ -560,6 +568,104 @@ not-base64
         for (auto& t : ValidTokens) {
             UNIT_ASSERT_EQUAL(checkToken(t), EStatus::TRANSPORT_UNAVAILABLE);
         }
+    }
+
+    Y_UNIT_TEST(DiscoveryLongPollingIsOptIn) {
+        TPortManager ports;
+        TManualEvent firstRequest, repeatedRequest;
+        TMockDiscoveryService discovery;
+        auto& snapshot = discovery.MockResults["/Root"];
+        snapshot.set_snapshot_hash("initial");
+        auto* endpoint = snapshot.add_endpoints();
+        endpoint->set_address("127.0.0.1");
+        endpoint->set_port(ports.GetPort());
+        discovery.OnListEndpoints = [&](const auto&, const auto& request, auto&, auto&) {
+            if (firstRequest.WaitT(TDuration::Zero()) || !request.snapshot_hash().empty()) {
+                repeatedRequest.Signal();
+            }
+            firstRequest.Signal();
+            return grpc::Status::OK;
+        };
+        const std::string address = TStringBuilder() << "127.0.0.1:" << ports.GetPort();
+        auto server = StartGrpcServer(address, discovery);
+        TDriver driver(TDriverConfig().SetEndpoint(address).SetDatabase("/Root").SetDiscoveryLongPollTimeout(TDuration::Minutes(5)));
+        UNIT_ASSERT(firstRequest.WaitT(TDuration::Seconds(10)));
+        UNIT_ASSERT(!repeatedRequest.WaitT(TDuration::MilliSeconds(500)));
+    }
+
+    void CheckLongPollRecovery(Ydb::StatusIds::StatusCode status) {
+        const bool keepsEndpoints = status == Ydb::StatusIds::UNAVAILABLE;
+        for (auto mode : {EDiscoveryMode::Sync, EDiscoveryMode::Async}) {
+            TPortManager ports;
+            TMockTableService table;
+            const auto tablePort = ports.GetPort();
+            auto tableServer = StartGrpcServer(TStringBuilder() << "127.0.0.1:" << tablePort, table);
+
+            TManualEvent pending, resume, legacyReply, unexpectedPoll;
+            std::atomic_int calls = 0;
+            TMockDiscoveryService discovery;
+            auto* endpoint = discovery.MockResults["/Root"].add_endpoints();
+            endpoint->set_address("127.0.0.1");
+            endpoint->set_port(tablePort);
+            discovery.OnListEndpoints = [&](const auto& context, const auto& request, auto& snapshot, auto& operation) {
+                const size_t call = ++calls;
+                const char* hashes[] = {"", "initial", status == Ydb::StatusIds::SUCCESS ? "empty" : "", "restored", "restored"};
+                if (call > std::size(hashes) || request.snapshot_hash() != hashes[call - 1]) {
+                    unexpectedPoll.Signal();
+                }
+                if (call == 1) {
+                    snapshot.set_snapshot_hash("initial");
+                } else if (call == 2) {
+                    const auto remaining = context.deadline() - std::chrono::system_clock::now();
+                    if (remaining < std::chrono::minutes(4) || remaining > std::chrono::seconds(301)) {
+                        unexpectedPoll.Signal();
+                    }
+                    operation.set_status(status);
+                    if (status == Ydb::StatusIds::SUCCESS) {
+                        snapshot.clear_endpoints();
+                        snapshot.set_snapshot_hash("empty");
+                    }
+                } else if (call == 3) {
+                    pending.Signal();
+                    resume.WaitT(TDuration::Seconds(10));
+                    snapshot.set_snapshot_hash("restored");
+                } else if (call == 4) {
+                    return grpc::Status(grpc::StatusCode::DEADLINE_EXCEEDED, "long poll expired");
+                } else if (call == 5) {
+                    legacyReply.Signal(); // The server returns endpoints without a hash.
+                }
+                return grpc::Status::OK;
+            };
+            const std::string address = TStringBuilder() << "127.0.0.1:" << ports.GetPort();
+            auto discoveryServer = StartGrpcServer(address, discovery);
+            TDriver driver(TDriverConfig().SetEndpoint(address).SetDatabase("/Root").SetDiscoveryMode(mode)
+                .SetDiscoveryLongPolling(true).SetDiscoveryLongPollTimeout(TDuration::Minutes(5)).SetMaxQueuedRequests(1));
+            TTableClient client(driver);
+
+            UNIT_ASSERT(pending.WaitT(TDuration::Seconds(10)));
+            auto session = client.CreateSession();
+            const bool queued = !keepsEndpoints && mode == EDiscoveryMode::Async;
+            UNIT_ASSERT_VALUES_EQUAL(session.Wait(TDuration::Seconds(2)), !queued);
+            if (queued) {
+                auto overflow = client.CreateSession();
+                UNIT_ASSERT(overflow.Wait(TDuration::Seconds(2)));
+                UNIT_ASSERT_VALUES_EQUAL(overflow.GetValue().GetStatus(), EStatus::CLIENT_LIMITS_REACHED);
+            }
+            resume.Signal();
+            UNIT_ASSERT(session.Wait(TDuration::Seconds(10)));
+            UNIT_ASSERT_VALUES_EQUAL(session.GetValue().GetStatus(), keepsEndpoints || queued ? EStatus::SUCCESS : EStatus::UNAVAILABLE);
+            UNIT_ASSERT(legacyReply.WaitT(TDuration::Seconds(10)));
+            UNIT_ASSERT(!unexpectedPoll.WaitT(TDuration::MilliSeconds(500)));
+            UNIT_ASSERT(client.CreateSession().GetValueSync().IsSuccess());
+        }
+    }
+
+    Y_UNIT_TEST(LongPollAfterEmptyList) {
+        CheckLongPollRecovery(Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(LongPollUnavailableKeepsEndpoints) {
+        CheckLongPollRecovery(Ydb::StatusIds::UNAVAILABLE);
     }
 
     Y_UNIT_TEST(UsingIpAddresses) {

@@ -5,6 +5,7 @@ ydb/core/kqp/executer_actor/ut unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
+ydb/core/kqp/ut/rbo/olap KqpRboOlapDistinctPushdown.DistinctLimitSyncPoint_IncrementsScanCounter_TrivialReader
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithCompactFulltextIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
@@ -32,6 +33,8 @@ ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.LocalRetention
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithoutLaterMessageReportsDataLoss
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapBeforeSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapBeforeSessionStartWithoutLaterMessageReportsDataLoss
+ydb/core/tx/schemeshard/ut_serverless TSchemeShardServerLess.StorageBilling
+ydb/core/tx/schemeshard/ut_serverless unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_topic_cloud_events unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_truncate_table_simple unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10

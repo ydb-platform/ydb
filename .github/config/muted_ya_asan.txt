@@ -16,6 +16,9 @@ ydb/core/client/ut TFlatTest.WriteSplitAndRead
 ydb/core/client/ut TFlatTest.WriteSplitWriteSplit
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
+ydb/core/fq/libs/wasm_services/ut TFqWasmModuleTest.ProfileJsonStackHandlesLongStringsWithinResponseLimit
+ydb/core/kqp/runtime/scheduler/ut/simulator/ut py3test.sole chunk
+ydb/core/kqp/runtime/scheduler/ut/simulator/ut test_simulator.py.TestSimulator.test_api_handles_are_isolated
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.RestoreScriptPhysicalGraphOnRetry+ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.RestoreScriptPhysicalGraphOnRetry-ModernChannels
@@ -40,6 +43,7 @@ ydb/core/kqp/ut/olap KqpOlapTiering.EvictionResetTiering
 ydb/core/kqp/ut/olap KqpOlapTiering.LocksInterference
 ydb/core/kqp/ut/olap KqpOlapTiering.OversizedNGrammIndexOnTiering
 ydb/core/kqp/ut/olap KqpOlapTiering.TieringForIndexes-SchemeObjectEnabled
+ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/rbo/statistics/correctness KqpCorrectnessAnalyzedStatistics.TPCDS+ColumnStore
 ydb/core/kqp/ut/rbo/statistics/correctness KqpCorrectnessAnalyzedStatistics.TPCDS-ColumnStore
 ydb/core/kqp/ut/rbo/statistics/join_order KqpJoinOrderAnalyzedStatistics.TPCDS+ColumnStore
@@ -54,6 +58,10 @@ ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationSnapshotRW
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStaleRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStrictSerializableRW
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
+ydb/core/tx/datashard/ut_database_freeze DataShardDatabaseFreeze.FinalResolvedWaitsForSplitTopicPartitions
+ydb/core/tx/datashard/ut_database_freeze DataShardDatabaseFreeze.FinalResolvedWaitsForSplitTopicPartitionsAfterDataShardRestart
+ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
+ydb/core/tx/schemeshard/ut_stats TStoragePoolsStatsPersistence.DatabaseUsageAfterRestartDuringMoveWithShardIdxStats
 ydb/core/viewer/ut Viewer.ClusterBridgePileQueryMatrix
 ydb/core/viewer/ut unittest.[*/*] chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
@@ -61,6 +69,7 @@ ydb/library/yql/providers/generic/connector/tests/join py3test.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/slow TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Query
 ydb/public/sdk/cpp/src/client/topic/ut/slow TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Table
 ydb/public/sdk/cpp/src/client/topic/ut/slow unittest.[*/*] chunk
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.ReadRuleGeneration
 ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-3-1_to_stable-26-4-1]
 ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_prestable-27-1-1_to_prestable-27-1-1-column]
@@ -667,8 +676,6 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[9]
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_drop_table_during_export
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_rename_table_during_export
-ydb/tests/stress/oltp_workload/tests py3test.sole chunk
-ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_board_workload.py] chunk

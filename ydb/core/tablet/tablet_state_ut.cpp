@@ -1,11 +1,15 @@
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/tablet/tablet_setup.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/algorithm.h>
 
 namespace NKikimr {
 
@@ -50,6 +54,114 @@ Y_UNIT_TEST_SUITE(TabletState) {
             }
         }
     };
+
+    Y_UNIT_TEST(ResolverDiscoversNewFollowerBeforeStateStorage) {
+        TTestBasicRuntime runtime(1, false);
+        SetupTabletServices(runtime);
+
+        const auto sender = runtime.AllocateEdgeActor();
+        const ui64 tabletId = TTestTxConfig::TxTablet0;
+        const ui32 followerId = 1;
+        auto createTablet = [](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TSimpleTablet(tablet, info);
+        };
+        const auto leader = StartTestTablet(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::Dummy), createTablet);
+
+        runtime.Send(new IEventHandle(leader, sender, new TEvTablet::TEvTabletStateSubscribe(tabletId, 1)), 0, true);
+        while (runtime.GrabEdgeEventRethrow<TEvTablet::TEvTabletStateUpdate>(sender)->Get()->Record.GetState()
+                != NKikimrTabletBase::TEvTabletStateUpdate::StateActive) {
+        }
+
+        auto resolve = [&](TEvTabletResolver::TEvForward::TResolveFlags flags) {
+            runtime.Send(new IEventHandle(MakeTabletResolverID(), sender,
+                new TEvTabletResolver::TEvForward(tabletId, nullptr, flags)), 0, true);
+            return runtime.GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(sender);
+        };
+
+        TEvTabletResolver::TEvForward::TResolveFlags flags;
+        flags.SetAllowFollower(true);
+        const auto initial = resolve(flags);
+        UNIT_ASSERT_VALUES_EQUAL(initial->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(initial->Get()->Tablet, leader);
+
+        const auto resolver = runtime.GetLocalServiceId(MakeTabletResolverID());
+        const auto stateStorageProxy = runtime.GetLocalServiceId(MakeStateStorageProxyID());
+        size_t resolverLookups = 0;
+        auto countLookups = runtime.AddObserver<TEvStateStorage::TEvLookup>([&](auto& ev) {
+            if (ev->Sender == resolver && ev->GetRecipientRewrite() == stateStorageProxy &&
+                    ev->Get()->TabletID == tabletId) {
+                ++resolverLookups;
+            }
+        });
+
+        auto setup = MakeIntrusive<TTabletSetupInfo>(createTablet, TMailboxType::Simple, 0u, TMailboxType::Simple, 0u);
+        auto startFollower = [&](ui32 id) {
+            const auto actor = runtime.Register(CreateTabletFollower(sender,
+                CreateTestTabletInfo(tabletId, TTabletTypes::Dummy), setup.Get(), id));
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([&](IEventHandle& ev) {
+                if (ev.GetTypeRewrite() != TEvTablet::TEvTabletStateUpdate::EventType ||
+                        ev.Sender != leader || ev.GetRecipientRewrite() != resolver) {
+                    return false;
+                }
+                const auto& record = ev.Get<TEvTablet::TEvTabletStateUpdate>()->Record;
+                return AnyOf(record.GetReadyFollowers(), [id](const auto& follower) {
+                    return follower.GetFollowerId() == id;
+                });
+            });
+            UNIT_ASSERT(runtime.DispatchEvents(options, TDuration::Seconds(30)));
+            return actor;
+        };
+
+        const auto follower = startFollower(followerId);
+        const auto restored = runtime.GrabEdgeEventRethrow<TEvTablet::TEvRestored>(sender);
+        const auto preferred = resolve(flags);
+        UNIT_ASSERT_VALUES_EQUAL(preferred->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(preferred->Get()->Tablet, follower);
+        UNIT_ASSERT_VALUES_EQUAL(preferred->Get()->TabletActor, restored->Get()->UserTabletActor);
+        UNIT_ASSERT_VALUES_EQUAL(resolverLookups, 0u);
+
+        // A lookup for a different follower can race with registration of the new follower.
+        auto staleLookup = runtime.AddObserver<TEvStateStorage::TEvInfo>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == resolver && ev->Get()->TabletID == tabletId) {
+                ev->Get()->Followers.clear();
+            }
+        });
+        flags.SetFollowerId(followerId + 1);
+        const auto missingFollower = resolve(flags);
+        UNIT_ASSERT_UNEQUAL(missingFollower->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(resolverLookups, 1u);
+
+        flags.SetFollowerId(followerId);
+        const auto explicitFollower = resolve(flags);
+        UNIT_ASSERT_VALUES_EQUAL(explicitFollower->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(explicitFollower->Get()->Tablet, follower);
+        UNIT_ASSERT_VALUES_EQUAL(resolverLookups, 1u);
+
+        runtime.Send(new IEventHandle(follower, sender, new TEvents::TEvPoisonPill()), 0, true);
+        runtime.GrabEdgeEventRethrow<TEvTablet::TEvTabletDead>(sender);
+        runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+
+        // Leader-only traffic keeps the cache hot without refreshing followers.
+        TEvTabletResolver::TEvForward::TResolveFlags leaderOnly;
+        const auto stillLeader = resolve(leaderOnly);
+        UNIT_ASSERT_VALUES_EQUAL(stillLeader->Get()->Tablet, leader);
+        UNIT_ASSERT_VALUES_EQUAL(resolverLookups, 1u);
+
+        // The first follower request after expiry must miss even without another announcement.
+        const auto expiredFollower = resolve(flags);
+        UNIT_ASSERT_UNEQUAL(expiredFollower->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(resolverLookups, 2u);
+
+        const ui32 nextFollowerId = followerId + 1;
+        const auto nextFollower = startFollower(nextFollowerId);
+        runtime.GrabEdgeEventRethrow<TEvTablet::TEvRestored>(sender);
+        flags.SetFollowerId(nextFollowerId);
+        const auto currentFollower = resolve(flags);
+        UNIT_ASSERT_VALUES_EQUAL(currentFollower->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(currentFollower->Get()->Tablet, nextFollower);
+        UNIT_ASSERT_VALUES_EQUAL(resolverLookups, 2u);
+    }
 
     Y_UNIT_TEST(NormalLifecycle) {
         TTestBasicRuntime runtime(1);

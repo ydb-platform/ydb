@@ -1,4 +1,5 @@
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -101,15 +102,57 @@ Y_UNIT_TEST_SUITE(TTabletResolver) {
         UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
     }
 
-    THolder<TEvTabletResolver::TEvForwardResult> DoResolveTablet(TTestBasicRuntime& runtime, ui64 tabletId) {
+    THolder<TEvTabletResolver::TEvForwardResult> DoResolveTablet(TTestBasicRuntime& runtime, ui64 tabletId,
+            TEvTabletResolver::TEvForward::TResolveFlags flags = {}) {
         const TActorId edge = runtime.AllocateEdgeActor();
-        runtime.Send(new IEventHandle(MakeTabletResolverID(), edge, new TEvTabletResolver::TEvForward(tabletId, nullptr)));
+        runtime.Send(new IEventHandle(MakeTabletResolverID(), edge, new TEvTabletResolver::TEvForward(tabletId, nullptr, flags)));
         auto ev = runtime.GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(edge);
         return std::move(ev->Release());
     }
 
     void DoSendNodeProblem(TTestBasicRuntime& runtime, ui32 nodeId, ui64 problemEpoch) {
         runtime.Send(new IEventHandle(MakeTabletResolverID(), TActorId(), new TEvTabletResolver::TEvNodeProblem(nodeId, problemEpoch)));
+    }
+
+    Y_UNIT_TEST(ReadyFollowerSurvivesOlderNodeProblem) {
+        TTestBasicRuntime runtime(2);
+        SetupTabletServices(runtime);
+
+        const ui64 tabletId = 123;
+        const ui64 otherTabletId = 234;
+        const auto leader = runtime.AllocateEdgeActor(0);
+        const auto userLeader = runtime.AllocateEdgeActor(0);
+        const auto otherLeader = runtime.AllocateEdgeActor(1);
+        DoRegisterTabletInfo(runtime, tabletId, 1, leader, userLeader);
+        DoRegisterTabletInfo(runtime, otherTabletId, 1, otherLeader, runtime.AllocateEdgeActor(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(DoResolveTablet(runtime, tabletId)->Tablet, leader);
+        auto subscription = runtime.GrabEdgeEventRethrow<TEvTablet::TEvTabletStateSubscribe>(leader);
+        const auto other = DoResolveTablet(runtime, otherTabletId);
+        UNIT_ASSERT_VALUES_EQUAL(other->Tablet, otherLeader);
+        const auto follower = runtime.AllocateEdgeActor(1);
+        const auto userFollower = runtime.AllocateEdgeActor(1);
+        const ui32 followerId = 1;
+
+        // A pipe to the other tablet reports a disconnect on the follower's node.
+        DoSendNodeProblem(runtime, follower.NodeId(), other->CacheEpoch);
+        auto update = MakeHolder<TEvTablet::TEvTabletStateUpdate>(tabletId, subscription->Get()->Record.GetSeqNo(),
+            NKikimrTabletBase::TEvTabletStateUpdate::StateActive, userLeader);
+        auto* ready = update->Record.AddReadyFollowers();
+        ActorIdToProto(follower, ready->MutableActorId());
+        TEvTablet::SetReadyFollower(ready, followerId, userFollower);
+        runtime.Send(new IEventHandle(subscription->Sender, leader, update.Release(), 0, subscription->Cookie), 0, true);
+
+        // State Storage still has no followers. Only the announcement can resolve this ID.
+        TEvTabletResolver::TEvForward::TResolveFlags flags;
+        flags.SetFollowerId(followerId);
+        const auto resolved = DoResolveTablet(runtime, tabletId, flags);
+        UNIT_ASSERT_VALUES_EQUAL(resolved->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(resolved->Tablet, follower);
+        UNIT_ASSERT_VALUES_EQUAL(resolved->TabletActor, userFollower);
+
+        DoSendNodeProblem(runtime, follower.NodeId(), resolved->CacheEpoch);
+        UNIT_ASSERT_UNEQUAL(DoResolveTablet(runtime, tabletId, flags)->Status, NKikimrProto::OK);
     }
 
     Y_UNIT_TEST(NodeProblem) {

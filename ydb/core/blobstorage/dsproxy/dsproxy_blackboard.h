@@ -3,6 +3,8 @@
 
 #include "dsproxy.h"
 #include "request_history.h"
+#include "dsproxy_read_decision.h"
+#include <functional>
 
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
@@ -181,6 +183,9 @@ struct TBlackboard {
     };
 
     using TBlobStates = TMap<TLogoBlobID, TBlobState>;
+    std::function<void(const TBlobState&, const TReadChoiceTrace&)> TraceReadChoice;
+    std::function<void(const TBlobState&, const TDiskDelayPredictions&, ui64, bool)> TraceSlowDisks;
+
     TBlobStates BlobStates;
     TBlobStates DoneBlobStates;
     TGroupDiskRequests GroupDiskRequests;

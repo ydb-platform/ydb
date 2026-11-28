@@ -672,6 +672,9 @@ void TBlackboard::MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerati
     ui64 slowThreshold = worstDisks[maxNumSlow].PredictedNs * accelerationParams.SlowDiskThreshold;
     if (slowThreshold == 0) {
         // invalid or non-initialized predicted ns, consider all disks not slow
+        if (TraceSlowDisks) {
+            TraceSlowDisks(state, worstDisks, slowThreshold, isPut);
+        }
         return;
     }
 
@@ -680,6 +683,9 @@ void TBlackboard::MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerati
             ui32 orderNumber = worstDisks[idx].DiskIdx;
             state.Disks[orderNumber].IsSlow = true;
         }
+    }
+    if (TraceSlowDisks) {
+        TraceSlowDisks(state, worstDisks, slowThreshold, isPut);
     }
 }
 

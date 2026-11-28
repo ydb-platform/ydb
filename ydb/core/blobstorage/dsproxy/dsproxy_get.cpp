@@ -9,6 +9,7 @@
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <util/generic/set.h>
 #include <util/system/datetime.h>
+#include <ydb/library/actors/wilson/wilson_event_budget.h>
 #include "dsproxy_get_impl.h"
 
 namespace NKikimr {
@@ -58,22 +59,38 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     ui32 PutsAccelerated = 0;
     bool IsPutAccelerateScheduled = false;
 
+    struct TTraceQuery {
+        TLogoBlobID BlobId;
+        ui64 Shift;
+        ui64 Size;
+        std::optional<ui32> BlobIndex;
+    };
+    struct TVGetTrace {
+        NWilson::TSpan Span;
+        TVector<TTraceQuery> Queries;
+    };
+    THashMap<ui64, TVGetTrace> VGetTraces;
+    THashMap<TLogoBlobID, ui32> TraceBlobIndices;
+    NWilson::TSpanEventBudget TraceEvents;
+    ui32 VGetTraceCount = 0;
+    ui64 VGetTraceDropped = 0;
+
     TAccelerationParams AccelerationParams;
     TDuration LongRequestThreshold;
 
     void Handle(TEvAccelerateGet::TPtr &ev) {
         IsGetAccelerateScheduled = false;
         RootCauseTrack.OnAccelerate(ev->Get()->CauseIdx);
-        AccelerateGet();
+        AccelerateGet("get_acceleration_timer");
     }
 
     void Handle(TEvAcceleratePut::TPtr &ev) {
         IsPutAccelerateScheduled = false;
         RootCauseTrack.OnAccelerate(ev->Get()->CauseIdx);
-        AcceleratePut();
+        AcceleratePut("put_acceleration_timer");
     }
 
-    void AccelerateGet() {
+    void AccelerateGet(const char* cause = "get_acceleration_threshold") {
         if (GetsAccelerated == 2) {
             return;
         }
@@ -85,11 +102,11 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         GetImpl.AccelerateGet(LogCtx, GetUnresponsiveDisksMask(), vGets, vPuts);
         *Mon->NodeMon->AccelerateEvVPutCount += vPuts.size();
         *Mon->NodeMon->AccelerateEvVGetCount += vGets.size();
-        SendVGetsAndVPuts(vGets, vPuts);
+        SendVGetsAndVPuts(vGets, vPuts, cause);
         TryScheduleGetAcceleration();
     }
 
-    void AcceleratePut() {
+    void AcceleratePut(const char* cause = "put_acceleration_threshold") {
         if (PutsAccelerated == 2) {
             return;
         }
@@ -101,12 +118,12 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         GetImpl.AcceleratePut(LogCtx, GetUnresponsiveDisksMask(), vGets, vPuts);
         *Mon->NodeMon->AccelerateEvVPutCount += vPuts.size();
         *Mon->NodeMon->AccelerateEvVGetCount += vGets.size();
-        SendVGetsAndVPuts(vGets, vPuts);
+        SendVGetsAndVPuts(vGets, vPuts, cause);
         TrySchedulePutAcceleration();
     }
 
     void SendVGetsAndVPuts(TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &vGets,
-            TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &vPuts) {
+            TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &vPuts, const char* cause) {
         ReportBytes(GetImpl.GrabBytesToReport());
         RequestsSent += vGets.size() + vPuts.size();
         for (const auto& vPut : vPuts) {
@@ -130,6 +147,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 DiskCounters.resize(orderNumber + 1);
             }
             DiskCounters[orderNumber].Sent++;
+            TraceVGetSent(*vGets[i], orderNumber, cause);
 
             LWTRACK(
                 DSProxyVGetSent, Orbit,
@@ -170,6 +188,211 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
             SendToQueue(std::move(ev), cookie);
         }
         GetImpl.History.AddAllWaiting();
+    }
+
+    std::optional<ui32> TraceBlobIndex(const TLogoBlobID& id) {
+        const auto full = id.FullID();
+        if (auto it = TraceBlobIndices.find(full); it != TraceBlobIndices.end()) {
+            return it->second;
+        }
+        if (TraceBlobIndices.size() == 32) {
+            return {};
+        }
+        const ui32 index = TraceBlobIndices.size();
+        TraceBlobIndices.emplace(full, index);
+        return index;
+    }
+
+    NWilson::TKeyValueList TraceDecisionAttributes(const TBlobState& state) {
+        NWilson::TKeyValueList attrs;
+        attrs["capture_version"] = i64(1);
+        attrs["decision_id"] = static_cast<i64>(GetImpl.TraceDecisionSequence);
+        attrs["strategy"] = TString(GetImpl.TraceStrategy);
+        attrs["group_generation"] = static_cast<i64>(Info->GroupGeneration);
+        attrs["erasure"] = static_cast<i64>(Info->Type.GetErasure());
+        if (const auto index = TraceBlobIndex(state.Id)) {
+            attrs["blob_index"] = static_cast<i64>(*index);
+        } else {
+            attrs["blob_index_truncated"] = true;
+        }
+        attrs["full_request_replay_supported"] = false;
+        return attrs;
+    }
+
+    void TraceReadChoice(const TBlobState& state, const TReadChoiceTrace& choice) {
+        if (auto* owner = Span.GetWilsonSpanPtr(); owner && *owner) {
+            TraceEvents.Event(*owner, 14, "Mirror read candidate choice", [&] {
+                auto attrs = TraceDecisionAttributes(state);
+                attrs["replay_scope"] = TString("mirror3dc_candidate_choice");
+                attrs["candidates_complete"] = choice.Complete;
+                attrs["new_request"] = choice.NewRequest;
+                attrs["selected"] = bool(choice.Selected);
+                if (choice.Selected) {
+                    attrs["selected_subgroup_index"] = static_cast<i64>(*choice.Selected);
+                }
+                NWilson::TArrayValue candidates;
+                for (const auto& candidate : choice.Candidates) {
+                    NWilson::TKeyValueList item;
+                    item["score"] = static_cast<i64>(candidate.Score);
+                    item["subgroup_index"] = static_cast<i64>(candidate.SubgroupIndex);
+                    item["disk_order"] = static_cast<i64>(candidate.DiskOrder);
+                    item["eligible"] = candidate.Eligible;
+                    item["slow"] = candidate.Slow;
+                    candidates.emplace_back(std::move(item));
+                }
+                attrs["candidates"] = std::move(candidates);
+                return attrs;
+            });
+        }
+    }
+
+    void TraceSlowDisks(const TBlobState& state, const TDiskDelayPredictions& predictions,
+            ui64 threshold, bool isPut) {
+        if (auto* owner = Span.GetWilsonSpanPtr(); owner && *owner) {
+            TraceEvents.Event(*owner, 14, "Slow disk decision inputs", [&] {
+                auto attrs = TraceDecisionAttributes(state);
+                attrs["is_put"] = isPut;
+                attrs["prediction_age_known"] = false;
+                attrs["slow_threshold_ns"] = static_cast<i64>(threshold);
+                attrs["prediction_multiplier"] = double(AccelerationParams.PredictedDelayMultiplier);
+                attrs["slow_disk_threshold"] = double(AccelerationParams.SlowDiskThreshold);
+                attrs["max_slow_disks"] = static_cast<i64>(AccelerationParams.MaxNumOfSlowDisks);
+                attrs["queue_id"] = static_cast<i64>(isPut
+                    ? HandleClassToQueueId(GetImpl.Blackboard.PutHandleClass)
+                    : HandleClassToQueueId(GetImpl.Blackboard.GetHandleClass));
+                NWilson::TArrayValue disks;
+                for (const auto& prediction : predictions) {
+                    if (disks.size() == 32) {
+                        break;
+                    }
+                    const auto& disk = state.Disks[prediction.DiskIdx];
+                    NWilson::TKeyValueList item;
+                    item["subgroup_index"] = static_cast<i64>(prediction.DiskIdx);
+                    item["disk_order"] = static_cast<i64>(disk.OrderNumber);
+                    item["scaled_prediction_ns"] = static_cast<i64>(prediction.PredictedNs);
+                    item["slow"] = disk.IsSlow;
+                    disks.emplace_back(std::move(item));
+                }
+                attrs["predictions_truncated"] = predictions.size() > 32;
+                attrs["predictions"] = std::move(disks);
+                return attrs;
+            });
+        }
+    }
+
+    void TraceVGetSent(const TEvBlobStorage::TEvVGet& event, ui32 disk, const char* cause) {
+        auto* owner = Span.GetWilsonSpanPtr();
+        if (!owner || !*owner || owner->GetTraceId().GetVerbosity() < 13) {
+            return;
+        }
+        const ui64 cookie = event.Record.GetCookie();
+        if (cookie == TRootCause::InvalidCauseIdx || VGetTraceCount >= 32) {
+            ++VGetTraceDropped;
+            return;
+        }
+        ++VGetTraceCount;
+        auto& trace = VGetTraces[cookie];
+        trace.Span = owner->CreateChild(13, "DSProxy VGet roundtrip", NWilson::EFlags::AUTO_END);
+        trace.Span.Attribute("ydb.storage.cause_id", static_cast<i64>(cookie));
+        const bool triggerKnown = RootCauseTrack.CurrentCauseIdx < RootCauseTrack.Items.size();
+        trace.Span.Attribute("ydb.storage.trigger_cause_known", triggerKnown);
+        if (triggerKnown) {
+            trace.Span.Attribute("ydb.storage.trigger_cause_id", static_cast<i64>(RootCauseTrack.CurrentCauseIdx));
+        }
+        trace.Span.Attribute("ydb.storage.send_cause", TString(cause));
+        trace.Span.Attribute("ydb.storage.disk_order", static_cast<i64>(disk));
+        trace.Span.Attribute("ydb.storage.group_generation", static_cast<i64>(Info->GroupGeneration));
+        trace.Span.Attribute("ydb.storage.requested_items", static_cast<i64>(event.Record.ExtremeQueriesSize()));
+        for (const auto& query : event.Record.GetExtremeQueries()) {
+            if (trace.Queries.size() == 32) {
+                break;
+            }
+            const auto blob = LogoBlobIDFromLogoBlobID(query.GetId());
+            const ui64 shift = query.GetShift();
+            const ui64 partSize = Info->Type.PartSize(blob);
+            const ui64 size = query.GetSize() ? query.GetSize() : (partSize >= shift ? partSize - shift : 0);
+            trace.Queries.push_back({blob, shift, size, TraceBlobIndex(blob)});
+        }
+        trace.Span.Attribute("ydb.storage.items_truncated", event.Record.ExtremeQueriesSize() > 32);
+        TraceEvents.Event(trace.Span, 13, "VGet dispatched");
+    }
+
+    void TraceVGetResult(const TEvBlobStorage::TEvVGetResult& event, size_t nextGets, size_t nextPuts, bool replied) {
+        const auto& record = event.Record;
+        if (!record.HasCookie()) {
+            return;
+        }
+        const auto it = VGetTraces.find(record.GetCookie());
+        if (it == VGetTraces.end()) {
+            return;
+        }
+        auto& trace = it->second;
+        trace.Span.Attribute("ydb.storage.response_status", static_cast<i64>(record.GetStatus()));
+        trace.Span.Attribute("ydb.storage.response_items", static_cast<i64>(record.ResultSize()));
+        trace.Span.Attribute("ydb.storage.next_gets", static_cast<i64>(nextGets));
+        trace.Span.Attribute("ydb.storage.next_puts", static_cast<i64>(nextPuts));
+        trace.Span.Attribute("ydb.storage.request_replied", replied);
+        // Bound work as well as output. Raw blob IDs and intervals stay local.
+        for (size_t index = 0; index < trace.Queries.size(); ++index) {
+            const auto& requested = trace.Queries[index];
+            const NKikimrBlobStorage::TQueryResult* result = nullptr;
+            for (ui32 i = 0; i < record.ResultSize() && i < 32; ++i) {
+                const auto& candidate = record.GetResult(i);
+                if (LogoBlobIDFromLogoBlobID(candidate.GetBlobID()) == requested.BlobId
+                        && candidate.GetShift() == requested.Shift) {
+                    result = &candidate;
+                    break;
+                }
+            }
+            TraceEvents.Event(trace.Span, 13, "VGet item coverage", [&] {
+                NWilson::TKeyValueList attributes;
+                attributes["item_index"] = static_cast<i64>(index);
+                attributes["requested_part_bytes"] = static_cast<i64>(requested.Size);
+                attributes["response_item_observed"] = result != nullptr;
+                attributes["result_scan_truncated"] = record.ResultSize() > 32;
+                if (result) {
+                    const ui64 bytes = event.GetBlobSize(*result);
+                    const ui64 begin = Max(requested.Shift, static_cast<ui64>(result->GetShift()));
+                    const ui64 end = Min(requested.Shift + requested.Size, static_cast<ui64>(result->GetShift()) + bytes);
+                    const ui64 covered = result->GetStatus() == NKikimrProto::OK && end > begin ? end - begin : 0;
+                    attributes["item_status"] = static_cast<i64>(result->GetStatus());
+                    attributes["returned_part_bytes"] = static_cast<i64>(bytes);
+                    attributes["missing_requested_part_bytes"] = static_cast<i64>(requested.Size - covered);
+                }
+                const auto blob = requested.BlobId.FullID();
+                const auto& board = GetImpl.Blackboard;
+                const TBlobState* state = nullptr;
+                if (auto active = board.BlobStates.find(blob); active != board.BlobStates.end()) {
+                    state = &active->second;
+                } else if (auto done = board.DoneBlobStates.find(blob); done != board.DoneBlobStates.end()) {
+                    state = &done->second;
+                }
+                if (state) {
+                    if (requested.BlobIndex) {
+                        attributes["blob_index"] = static_cast<i64>(*requested.BlobIndex);
+                    } else {
+                        attributes["blob_index_truncated"] = true;
+                    }
+                    attributes["strategy_whole_situation"] = static_cast<i64>(state->WholeSituation);
+                }
+                return attributes;
+            });
+        }
+        trace.Span.End();
+        VGetTraces.erase(it);
+    }
+
+    void FinishGetTrace() {
+        if (auto* owner = Span.GetWilsonSpanPtr(); owner && *owner) {
+            owner->Attribute("ydb.storage.vget_spans_dropped", static_cast<i64>(VGetTraceDropped));
+            owner->Attribute("ydb.trace.event_budget.scope", TString("dsproxy_get_coverage"));
+            TraceEvents.Annotate(*owner);
+        }
+        for (auto& [cookie, trace] : VGetTraces) {
+            trace.Span.Attribute("ydb.storage.wait_outcome", TString("request_ended_before_reply"));
+            trace.Span.End();
+        }
+        VGetTraces.clear();
     }
 
     ui32 CountDisksWithActiveRequests() {
@@ -244,7 +467,8 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         ResponsesReceived++;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         GetImpl.OnVGetResult(LogCtx, *ev->Get(), vGets, vPuts, getResult);
-        SendVGetsAndVPuts(vGets, vPuts);
+        TraceVGetResult(*ev->Get(), vGets.size(), vPuts.size(), bool(getResult));
+        SendVGetsAndVPuts(vGets, vPuts, "vget_result");
 
         if (getResult) {
             SendReplyAndDie(getResult);
@@ -329,7 +553,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         ResponsesReceived++;
 
         GetImpl.OnVPutResult(LogCtx, *ev->Get(), vGets, vPuts, getResult);
-        SendVGetsAndVPuts(vGets, vPuts);
+        SendVGetsAndVPuts(vGets, vPuts, "vput_result");
         if (getResult) {
             SendReplyAndDie(getResult);
             return;
@@ -383,6 +607,21 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     }
 
     void SendReplyAndDie(TAutoPtr<TEvBlobStorage::TEvGetResult> &evResult) {
+        if (auto* owner = Span.GetWilsonSpanPtr(); owner && *owner) {
+            for (ui32 index = 0; index < Min(evResult->ResponseSz, 32u); ++index) {
+                const auto& response = evResult->Responses[index];
+                TraceEvents.Event(*owner, 13, "Get item result", [&] {
+                    NWilson::TKeyValueList attributes;
+                    attributes["query_index"] = static_cast<i64>(index);
+                    attributes["status"] = static_cast<i64>(response.Status);
+                    attributes["requested_bytes"] = static_cast<i64>(response.RequestedSize);
+                    attributes["returned_bytes"] = static_cast<i64>(response.Buffer.size());
+                    return attributes;
+                });
+            }
+            owner->Attribute("ydb.storage.get_items_truncated", evResult->ResponseSz > 32);
+        }
+        FinishGetTrace();
         const TMonotonic now = TActivationContext::Monotonic();
         const TDuration duration = now - RequestStartTime;
         NKikimrBlobStorage::EGetHandleClass handleClass = GetImpl.GetHandleClass();
@@ -474,6 +713,19 @@ public:
         if (Orbit.HasShuttles()) {
             RootCauseTrack.IsOn = true;
         }
+        if (auto* wilson = Span.GetWilsonSpanPtr(); wilson && *wilson && wilson->GetTraceId().GetVerbosity() >= 13) {
+            // Reuse the existing bounded cause-cookie mechanism for Wilson too.
+            RootCauseTrack.IsOn = true;
+            if (wilson->GetTraceId().GetVerbosity() >= 14) {
+                GetImpl.Blackboard.TraceReadChoice = [this](const TBlobState& state, const TReadChoiceTrace& choice) {
+                    TraceReadChoice(state, choice);
+                };
+                GetImpl.Blackboard.TraceSlowDisks = [this](const TBlobState& state,
+                        const TDiskDelayPredictions& predictions, ui64 threshold, bool isPut) {
+                    TraceSlowDisks(state, predictions, threshold, isPut);
+                };
+            }
+        }
     }
 
     void ReportBytes(i64 bytes) {
@@ -501,7 +753,7 @@ public:
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         GetImpl.GenerateInitialRequests(LogCtx, vGets);
-        SendVGetsAndVPuts(vGets, vPuts);
+        SendVGetsAndVPuts(vGets, vPuts, "initial");
         TryScheduleGetAcceleration();
 
         Y_ABORT_UNLESS(RequestsSent > ResponsesReceived);

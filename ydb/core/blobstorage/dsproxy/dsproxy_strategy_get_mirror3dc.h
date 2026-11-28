@@ -57,6 +57,22 @@ class TMirror3dcGetStrategy : public IStrategy {
             }
         }
         std::sort(disks.begin(), disks.end());
+        auto traceChoice = [&](std::optional<ui32> selected, bool newRequest) {
+            if (!blackboard->TraceReadChoice) {
+                return;
+            }
+            TReadChoiceTrace capture;
+            capture.Selected = selected;
+            capture.NewRequest = newRequest;
+            for (const auto& [score, index] : disks) {
+                const auto& disk = state->Disks[index];
+                const auto situation = disk.DiskParts[index % 3].Situation;
+                const bool eligible = situation == TBlobState::ESituation::Unknown
+                    || situation == TBlobState::ESituation::Present;
+                capture.Candidates.push_back({score, index, disk.OrderNumber, eligible, disk.IsSlow});
+            }
+            blackboard->TraceReadChoice(*state, capture);
+        };
         for (const auto& [distance, diskIdx] : disks) {
             Y_UNUSED(distance);
             auto& disk = state->Disks[diskIdx];
@@ -65,12 +81,15 @@ class TMirror3dcGetStrategy : public IStrategy {
             if (diskPart.Situation != TBlobState::ESituation::Unknown && diskPart.Situation != TBlobState::ESituation::Present) {
                 continue;
             }
-            if (const auto request = readState.Missing - diskPart.Requested) {
+            const auto request = readState.Missing - diskPart.Requested;
+            if (request) {
                 groupDiskRequests->AddGet(disk.OrderNumber, TLogoBlobID(state->Id, part + 1), request);
                 diskPart.Requested.Add(request);
             }
+            traceChoice(diskIdx, bool(request));
             return EStrategyOutcome::IN_PROGRESS;
         }
+        traceChoice(std::nullopt, false);
 
         // Without ERROR, NOT_YET replies confirm missing data for an ordinary Get.
         const auto absenceState = checker.GetBlobState(readState.Parts,

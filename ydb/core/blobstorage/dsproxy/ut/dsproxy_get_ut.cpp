@@ -1,5 +1,8 @@
 #include "defs.h"
 #include "dsproxy_vdisk_mock_ut.h"
+#include "dsproxy_env_mock_ut.h"
+#include "dsproxy_test_state_ut.h"
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/actor_helpers.h>
@@ -27,6 +30,113 @@ do {                            \
 
 
 Y_UNIT_TEST_SUITE(TDSProxyGetTest) {
+
+Y_UNIT_TEST(MirrorReadChoiceReplayRejectsIncompleteCapture) {
+    TReadChoiceTrace choice;
+    choice.Candidates = {{7, 0, 10, true, false}, {7, 1, 11, true, false},
+        {1, 2, 12, false, false}};
+    auto replay = ReplayMirrorReadChoice(choice);
+    UNIT_ASSERT(replay.Valid && replay.Selected && *replay.Selected == 0);
+    choice.Candidates[0].Eligible = false;
+    replay = ReplayMirrorReadChoice(choice);
+    UNIT_ASSERT(replay.Valid && replay.Selected && *replay.Selected == 1);
+    choice.Candidates[1].Eligible = false;
+    replay = ReplayMirrorReadChoice(choice);
+    UNIT_ASSERT(replay.Valid && !replay.Selected);
+    choice.Candidates[1].SubgroupIndex = 0;
+    UNIT_ASSERT(!ReplayMirrorReadChoice(choice).Valid);
+    choice.Candidates[1].SubgroupIndex = 1;
+    choice.Complete = false;
+    UNIT_ASSERT(!ReplayMirrorReadChoice(choice).Valid);
+}
+
+Y_UNIT_TEST(VGetTracePreservesPerItemNoData) {
+    for (const ui8 level : {0, 12, 13, 14}) {
+        TTestBasicRuntime runtime(1, false);
+        SetupRuntime(runtime);
+        TDSProxyEnv env;
+        env.Configure(runtime, TBlobStorageGroupType(level == 14
+            ? TErasureType::ErasureMirror3dc : TErasureType::ErasureNone), 0, 0);
+        TTestState state(runtime, env.Info);
+        const auto uploader = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploader);
+        TVector<NWilson::NTraceProto::Span> spans;
+        const auto observer = runtime.AddObserver<NWilson::TEvWilson>([&](NWilson::TEvWilson::TPtr& ev) {
+            spans.push_back(ev->Get()->Span);
+        });
+        const TLogoBlobID id(1, 1, 1, 0, 1024, 0);
+        auto request = state.CreateGetRequest({id}, false);
+        runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, request->ReleaseBase().Release(),
+            0, 0, nullptr, level ? NWilson::TTraceId::NewTraceId(level, 4095) : NWilson::TTraceId()));
+        for (size_t attempt = 0; ; ++attempt) {
+            UNIT_ASSERT(attempt < 32);
+            TAutoPtr<IEventHandle> handle;
+            const auto events = runtime.GrabEdgeEventsRethrow<TEvBlobStorage::TEvVGet, TEvBlobStorage::TEvGetResult>(handle);
+            if (auto* result = std::get<TEvBlobStorage::TEvGetResult*>(events)) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(result->Responses[0].Status, NKikimrProto::NODATA);
+                break;
+            }
+            TEvBlobStorage::TEvVGet::TPtr get = static_cast<TEventHandle<TEvBlobStorage::TEvVGet>*>(handle.Release());
+            auto response = state.CreateEventResultPtr(get, NKikimrProto::UNKNOWN);
+            state.GroupMock.OnVGet(*get->Get(), *response->Get());
+            response->Get()->Record.SetCookie(get->Get()->Record.GetCookie());
+            runtime.Send(response.Release());
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        bool detailed = false;
+        bool replayed = false;
+        for (const auto& span : spans) {
+            for (const auto& event : span.events()) {
+                if (event.name() != "Mirror read candidate choice") {
+                    continue;
+                }
+                TReadChoiceTrace choice;
+                for (const auto& attr : event.attributes()) {
+                    if (attr.key() == "candidates_complete") {
+                        choice.Complete = attr.value().bool_value();
+                    } else if (attr.key() == "selected_subgroup_index") {
+                        choice.Selected = attr.value().int_value();
+                    } else if (attr.key() == "candidates") {
+                        for (const auto& value : attr.value().array_value().values()) {
+                            TReadCandidateTrace candidate{};
+                            for (const auto& field : value.kvlist_value().values()) {
+                                if (field.key() == "score") { candidate.Score = field.value().int_value(); }
+                                if (field.key() == "subgroup_index") { candidate.SubgroupIndex = field.value().int_value(); }
+                                if (field.key() == "disk_order") { candidate.DiskOrder = field.value().int_value(); }
+                                if (field.key() == "eligible") { candidate.Eligible = field.value().bool_value(); }
+                                if (field.key() == "slow") { candidate.Slow = field.value().bool_value(); }
+                            }
+                            choice.Candidates.push_back(candidate);
+                        }
+                    }
+                }
+                const auto replay = ReplayMirrorReadChoice(choice);
+                UNIT_ASSERT(replay.Valid);
+                UNIT_ASSERT(replay.Selected == choice.Selected);
+                replayed = true;
+            }
+            if (span.name() != "DSProxy VGet roundtrip") {
+                continue;
+            }
+            detailed = true;
+            bool sawNoData = false;
+            for (const auto& event : span.events()) {
+                if (event.name() == "VGet item coverage") {
+                    for (const auto& attribute : event.attributes()) {
+                        if (attribute.key() == "item_status") {
+                            UNIT_ASSERT_VALUES_EQUAL(attribute.value().int_value(), NKikimrProto::NODATA);
+                            sawNoData = true;
+                        }
+                    }
+                }
+            }
+            UNIT_ASSERT(sawNoData);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(detailed, level >= 13);
+        UNIT_ASSERT_VALUES_EQUAL(replayed, level >= 14);
+    }
+}
 
 Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
     for (bool mustRestore : {false, true}) {

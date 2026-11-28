@@ -383,16 +383,22 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
 
 EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
     if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
+        TraceStrategy = "mirror3dc";
         return RunMirror3dcStrategy(logCtx);
     } else if (Info->Type.GetErasure() == TErasureType::ErasureMirror3of4) {
+        TraceStrategy = "mirror3of4";
         return RunMirror3of4Strategy(logCtx);
     } else if (MustRestoreFirst || PhantomCheck) {
+        TraceStrategy = "bold";
         return RunBoldStrategy(logCtx);
     } else if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
+        TraceStrategy = "min_iops_block";
         return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy(), AccelerationParams);
     } else if (Info->Type.ErasureFamily() == TErasureType::ErasureMirror) {
+        TraceStrategy = "min_iops_mirror";
         return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy(), AccelerationParams);
     } else {
+        TraceStrategy = "bold";
         return RunBoldStrategy(logCtx);
     }
 }

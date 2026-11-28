@@ -34,6 +34,10 @@ struct TDqState: public TThrRefBase {
     TDqConfiguration::TPtr Settings;
     bool ExternalUser;
     bool IsFullCaptureReady = true;
+    // Cached confirmation from WholeQueryProvidersSupportFallback before capture.
+    // Only for the allocation timeout; false also means unchecked. Rewind clears it.
+    // The facade owns whole-query recovery; submission applies the current policy.
+    bool WholeQueryFallbackConfirmed = false;
 
     TMutex Mutex;
     THashMap<ui32, TOperationStatistics> Statistics;
@@ -79,19 +83,26 @@ struct TDqState: public TThrRefBase {
         , AbortHidden(std::move(hiddenAborter))
     { }
 
+    // canFallbackLocally asserts caller-owned recovery for this execution only.
     NThreading::TFuture<IDqGateway::TResult>
     ExecutePlan(const TString& sessionId, NDqs::TPlan&& plan, const TVector<TString>& columns,
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,
                 const IDqGateway::TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-                bool discard, ui64 executionTimeout) {
+                bool discard, ui64 executionTimeout, bool canFallbackLocally = false) {
+        const bool canFallbackOnAllocationTimeout = ((WholeQueryFallbackConfirmed && TypeCtx->DqCaptured) || canFallbackLocally) &&
+            !TypeCtx->EvaluationInProgress &&
+            TypeCtx->DqFallbackPolicy != EFallbackPolicy::Never &&
+            settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) != EFallbackPolicy::Never &&
+            !TypeCtx->ForceDq;
+        auto effectiveSettings = TDqSettings::WithEffectiveWorkersAllocationTimeout(settings, canFallbackOnAllocationTimeout);
         with_lock(Mutex_) {
             if (!OperationSemaphore) {
                 const auto parallelOperationsLimit = Settings->ParallelOperationsLimit.Get().GetOrElse(TDqSettings::TDefault::ParallelOperationsLimit);
                 OperationSemaphore = NThreading::TAsyncSemaphore::Make(parallelOperationsLimit);
             }
         }
-        return OperationSemaphore->AcquireAsync().Apply([gateway = DqGateway, sessionId, plan=std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout](const auto& f) mutable {
+        return OperationSemaphore->AcquireAsync().Apply([gateway = DqGateway, sessionId, plan=std::move(plan), columns, secureParams, graphParams, settings = std::move(effectiveSettings), progressWriter, modulesMapping, discard, executionTimeout](const auto& f) mutable {
             auto lock = f.GetValue()->MakeAutoRelease();
             const auto gw = std::move(gateway);
             return gw->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout).Apply([unlock = lock.DeferRelease()](const auto& f) {

@@ -116,6 +116,9 @@ namespace NYql::NDqs {
         _MaxDataSizePerJob = 0;
     }
 
+    // Returns false if a source in this physical graph explicitly disallows fallback.
+    // Sinks and providers without DQ integration are not checked.
+    // A positive result does not establish whole-query fallback support.
     bool TDqsExecutionPlanner::CanFallback() {
         THashSet<TString> sources;
         bool flag = true;

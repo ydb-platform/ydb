@@ -2204,6 +2204,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
         newTask.Meta.TaskParams.insert(taskInfo.GetTaskParams().begin(), taskInfo.GetTaskParams().end());
         newTask.Meta.ReadRanges.assign(taskInfo.GetReadRanges().begin(), taskInfo.GetReadRanges().end());
         newTask.Meta.ExecuterId = GetMeta().ExecuterId;
+        AddQueryPathParam(newTask, GetMeta().UserRequestContext);
 
         if (taskInfo.HasMetaId()) {
             newTask.SetMetaId(taskInfo.GetMetaId());

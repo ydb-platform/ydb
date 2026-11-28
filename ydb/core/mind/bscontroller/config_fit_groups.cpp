@@ -460,8 +460,8 @@ namespace NKikimr {
                                 const TVSlotInfo *slot = State.VSlots.Find(vslotId);
                                 Y_ABORT_UNLESS(slot);
                                 if (!slot->PDisk->SlotSpaceEnforced(State.Self)) {
-                                    // mark the space from destroyed slot as available
-                                    Mapper->AdjustSpaceAvailable(vslotId.ComprisingPDiskId(), slot->Metrics.GetAllocatedSize());
+                                    // The old PDisk may have been temporarily registered for allocation.
+                                    Mapper->TryAdjustSpaceAvailable(vslotId.ComprisingPDiskId(), slot->Metrics.GetAllocatedSize());
                                 }
                             }
 

@@ -144,6 +144,7 @@ namespace NKikimr {
 
             // Adjust VDisk space quota.
             void AdjustSpaceAvailable(TPDiskId pdiskId, i64 increment);
+            bool TryAdjustSpaceAvailable(TPDiskId pdiskId, i64 increment);
 
             // Allocate group (with incrementing number of used slots in internal structures) of given geometry. This
             // function returns true if group allocation succeeds returning PDisk layout in result variable, or false

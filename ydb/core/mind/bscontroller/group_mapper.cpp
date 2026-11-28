@@ -974,10 +974,13 @@ namespace NKikimr::NBsController {
             return ret;
         }
 
-        void AdjustSpaceAvailable(TPDiskId pdiskId, i64 increment) {
+        bool TryAdjustSpaceAvailable(TPDiskId pdiskId, i64 increment) {
             const auto it = PDisks.find(pdiskId);
-            Y_ABORT_UNLESS(it != PDisks.end());
+            if (it == PDisks.end()) {
+                return false;
+            }
             it->second.SpaceAvailable += increment;
+            return true;
         }
 
         TGroupMapperError BuildGroupMappingError(const TDiskManager& diskManager) const {
@@ -1401,7 +1404,11 @@ namespace NKikimr::NBsController {
     }
 
     void TGroupMapper::AdjustSpaceAvailable(TPDiskId pdiskId, i64 increment) {
-        return Impl->AdjustSpaceAvailable(pdiskId, increment);
+        Y_ABORT_UNLESS(TryAdjustSpaceAvailable(pdiskId, increment));
+    }
+
+    bool TGroupMapper::TryAdjustSpaceAvailable(TPDiskId pdiskId, i64 increment) {
+        return Impl->TryAdjustSpaceAvailable(pdiskId, increment);
     }
 
     bool TGroupMapper::AllocateGroup(ui32 groupId, TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,

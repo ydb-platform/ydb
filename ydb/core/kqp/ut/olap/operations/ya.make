@@ -11,6 +11,11 @@ ELSE()
 ENDIF()
 
 SRCS(
+<<<<<<< HEAD
+=======
+    cache_blobs_after_write_ut.cpp
+    compact_ut.cpp
+>>>>>>> 08e51af9c37 (BACKPORT-CONFLICT: manual resolution required for commit 594ef54)
     delete_ut.cpp
     write_ut.cpp
 )
